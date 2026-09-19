@@ -1,0 +1,78 @@
+import { describe, expect, it, vi } from "vitest"
+import { ZodError } from "zod"
+import { CapabilityError, ForbiddenError, OptimisticConcurrencyError, RetryablePersistenceError, UnauthorizedError, ValidationError } from "core/domain"
+import { createFrameworkErrorHandler } from "../handleFrameworkCoreError"
+import { RequestBodyTooLargeError, UnsupportedMediaTypeError } from "../requestBody"
+
+async function responseBody(response: Response): Promise<unknown> {
+  const body: unknown = await response.json()
+  return body
+}
+
+describe("framework HTTP error serialization", () => {
+  it.each([
+    [new UnauthorizedError("credential detail", { userId: "user-1" }), 401, { error: "Unauthorized", code: "UNAUTHORIZED" }],
+    [new ForbiddenError("ABAC policy detail", { policy: "secret-policy", fields: ["ssn"] }), 403, { error: "Forbidden", code: "FORBIDDEN" }],
+    [new CapabilityError("tenant.module:manage", { moduleKey: "tenant.module" }), 403, { error: "Forbidden", code: "CAPABILITY_REQUIRED" }],
+  ] as const)("sanitizes %s responses", async (error, status, expected) => {
+    const reportError = vi.fn()
+    const response = createFrameworkErrorHandler({ reportError })(error)
+
+    expect(response.status).toBe(status)
+    expect(await responseBody(response)).toEqual(expected)
+    expect(reportError).toHaveBeenCalledWith(error)
+  })
+
+  it("does not leak freeform exception text on 4xx reason codes", async () => {
+    const cases: Array<[unknown, number, Record<string, unknown>]> = [
+      [new ValidationError("leaked validation detail", { dbPassword: "s3cret" }), 400, { error: "Validation failed", code: "VALIDATION_ERROR" }],
+      [new RequestBodyTooLargeError(1024), 413, { error: "Request body is too large", code: "REQUEST_BODY_TOO_LARGE" }],
+      [new UnsupportedMediaTypeError(), 415, { error: "Unsupported media type", code: "UNSUPPORTED_MEDIA_TYPE" }],
+    ]
+    for (const [error, status, expected] of cases) {
+      const response = createFrameworkErrorHandler()(error)
+      expect(response.status).toBe(status)
+      const body = await responseBody(response)
+      expect(body).not.toMatchObject({ error: expect.stringContaining("leaked") as unknown })
+      expect(body).toEqual(expected)
+    }
+  })
+
+  it("sanitizes ZodError issues and never returns raw issues", async () => {
+    const zodError = new ZodError([
+      {
+        code: "custom",
+        path: ["a", 1, "nested"],
+        message: "boom",
+        secret: "do-not-leak",
+        input: { confidential: true },
+      } as never,
+    ])
+    const response = createFrameworkErrorHandler()(zodError)
+    expect(response.status).toBe(400)
+
+    const body = await responseBody(response)
+    expect(body).toEqual({
+      error: "Validation failed",
+      code: "VALIDATION_ERROR",
+      details: [{ code: "custom", path: "a.1.nested", message: "boom" }],
+    })
+    expect(JSON.stringify(body)).not.toContain("do-not-leak")
+  })
+
+  it("routes 413/415 and capability responses through metadata decoration", () => {
+    const metadata = { requestId: "req-123", correlationId: "corr-456" }
+    const cases = [
+      createFrameworkErrorHandler()(new RequestBodyTooLargeError(1024), metadata),
+      createFrameworkErrorHandler()(new UnsupportedMediaTypeError(), metadata),
+      createFrameworkErrorHandler()(new CapabilityError("tenant.module:manage", { moduleKey: "tenant.module" }), metadata),
+    ]
+    for (const response of cases) {
+      expect(response.headers.get("x-request-id")).toBe("req-123")
+      expect(response.headers.get("x-correlation-id")).toBe("corr-456")
+    }
+    expect(cases.map((response) => response.status)).toEqual([413, 415, 403])
+  })
+
+  it("maps framework errors only from canonical metadata",async()=>{const conflict=await createFrameworkErrorHandler()(new OptimisticConcurrencyError("table users version leaked")).json();expect(conflict).toEqual({error:"Conflict",code:"OPTIMISTIC_CONCURRENCY_FAILED"});const unavailable=createFrameworkErrorHandler()(new RetryablePersistenceError("postgres host leaked"));expect(unavailable.status).toBe(503);expect(await unavailable.json()).toEqual({error:"Service temporarily unavailable",code:"SERVICE_UNAVAILABLE"})})
+})

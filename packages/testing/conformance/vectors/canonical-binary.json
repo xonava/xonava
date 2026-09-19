@@ -1,0 +1,50 @@
+{
+  "schema": "framework.conformance-vectors",
+  "schemaVersion": 1,
+  "suiteId": "canonical-binary",
+  "suiteVersion": 1,
+  "vectors": [
+    {
+      "id": "b64-empty",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": {
+        "bytes": ""
+      },
+      "expected": "{\"bytes\":\"\"}"
+    },
+    {
+      "id": "b64-zero",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": {
+        "bytes": "AA"
+      },
+      "expected": "{\"bytes\":\"AA\"}"
+    },
+    {
+      "id": "b64-hello-raw",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": "aGVsbG8",
+      "expected": "\"aGVsbG8\""
+    },
+    {
+      "id": "b64-pattern",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": "_wCA",
+      "expected": "\"_wCA\""
+    },
+    {
+      "id": "binary-field-typed",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": {
+        "type": "bytes",
+        "value": "aGVsbG8"
+      },
+      "expected": "{\"type\":\"bytes\",\"value\":\"aGVsbG8\"}"
+    }
+  ]
+}

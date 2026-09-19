@@ -1,0 +1,1 @@
+export function getMySqlAffectedRows(result:unknown):number{const value=Array.isArray(result)?result[0]:result;if(!value||typeof value!=="object")return 0;const record=value as Record<string,unknown>;return typeof record.affectedRows==="number"?record.affectedRows:typeof record.rowsAffected==="number"?record.rowsAffected:0}

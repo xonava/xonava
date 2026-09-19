@@ -1,0 +1,152 @@
+{
+  "schema": "framework.conformance-vectors",
+  "schemaVersion": 1,
+  "suiteId": "canonical-json",
+  "suiteVersion": 1,
+  "vectors": [
+    {
+      "id": "null",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": null,
+      "expected": "null"
+    },
+    {
+      "id": "true",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": true,
+      "expected": "true"
+    },
+    {
+      "id": "false",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": false,
+      "expected": "false"
+    },
+    {
+      "id": "zero",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": 0,
+      "expected": "0"
+    },
+    {
+      "id": "neg-zero",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": 0,
+      "expected": "0"
+    },
+    {
+      "id": "one",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": 1,
+      "expected": "1"
+    },
+    {
+      "id": "neg-one",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": -1,
+      "expected": "-1"
+    },
+    {
+      "id": "int-safe-max",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": 9007199254740991,
+      "expected": "9007199254740991"
+    },
+    {
+      "id": "int-safe-min",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": -9007199254740991,
+      "expected": "-9007199254740991"
+    },
+    {
+      "id": "float-pi",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": 3.14,
+      "expected": "3.14"
+    },
+    {
+      "id": "float-exp",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": 1200,
+      "expected": "1200"
+    },
+    {
+      "id": "empty-string",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": "",
+      "expected": "\"\""
+    },
+    {
+      "id": "hello",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": "hello",
+      "expected": "\"hello\""
+    },
+    {
+      "id": "empty-array",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": [],
+      "expected": "[]"
+    },
+    {
+      "id": "empty-object",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": {},
+      "expected": "{}"
+    },
+    {
+      "id": "array-primitives",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": [
+        1,
+        "a",
+        true,
+        null
+      ],
+      "expected": "[1,\"a\",true,null]"
+    },
+    {
+      "id": "object-key-order-b-a",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": {
+        "b": 1,
+        "a": 2
+      },
+      "expected": "{\"a\":2,\"b\":1}"
+    },
+    {
+      "id": "nested",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": {
+        "z": {
+          "b": 2,
+          "a": 1
+        },
+        "a": [
+          3,
+          2,
+          1
+        ]
+      },
+      "expected": "{\"a\":[3,2,1],\"z\":{\"a\":1,\"b\":2}}"
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "schema": "framework.conformance-vectors",
+  "schemaVersion": 1,
+  "suiteId": "canonical-json-unicode",
+  "suiteVersion": 1,
+  "vectors": [
+    {
+      "id": "emoji",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": "😀",
+      "expected": "\"😀\""
+    },
+    {
+      "id": "cjk",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": "漢字",
+      "expected": "\"漢字\""
+    },
+    {
+      "id": "snowman",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": "☃",
+      "expected": "\"☃\""
+    },
+    {
+      "id": "latin-1",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": "café",
+      "expected": "\"café\""
+    },
+    {
+      "id": "key-unicode-order",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": {
+        "Ω": 1,
+        "α": 2
+      },
+      "expected": "{\"Ω\":1,\"α\":2}"
+    },
+    {
+      "id": "string-with-quote",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": "a\"b",
+      "expected": "\"a\\\"b\""
+    },
+    {
+      "id": "string-with-backslash",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": "a\\b",
+      "expected": "\"a\\\\b\""
+    },
+    {
+      "id": "string-with-newline",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": "a\nb",
+      "expected": "\"a\\nb\""
+    }
+  ]
+}

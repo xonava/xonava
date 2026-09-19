@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "runId": "local-latest",
+  "adapter": "pg",
+  "status": "incomplete",
+  "processIsolation": true,
+  "freshVerifier": true,
+  "repetitions": 1,
+  "requiredRepetitions": 20,
+  "recordedAt": "2026-09-19T03:17:20.677Z",
+  "failpoints": [
+    {
+      "name": "before-transaction",
+      "status": "incomplete",
+      "partialCommitViolations": 0
+    },
+    {
+      "name": "after-business-before-commit",
+      "status": "incomplete",
+      "partialCommitViolations": 0
+    },
+    {
+      "name": "after-participants-before-commit",
+      "status": "incomplete",
+      "partialCommitViolations": 0
+    },
+    {
+      "name": "after-commit-before-response",
+      "status": "incomplete",
+      "partialCommitViolations": 0
+    },
+    {
+      "name": "after-commit-before-finalization",
+      "status": "incomplete",
+      "partialCommitViolations": 0
+    },
+    {
+      "name": "during-replay-before-response",
+      "status": "incomplete",
+      "partialCommitViolations": 0
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+import type { D1FixtureDatabase } from "./schema.js"
+export async function resetD1Fixture(database: D1FixtureDatabase): Promise<void> {
+  await database.exec("DELETE FROM framework_sequences; DELETE FROM framework_temporal_snapshots; DELETE FROM framework_temporal_revisions; DELETE FROM framework_temporal_heads; DELETE FROM framework_workflow_signals; DELETE FROM framework_workflows; DELETE FROM framework_job_progress; DELETE FROM framework_j1_jobs; DELETE FROM framework_ev1_business_effects; DELETE FROM framework_outbox_delivery_records; DELETE FROM framework_inbox_records; DELETE FROM framework_finalizers; DELETE FROM framework_leases; DELETE FROM framework_cache_generations; DELETE FROM framework_audit; DELETE FROM framework_outbox; DELETE FROM framework_idempotency; DELETE FROM framework_records;")
+}

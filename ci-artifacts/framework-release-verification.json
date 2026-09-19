@@ -1,0 +1,91 @@
+{
+  "schema": "framework.release-evidence",
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-19T08:20:59.809Z",
+  "frameworkLine": "2.0",
+  "certificationScope": "framework-only",
+  "applicationPackageVersionsConsidered": false,
+  "sourceRevision": {
+    "kind": "content-sha256",
+    "value": "25fbeeefc67256771726cc3ba02f50c1d63c0545aeefa2bce9f1ed5ab6b60873"
+  },
+  "lockfile": {
+    "path": "package-lock.json",
+    "sha256": "5819bce28d4f6773e01945dd1a5a0ea2fa1a48f58adc04e9a5997327ec74d78b"
+  },
+  "publicApi": {
+    "manifest": "docs\\governance\\public-api-manifest.json",
+    "sha256": "5de9a120df2862c27a8dd2e1402b1530ae72f90cc3d01a2cdbf66f7774671f7c",
+    "packages": [
+      {
+        "name": "core",
+        "version": "2.0.0-rc.2",
+        "exports": [
+          ".",
+          "./aggregate",
+          "./bootstrap",
+          "./business-calendar",
+          "./cache",
+          "./domain",
+          "./entity",
+          "./events",
+          "./execution",
+          "./feature-flags",
+          "./health",
+          "./kernel",
+          "./object-store",
+          "./operation",
+          "./persistence",
+          "./query",
+          "./quota",
+          "./rate-limit",
+          "./read-model",
+          "./resilience",
+          "./rules",
+          "./secrets",
+          "./security",
+          "./sequence",
+          "./serialization",
+          "./storage",
+          "./telemetry",
+          "./temporal",
+          "./workflow"
+        ]
+      },
+      {
+        "name": "adapters",
+        "version": "2.0.0-rc.2",
+        "exports": [
+          ".",
+          "./cache",
+          "./drizzle-d1",
+          "./drizzle-mysql",
+          "./drizzle-pg",
+          "./express",
+          "./fastify",
+          "./hono",
+          "./http",
+          "./server",
+          "./storage"
+        ]
+      },
+      {
+        "name": "testing",
+        "version": "2.0.0-rc.2",
+        "exports": [
+          ".",
+          "./abac",
+          "./contracts/atomic-batch",
+          "./contracts/cache-adapter",
+          "./contracts/persistence-provider",
+          "./contracts/shared-conformance",
+          "./predicates",
+          "./repositories"
+        ]
+      }
+    ]
+  },
+  "releaseProfiles": {
+    "current": "release/framework-2.0.json"
+  }
+}

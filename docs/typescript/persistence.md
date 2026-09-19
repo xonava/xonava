@@ -1,0 +1,3 @@
+# Persistence API
+
+`core/persistence` exports datasource/routing, provider/repository, tenant-scoping, transaction/batch, bulk, streaming, and capability contracts. Applications should obtain a provider from a public adapter subpath, scope it with trusted tenant authority, and pass it through operation services. Use capability guards before interactive transactions or atomic batches. Versioned writes require `expectedVersion`; scoped wrappers brand validated providers. Provider-specific setup lives in `adapters/drizzle-pg`, `adapters/drizzle-mysql`, or `adapters/drizzle-d1`. Never import `drizzle-shared` or private source paths.

@@ -1,0 +1,112 @@
+{
+  "schema": "framework.aggregate-release-certification",
+  "schemaVersion": 2,
+  "status": "certified",
+  "runId": "release-20260919T082057Z",
+  "phase": "release",
+  "frameworkLine": "2.0",
+  "releaseCandidate": "2.0.0-rc.2",
+  "generatedAt": "2026-09-19T08:35:27.152Z",
+  "startedAt": "2026-09-19T08:20:58.398Z",
+  "packages": [
+    {
+      "name": "core",
+      "version": "2.0.0-rc.2"
+    },
+    {
+      "name": "adapters",
+      "version": "2.0.0-rc.2"
+    },
+    {
+      "name": "testing",
+      "version": "2.0.0-rc.2"
+    }
+  ],
+  "source": {
+    "sha256": "e4f012ab2e9bb58d55b66ec7ed1c0a04a0e555bb4235892842b60317801d62fb",
+    "fileCount": 622
+  },
+  "lockfile": {
+    "path": "package-lock.json",
+    "sha256": "5819bce28d4f6773e01945dd1a5a0ea2fa1a48f58adc04e9a5997327ec74d78b"
+  },
+  "evidence": [
+    {
+      "adapter": "core",
+      "kind": "rl1",
+      "path": "artifacts/framework-conformance/release-20260919T082057Z/rl1/business-rules-conformance.json",
+      "sha256": "5af701808900ae5a236cb15c9041d3a29f4fcb3a69c7e968d946eb95f3e96bbf"
+    },
+    {
+      "adapter": "core",
+      "kind": "ag1",
+      "path": "artifacts/framework-conformance/release-20260919T082057Z/ag1/aggregate-consistency-conformance.json",
+      "sha256": "c83a4337984576d553bd8be23fe31e12beaecf919af1069235b32c97d37ec573"
+    },
+    {
+      "adapter": "core",
+      "kind": "th1",
+      "path": "artifacts/framework-conformance/release-20260919T082057Z/th1/temporal-history-conformance.json",
+      "sha256": "8b3c8ef692fa0e97219f927e08d8619909f49055815e6efabbe4c3bb0a08251d"
+    },
+    {
+      "adapter": "core",
+      "kind": "n1",
+      "path": "artifacts/framework-conformance/release-20260919T082057Z/n1/sequence-numbering-conformance.json",
+      "sha256": "afb48091fd1c2b16a88402a0d94572cf89a7b98fae37750973850f5eae10d70d"
+    },
+    {
+      "adapter": "core",
+      "kind": "ht1",
+      "path": "artifacts/framework-conformance/release-20260919T082057Z/ht1/http-adapters-conformance.json",
+      "sha256": "aa153e9322c260da93acab3252653627863d82afff504a96b1cce1032a6e4bdc"
+    },
+    {
+      "adapter": "pg",
+      "kind": "guarantees",
+      "path": "artifacts/framework-conformance/release-20260919T082057Z/release/pg-guarantees.json",
+      "sha256": "a33339828352d76a79395ee35b44823d000b4549500a1a98b2c2fb830d6292e1"
+    },
+    {
+      "adapter": "pg",
+      "kind": "crash-replay",
+      "path": "artifacts/framework-conformance/release-20260919T082057Z/release/pg-crash-replay.json",
+      "sha256": "68221498a0dba3672748f52c72eec8d1a8211f423704f61ddfc4995960f3f78c"
+    },
+    {
+      "adapter": "mysql",
+      "kind": "guarantees",
+      "path": "artifacts/framework-conformance/release-20260919T082057Z/release/mysql-guarantees.json",
+      "sha256": "03ec200c70e8e0eaf3307463a9eda86104df43223feb9f9e3a14a1b27ad5c156"
+    },
+    {
+      "adapter": "mysql",
+      "kind": "crash-replay",
+      "path": "artifacts/framework-conformance/release-20260919T082057Z/release/mysql-crash-replay.json",
+      "sha256": "88ad31f0bfc79d33c2681e29a991d1e3a52779353a0323eeca48f76d7f63dc4c"
+    },
+    {
+      "adapter": "d1",
+      "kind": "guarantees",
+      "path": "artifacts/framework-conformance/release-20260919T082057Z/release/d1-guarantees.json",
+      "sha256": "d8423955625270e70287f275addbcbe17b78f8a06de9c24e5f5528f7fdf191dc"
+    },
+    {
+      "adapter": "d1",
+      "kind": "crash-replay",
+      "path": "artifacts/framework-conformance/release-20260919T082057Z/release/d1-crash-replay.json",
+      "sha256": "a56f73966414f05c5c219e61d5a401591636b7dbcb029e28b1352941990aff99"
+    }
+  ],
+  "certificationScope": {
+    "level": "local-multi-backend",
+    "providers": [
+      "PostgreSQL",
+      "MySQL",
+      "D1 Miniflare"
+    ],
+    "productionTopologyCertified": false,
+    "customAdaptersCertified": false,
+    "externalAdvisories": "not-assessed-offline"
+  }
+}

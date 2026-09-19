@@ -1,0 +1,101 @@
+{
+  "name": "adapters",
+  "version": "2.0.0-rc.2",
+  "type": "module",
+  "private": true,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json --force && node ../../scripts/verification/rewriteBuildExtensions.mjs .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src --max-warnings=0",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "exports": {
+    "./fastify": {
+      "types": "./dist/fastify/index.d.ts",
+      "default": "./dist/fastify/index.js"
+    },
+    "./hono": {
+      "types": "./dist/hono/index.d.ts",
+      "default": "./dist/hono/index.js"
+    },
+    "./express": {
+      "types": "./dist/express/index.d.ts",
+      "default": "./dist/express/index.js"
+    },
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./http": {
+      "types": "./dist/http/index.d.ts",
+      "default": "./dist/http/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "default": "./dist/server/index.js"
+    },
+    "./drizzle-d1": {
+      "types": "./dist/drizzle-d1/index.d.ts",
+      "default": "./dist/drizzle-d1/index.js"
+    },
+    "./drizzle-pg": {
+      "types": "./dist/drizzle-pg/index.d.ts",
+      "default": "./dist/drizzle-pg/index.js"
+    },
+    "./drizzle-mysql": {
+      "types": "./dist/drizzle-mysql/index.d.ts",
+      "default": "./dist/drizzle-mysql/index.js"
+    },
+    "./cache": {
+      "types": "./dist/cache/index.d.ts",
+      "default": "./dist/cache/index.js"
+    },
+    "./storage": {
+      "types": "./dist/storage/index.d.ts",
+      "default": "./dist/storage/index.js"
+    }
+  },
+  "peerDependencies": {
+    "@types/express": "^5.0.0",
+    "express": "^5.0.0",
+    "fastify": "^5.0.0",
+    "hono": "^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "fastify": {
+      "optional": true
+    },
+    "hono": {
+      "optional": true
+    },
+    "express": {
+      "optional": true
+    },
+    "@types/express": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "core": "*",
+    "drizzle-orm": "^0.45.2",
+    "mysql2": "^3.24.4",
+    "pg": "^8.16.3",
+    "uuidv7": "^1.2.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/pg": "^8.15.5",
+    "@types/supertest": "^6.0.3",
+    "express": "^5.2.1",
+    "fastify": "^5.12.5",
+    "hono": "^4.13.8",
+    "supertest": "^7.2.2",
+    "vitest": "^4.0.0"
+  }
+}

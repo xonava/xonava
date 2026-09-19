@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "runId": "local-latest",
+  "adapter": "d1",
+  "records": [
+    {
+      "guaranteeId": "transaction.atomicBatch",
+      "adapter": "d1",
+      "status": "proven",
+      "suite": "f2-d1-conformance",
+      "assertions": 17,
+      "sourceDigest": "a5d807eac4e98175702812ee07e4ae8123980a30ed7fb796fdcbe46b101b578c",
+      "recordedAt": "2026-09-19T07:57:49.144Z"
+    },
+    {
+      "guaranteeId": "persistence.conditionalVersionedMutation",
+      "adapter": "d1",
+      "status": "proven",
+      "suite": "f2-d1-conformance",
+      "assertions": 17,
+      "sourceDigest": "a5d807eac4e98175702812ee07e4ae8123980a30ed7fb796fdcbe46b101b578c",
+      "recordedAt": "2026-09-19T07:57:49.144Z"
+    },
+    {
+      "guaranteeId": "persistence.conditionalAuthorizedMutation",
+      "adapter": "d1",
+      "status": "proven",
+      "suite": "f2-d1-conformance",
+      "assertions": 17,
+      "sourceDigest": "a5d807eac4e98175702812ee07e4ae8123980a30ed7fb796fdcbe46b101b578c",
+      "recordedAt": "2026-09-19T07:57:49.144Z"
+    },
+    {
+      "guaranteeId": "idempotency.atomicCommitReceipt",
+      "adapter": "d1",
+      "status": "proven",
+      "suite": "f2-d1-conformance",
+      "assertions": 17,
+      "sourceDigest": "a5d807eac4e98175702812ee07e4ae8123980a30ed7fb796fdcbe46b101b578c",
+      "recordedAt": "2026-09-19T07:57:49.144Z"
+    },
+    {
+      "guaranteeId": "audit.atomic",
+      "adapter": "d1",
+      "status": "proven",
+      "suite": "f2-d1-conformance",
+      "assertions": 17,
+      "sourceDigest": "a5d807eac4e98175702812ee07e4ae8123980a30ed7fb796fdcbe46b101b578c",
+      "recordedAt": "2026-09-19T07:57:49.144Z"
+    },
+    {
+      "guaranteeId": "outbox.atomic",
+      "adapter": "d1",
+      "status": "proven",
+      "suite": "f2-d1-conformance",
+      "assertions": 17,
+      "sourceDigest": "a5d807eac4e98175702812ee07e4ae8123980a30ed7fb796fdcbe46b101b578c",
+      "recordedAt": "2026-09-19T07:57:49.144Z"
+    },
+    {
+      "guaranteeId": "cacheGeneration.atomic",
+      "adapter": "d1",
+      "status": "proven",
+      "suite": "f2-d1-conformance",
+      "assertions": 17,
+      "sourceDigest": "a5d807eac4e98175702812ee07e4ae8123980a30ed7fb796fdcbe46b101b578c",
+      "recordedAt": "2026-09-19T07:57:49.144Z"
+    },
+    {
+      "guaranteeId": "temporal.atomicAppend",
+      "adapter": "d1",
+      "status": "proven",
+      "suite": "f2-d1-conformance",
+      "assertions": 17,
+      "sourceDigest": "a5d807eac4e98175702812ee07e4ae8123980a30ed7fb796fdcbe46b101b578c",
+      "recordedAt": "2026-09-19T07:57:49.144Z"
+    },
+    {
+      "guaranteeId": "temporal.monotonicRevision",
+      "adapter": "d1",
+      "status": "proven",
+      "suite": "f2-d1-conformance",
+      "assertions": 17,
+      "sourceDigest": "a5d807eac4e98175702812ee07e4ae8123980a30ed7fb796fdcbe46b101b578c",
+      "recordedAt": "2026-09-19T07:57:49.144Z"
+    },
+    {
+      "guaranteeId": "sequence.atomicGapless",
+      "adapter": "d1",
+      "status": "proven",
+      "suite": "f2-d1-conformance",
+      "assertions": 17,
+      "sourceDigest": "a5d807eac4e98175702812ee07e4ae8123980a30ed7fb796fdcbe46b101b578c",
+      "recordedAt": "2026-09-19T07:57:49.144Z"
+    }
+  ]
+}

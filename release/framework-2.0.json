@@ -1,0 +1,9 @@
+{
+  "schema": "framework.release-profile",
+  "schemaVersion": 1,
+  "line": "2.0",
+  "mode": "breaking-architecture",
+  "allowedVersionPattern": "^2\\.0\\.0(?:-(?:alpha|beta|rc)\\.[1-9][0-9]*)?$",
+  "applicationMigrationMinimum": "2.0.0-rc.1",
+  "certificationScope": "framework-only"
+}

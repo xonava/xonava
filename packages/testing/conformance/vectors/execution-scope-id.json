@@ -1,0 +1,48 @@
+{
+  "schema": "framework.conformance-vectors",
+  "schemaVersion": 1,
+  "suiteId": "execution-scope-id",
+  "suiteVersion": 1,
+  "vectors": [
+    {
+      "id": "app-scope",
+      "kind": "execution-scope-id",
+      "formatVersion": 1,
+      "input": {
+        "kind": "application",
+        "applicationKey": "myapp"
+      },
+      "expected": "fscope:v1:eyJhcHBsaWNhdGlvbktleSI6Im15YXBwIiwia2luZCI6ImFwcGxpY2F0aW9uIn0"
+    },
+    {
+      "id": "tenant-scope",
+      "kind": "execution-scope-id",
+      "formatVersion": 1,
+      "input": {
+        "kind": "tenant",
+        "tenantId": "tenant-42"
+      },
+      "expected": "fscope:v1:eyJraW5kIjoidGVuYW50IiwidGVuYW50SWQiOiJ0ZW5hbnQtNDIifQ"
+    },
+    {
+      "id": "platform-scope",
+      "kind": "execution-scope-id",
+      "formatVersion": 1,
+      "input": {
+        "kind": "platform",
+        "platformKey": "platform"
+      },
+      "expected": "fscope:v1:eyJraW5kIjoicGxhdGZvcm0iLCJwbGF0Zm9ybUtleSI6InBsYXRmb3JtIn0"
+    },
+    {
+      "id": "system-scope",
+      "kind": "execution-scope-id",
+      "formatVersion": 1,
+      "input": {
+        "kind": "system",
+        "systemKey": "system"
+      },
+      "expected": "fscope:v1:eyJraW5kIjoic3lzdGVtIiwic3lzdGVtS2V5Ijoic3lzdGVtIn0"
+    }
+  ]
+}

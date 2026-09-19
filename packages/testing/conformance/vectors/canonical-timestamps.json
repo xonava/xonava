@@ -1,0 +1,45 @@
+{
+  "schema": "framework.conformance-vectors",
+  "schemaVersion": 1,
+  "suiteId": "canonical-timestamps",
+  "suiteVersion": 1,
+  "vectors": [
+    {
+      "id": "rfc3339-epoch",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": "1970-01-01T00:00:00.000Z",
+      "expected": "\"1970-01-01T00:00:00.000Z\""
+    },
+    {
+      "id": "rfc3339-example",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": "2026-08-21T13:45:30.123Z",
+      "expected": "\"2026-08-21T13:45:30.123Z\""
+    },
+    {
+      "id": "rfc3339-object",
+      "kind": "canonical-json",
+      "formatVersion": 1,
+      "input": {
+        "occurredAt": "2026-01-01T00:00:00.000Z"
+      },
+      "expected": "{\"occurredAt\":\"2026-01-01T00:00:00.000Z\"}"
+    },
+    {
+      "id": "digest-empty-object",
+      "kind": "fingerprint",
+      "formatVersion": 1,
+      "input": {},
+      "expected": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "id": "digest-hello-string",
+      "kind": "fingerprint",
+      "formatVersion": 1,
+      "input": "hello",
+      "expected": "5aa762ae383fbb727af3c7a36d4940a5b8c40a989452d2304fc958ff3f354e7a"
+    }
+  ]
+}

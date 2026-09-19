@@ -1,0 +1,16 @@
+{
+  "schema": "framework.conformance-vectors",
+  "schemaVersion": 1,
+  "suiteId": "f1-exact-bytes-digests",
+  "suiteVersion": 1,
+  "vectors": [
+    { "id": "primitive-null", "kind": "canonical-json", "formatVersion": 1, "input": null, "expected": "null", "expectedUtf8Hex": "6e756c6c", "expectedSha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b" },
+    { "id": "primitive-boolean", "kind": "canonical-json", "formatVersion": 1, "input": true, "expected": "true", "expectedUtf8Hex": "74727565", "expectedSha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b" },
+    { "id": "number-negative-zero", "kind": "canonical-json", "formatVersion": 1, "input": 0, "expected": "0", "expectedUtf8Hex": "30", "expectedSha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9" },
+    { "id": "key-order", "kind": "canonical-json", "formatVersion": 1, "input": { "z": 1, "a": 2 }, "expected": "{\"a\":2,\"z\":1}", "expectedUtf8Hex": "7b2261223a322c227a223a317d", "expectedSha256": "c2985c5ba6f7d2a55e768f92490ca09388e95bc4cccb9fdf11b15f4d42f93e73" },
+    { "id": "unicode-no-normalization", "kind": "canonical-json", "formatVersion": 1, "input": "café", "expected": "\"café\"", "expectedUtf8Hex": "22636166c3a922", "expectedSha256": "28380feb8724d669bc8d4cf5b5a5bb1adbdc61b81ebd06f3fabc567b4f3b0fc5" },
+    { "id": "nested", "kind": "canonical-json", "formatVersion": 1, "input": { "z": { "b": 2, "a": 1 }, "a": [3, 2, 1] }, "expected": "{\"a\":[3,2,1],\"z\":{\"a\":1,\"b\":2}}", "expectedUtf8Hex": "7b2261223a5b332c322c315d2c227a223a7b2261223a312c2262223a327d7d", "expectedSha256": "f613a572f53e0e577f557af7e41633d7c30546ae97e1e20b8ad0dbea7118d7a6" },
+    { "id": "timestamp", "kind": "canonical-json", "formatVersion": 1, "input": "2026-08-21T13:45:30.123Z", "expected": "\"2026-08-21T13:45:30.123Z\"", "expectedUtf8Hex": "22323032362d30382d32315431333a34353a33302e3132335a22", "expectedSha256": "938289f87db60fc4f66cc6afe60b43fc43b8239f5fed3ece62cff93a7bbce79c" },
+    { "id": "binary-explicit-codec", "kind": "canonical-json", "formatVersion": 1, "input": { "type": "bytes", "value": "aGVsbG8" }, "expected": "{\"type\":\"bytes\",\"value\":\"aGVsbG8\"}", "expectedUtf8Hex": "7b2274797065223a226279746573222c2276616c7565223a2261475673624738227d", "expectedSha256": "174b40a9b8a8408e6696570b86d67e9f397ecf7a95472c98e0a366ee2236141d" }
+  ]
+}

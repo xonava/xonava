@@ -1,0 +1,76 @@
+{
+  "schema": "framework.public-exports",
+  "schemaVersion": 1,
+  "packages": {
+    "core": [
+      ".",
+      "./aggregate",
+      "./bootstrap",
+      "./business-calendar",
+      "./cache",
+      "./domain",
+      "./entity",
+      "./events",
+      "./execution",
+      "./operation",
+      "./health",
+      "./feature-flags",
+      "./kernel",
+      "./object-store",
+      "./persistence",
+      "./quota",
+      "./query",
+      "./rate-limit",
+      "./read-model",
+      "./resilience",
+      "./rules",
+      "./sequence",
+      "./security",
+      "./secrets",
+      "./serialization",
+      "./storage",
+      "./telemetry",
+      "./temporal",
+      "./workflow"
+    ],
+    "adapters": [
+      ".",
+      "./cache",
+      "./drizzle-d1",
+      "./drizzle-mysql",
+      "./drizzle-pg",
+      "./express",
+      "./fastify",
+      "./hono",
+      "./http",
+      "./server",
+      "./storage"
+    ]
+  },
+  "rootSymbols": {
+    "core": [
+      "BrandedEntityDefinition",
+      "CompiledEntityDefinition",
+      "EntityDefinition",
+      "EntityDefinitionInput",
+      "OperationCommittedEffectError",
+      "OperationDefinition",
+      "OperationOutcome",
+      "OperationRunner",
+      "compileEntity",
+      "createOperation",
+      "defineEntity",
+      "isCompiledEntityDefinition",
+      "runOperation",
+      "runOperationDetailed"
+    ],
+    "adapters": ["CRUD"]
+  },
+  "forbiddenPublicSymbols": [
+    "repositoryForDynamicDescriptor",
+    "COMPILED_ENTITY_DEFINITION_BRAND",
+    "ENTITY_DEFINITION_BRAND",
+    "OperationEffectCollector",
+    "OperationCommitCoordinator"
+  ]
+}

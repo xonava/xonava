@@ -1,0 +1,67 @@
+{
+  "schema": "framework.conformance-vectors",
+  "schemaVersion": 1,
+  "suiteId": "fingerprints",
+  "suiteVersion": 1,
+  "vectors": [
+    {
+      "id": "idempotency-simple",
+      "kind": "fingerprint",
+      "formatVersion": 1,
+      "input": {
+        "scope": {
+          "kind": "tenant",
+          "tenantId": "t-1"
+        },
+        "key": "k1"
+      },
+      "expected": "e887810ed9dff63eaf3ac32cd3ba25397a1557283518b979ea5bda772a05d121"
+    },
+    {
+      "id": "idempotency-order-independent",
+      "kind": "fingerprint",
+      "formatVersion": 1,
+      "input": {
+        "b": 2,
+        "a": 1
+      },
+      "expected": "ad1c283d16d7258c07b8a61cc8e4dd4b07c88a421174065405a29d6065883ce3"
+    },
+    {
+      "id": "outbox-simple",
+      "kind": "fingerprint",
+      "formatVersion": 1,
+      "input": {
+        "event": "invoice.paid",
+        "id": "evt-1"
+      },
+      "expected": "868408756165b80b7ca5ed0e3ac56f6f4b84c734db3770765d77ef0615bcef67"
+    },
+    {
+      "id": "cursor-query-simple",
+      "kind": "fingerprint",
+      "formatVersion": 1,
+      "input": {
+        "filter": {
+          "field": "name",
+          "op": "eq",
+          "value": "Alice"
+        }
+      },
+      "expected": "977339f476457a701f0f582ab3c515cd6971c555064dabb25ee176f5c8b65b03"
+    },
+    {
+      "id": "outbox-nested",
+      "kind": "fingerprint",
+      "formatVersion": 1,
+      "input": {
+        "a": {
+          "b": {
+            "c": 1
+          }
+        }
+      },
+      "expected": "92334c51ceb39c0032c01853c8ba2bcb7c7847d137a2a22f1bfdb4bcc38b868f"
+    }
+  ]
+}

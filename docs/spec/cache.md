@@ -1,0 +1,29 @@
+# Cache
+
+## Scope
+
+This specification defines cache keys, value operations, expiry, tags, generation fencing, consistency declaration, and failures without prescribing a provider.
+
+## Data model and resource limits
+
+A key is a bounded encoded sequence of prefix, trusted scope, and suffix. Key-part canonicalization MUST be deterministic. The canonical profile accepts primitives, arrays, maps, sets, timestamps, and arbitrary-precision integers through explicit tagged encodings. It gives tagged representations to absence, non-finite numbers, timestamps, arbitrary-precision integers, maps, and sets. Map entries and set elements MUST be deterministically ordered. Objects using reserved `$type`, cycles, invalid timestamps, and unsupported instances MUST be rejected.
+
+The canonical profile limits nesting to 100, object members to 10,000, collection items to 10,000, visited nodes to 10,000, and each encoded key/key-part to 2,048 UTF-8 bytes. Language profiles MUST apply equivalent limits and bytes.
+
+## Requirements
+
+Lookup MUST return stored value, explicit absence, or failure. Store associates a value and OPTIONAL positive expiry. Delete reports whether removal occurred. Membership reports presence without conflating failure. Clear removes entries in the cache namespace. Expired entries MUST NOT be returned as present. A language profile MUST document its configured/default expiry behavior; the neutral specification does not impose a default.
+
+Tag addition associates key and tag; tag lookup returns associations; tag deletion removes the tag namespace. Correctness-critical tagged caching MUST require declared linearizable generation consistency, fleet-shared coherence, generation lookup, and atomic generation advancement. A resolver MUST avoid publishing a value when invalidation advanced the observed generation.
+
+In-flight coalescing MAY combine misses in one service instance. It MUST NOT imply cross-process single-flight behavior or provide correctness.
+
+## Errors
+
+Invalid keys produce canonicalization/validation failure. Missing correctness-critical capabilities produce capability/configuration failure. Provider failure MUST remain distinct from absence. Telemetry MUST NOT disclose unsafe key/value data.
+
+## Evolution and conformance
+
+Tags/generations are OPTIONAL unless required by a plan. Implementations MUST declare consistency/coherence accurately. New tagged key types require a format-version decision. Conformance MUST cover deterministic bytes, every accepted tagged value, all limits, cycles/reserved tags, TTL, absence/failure, tags, generation races, and multi-instance invalidation.
+
+Traceability: `packages/core/src/cache`; adapter cache tests; G1/C1/V1 evidence.

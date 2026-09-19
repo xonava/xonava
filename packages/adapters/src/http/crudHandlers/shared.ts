@@ -1,0 +1,684 @@
+import { enforceRateLimit, type RateLimitConfig, type RateLimitPolicy, type RateLimitStore } from "core/rate-limit"
+import type { EntityVersion } from "core/serialization"
+import { internalRepositoryForDescriptor } from "../../repository/dynamicRepository"
+import type { EntityRateLimitSetting } from "core/entity"
+import {
+  assertFrameworkAuthorization,
+  ConfigurationError,
+  assertVerifiedAbacBundle,
+  createAbacAuthorizer,
+  ForbiddenError,
+  Predicate,
+  projectResponseRecord,
+  resolveFieldReadOverrides,
+  deepFreeze,
+  type PredicateNode,
+  type RequestContext,
+} from "core/domain"
+import type { CrudRouteKey } from "core/entity"
+import { createReadOnlyPersistenceProvider, createTenantScopedPersistenceProvider, type PersistenceProvider } from "core/persistence"
+import { CacheBackedRateLimitStore } from "../../cache"
+import type {
+  CrudMutationHookContext,
+  CrudPostCommitHookContext,
+  CrudReadHookContext,
+  CrudMutationHookOperation,
+  CrudReadHookOperation,
+} from "core/entity"
+import type {
+  PostCommitContext,
+  AtomicBatchPreparationContext,
+  MutationOperationContext,
+  PreparationOperationContext,
+  ReadOperationContext,
+  RepresentationContext,
+} from "core/operation"
+import type { FrameworkRequestNormalization } from "../../server"
+import { normalizeFrameworkRequest } from "../scopeResolution"
+import type {
+  CrudShared,
+  AuditObject,
+  CrudOptions,
+  MutationResult,
+  SelectableRow,
+} from "./types"
+
+export function tenantIdFromContext(context: RequestContext): string | undefined {
+  return context.scope.kind === "tenant" ? context.scope.tenantId : undefined
+}
+
+export async function normalizeCrudRequest(args: {
+  request: Request
+  routeKey: CrudRouteKey
+  normalization: FrameworkRequestNormalization
+  requestId: string
+  correlationId: string
+  pathParameters?: Readonly<Record<string, string>>
+  metadata?: Readonly<Record<string, unknown>>
+}): Promise<RequestContext> {
+  const route = args.normalization.routeBindings[args.routeKey]
+  const session = await args.normalization.resolveTrustedSession({ request: args.request, route })
+  const trustedHeaders = Object.fromEntries((args.normalization.trustedHeaders ?? []).flatMap((name) => {
+    const value = args.request.headers.get(name)
+    return value === null ? [] : [[name.toLowerCase(), value]]
+  }))
+  return normalizeFrameworkRequest({
+    requestId: args.requestId,
+    correlationId: args.correlationId,
+    route,
+    resolverBindings: args.normalization.resolverBindings,
+    ...(args.normalization.verifyDelegationRevocation === undefined ? {} : { verifyDelegationRevocation: args.normalization.verifyDelegationRevocation }),
+    ...(session === undefined ? {} : { session }),
+    admit: ({ identity, scope, scopeId }) => args.normalization.resolveAdmissionEvidence({
+      request: args.request,
+      route,
+      identity,
+      scope,
+      scopeId,
+      ...(session === undefined ? {} : { session }),
+    }),
+    signal: args.request.signal,
+    host: new URL(args.request.url).hostname,
+    ...(args.pathParameters === undefined ? {} : { pathParameters: args.pathParameters }),
+    ...(Object.keys(trustedHeaders).length === 0 ? {} : { headers: trustedHeaders }),
+    ...(args.metadata === undefined ? {} : { metadata: args.metadata }),
+  })
+}
+
+export function getRequestIp(
+  request: Request,
+  resolveClientIp?: import("../requestBody").TrustedClientIpResolver,
+  resolveHttpMetadata?: import("../../server/frameworkAdapterDeps").FrameworkAdapterDeps["resolveHttpMetadata"],
+): string {
+  return resolveClientIp?.(request, resolveHttpMetadata?.(request))?.trim() || "unknown"
+}
+
+/**
+ * Derives the cache partition for a read so that post-projection responses are
+ * only shared within one security context. The partition is bound to the
+ * verified ABAC security digest so two bundles with the same cacheScopeKey but
+ * different authorization state can never share cached rows.
+ */
+export function deriveSecurityCachePartition(args: {
+  bundle?: import("../../server").AbacBundle | undefined
+  context: RequestContext
+  cacheScopeKey?: string | undefined
+  hasRepresentationHook: boolean
+  deps: CrudOptions<SelectableRow>["adapterDeps"]
+  scope: CrudOptions<SelectableRow>["scope"]["scope"]
+}): { canCache: boolean; partition: string } {
+  // Representation hook output is request-dependent. Until a reviewed
+  // variance contract exists, never share a representation-hook execution.
+  if (args.hasRepresentationHook) {
+    return { canCache: false, partition: "" }
+  }
+  if (args.context.identity.actor.kind === "anonymous") {
+    return { canCache: true, partition: `public:${args.context.scopeId}` }
+  }
+  const digest = args.bundle?.securityDigest
+  if (!digest || digest.trim().length === 0) {
+    return { canCache: false, partition: "" }
+  }
+  const scopeKey = args.cacheScopeKey
+  const hasScopeKey = Boolean(scopeKey && scopeKey.trim().length > 0)
+  return {
+    canCache: hasScopeKey,
+    partition: `abac:${digest}:${hasScopeKey ? scopeKey : "default"}`,
+  }
+}
+
+export function canUseOwnerBypass(
+  _deps: CrudOptions<SelectableRow>["adapterDeps"],
+  _scope: CrudOptions<SelectableRow>["scope"]["scope"],
+  _context: RequestContext,
+): boolean {
+  // Administrative bypass is no longer accepted from transport/session shape.
+  // A future compiled entitlement may opt in through packages/core policy.
+  return false
+}
+
+export function authorizeFrameworkModule(args: {
+  deps: CrudOptions<SelectableRow>["adapterDeps"]
+  moduleKey: string
+  action: "read" | "create" | "update" | "delete"
+  capabilityKey?: string
+  context: RequestContext
+  bundle?: import("../../server").AbacBundle | null
+  evaluateAbacAction?: boolean
+}): { ownerBypass: boolean } {
+  const customFacts = args.deps.resolveModuleAuthorizationFacts?.({
+    moduleKey: args.moduleKey,
+    context: args.context,
+  })
+  const impersonated = args.context.identity.actor.id !== args.context.identity.subject.id ||
+    args.context.identity.actor.kind !== args.context.identity.subject.kind
+  const facts = {
+    ...(customFacts ?? {}),
+    scope: args.context.scope.kind === "tenant" ? "tenant" as const : "platform" as const,
+    ownerAuthority: false,
+    impersonated,
+  }
+  return assertFrameworkAuthorization({
+    facts,
+    moduleKey: args.moduleKey,
+    action: args.action,
+    ...(args.capabilityKey !== undefined ? { capabilityKey: args.capabilityKey } : {}),
+    ...(args.bundle !== undefined ? { bundle: args.bundle } : {}),
+    ...(args.evaluateAbacAction !== undefined ? { evaluateAbacAction: args.evaluateAbacAction } : {}),
+  })
+}
+
+export function auditEmit<
+  TRow extends SelectableRow,
+  A,
+  B,
+  L extends SelectableRow,
+  D extends SelectableRow,
+>(
+  options: CrudOptions<TRow, A, B, L, D>,
+  action: "create" | "update" | "delete"
+): boolean {
+  if (options.audit?.enabled === false) return false
+  return options.audit?.emitOn ? options.audit.emitOn.includes(action) : true
+}
+export function buildStructuralScope<TRow extends SelectableRow>(
+  entity: CrudOptions<TRow>["entity"],
+  context: RequestContext,
+  entityScope: CrudOptions<TRow>["entityScope"]
+): PredicateNode | undefined {
+  let scope: PredicateNode | undefined =
+    entityScope?.kind === "tenant" && context.scope.kind === "tenant" && (entityScope.field ?? entity.tenantField)
+      ? Predicate.eq((entityScope.field ?? entity.tenantField)!, context.scope.tenantId)
+      : entityScope?.kind === "application" && context.scope.kind === "application"
+        ? Predicate.eq(entityScope.field, context.scope.applicationKey)
+      : undefined
+  if ((entityScope?.kind === "platform" || entityScope?.kind === "system") && entityScope.scopeFilter)
+    scope = scope
+      ? Predicate.and(scope, entityScope.scopeFilter)
+      : entityScope.scopeFilter
+  if (entity.activeRowFilter) scope = scope ? Predicate.and(scope, entity.activeRowFilter) : entity.activeRowFilter
+  return scope
+}
+
+export function getProtectedMutationFields<TRow extends SelectableRow>(
+  entity: CrudOptions<TRow>["entity"]
+): string[] {
+  return [...new Set([
+    entity.primaryKey,
+    entity.tenantField,
+    entity.versionField,
+    ...(entity.immutableFields ?? []),
+  ].filter((field): field is string => Boolean(field)))]
+}
+
+export function assertProtectedUpdateFields<TRow extends SelectableRow>(
+  entity: CrudOptions<TRow>["entity"],
+  patch: object
+): void {
+  const protectedFields = getProtectedMutationFields(entity)
+  const provided = protectedFields.filter((field) => Object.hasOwn(patch, field))
+  if (provided.length > 0)
+    throw new ForbiddenError(
+      `Cannot modify protected fields on ${entity.name}: ${provided.join(", ")}`,
+      { fields: provided }
+    )
+}
+
+export function assertProtectedCreateFields<TRow extends SelectableRow>(
+  entity: CrudOptions<TRow>["entity"],
+  body: object
+): void {
+  const protectedFields = getProtectedMutationFields(entity)
+  const provided = protectedFields.filter((field) => Object.hasOwn(body, field))
+  if (provided.length > 0)
+    throw new ForbiddenError(
+      `Cannot provide protected fields on ${entity.name}: ${provided.join(", ")}`,
+      { fields: provided }
+    )
+}
+
+export async function resolveActionScopeForContext<
+  TRow extends SelectableRow,
+  A = TRow,
+  B = Partial<TRow>,
+  L extends SelectableRow = TRow,
+  D extends SelectableRow = TRow,
+>(
+  options: CrudOptions<TRow, A, B, L, D>,
+  context: RequestContext,
+  action: string
+): Promise<PredicateNode | undefined> {
+  if (context.identity.actor.kind === "anonymous" || canUseOwnerBypass(options.adapterDeps, options.scope.scope, context))
+    return undefined
+  const bundle = await options.adapterDeps.resolveAbacBundle({
+    moduleKey: options.moduleKey,
+    context,
+  })
+  if (!bundle)
+    throw new ForbiddenError("ABAC authorization bundle unavailable")
+  assertVerifiedAbacBundle(bundle)
+  return bundle ? createAbacAuthorizer(bundle).assertCollectionAction(action).scope : undefined
+}
+
+export async function readMutationResult<
+  TRow extends SelectableRow,
+  A = TRow,
+  B = Partial<TRow>,
+  L extends SelectableRow = TRow,
+  D extends SelectableRow = TRow,
+>(
+  options: CrudOptions<TRow, A, B, L, D>,
+  entity: CrudOptions<TRow>["entity"],
+  context: RequestContext,
+  id: string,
+  persistence?: PersistenceProvider,
+): Promise<TRow | null> {
+  const result = await loadReadableMutationRecord(
+    options,
+    entity,
+    context,
+    id,
+    persistence,
+  )
+  if (!result) return null
+  const requiresAbac = context.identity.actor.kind !== "anonymous" && !canUseOwnerBypass(options.adapterDeps, options.scope.scope, context)
+  const bundle = requiresAbac
+    ? await options.adapterDeps.resolveAbacBundle({ moduleKey: options.moduleKey, context })
+    : undefined
+  if (requiresAbac && !bundle)
+    throw new ForbiddenError("ABAC authorization bundle unavailable")
+  if (bundle) assertVerifiedAbacBundle(bundle)
+  return projectResponseRecord({
+    entity,
+    record: result,
+    ...(bundle ? { overrides: resolveFieldReadOverrides({ policies: bundle.policies, moduleKey: options.moduleKey, record: result }) } : {}),
+  })
+}
+
+/** Internal versions are already validated numbers; do not coerce persisted strings. */
+export function sameMutationVersion(a: unknown, b: unknown): boolean {
+  return a === b
+}
+
+/**
+ * Rebuilds a safe committed mutation response by rereading the resource under
+ * the current verified security context. Used to recover an idempotent request
+ * whose committed response was never finalized (crash between commit and
+ * complete). Returns null when the row is not readable, in which case the
+ * caller must not invent a response.
+ */
+export async function buildCommittedReadResponse<
+  TRow extends SelectableRow,
+  A,
+  B,
+  L extends SelectableRow,
+  D extends SelectableRow,
+>(args: {
+  options: CrudOptions<TRow, A, B, L, D>
+  entity: CrudOptions<TRow>["entity"]
+  context: RequestContext
+  id: string
+  resourceVersion?: EntityVersion
+}): Promise<MutationResult<TRow> | null> {
+  const readable = await loadReadableMutationRecord(
+    args.options,
+    args.entity,
+    args.context,
+    args.id,
+    undefined,
+    args.resourceVersion,
+  )
+  if (!readable) return null
+  const bundle = args.context.identity.actor.kind !== "anonymous" && !canUseOwnerBypass(args.options.adapterDeps, args.options.scope.scope, args.context)
+    ? await args.options.adapterDeps.resolveAbacBundle({ moduleKey: args.options.moduleKey, context: args.context })
+    : undefined
+  if (bundle) assertVerifiedAbacBundle(bundle)
+  return {
+    record: projectResponseRecord({
+      entity: args.entity,
+      record: readable,
+      ...(bundle
+        ? {
+            overrides: resolveFieldReadOverrides({
+              policies: bundle.policies,
+              moduleKey: args.options.moduleKey,
+              record: readable,
+            }),
+          }
+        : {}),
+    }),
+  }
+}
+
+export async function loadReadableMutationRecord<
+  TRow extends SelectableRow,
+  A = TRow,
+  B = Partial<TRow>,
+  L extends SelectableRow = TRow,
+  D extends SelectableRow = TRow,
+>(
+  options: CrudOptions<TRow, A, B, L, D>,
+  entity: CrudOptions<TRow>["entity"],
+  context: RequestContext,
+  id: string,
+  persistence?: PersistenceProvider,
+  resourceVersion?: EntityVersion,
+): Promise<TRow | null> {
+  const structural = buildStructuralScope(entity, context, options.entityScope)
+  const readBundle = context.identity.actor.kind === "anonymous" || canUseOwnerBypass(options.adapterDeps, options.scope.scope, context)
+    ? undefined
+    : await options.adapterDeps.resolveAbacBundle({
+        moduleKey: options.moduleKey,
+        context,
+      })
+  if (context.identity.actor.kind !== "anonymous" && !canUseOwnerBypass(options.adapterDeps, options.scope.scope, context) && !readBundle)
+    throw new ForbiddenError("ABAC authorization bundle unavailable")
+  if (readBundle) assertVerifiedAbacBundle(readBundle)
+  const resolvedReadScope = readBundle
+    ? createAbacAuthorizer(readBundle).authorizeCollection("read").scope
+    : undefined
+  const scope = structural && resolvedReadScope
+    ? Predicate.and(structural, resolvedReadScope)
+    : structural ?? resolvedReadScope
+  const filter = scope
+    ? Predicate.and(Predicate.eq(entity.primaryKey ?? "id", id), scope)
+    : Predicate.eq(entity.primaryKey ?? "id", id)
+  const versionField = entity.versionField
+  const versionFilter = resourceVersion !== undefined && versionField
+    ? Predicate.eq(versionField, resourceVersion)
+    : undefined
+  const mutationFilter = versionFilter ? Predicate.and(filter, versionFilter) : filter
+  const basePersistence = persistence ?? options.createPersistence(context)
+  const readPersistence = entity.tenantField
+    ? withScopedPersistence(context, basePersistence)
+    : basePersistence
+  const row = await internalRepositoryForDescriptor(readPersistence, entity).findMany({
+    filter: mutationFilter,
+    pagination: { kind: "offset", page: 1, pageSize: 1 },
+  })
+  const result = row.rows[0] ?? null
+  if (result && resourceVersion !== undefined && (!versionField || !sameMutationVersion(result[versionField], resourceVersion))) return null
+  return result
+}
+export function withScopedPersistence(
+  context: RequestContext,
+  persistence: PersistenceProvider
+): PersistenceProvider {
+  return context.scope.kind === "tenant"
+    ? createTenantScopedPersistenceProvider(persistence, context.scope.tenantId)
+    : persistence
+}
+
+function snapshotHookValue<T>(value: T): T {
+  // Hooks may inspect request metadata, but must never receive references into
+  // the authorization/session state used by the operation pipeline.
+  return deepFreeze(value)
+}
+
+export function toCrudContext(
+  context: RequestContext,
+  operation: MutationOperationContext | PreparationOperationContext | RepresentationContext,
+  persistence?: PersistenceProvider,
+): CrudMutationHookContext {
+  const operationPersistence = "persistence" in operation ? operation.persistence : undefined
+  if (!persistence && !operationPersistence) throw new ConfigurationError("Mutation hook persistence is unavailable")
+  const hookPersistence = persistence
+    ? createReadOnlyPersistenceProvider(context.scope.kind === "tenant" ? withScopedPersistence(context, persistence) : persistence)
+    : operationPersistence!
+
+  // Keep internal effect, capability, disposal, and persistence-replacement
+  // APIs out of the hook-visible operation object.
+  const request = "request" in operation && operation.request !== undefined
+    ? snapshotHookValue(operation.request)
+    : undefined
+  const hookOperation: CrudMutationHookOperation = {
+    operationId: operation.operationId,
+    ...(operation.correlationId !== undefined ? { correlationId: operation.correlationId } : {}),
+    ...(request !== undefined ? { request } : {}),
+    persistence: hookPersistence,
+    services: operation.services,
+    signal: operation.signal,
+    deadline: operation.deadline,
+  }
+
+  return {
+    tenantId: tenantIdFromContext(context) ?? "",
+    persistence: hookPersistence,
+    requestId: request?.requestId ?? "",
+    correlationId: request?.correlationId ?? operation.correlationId ?? "",
+    operation: hookOperation,
+  }
+}
+export function toCrudPostCommitContext(
+  context: RequestContext,
+  operation: PostCommitContext
+): CrudPostCommitHookContext {
+  const requestId =
+    typeof operation.metadata?.requestId === "string"
+      ? operation.metadata.requestId
+      : (operation.correlationId ?? "")
+  return {
+    tenantId: tenantIdFromContext(context) ?? "",
+    requestId,
+    correlationId: operation.correlationId ?? "",
+  }
+}
+export function toCrudReadContext(
+  context: RequestContext,
+  operation: ReadOperationContext | RepresentationContext
+): CrudReadHookContext {
+  const metadata = snapshotHookValue(
+    "request" in operation ? operation.request?.metadata : "metadata" in operation ? operation.metadata : undefined
+  )
+  const metadataRequestId = typeof metadata?.requestId === "string"
+    ? metadata.requestId
+    : undefined
+  return {
+    tenantId: tenantIdFromContext(context) ?? "",
+    requestId: ("request" in operation ? operation.request?.requestId : undefined) ?? metadataRequestId ?? "",
+    correlationId: ("request" in operation ? operation.request?.correlationId : undefined) ?? operation?.correlationId ?? "",
+    operation: {
+      operationId: operation.operationId,
+      ...(operation.correlationId !== undefined ? { correlationId: operation.correlationId } : {}),
+      services: operation.services,
+      ...(metadata !== undefined ? { metadata } : {}),
+    } satisfies CrudReadHookOperation,
+  }
+}
+export function resolveOperationRequestContext(
+  operation: ReadOperationContext | MutationOperationContext | RepresentationContext | PostCommitContext | AtomicBatchPreparationContext
+): RequestContext {
+  if ("request" in operation && operation.request) return operation.request
+  const metadata = "metadata" in operation ? operation.metadata : undefined
+  const context = metadata?.requestContext as RequestContext | undefined
+  if (!context)
+    throw new ConfigurationError(
+      "Canonical request context metadata missing for CRUD hook context"
+    )
+  return context
+}
+
+export function normalizeEntityRateLimitSetting(setting: EntityRateLimitSetting): {
+  config: RateLimitConfig
+  consistency: NonNullable<EntityRateLimitSetting["consistency"]>
+  policy?: Pick<RateLimitPolicy, "failureMode">
+} {
+  const { max, timeWindow, consistency, failureMode, algorithm, cost } = setting
+  return {
+    config: { max, timeWindow, ...(algorithm!==undefined?{algorithm}:{}), ...(cost!==undefined?{cost}:{}) },
+    consistency,
+    ...(failureMode !== undefined ? { policy: { failureMode } } : {}),
+  }
+}
+
+export async function loadExistingRecord<
+  TRow extends SelectableRow,
+  A,
+  B,
+  L extends SelectableRow,
+  D extends SelectableRow,
+>(
+  options: CrudOptions<TRow, A, B, L, D>,
+  id: string,
+  context: RequestContext,
+  extraFilter?: PredicateNode
+): Promise<TRow | null> {
+  const basePersistence = options.createPersistence(context)
+  const readPersistence = options.entity.tenantField
+    ? withScopedPersistence(context, basePersistence)
+    : basePersistence
+  const repo = internalRepositoryForDescriptor(readPersistence, options.entity)
+  const structural = buildStructuralScope(
+    options.entity,
+    context,
+    options.entityScope
+  )
+  const scope = extraFilter
+    ? structural
+      ? Predicate.and(structural, extraFilter)
+      : extraFilter
+    : structural
+  const filter = scope
+    ? Predicate.and(Predicate.eq(options.entity.primaryKey ?? "id", id), scope)
+    : Predicate.eq(options.entity.primaryKey ?? "id", id)
+  if (scope)
+    return repo.findOneWhere
+      ? repo.findOneWhere(filter)
+      : ((await repo.findMany({ filter })).rows[0] ?? null)
+  return repo.findById(id)
+}
+export function toAuditObject(value: object): AuditObject {
+  return value as AuditObject
+}
+export function buildScopedCreateRecord<TRow extends SelectableRow>(
+  entity: CrudOptions<TRow>["entity"],
+  input: { id: string },
+  body: AuditObject,
+  context: RequestContext
+): Partial<TRow> {
+  return {
+    ...body,
+    id: input.id,
+    ...(context.scope.kind === "tenant" && entity.tenantField
+      ? { [entity.tenantField]: context.scope.tenantId }
+      : {}),
+    // Create is the first versioned state. Set it explicitly so the durable
+    // idempotency receipt does not depend on a dialect/schema default.
+    ...(entity.versionField ? { [entity.versionField]: 1 } : {}),
+  } as unknown as Partial<TRow>
+}
+export function createShared<
+  TRow extends SelectableRow,
+  A,
+  B,
+  L extends SelectableRow,
+  D extends SelectableRow,
+>(
+  options: CrudOptions<TRow, A, B, L, D>,
+  routes: CrudShared<TRow, A, B, L, D>["routes"],
+  capabilityMode: CrudShared<TRow, A, B, L, D>["capabilityMode"]
+): Pick<
+  CrudShared<TRow, A, B, L, D>,
+  | "buildReadTags"
+  | "enforceReadRateLimit"
+  | "enforceReadAccess"
+  | "buildReadScope"
+  | "resolveReadScopeForContext"
+> {
+  const deps = options.adapterDeps
+  const buildTagScopeKey = (context: RequestContext) =>
+    context.scope.kind === "tenant" ? context.scope.tenantId : context.scopeId
+  const buildReadTags = (context: RequestContext) => {
+    // Tenant data is namespaced by tenant so one tenant's write cannot churn
+    // every tenant's cache. The bare global module tag is reserved for
+    // genuinely global (platform/public) shared data.
+    const globalTag = context.scope.kind === "tenant" ? [] : [options.cache.tag]
+    return [
+      `${options.cache.tag}:${buildTagScopeKey(context)}`,
+      `scope:${context.scopeId}`,
+      ...globalTag,
+    ]
+  }
+  const enforceReadRateLimit = async (
+    route: "list" | "detail",
+    config:
+      import("core/entity").EntityRateLimitSetting | undefined,
+    request: Request,
+    context: RequestContext
+  ) => {
+    if (!config) return
+    const key = `${context.scopeId}:${context.identity.actor.id}:${options.moduleKey}:${route}:${getRequestIp(request, deps.resolveClientIp, deps.resolveHttpMetadata)}`
+    const normalized = normalizeEntityRateLimitSetting(config)
+    if (normalized.consistency === "atomic" && !options.getRateLimitStore) {
+      throw new ConfigurationError("Atomic rate limiting requires an atomic rate-limit store")
+    }
+    const store: RateLimitStore = normalized.consistency === "atomic"
+      ? await options.getRateLimitStore!()
+      : new CacheBackedRateLimitStore(await options.getCacheAdapter())
+    await enforceRateLimit({ store, key, ...normalized })
+  }
+  const enforceReadAccess = async (
+    _request: Request,
+    context: RequestContext
+  ) => {
+    let abacBundle
+    if (
+      context.identity.actor.kind !== "anonymous" &&
+       !canUseOwnerBypass(deps, options.scope.scope, context)
+    ) {
+      abacBundle =
+        (await deps.resolveAbacBundle({
+          moduleKey: options.moduleKey,
+          context,
+        })) ?? undefined
+      if (!abacBundle)
+         throw new ForbiddenError("ABAC authorization bundle unavailable")
+       assertVerifiedAbacBundle(abacBundle)
+    } else if (context.identity.actor.kind === "anonymous" && capabilityMode.enabled)
+      throw new ForbiddenError("This operation is not permitted")
+    authorizeFrameworkModule({
+      deps,
+      moduleKey: options.moduleKey,
+      action: "read",
+      ...(capabilityMode.enabled ? { capabilityKey: capabilityMode.key! } : {}),
+      context,
+      ...(abacBundle !== undefined ? { bundle: abacBundle } : {}),
+      evaluateAbacAction: false,
+    })
+    return abacBundle
+  }
+  const buildReadScope = (
+    bundle: import("../../server").AbacBundle | undefined
+  ) => {
+    const scope = bundle
+      ? createAbacAuthorizer(bundle).buildActionScope("read")
+      : { filter: undefined, cacheScopeKey: undefined }
+    return {
+      filter: scope.filter,
+      ...(scope.cacheScopeKey !== undefined
+        ? { cacheScopeKey: scope.cacheScopeKey }
+        : {}),
+    }
+  }
+  const resolveReadScopeForContext = async (context: RequestContext) => {
+    if (
+      context.identity.actor.kind === "anonymous" ||
+       canUseOwnerBypass(deps, options.scope.scope, context)
+    )
+      return { filter: undefined }
+     const bundle = await deps.resolveAbacBundle({
+         moduleKey: options.moduleKey,
+         context,
+      })
+      if (!bundle) throw new ForbiddenError("ABAC authorization bundle unavailable")
+      assertVerifiedAbacBundle(bundle)
+      return buildReadScope(bundle)
+  }
+  return {
+    buildReadTags,
+    enforceReadRateLimit,
+    enforceReadAccess,
+    buildReadScope,
+    resolveReadScopeForContext,
+  }
+}

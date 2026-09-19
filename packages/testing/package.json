@@ -1,0 +1,81 @@
+{
+  "name": "testing",
+  "version": "2.0.0-rc.2",
+  "type": "module",
+  "private": true,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./repositories": {
+      "types": "./dist/repository-contracts.d.ts",
+      "default": "./dist/repository-contracts.js"
+    },
+    "./predicates": {
+      "types": "./dist/predicate-contracts.d.ts",
+      "default": "./dist/predicate-contracts.js"
+    },
+    "./abac": {
+      "types": "./dist/abac-contracts.d.ts",
+      "default": "./dist/abac-contracts.js"
+    },
+    "./contracts/persistence-provider": {
+      "types": "./dist/contracts/persistence-provider.d.ts",
+      "default": "./dist/contracts/persistence-provider.js"
+    },
+    "./contracts/atomic-batch": {
+      "types": "./dist/contracts/atomic-batch.d.ts",
+      "default": "./dist/contracts/atomic-batch.js"
+    },
+    "./contracts/cache-adapter": {
+      "types": "./dist/contracts/cache-adapter.d.ts",
+      "default": "./dist/contracts/cache-adapter.js"
+    },
+    "./contracts/shared-conformance": {
+      "types": "./dist/contracts/shared-conformance.d.ts",
+      "default": "./dist/contracts/shared-conformance.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json --force && node ../../scripts/verification/rewriteBuildExtensions.mjs .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src tests fixtures integration crash conformance --max-warnings=0",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:property": "vitest run tests/property.test.ts",
+    "test:race": "vitest run tests/race.test.ts",
+    "test:crash": "vitest run tests/crash-recovery.test.ts",
+    "test:integration:pg": "vitest run --config vitest.integration.config.ts integration/pg",
+    "test:integration:d1": "vitest run --config vitest.integration.config.ts integration/d1",
+    "test:integration:mysql": "vitest run --config vitest.integration.config.ts integration/mysql",
+    "test:conformance:pg": "vitest run --config vitest.integration.config.ts conformance/guarantees/pg.conformance.test.ts",
+    "test:conformance:d1": "vitest run --config vitest.integration.config.ts conformance/guarantees/d1.conformance.test.ts",
+    "test:conformance:mysql": "vitest run --config vitest.integration.config.ts conformance/guarantees/mysql.conformance.test.ts",
+    "test:race:pg": "vitest run --config vitest.integration.config.ts integration/pg/race.integration.test.ts integration/pg/temporal.integration.test.ts integration/pg/sequence.integration.test.ts",
+    "test:race:d1": "vitest run --config vitest.integration.config.ts integration/d1/race.integration.test.ts integration/d1/new-capabilities-race.integration.test.ts",
+    "test:race:mysql": "vitest run --config vitest.integration.config.ts integration/mysql/race.integration.test.ts integration/mysql/job.integration.test.ts integration/mysql/schedule.integration.test.ts integration/mysql/temporal.integration.test.ts integration/mysql/sequence.integration.test.ts",
+    "test:crash:pg": "vitest run --config vitest.integration.config.ts crash/pg.crash.test.ts",
+    "test:crash:d1": "vitest run --config vitest.integration.config.ts crash/d1.crash.test.ts",
+    "test:crash:mysql": "vitest run --config vitest.integration.config.ts crash/mysql.crash.test.ts"
+  },
+  "peerDependencies": {
+    "vitest": "^4.1.7"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1",
+    "miniflare": "3.20250718.3",
+    "vitest": "^4.1.7"
+  },
+  "dependencies": {
+    "adapters": "*",
+    "core": "*",
+    "drizzle-orm": "0.45.2",
+    "mysql2": "^3.24.4",
+    "pg": "8.23.0"
+  }
+}

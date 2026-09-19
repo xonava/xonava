@@ -1,0 +1,16 @@
+{
+  "schema": "framework.conformance-vector-manifest",
+  "version": 1,
+  "canonicalizationVersion": "jcs-rfc8785-v1",
+  "digestAlgorithmVersion": "sha256-v1",
+  "baseDirectory": "../../packages/testing/conformance/vectors",
+  "vectors": [
+    "canonical-json.json",
+    "canonical-json-unicode.json",
+    "canonical-timestamps.json",
+    "canonical-binary.json",
+    "execution-scope-id.json",
+    "fingerprints.json",
+    "f1-exact-bytes-digests.json"
+  ]
+}

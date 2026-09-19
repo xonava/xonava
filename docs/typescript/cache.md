@@ -1,0 +1,3 @@
+# Cache API
+
+Import `CacheService`, `CacheAdapter`, `CacheCapabilities`, key helpers, and generation contracts from `core/cache`. Construct a service with an adapter and optional `defaultTtlMs`, telemetry, and `correctnessCritical`; this TypeScript implementation defaults omitted TTL to 120,000 milliseconds. Correctness-critical mode rejects adapters unless they declare shared linearizable generations and implement both generation operations. `get` returns `undefined` for absence; adapter failures become `CacheAdapterError`. Use tag/generation APIs for invalidation and never treat instance-local miss coalescing as distributed locking. See the [normative cache spec](../spec/cache.md) and compile-tested example in `packages/testing/tests/documentationExamples.test.ts`.

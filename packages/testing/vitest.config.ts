@@ -1,0 +1,31 @@
+import { defineConfig } from "vitest/config"
+import path from "node:path"
+export default defineConfig({
+  resolve: { alias: {
+    "core/domain": path.resolve(import.meta.dirname, "../core/src/domain/index.ts"),
+    "core/entity": path.resolve(import.meta.dirname, "../core/src/entity/index.ts"),
+    "core/execution": path.resolve(import.meta.dirname, "../core/src/execution/index.ts"),
+    "core/events": path.resolve(import.meta.dirname, "../core/src/events/index.ts"),
+    "core/operation": path.resolve(import.meta.dirname, "../core/src/operation/index.ts"),
+    "core/bootstrap": path.resolve(import.meta.dirname, "../core/src/bootstrap/index.ts"),
+    "core/security": path.resolve(import.meta.dirname, "../core/src/security/index.ts"),
+    "core/query": path.resolve(import.meta.dirname, "../core/src/query/index.ts"),
+    "core/persistence": path.resolve(import.meta.dirname, "../core/src/persistence/index.ts"),
+    "core/cache": path.resolve(import.meta.dirname, "../core/src/cache/index.ts"),
+    "core/rate-limit": path.resolve(import.meta.dirname, "../core/src/rate-limit/index.ts"),
+    "core/telemetry": path.resolve(import.meta.dirname, "../core/src/telemetry/index.ts"),
+    "core/temporal": path.resolve(import.meta.dirname, "../core/src/temporal/index.ts"),
+    "core/sequence": path.resolve(import.meta.dirname, "../core/src/sequence/index.ts"),
+    "core/aggregate": path.resolve(import.meta.dirname, "../core/src/aggregate/index.ts"),
+    "core/rules": path.resolve(import.meta.dirname, "../core/src/rules/index.ts"),
+    "core/object-store": path.resolve(import.meta.dirname, "../core/src/object-store/index.ts"),
+    "core/serialization": path.resolve(import.meta.dirname, "../core/src/serialization/index.ts"),
+    "core/workflow": path.resolve(import.meta.dirname, "../core/src/workflow/index.ts"),
+    "core": path.resolve(import.meta.dirname, "../core/src/index.ts"),
+    "adapters/drizzle-d1": path.resolve(import.meta.dirname, "../adapters/src/drizzle-d1/index.ts"),
+    "adapters/drizzle-pg": path.resolve(import.meta.dirname, "../adapters/src/drizzle-pg/index.ts"),
+    "adapters/drizzle-mysql": path.resolve(import.meta.dirname, "../adapters/src/drizzle-mysql/index.ts"),
+    "adapters": path.resolve(import.meta.dirname, "../adapters/src/index.ts"),
+  }},
+  test: { include: ["tests/**/*.test.ts"] },
+})
