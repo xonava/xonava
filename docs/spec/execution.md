@@ -1,4 +1,4 @@
-# Jobs and schedules
+# Jobs, schedules, and workflow execution
 
 ## Scope and data model
 
@@ -10,7 +10,7 @@ Job identity/fingerprint binds definition, version, scoped payload, and idempote
 
 Dispatch MUST honor cancellation, deadline, retry policy, and idempotency. Schedule lifecycle transitions and next-run calculation MUST be deterministic for the declared time basis. Payload migration MUST be explicit and reject unknown unsupported versions.
 
-Retry policy bounds attempts and delay and MUST NOT exceed enclosing expiry/deadline. Schedules define timezone/time basis, cadence, missed-run behavior, overlap policy, and enabled lifecycle. Concurrent dispatchers MUST not both commit ownership for one occurrence.
+Retry policy bounds attempts and delay and MUST NOT exceed enclosing expiry/deadline. Schedules define timezone/time basis, cadence, missed-run behavior, overlap policy, and enabled lifecycle. Concurrent dispatchers MUST not both commit ownership for one occurrence. Job, schedule, and workflow lease renewals for one claim MUST be serialized, atomically verify the fencing token, move expiry monotonically forward, and settle before the dispatcher releases its renewal lifecycle. A pending renewal MUST settle before successful job/workflow completion can commit.
 
 ## Errors and conformance
 

@@ -145,6 +145,23 @@ async function waitForExecutionSettlement(executionPromise: Promise<JobResult>, 
   return settled
 }
 
+async function renewWithDeadline(operation: Promise<boolean>, leaseDurationMs: number, clock: DispatcherClock): Promise<boolean> {
+  let timeoutId: unknown
+  const timeout = new Promise<never>((_resolve, reject) => {
+    const callback = () => reject(new Error("Job lease renewal timed out"))
+    timeoutId = clock.setTimeout?.(callback, Math.max(1, Math.floor(leaseDurationMs / 2)))
+    if (timeoutId === undefined) timeoutId = setTimeout(callback, Math.max(1, Math.floor(leaseDurationMs / 2)))
+  })
+  try {
+    return await Promise.race([operation, timeout])
+  } finally {
+    if (timeoutId !== undefined) {
+      if (clock.clearTimeout) clock.clearTimeout(timeoutId)
+      else clearTimeout(timeoutId as ReturnType<typeof setTimeout>)
+    }
+  }
+}
+
 async function markFailedState(args: Parameters<JobStore["markFailed"]>[0], store: JobStore): Promise<{ applied: boolean; error?: string }> {
   try {
     const status = await store.markFailed(args)
@@ -223,12 +240,12 @@ async function executeJob(args: DispatcherConfig & { job: StoredJob; log: Dispat
   // immediately before execution instead of trusting the lease it received in
   // the batch. This validates the opaque claimToken atomically.
   try {
-    const renewed = await store.renewLease({
+    const renewed = await renewWithDeadline(store.renewLease({
       jobId: job.id,
       workerId,
       claimToken,
       extendByMs: leaseDurationMs,
-    })
+    }), leaseDurationMs, clock)
     if (!renewed) {
       log.warn?.("Job lease re-fence rejected", { jobId: job.id, workerId, claimToken })
       return { kind: "lease_lost", error: "Job lease was lost" }
@@ -286,6 +303,36 @@ async function executeJob(args: DispatcherConfig & { job: StoredJob; log: Dispat
   const cancellationGraceMs = args.timeoutPolicy?.cancellationGraceMs ?? leaseDurationMs
   const controller = new AbortController()
   const startedAt = clock.now()
+  let leaseLost = false
+  let stopped = false
+  let renewalInFlight: Promise<void> | undefined
+  let resolveLeaseLost: (() => void) | undefined
+  const leaseLostPromise = new Promise<never>((_, reject) => { resolveLeaseLost = () => reject(new Error("Job lease was lost")) })
+  const markLeaseLost = (error: unknown): void => {
+    if (leaseLost) return
+    leaseLost = true
+    controller.abort(error instanceof Error ? error : new Error("Job lease was lost"))
+    resolveLeaseLost?.()
+  }
+  const renewCurrentLease = (): Promise<void> => {
+    if (leaseLost) return Promise.reject(new Error("Job lease was lost"))
+    if (renewalInFlight) return renewalInFlight
+    const operation = (async (): Promise<void> => {
+      const renewed = await renewWithDeadline(store.renewLease({ jobId: job.id, workerId, claimToken, extendByMs: leaseDurationMs }), leaseDurationMs, clock)
+      if (!renewed) throw new Error("Job lease was lost")
+    })()
+    let tracked: Promise<void>
+    tracked = operation.then(
+      () => { if (renewalInFlight === tracked) renewalInFlight = undefined },
+      (error: unknown) => {
+        if (renewalInFlight === tracked) renewalInFlight = undefined
+        markLeaseLost(error)
+        throw error
+      },
+    )
+    renewalInFlight = tracked
+    return tracked
+  }
   const execution = {
     ...createExecutionContext({
        executionId: args.idGenerator?.() ?? crypto.randomUUID(),
@@ -302,47 +349,28 @@ async function executeJob(args: DispatcherConfig & { job: StoredJob; log: Dispat
       signal: controller.signal,
       metadata: job.metadata ?? {},
       clock,
-      assertLease: async () => {
-        const renewed = await store.renewLease({
-          jobId: job.id,
-          workerId,
-          claimToken,
-          extendByMs: leaseDurationMs,
-        })
-        if (!renewed) throw new Error("Job lease was lost")
-      },
+      assertLease: renewCurrentLease,
      }),
     payload,
   }
-  let leaseLost = false
-  let stopped = false
   let heartbeatPromise: Promise<void> | undefined
   let resolveHeartbeatStop: (() => void) | undefined
   const heartbeatStop = new Promise<void>((resolve) => { resolveHeartbeatStop = resolve })
-  let resolveLeaseLost: (() => void) | undefined
-  const leaseLostPromise = new Promise<never>((_, reject) => { resolveLeaseLost = () => reject(new Error("Job lease was lost")) })
   const heartbeat = async (): Promise<void> => {
     while (!stopped) {
       try {
         await Promise.race([clock.sleep(Math.max(1, leaseDurationMs / 3)), heartbeatStop])
       } catch (sleepError) {
-        leaseLost = true
         log.warn?.("Job heartbeat sleep failed; treating as lease lost", { jobId: job.id, error: errorMessage(sleepError) })
         const error = new Error("Job lease renewal failed")
-        controller.abort(error)
-        resolveLeaseLost?.()
+        markLeaseLost(error)
         return
       }
       if (stopped) return
       try {
-        const renewed = await store.renewLease({ jobId: job.id, workerId, claimToken, extendByMs: leaseDurationMs })
-        if (!renewed) throw new Error("Job lease was lost")
+        await renewCurrentLease()
       } catch (renewError) {
-        leaseLost = true
         log.warn?.("Job heartbeat lease renewal failed", { jobId: job.id, error: errorMessage(renewError), claimToken })
-        const error = new Error("Job lease was lost")
-        controller.abort(error)
-        resolveLeaseLost?.()
         return
       }
     }
@@ -365,6 +393,10 @@ async function executeJob(args: DispatcherConfig & { job: StoredJob; log: Dispat
     heartbeatPromise = heartbeat()
     executionPromise = def.execute(execution)
     const executionResult = await Promise.race([executionPromise, timeoutPromise, leaseLostPromise])
+    // Completion must not overtake a renewal that already started. Otherwise a
+    // fast execution settlement can be committed while that renewal is about
+    // to prove the claim stale.
+    if (renewalInFlight) await renewalInFlight
     if (leaseLost) {
       if (executionPromise !== undefined) await waitForExecutionSettlement(executionPromise, cancellationGraceMs, clock)
       return { kind: "lease_lost", error: "Job lease was lost" }

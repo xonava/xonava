@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from "vitest"
-import { buildKey, CacheService, serializeCacheKeyPart, type CacheAdapter } from "../cache"
+import {
+  buildKey,
+  CacheOverloadError,
+  CacheService,
+  MAX_CACHE_KEY_BYTES,
+  MAX_CACHE_TAG_BYTES,
+  MAX_CACHE_TAGS_PER_CALL,
+  serializeCacheKeyPart,
+  type CacheAdapter,
+} from "../cache"
 
 function createAdapter(capabilities?: CacheAdapter["capabilities"]): CacheAdapter {
   return {
@@ -32,6 +41,20 @@ describe("cache ports", () => {
     expect(serializeCacheKeyPart("plain")).toBe('"plain"')
   })
 
+  it("rejects executable and non-plain cache-key shapes without invoking accessors", () => {
+    let reads = 0
+    const accessor = Object.defineProperty({}, "secret", { enumerable: true, get() { reads++; return "value" } })
+    class Custom { value = 1 }
+    class CustomMap extends Map<unknown, unknown> {}
+
+    expect(() => serializeCacheKeyPart(accessor)).toThrow(/data properties/)
+    expect(reads).toBe(0)
+    expect(() => serializeCacheKeyPart(new Custom())).toThrow(/plain objects/)
+    expect(() => serializeCacheKeyPart(new CustomMap())).toThrow(/Map subclasses/)
+    expect(() => serializeCacheKeyPart(Symbol("key"))).toThrow(/symbol/)
+    expect(() => serializeCacheKeyPart(() => "key")).toThrow(/function/)
+  })
+
   it("caches resolver results and manages tags", async () => {
     const adapter = createAdapter()
     const cache = new CacheService({ adapter, defaultTtlMs: 1000 })
@@ -61,9 +84,7 @@ describe("cache ports", () => {
 
     const first = cache.getOrSet("key", resolver)
     const second = cache.getOrSet("key", resolver)
-    await Promise.resolve()
-    await Promise.resolve()
-    expect(resolver).toHaveBeenCalledOnce()
+    await vi.waitFor(() => expect(resolver).toHaveBeenCalledOnce())
     resolve({ id: "shared" })
 
     await expect(Promise.all([first, second])).resolves.toEqual([{ id: "shared" }, { id: "shared" }])
@@ -98,6 +119,78 @@ describe("cache ports", () => {
     const fresh = cache.getOrSet("key", async () => "fresh", ["rows"])
     await expect(fresh).resolves.toBe("fresh")
     expect(setMock).toHaveBeenLastCalledWith(expect.stringContaining("__generation__"), "fresh", 120000)
+  })
+
+  it("does not retain generation state per unique tag", async () => {
+    const adapter: CacheAdapter = {
+      get: async () => undefined,
+      set: async () => undefined,
+      delete: async () => true,
+      has: async () => false,
+      clear: async () => undefined,
+      addToTag: async () => undefined,
+      getTagKeys: async () => [],
+      deleteTag: async () => undefined,
+    }
+    const cache = new CacheService({ adapter })
+
+    for (let index = 0; index < 100_000; index++) await cache.invalidateTag(`tag-${index}`)
+
+    const retainedMaps = Object.values(cache).filter((value): value is Map<unknown, unknown> => value instanceof Map)
+    expect(retainedMaps).toHaveLength(1)
+    expect(retainedMaps[0]?.size).toBe(0)
+  })
+
+  it("conservatively invalidates every local tagged key when one tag changes", async () => {
+    const values = new Map<string, unknown>()
+    const adapter: CacheAdapter = {
+      get: async <T>(key: string) => values.get(key) as T | undefined,
+      set: async (key, value) => { values.set(key, value) },
+      delete: async (key) => values.delete(key),
+      has: async (key) => values.has(key),
+      clear: async () => { values.clear() },
+      addToTag: async () => undefined,
+      getTagKeys: async () => [],
+      deleteTag: async () => undefined,
+    }
+    const cache = new CacheService({ adapter })
+    await cache.getOrSet("key", async () => "old", ["tag-a"])
+    await cache.invalidateTag("tag-b")
+
+    await expect(cache.getOrSet("key", async () => "fresh", ["tag-a"])).resolves.toBe("fresh")
+  })
+
+  it("fences a tagged resolver that started before clear", async () => {
+    const adapter = createAdapter()
+    const cache = new CacheService({ adapter })
+    let finish!: (value: string) => void
+    const stale = cache.getOrSet("key", () => new Promise<string>((resolve) => { finish = resolve }), ["tag"])
+    await Promise.resolve()
+    await Promise.resolve()
+
+    await cache.clear()
+    finish("stale")
+    await expect(stale).resolves.toBe("stale")
+    expect(adapter.set).not.toHaveBeenCalled()
+  })
+
+  it("fences an untagged resolver and its single-flight group across clear", async () => {
+    const adapter = createAdapter()
+    const cache = new CacheService({ adapter })
+    let finish!: (value: string) => void
+    const staleResolver = vi.fn(() => new Promise<string>((resolve) => { finish = resolve }))
+    const stale = cache.getOrSet("key", staleResolver)
+    await vi.waitFor(() => expect(staleResolver).toHaveBeenCalledOnce())
+
+    await cache.clear()
+    const freshResolver = vi.fn(async () => "fresh")
+    await expect(cache.getOrSet("key", freshResolver)).resolves.toBe("fresh")
+    finish("stale")
+    await expect(stale).resolves.toBe("stale")
+
+    expect(freshResolver).toHaveBeenCalledOnce()
+    expect(adapter.set).toHaveBeenCalledTimes(1)
+    expect(adapter.set).toHaveBeenCalledWith("key", "fresh", 120_000)
   })
 
   it("rechecks a tag generation before returning a raced cached value", async () => {
@@ -135,6 +228,18 @@ describe("cache ports", () => {
     adapter.advanceTagGeneration = vi.fn(async () => "1")
     const cache = new CacheService({ adapter, correctnessCritical: true })
     await expect(cache.getOrSet("key", async () => "fresh", ["rows"])).rejects.toThrow("generation unavailable")
+  })
+
+  it("fails closed for generation advance errors when correctness is critical", async () => {
+    const adapter = createAdapter({ tagGenerationConsistency: "linearizable", coherenceScope: "shared" })
+    adapter.getTagGeneration = vi.fn(async () => "0")
+    adapter.advanceTagGeneration = vi.fn(async () => { throw new Error("advance unavailable") })
+    const cache = new CacheService({ adapter, correctnessCritical: true })
+
+    await expect(cache.invalidateTag("rows")).rejects.toMatchObject({
+      name: "CacheAdapterError",
+      operation: "advanceTagGeneration",
+    })
   })
 
   it("fails closed when configuring correctness-critical cache without atomic shared generation", () => {
@@ -312,6 +417,34 @@ describe("cache ports", () => {
     await expect(cache.invalidateTag("tag")).resolves.toBeUndefined()
   })
 
+  it("fences successful backend generations across an outage and recovery", async () => {
+    const values = new Map<string, unknown>()
+    let available = true
+    const adapter: CacheAdapter = {
+      get: async <T>(key: string) => values.get(key) as T | undefined,
+      set: async (key, value) => { values.set(key, value) },
+      delete: async (key) => values.delete(key),
+      has: async (key) => values.has(key),
+      clear: async () => { values.clear() },
+      addToTag: async () => undefined,
+      getTagKeys: async () => [],
+      deleteTag: async () => undefined,
+      getTagGeneration: async () => {
+        if (!available) throw new Error("generation unavailable")
+        return "0"
+      },
+      advanceTagGeneration: async () => "1",
+    }
+    const cache = new CacheService({ adapter })
+    await cache.getOrSet("key", async () => "before-outage", ["tag"])
+
+    available = false
+    await expect(cache.getOrSet("key", async () => "during-outage", ["tag"])).resolves.toBe("during-outage")
+    available = true
+
+    await expect(cache.getOrSet("key", async () => "after-recovery", ["tag"])).resolves.toBe("after-recovery")
+  })
+
   it("uses the local generation when a remote generation is absent", async () => {
     const adapter = createAdapter() as CacheAdapter & { getTagGeneration: () => Promise<string | undefined> }
     adapter.getTagGeneration = vi.fn(async () => undefined)
@@ -320,6 +453,36 @@ describe("cache ports", () => {
     await expect(cache.getOrSet("key", async () => "value", ["tag"])).resolves.toBe("value")
     const getTagGeneration = vi.mocked(Reflect.get(adapter, "getTagGeneration") as ReturnType<typeof vi.fn>)
     expect(getTagGeneration).toHaveBeenCalledWith("tag")
+  })
+
+  it("rejects oversized keys and tags, excessive or duplicate tags, and invalid TTLs", async () => {
+    const adapter = createAdapter()
+    const cache = new CacheService({ adapter })
+
+    await expect(cache.get("x".repeat(MAX_CACHE_KEY_BYTES + 1))).rejects.toThrow(/key/)
+    await expect(cache.invalidateTag("é".repeat(Math.floor(MAX_CACHE_TAG_BYTES / 2) + 1))).rejects.toThrow(/tag/)
+    await expect(cache.getOrSet("key", async () => "value", Array.from({ length: MAX_CACHE_TAGS_PER_CALL + 1 }, (_, index) => `tag-${index}`))).rejects.toThrow(/at most/)
+    await expect(cache.getOrSet("key", async () => "value", ["duplicate", "duplicate"])).rejects.toThrow(/unique/)
+    await expect(cache.getOrSet("key", async () => "value", [], 0)).rejects.toThrow(/positive safe integer/)
+    await expect(cache.set("key", "value", Number.POSITIVE_INFINITY)).rejects.toThrow(/positive safe integer/)
+    expect(() => new CacheService({ adapter, defaultTtlMs: Number.NaN })).toThrow(/defaultTtlMs/)
+  })
+
+  it("caps unresolved distinct resolvers while continuing to coalesce an existing key", async () => {
+    const adapter = createAdapter()
+    const cache = new CacheService({ adapter, maxInFlight: 1 })
+    let finish!: (value: string) => void
+    const resolver = vi.fn(() => new Promise<string>((resolve) => { finish = resolve }))
+    const first = cache.getOrSet("first", resolver)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const coalesced = cache.getOrSet("first", resolver)
+    await expect(cache.getOrSet("second", async () => "second")).rejects.toBeInstanceOf(CacheOverloadError)
+    expect(resolver).toHaveBeenCalledOnce()
+    finish("done")
+    await expect(Promise.all([first, coalesced])).resolves.toEqual(["done", "done"])
+    await expect(cache.getOrSet("second", async () => "second")).resolves.toBe("second")
   })
 
   it("does not require telemetry when a cache operation fails", async () => {

@@ -263,6 +263,21 @@ describe("dispatchDueJobs timeout handling", () => {
     expect(markRetrying.mock.calls).toHaveLength(0)
   })
 
+  it("bounds an initial lease renewal that never settles", async () => {
+    vi.useFakeTimers()
+    const job = makeJob()
+    const markRetrying = vi.fn(async () => ({ applied: true as const }))
+    const { store, renewLease } = makeStore(job, markRetrying)
+    renewLease.mockImplementation(() => new Promise<boolean>(() => undefined))
+    const execute = vi.fn(async () => ({ success: true as const }))
+
+    const dispatch = dispatchDueJobs(makeConfig(store, execute))
+    await vi.advanceTimersByTimeAsync(50)
+
+    await expect(dispatch).resolves.toMatchObject({ leaseLost: 1, succeeded: 0 })
+    expect(execute).not.toHaveBeenCalled()
+  })
+
   it("waits for a non-cooperative execution to settle after lease loss", async () => {
     const job = makeJob()
     const markRetrying = vi.fn(async () => ({ applied: true as const }))
@@ -434,6 +449,42 @@ describe("dispatchDueJobs timeout handling", () => {
     expect(renewLease.mock.calls[0]?.[0]).toMatchObject({ jobId: job.id, workerId: "worker-1", claimToken: "claim-1" })
     expect(markSucceeded).toHaveBeenCalledOnce()
     expect(markSucceeded).toHaveBeenCalledWith(expect.objectContaining({ claimToken: "claim-1" }))
+  })
+
+  it("shares one in-flight renewal between the heartbeat and fenced effects", async () => {
+    const job = makeJob()
+    const markRetrying = vi.fn(async () => ({ applied: true as const }))
+    const { store, renewLease } = makeStore(job, markRetrying)
+    let renewalCalls = 0
+    let activeRenewals = 0
+    let maxActiveRenewals = 0
+    let releaseRenewal!: () => void
+    renewLease.mockImplementation(async () => {
+      renewalCalls++
+      activeRenewals++
+      maxActiveRenewals = Math.max(maxActiveRenewals, activeRenewals)
+      if (renewalCalls > 1) await new Promise<void>((resolve) => { releaseRenewal = resolve })
+      activeRenewals--
+      return true
+    })
+    let releaseHeartbeat!: () => void
+    const sleep = vi.fn(() => new Promise<void>((resolve) => { releaseHeartbeat = resolve }))
+    const execute = vi.fn(async (context: Parameters<JobDefinition["execute"]>[0]) => {
+      const effect = context.fencedEffect.execute({ effectName: "write", idempotencyKey: "write-1", fn: async () => "ok" })
+      releaseHeartbeat()
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(renewLease).toHaveBeenCalledTimes(2)
+      releaseRenewal()
+      await effect
+      return { success: true as const }
+    })
+
+    const result = await dispatchDueJobs(makeConfig(store, execute, { now: () => new Date(2_000), sleep }))
+
+    expect(result.succeeded).toBe(1)
+    expect(maxActiveRenewals).toBe(1)
+    expect(renewLease).toHaveBeenCalledTimes(2)
   })
 
   it("dead-letters a retryable failure at maxAttempts", async () => {

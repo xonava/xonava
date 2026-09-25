@@ -179,8 +179,38 @@ describe("A1 canonical request context", () => {
   it("validates all canonical links and freezes the normalized context", () => {
     const value = context()
     expect(() => assertRequestContext(value, now)).not.toThrow()
-    expect(Object.isFrozen(freezeRequestContext(value, now))).toBe(true)
-    expect(Object.isFrozen(value.metadata)).toBe(true)
+    const frozen = freezeRequestContext(value, now)
+    expect(Object.isFrozen(frozen)).toBe(true)
+    expect(Object.isFrozen(frozen.metadata)).toBe(true)
+    expect(Object.isFrozen(value.metadata)).toBe(false)
+  })
+
+  it("deep-snapshots metadata and trace context without mutating caller-owned values", () => {
+    const base = context()
+    const nested = { flags: ["original"], observedAt: new Date("2026-01-01T00:00:00.000Z") }
+    const traceContext = { traceparent: "00-abc" }
+    const value = { ...base, metadata: { nested }, traceContext }
+    const frozen = freezeRequestContext(value, now)
+
+    nested.flags[0] = "mutated"
+    nested.observedAt.setTime(0)
+    traceContext.traceparent = "changed"
+    const metadata = frozen.metadata as { nested: { flags: readonly string[]; observedAt: Date } }
+    metadata.nested.observedAt.setTime(1)
+
+    expect(metadata.nested.flags).toEqual(["original"])
+    expect(metadata.nested.observedAt.toISOString()).toBe("2026-01-01T00:00:00.000Z")
+    expect(frozen.traceContext).toEqual({ traceparent: "00-abc" })
+    expect(Object.isFrozen(metadata.nested)).toBe(true)
+    expect(Object.isFrozen(metadata.nested.flags)).toBe(true)
+  })
+
+  it("rejects top-level accessors without invoking them", () => {
+    const value = context()
+    let reads = 0
+    Object.defineProperty(value, "metadata", { enumerable: true, get() { reads++; return {} } })
+    expect(() => freezeRequestContext(value, now)).toThrow(/data property/)
+    expect(reads).toBe(0)
   })
 
   it("snapshots authority before asynchronous revocation verification", async () => {

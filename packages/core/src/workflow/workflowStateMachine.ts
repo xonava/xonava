@@ -1,22 +1,13 @@
 import type { WorkflowInstance, WorkflowSignal, WorkflowStepResult } from "./types"
 import { WorkflowStateError } from "./workflowErrors"
 import { assertWorkflowDurableValue } from "./workflowDefinition"
-import { cloneAndFreezeDefinition } from "../kernel/definitionIntegrity"
+import { snapshotData } from "../kernel/snapshotData"
 
 const terminal = new Set(["succeeded", "failed", "cancelled"])
 export function isWorkflowTerminal(instance: WorkflowInstance): boolean { return terminal.has(instance.status) }
 
 function seal(instance: WorkflowInstance): WorkflowInstance {
-  return Object.freeze({
-    ...instance,
-    executionScope: cloneAndFreezeDefinition(instance.executionScope, true),
-    variables: cloneAndFreezeDefinition(instance.variables, true),
-    compensationStack: Object.freeze([...instance.compensationStack]),
-    wakeAt: instance.wakeAt ? new Date(instance.wakeAt) : null,
-    leaseExpiresAt: instance.leaseExpiresAt ? new Date(instance.leaseExpiresAt) : null,
-    createdAt: new Date(instance.createdAt),
-    updatedAt: new Date(instance.updatedAt),
-  })
+  return snapshotData(instance, { label: "Workflow instance" })
 }
 
 export function applyWorkflowStep(instance: WorkflowInstance, result: WorkflowStepResult, now: Date): WorkflowInstance {

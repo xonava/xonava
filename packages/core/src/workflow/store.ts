@@ -10,6 +10,8 @@ export interface WorkflowStore {
   claimDue(args: { workerId: string; limit: number; leaseDurationMs: number; now?: Date }): Promise<readonly WorkflowClaim[]>
   /** Proves that the claim is still current immediately before external activity execution. */
   assertLease(fence: WorkflowFence): Promise<boolean>
+  /** Monotonically extends a current, unexpired claim. Returns false for a stale fence. */
+  renewLease(fence: WorkflowFence, extendByMs: number): Promise<boolean>
   commit(fence: WorkflowFence, next: WorkflowInstance): Promise<boolean>
   deliverSignal(signal: Omit<WorkflowSignal, "deliveredAt">, now?: Date): Promise<{ delivered: boolean; duplicate: boolean }>
   cancel(instanceId: string, now?: Date): Promise<boolean>

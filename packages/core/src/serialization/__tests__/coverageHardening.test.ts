@@ -26,9 +26,19 @@ import {
   encodeWithCodec,
   isCodecVersionReadable,
 } from "../versionedCodec"
-import { CanonicalJsonError } from "../canonicalJson"
+import { canonicalJsonString, CanonicalJsonError } from "../canonicalJson"
 
 describe("durable serialization defensive branches", () => {
+  it("rejects accessors and sparse arrays without executing inherited values", () => {
+    let reads = 0
+    const accessor = Object.defineProperty({}, "value", { enumerable: true, get() { reads++; return "secret" } })
+    const sparse = new Array(1)
+
+    expect(() => canonicalJsonString(accessor)).toThrow(/accessors/)
+    expect(reads).toBe(0)
+    expect(() => canonicalJsonString(sparse)).toThrow(/dense/)
+  })
+
   it("validates format identifiers and versions at their boundaries", () => {
     expect(isValidFormatId("a.b-c_1")).toBe(true)
     expect(isValidFormatId("" )).toBe(false)

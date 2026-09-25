@@ -1,9 +1,10 @@
 import { ConfigurationError, ForbiddenError } from "./errors.js"
-import { assertAuthorityProvenance, freezeAuthorityProvenance, type AuthorityProvenance, type AuthorityValidationOptions, type DelegationHop } from "./authority.js"
+import { assertAuthorityProvenance, type AuthorityProvenance, type AuthorityValidationOptions, type DelegationHop } from "./authority.js"
 import { encodeExecutionScopeId, type ExecutionScope, type ExecutionScopeId } from "./executionScope.js"
 import { isRfc3339UtcInstant, type ExecutionIdentity } from "./principal.js"
 import type { CompiledRouteBindingRef } from "./routeExposure.js"
 import { cloneAndFreezeDefinition } from "../kernel/definitionIntegrity"
+import { snapshotData } from "../kernel/snapshotData"
 
 export interface RequestContext {
   readonly requestId: string
@@ -36,8 +37,8 @@ function authoritativeStoreHops(context: RequestContext): AuthoritativeStoreDele
 }
 
 function assertRequestContextBase(context: RequestContext, now: Date): void {
-  if (context.requestId.trim().length === 0) throw new ConfigurationError("requestId must be non-empty")
-  if (context.correlationId.trim().length === 0) throw new ConfigurationError("correlationId must be non-empty")
+  if (typeof context.requestId !== "string" || context.requestId.trim().length === 0) throw new ConfigurationError("requestId must be non-empty")
+  if (typeof context.correlationId !== "string" || context.correlationId.trim().length === 0) throw new ConfigurationError("correlationId must be non-empty")
   if (context.authority.correlationId !== context.correlationId) throw new ConfigurationError("request and authority correlationId mismatch")
   if (context.authority.causationId !== context.causationId) throw new ConfigurationError("request and authority causationId mismatch")
   if (
@@ -47,9 +48,9 @@ function assertRequestContextBase(context: RequestContext, now: Date): void {
     context.authority.identity.subject.kind !== context.identity.subject.kind
   ) throw new ConfigurationError("request and authority identity mismatch")
   if (context.scopeId !== encodeExecutionScopeId(context.scope)) throw new ConfigurationError("request scope identity mismatch")
-  if (context.route.routeKey.trim().length === 0 || context.route.operationKey.trim().length === 0 || !Number.isSafeInteger(context.route.definitionVersion) || context.route.definitionVersion < 1) throw new ConfigurationError("route binding reference is invalid")
-  if (context.deadline && !isRfc3339UtcInstant(context.deadline)) throw new ConfigurationError("deadline must be an RFC 3339 UTC instant")
-  if (context.delegationTarget?.action !== undefined && context.delegationTarget.action.trim().length === 0) {
+  if (typeof context.route.routeKey !== "string" || typeof context.route.operationKey !== "string" || context.route.routeKey.trim().length === 0 || context.route.operationKey.trim().length === 0 || !Number.isSafeInteger(context.route.definitionVersion) || context.route.definitionVersion < 1) throw new ConfigurationError("route binding reference is invalid")
+  if (context.deadline !== undefined && (typeof context.deadline !== "string" || !isRfc3339UtcInstant(context.deadline))) throw new ConfigurationError("deadline must be an RFC 3339 UTC instant")
+  if (context.delegationTarget?.action !== undefined && (typeof context.delegationTarget.action !== "string" || context.delegationTarget.action.trim().length === 0)) {
     throw new ConfigurationError("delegation target action must be non-empty")
   }
   if (context.delegationTarget?.resourceIds !== undefined && context.delegationTarget.resourceIds.some((resourceId) => typeof resourceId !== "string" || resourceId.trim().length === 0)) {
@@ -63,6 +64,57 @@ function assertRequestContextBase(context: RequestContext, now: Date): void {
   })
 }
 
+const REQUEST_CONTEXT_KEYS = new Set([
+  "requestId", "correlationId", "causationId", "identity", "scope", "scopeId", "authority", "route",
+  "delegationTarget", "signal", "deadline", "locale", "timezone", "traceContext", "metadata",
+])
+const REQUIRED_REQUEST_CONTEXT_KEYS = ["requestId", "correlationId", "identity", "scope", "scopeId", "authority", "route", "signal"] as const
+
+function snapshotRequestContext(context: RequestContext): RequestContext {
+  if (!context || typeof context !== "object" || Array.isArray(context) || (Object.getPrototypeOf(context) !== Object.prototype && Object.getPrototypeOf(context) !== null)) {
+    throw new ConfigurationError("request context must be a plain object")
+  }
+  if (Object.getOwnPropertySymbols(context).length > 0) throw new ConfigurationError("request context cannot contain symbol keys")
+  const values: Record<string, unknown> = Object.create(null) as Record<string, unknown>
+  for (const key of Object.getOwnPropertyNames(context)) {
+    if (!REQUEST_CONTEXT_KEYS.has(key)) throw new ConfigurationError(`unknown request context field: ${key}`)
+    const descriptor = Object.getOwnPropertyDescriptor(context, key)
+    if (!descriptor || !("value" in descriptor)) throw new ConfigurationError(`request context field ${key} must be a data property`)
+    values[key] = descriptor.value
+  }
+  for (const key of REQUIRED_REQUEST_CONTEXT_KEYS) if (!Object.hasOwn(values, key)) throw new ConfigurationError(`request context field ${key} is required`)
+  const signal = values.signal
+  if (!signal || typeof signal !== "object" || typeof (signal as AbortSignal).aborted !== "boolean" || typeof (signal as AbortSignal).addEventListener !== "function" || typeof (signal as AbortSignal).removeEventListener !== "function") {
+    throw new ConfigurationError("request context signal must be an AbortSignal")
+  }
+  const security = cloneAndFreezeDefinition({
+    identity: values.identity,
+    scope: values.scope,
+    authority: values.authority,
+    route: values.route,
+    ...(values.delegationTarget !== undefined ? { delegationTarget: values.delegationTarget } : {}),
+  }, true) as Pick<RequestContext, "identity" | "scope" | "authority" | "route" | "delegationTarget">
+  const traceContext = values.traceContext === undefined ? undefined : snapshotData(values.traceContext, { label: "Request trace context" }) as Readonly<Record<string, string>>
+  if (traceContext !== undefined) {
+    for (const [key, value] of Object.entries(traceContext)) if (key.trim().length === 0 || typeof value !== "string") throw new ConfigurationError("request trace context must contain non-empty keys and string values")
+  }
+  const metadata = values.metadata === undefined ? undefined : snapshotData(values.metadata, { label: "Request metadata" }) as Readonly<Record<string, unknown>>
+  if (metadata !== undefined && (!metadata || typeof metadata !== "object" || Array.isArray(metadata))) throw new ConfigurationError("request metadata must be a record")
+  return Object.freeze({
+    requestId: values.requestId,
+    correlationId: values.correlationId,
+    ...(values.causationId !== undefined ? { causationId: values.causationId } : {}),
+    ...security,
+    scopeId: values.scopeId,
+    signal: signal as AbortSignal,
+    ...(values.deadline !== undefined ? { deadline: values.deadline } : {}),
+    ...(values.locale !== undefined ? { locale: values.locale } : {}),
+    ...(values.timezone !== undefined ? { timezone: values.timezone } : {}),
+    ...(traceContext !== undefined ? { traceContext } : {}),
+    ...(metadata !== undefined ? { metadata } : {}),
+  } as RequestContext)
+}
+
 export function assertRequestContext(context: RequestContext, now = new Date()): void {
   assertRequestContextBase(context, now)
   if (authoritativeStoreHops(context).length > 0) {
@@ -70,27 +122,10 @@ export function assertRequestContext(context: RequestContext, now = new Date()):
   }
 }
 
-function freezeValidatedRequestContext(context: RequestContext): RequestContext {
-  freezeAuthorityProvenance(context.authority)
-  Object.freeze(context.identity.actor.authentication)
-  Object.freeze(context.identity.subject.authentication)
-  Object.freeze(context.identity.actor)
-  Object.freeze(context.identity.subject)
-  Object.freeze(context.identity)
-  Object.freeze(context.scope)
-  Object.freeze(context.route)
-  if (context.delegationTarget) {
-    if (context.delegationTarget.resourceIds) Object.freeze(context.delegationTarget.resourceIds)
-    Object.freeze(context.delegationTarget)
-  }
-  if (context.traceContext) Object.freeze(context.traceContext)
-  if (context.metadata) Object.freeze(context.metadata)
-  return Object.freeze(context)
-}
-
 export function freezeRequestContext(context: RequestContext, now = new Date()): RequestContext {
+  context = snapshotRequestContext(context)
   assertRequestContext(context, now)
-  return freezeValidatedRequestContext(context)
+  return context
 }
 
 /** Creates a live request context only after every revocable delegation is checked. */
@@ -99,18 +134,11 @@ export async function freezeVerifiedRequestContext(
   verifyDelegationRevocation: DelegationRevocationVerifier | undefined,
   now = new Date(),
 ): Promise<RequestContext> {
-  const snapshot = cloneAndFreezeDefinition({
-    authority: context.authority,
-    identity: context.identity,
-    scope: context.scope,
-    route: context.route,
-    ...(context.delegationTarget !== undefined ? { delegationTarget: context.delegationTarget } : {}),
-  }, true)
-  context = Object.freeze({ ...context, ...snapshot })
+  context = snapshotRequestContext(context)
   assertRequestContextBase(context, now)
   for (const hop of authoritativeStoreHops(context)) {
     if (!verifyDelegationRevocation) throw new ConfigurationError("authoritative-store delegation requires a revocation verifier")
     if ((await verifyDelegationRevocation(hop)) !== true) throw new ForbiddenError("delegation has been revoked")
   }
-  return freezeValidatedRequestContext(context)
+  return context
 }

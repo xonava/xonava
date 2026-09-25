@@ -1,4 +1,5 @@
 import { CanonicalJsonError } from "../serialization/canonicalJson"
+import { ConfigurationError, ValidationError } from "../domain"
 import { emitTelemetry, explicitlySafeTelemetryAttributes, type TelemetryPort } from "../telemetry/telemetry"
 
 export const MAX_CACHE_KEY_DEPTH = 100
@@ -6,6 +7,43 @@ export const MAX_CACHE_KEY_KEYS = 10_000
 export const MAX_CACHE_KEY_BYTES = 2 * 1024
 export const MAX_CACHE_KEY_ITEMS = 10_000
 export const MAX_CACHE_KEY_NODES = 10_000
+export const MAX_CACHE_TAG_BYTES = 256
+export const MAX_CACHE_TAGS_PER_CALL = 100
+export const DEFAULT_MAX_CACHE_IN_FLIGHT = 1_000
+
+const textEncoder = new TextEncoder()
+
+function utf8Bytes(value: string): number {
+  return textEncoder.encode(value).byteLength
+}
+
+function assertCacheKey(key: string): void {
+  if (typeof key !== "string" || utf8Bytes(key) > MAX_CACHE_KEY_BYTES) {
+    throw new ValidationError(`Cache key must not exceed ${MAX_CACHE_KEY_BYTES} UTF-8 bytes`)
+  }
+}
+
+function assertTag(tag: string): void {
+  if (typeof tag !== "string" || tag.length === 0 || utf8Bytes(tag) > MAX_CACHE_TAG_BYTES) {
+    throw new ValidationError(`Cache tag must be non-empty and not exceed ${MAX_CACHE_TAG_BYTES} UTF-8 bytes`)
+  }
+}
+
+function assertTags(tags: readonly string[]): void {
+  if (!Array.isArray(tags) || tags.length > MAX_CACHE_TAGS_PER_CALL) {
+    throw new ValidationError(`Cache calls accept at most ${MAX_CACHE_TAGS_PER_CALL} tags`)
+  }
+  const unique = new Set<string>()
+  for (const tag of tags) {
+    assertTag(tag)
+    if (unique.has(tag)) throw new ValidationError("Cache tags must be unique")
+    unique.add(tag)
+  }
+}
+
+function assertPositiveSafeInteger(value: number, name: string, ErrorType: typeof ValidationError | typeof ConfigurationError): void {
+  if (!Number.isSafeInteger(value) || value <= 0) throw new ErrorType(`${name} must be a positive safe integer`)
+}
 
 function compareSerialized(left: unknown, right: unknown): number {
   const a = JSON.stringify(left) ?? ""
@@ -40,33 +78,38 @@ function sortForSerialization(
   if (++state.nodes > MAX_CACHE_KEY_NODES) {
     throw new CanonicalJsonError(`Cache key exceeds the maximum of ${MAX_CACHE_KEY_NODES} nodes`)
   }
+  if (typeof value === "string" && (value.length > MAX_CACHE_KEY_BYTES || utf8Bytes(value) > MAX_CACHE_KEY_BYTES)) {
+    throw new CanonicalJsonError(`Cache key string exceeds the maximum of ${MAX_CACHE_KEY_BYTES} bytes`)
+  }
   if (value === undefined) return { "$type": "undefined" }
   if (typeof value === "number" && Number.isNaN(value)) return { "$type": "NaN" }
   if (typeof value === "number" && !Number.isFinite(value)) {
     return { "$type": value > 0 ? "Infinity" : "-Infinity" }
   }
   if (value instanceof Date) {
-    if (Number.isNaN(value.getTime())) {
+    if (Object.getPrototypeOf(value) !== Date.prototype || Number.isNaN(Date.prototype.getTime.call(value))) {
       throw new CanonicalJsonError("Cache key parts do not accept invalid Date values")
     }
-    return { "$type": "Date", "value": value.toISOString() }
+    return { "$type": "Date", "value": Date.prototype.toISOString.call(value) }
   }
   if (typeof value === "bigint") {
     return { "$type": "BigInt", "value": value.toString() }
   }
   if (value instanceof Map) {
+    if (Object.getPrototypeOf(value) !== Map.prototype) throw new CanonicalJsonError("Cache key parts do not accept Map subclasses")
     assertAcyclic(value, seen)
-    const entries = Array.from(value.entries())
+    const entries = Array.from(Map.prototype.entries.call(value) as MapIterator<[unknown, unknown]>)
     assertItemCount(entries.length, "Map")
     const sorted = entries
       .map(([k, v]) => [sortForSerialization(k, state, depth + 1, seen), sortForSerialization(v, state, depth + 1, seen)] as const)
-      .sort((left, right) => compareSerialized(left[0], right[0]))
+      .sort(compareSerialized)
     seen.delete(value)
     return { "$type": "Map", "value": sorted }
   }
   if (value instanceof Set) {
+    if (Object.getPrototypeOf(value) !== Set.prototype) throw new CanonicalJsonError("Cache key parts do not accept Set subclasses")
     assertAcyclic(value, seen)
-    const items = Array.from(value)
+    const items = Array.from(Set.prototype.values.call(value) as SetIterator<unknown>)
     assertItemCount(items.length, "Set")
     const sorted = items
       .map((item) => sortForSerialization(item, state, depth + 1, seen))
@@ -75,32 +118,47 @@ function sortForSerialization(
     return { "$type": "Set", "value": sorted }
   }
   if (Array.isArray(value)) {
+    if (Object.getPrototypeOf(value) !== Array.prototype || Object.getOwnPropertySymbols(value).length > 0) throw new CanonicalJsonError("Cache key parts accept only plain arrays")
     assertAcyclic(value, seen)
     assertItemCount(value.length, "array")
-    const items = value.map((item) => sortForSerialization(item, state, depth + 1, seen))
+    const names = Object.getOwnPropertyNames(value)
+    if (names.length !== value.length + 1) throw new CanonicalJsonError("Cache key arrays must be dense and cannot contain extra properties")
+    const items: unknown[] = []
+    for (let index = 0; index < value.length; index++) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index))
+      if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) throw new CanonicalJsonError("Cache key arrays must contain enumerable data properties")
+      items.push(sortForSerialization(descriptor.value, state, depth + 1, seen))
+    }
     seen.delete(value)
     return items
   }
   if (value && typeof value === "object") {
     const record = value as Record<string, unknown>
-    if ("$type" in record) {
+    const prototype = Object.getPrototypeOf(record) as object | null
+    if (prototype !== Object.prototype && prototype !== null) throw new CanonicalJsonError("Cache key parts accept only plain objects")
+    if (Object.getOwnPropertySymbols(record).length > 0) throw new CanonicalJsonError("Cache key parts do not accept symbol keys")
+    if (Object.hasOwn(record, "$type")) {
       throw new CanonicalJsonError("Cache key parts do not accept objects with a reserved $type key")
     }
     assertAcyclic(value, seen)
-    const keys = Object.keys(record)
+    const keys = Object.getOwnPropertyNames(record)
     if (keys.length > MAX_CACHE_KEY_KEYS) {
       throw new CanonicalJsonError(`Cache key object exceeds the maximum of ${MAX_CACHE_KEY_KEYS} keys`)
     }
     const result = keys
       .sort()
       .reduce<Record<string, unknown>>((acc, key) => {
-        acc[key] = sortForSerialization(record[key], state, depth + 1, seen)
+        if (key.length > MAX_CACHE_KEY_BYTES || utf8Bytes(key) > MAX_CACHE_KEY_BYTES) throw new CanonicalJsonError(`Cache key property exceeds the maximum of ${MAX_CACHE_KEY_BYTES} bytes`)
+        const descriptor = Object.getOwnPropertyDescriptor(record, key)
+        if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) throw new CanonicalJsonError("Cache key objects must contain enumerable data properties")
+        acc[key] = sortForSerialization(descriptor.value, state, depth + 1, seen)
         return acc
       }, Object.create(null) as Record<string, unknown>)
     seen.delete(value)
     return result
   }
-  return value
+  if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value
+  throw new CanonicalJsonError(`Cache key parts do not accept values of type ${typeof value}`)
 }
 
 export function serializeCacheKeyPart(value: unknown): string {
@@ -128,6 +186,17 @@ export class CacheAdapterError extends Error {
     super(`Cache operation failed: ${operation}`, options)
     this.name = "CacheAdapterError"
     this.operation = operation
+  }
+}
+
+/** A new cache miss was rejected before its resolver ran because the local single-flight limit was reached. */
+export class CacheOverloadError extends Error {
+  readonly maxInFlight: number
+
+  constructor(maxInFlight: number) {
+    super(`Cache resolver capacity exhausted (${maxInFlight} in flight)`)
+    this.name = "CacheOverloadError"
+    this.maxInFlight = maxInFlight
   }
 }
 
@@ -174,6 +243,8 @@ export interface CacheConfig {
   defaultTtlMs?: number
   debug?: boolean
   telemetry?: TelemetryPort | CacheTelemetry
+  /** Maximum unresolved, distinct resolver calls retained by this service. New misses fail before invoking the resolver. */
+  maxInFlight?: number
   /**
    * Do not read or write tagged cache data when generation state cannot be
    * verified. When enabled, the cache service requires `getTagGeneration` and
@@ -202,13 +273,21 @@ export class CacheService {
    * boundary, never a correctness mechanism. A miss simply recomputes the value.
    */
   private readonly inFlight = new Map<string, Promise<unknown>>()
-  private readonly localTagGenerations = new Map<string, string>()
+  /** One process-local fence shared by every tag; cardinality does not depend on caller input. */
+  private localFallbackEpoch = 0n
+  /** Fences every resolver write and single-flight group started before a clear. */
+  private localClearEpoch = 0n
+  private backendGenerationUnavailable = false
+  private readonly maxInFlight: number
   private readonly telemetry: TelemetryPort | CacheTelemetry | undefined
   private readonly correctnessCritical: boolean
 
   constructor(config: CacheConfig & { adapter: CacheAdapter }) {
     this.adapter = config.adapter
     this.defaultTtlMs = config.defaultTtlMs ?? 120_000
+    assertPositiveSafeInteger(this.defaultTtlMs, "Cache defaultTtlMs", ConfigurationError)
+    this.maxInFlight = config.maxInFlight ?? DEFAULT_MAX_CACHE_IN_FLIGHT
+    assertPositiveSafeInteger(this.maxInFlight, "Cache maxInFlight", ConfigurationError)
     this.telemetry = config.telemetry
     this.correctnessCritical = config.correctnessCritical === true
     if (
@@ -228,29 +307,39 @@ export class CacheService {
     tags: string[] = [],
     ttlMs?: number
   ): Promise<T> {
+    assertCacheKey(key)
+    assertTags(tags)
+    const clearEpoch = this.localClearEpoch
+    const effectiveTtlMs = ttlMs ?? this.defaultTtlMs
+    assertPositiveSafeInteger(effectiveTtlMs, "Cache TTL", ValidationError)
     this.requireSharedGeneration(tags)
     const generation = tags.length > 0
       ? await this.getTagGeneration(tags)
       : undefined
     const storageKey = generation === undefined ? key : this.generationKey(key, generation)
-    const existing = await this.get<T>(storageKey)
-    if (existing !== undefined) {
+    const existing = await this.read<T>(storageKey)
+    if (existing !== undefined && this.localClearEpoch === clearEpoch) {
       const currentGeneration = tags.length > 0 ? await this.getTagGeneration(tags) : undefined
-      if (currentGeneration === generation) return existing
+      if (this.localClearEpoch === clearEpoch && currentGeneration === generation) return existing
     }
 
-    const pending = this.inFlight.get(storageKey)
+    const inFlightKey = `${clearEpoch}:${storageKey}`
+    const pending = this.inFlight.get(inFlightKey)
     if (pending) return pending as Promise<T>
+    if (this.inFlight.size >= this.maxInFlight) throw new CacheOverloadError(this.maxInFlight)
 
-    const work = (async () => {
+    // Defer resolver invocation until after `work` is installed below. This
+    // makes the bound and same-key coalescing hold even for re-entrant resolvers.
+    const work = Promise.resolve().then(async () => {
       const value = await resolver()
       if (tags.length > 0) {
         const currentGeneration = await this.getTagGeneration(tags)
         if (currentGeneration !== generation) return value
       }
+      if (this.localClearEpoch !== clearEpoch) return value
       // A resolver may have started before a write invalidated its tags. Its
       // generation-qualified key is intentionally no longer readable.
-      await this.set(storageKey, value, ttlMs ?? this.defaultTtlMs)
+      await this.write(storageKey, value, effectiveTtlMs)
 
       for (const tag of tags) {
         try {
@@ -261,17 +350,22 @@ export class CacheService {
       }
 
       return value
-    })()
+    })
 
-    this.inFlight.set(storageKey, work)
+    this.inFlight.set(inFlightKey, work)
     try {
       return await work
     } finally {
-      if (this.inFlight.get(storageKey) === work) this.inFlight.delete(storageKey)
+      if (this.inFlight.get(inFlightKey) === work) this.inFlight.delete(inFlightKey)
     }
   }
 
   async get<T>(key: string): Promise<T | undefined> {
+    assertCacheKey(key)
+    return this.read<T>(key)
+  }
+
+  private async read<T>(key: string): Promise<T | undefined> {
     try {
       return await this.adapter.get<T>(key)
     } catch (error) {
@@ -282,8 +376,15 @@ export class CacheService {
   }
 
   async set<T>(key: string, value: T, ttlMs?: number): Promise<void> {
+    assertCacheKey(key)
+    const effectiveTtlMs = ttlMs ?? this.defaultTtlMs
+    assertPositiveSafeInteger(effectiveTtlMs, "Cache TTL", ValidationError)
+    return this.write(key, value, effectiveTtlMs)
+  }
+
+  private async write<T>(key: string, value: T, ttlMs: number): Promise<void> {
     try {
-      await this.adapter.set(key, value, ttlMs ?? this.defaultTtlMs)
+      await this.adapter.set(key, value, ttlMs)
     } catch (error) {
       this.reportError("set", key, error)
       if (this.correctnessCritical) throw error
@@ -292,6 +393,7 @@ export class CacheService {
   }
 
   async delete(key: string): Promise<boolean> {
+    assertCacheKey(key)
     try {
       return await this.adapter.delete(key)
     } catch (error) {
@@ -301,6 +403,7 @@ export class CacheService {
   }
 
   async has(key: string): Promise<boolean> {
+    assertCacheKey(key)
     try {
       return await this.adapter.has(key)
     } catch (error) {
@@ -310,6 +413,10 @@ export class CacheService {
   }
 
   async clear(): Promise<void> {
+    // Fence before awaiting the adapter so work already in progress can never
+    // repopulate a generation that this instance will read after the clear.
+    this.localClearEpoch += 1n
+    this.advanceLocalFallbackEpoch()
     try {
       await this.adapter.clear()
     } catch (error) {
@@ -319,6 +426,7 @@ export class CacheService {
   }
 
   async invalidateTag(tag: string): Promise<void> {
+    assertTag(tag)
     this.requireSharedGeneration([tag])
     await this.advanceTagGeneration(tag)
     // A shared, linearizable generation advance fences every pre-invalidation
@@ -335,12 +443,15 @@ export class CacheService {
   }
 
   async invalidateTags(tags: string[]): Promise<void> {
+    assertTags(tags)
     for (const tag of tags) {
       await this.invalidateTag(tag)
     }
   }
 
   async addToTag(tag: string, key: string): Promise<void> {
+    assertTag(tag)
+    assertCacheKey(key)
     try {
       await this.adapter.addToTag(tag, key)
     } catch (error) {
@@ -357,37 +468,63 @@ export class CacheService {
     if (tags.length === 0) return undefined
     if (!this.adapter.getTagGeneration) {
       if (this.correctnessCritical) throw new CacheAdapterError("getTagGeneration")
-      return serializeCacheKeyPart(tags.map((tag) => this.localTagGenerations.get(tag) ?? "0"))
+      return this.fallbackGeneration()
     }
-    const generations = await Promise.all(tags.map(async (tag) => {
-      try {
-        const generation = await this.adapter.getTagGeneration!(tag)
-        if (generation !== undefined) this.localTagGenerations.set(tag, generation)
-        return generation ?? this.localTagGenerations.get(tag) ?? "0"
-      } catch (error) {
-        if (this.correctnessCritical) throw error
-        return this.localTagGenerations.get(tag) ?? "0"
+    const epochAtStart = this.localFallbackEpoch
+    try {
+      const generations = await Promise.all(tags.map((tag) => this.adapter.getTagGeneration!(tag)))
+      for (const generation of generations) {
+        if (generation !== undefined && (typeof generation !== "string" || utf8Bytes(generation) > MAX_CACHE_TAG_BYTES)) {
+          throw new CacheAdapterError("getTagGeneration")
+        }
       }
-    }))
-    return serializeCacheKeyPart(generations)
+      if (this.backendGenerationUnavailable) {
+        this.backendGenerationUnavailable = false
+        this.advanceLocalFallbackEpoch()
+        return this.remoteGeneration(generations, this.localFallbackEpoch)
+      }
+      return this.remoteGeneration(generations, epochAtStart)
+    } catch (error) {
+      if (this.correctnessCritical) throw error
+      // Entering fallback is itself a fence. Remaining unavailable is stable,
+      // allowing local fallback hits without retaining one value per tag.
+      if (!this.backendGenerationUnavailable) {
+        this.backendGenerationUnavailable = true
+        this.advanceLocalFallbackEpoch()
+      }
+      return this.fallbackGeneration()
+    }
   }
 
   private async advanceTagGeneration(tag: string): Promise<void> {
+    // Advance synchronously: invalidation fences local reads and in-flight
+    // writes even if the backend operation fails or is still pending.
+    this.advanceLocalFallbackEpoch()
     try {
       if (this.adapter.advanceTagGeneration) {
-        this.localTagGenerations.set(tag, await this.adapter.advanceTagGeneration(tag))
+        await this.adapter.advanceTagGeneration(tag)
       } else {
         if (this.correctnessCritical) throw new CacheAdapterError("advanceTagGeneration")
-        this.localTagGenerations.set(tag, String(Number(this.localTagGenerations.get(tag) ?? "0") + 1))
       }
     } catch (error) {
       if (this.correctnessCritical) {
         if (error instanceof CacheAdapterError) throw error
         throw new CacheAdapterError("advanceTagGeneration", { cause: error })
       }
-      // Invalidation remains best effort, but fence local in-flight work.
-      this.localTagGenerations.set(tag, String(Number(this.localTagGenerations.get(tag) ?? "0") + 1))
+      // Invalidation remains best effort; the local fence was already advanced.
     }
+  }
+
+  private advanceLocalFallbackEpoch(): void {
+    this.localFallbackEpoch += 1n
+  }
+
+  private fallbackGeneration(): string {
+    return `fallback:${this.localFallbackEpoch}`
+  }
+
+  private remoteGeneration(generations: readonly (string | undefined)[], epoch: bigint): string {
+    return serializeCacheKeyPart([`local:${epoch}`, ...generations.map((generation) => generation ?? "0")])
   }
 
   private requireSharedGeneration(tags: string[]): void {

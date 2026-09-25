@@ -42,6 +42,12 @@ export interface WorkflowStepContext {
   readonly attempt: number
   readonly variables: Readonly<Record<string, unknown>>
   readonly signal?: WorkflowSignal
+  /** Cooperative lifecycle signal. Steps must stop external activity when aborted. */
+  readonly executionSignal: AbortSignal
+  /** Absolute Unix-millisecond execution deadline. */
+  readonly deadline: number
+  /** Re-fences immediately before an external effect. */
+  readonly assertLease: () => Promise<void>
   /** A workflow step may write one datasource only. Cross-datasource work is sequenced as separate steps. */
   readonly datasource: string
 }

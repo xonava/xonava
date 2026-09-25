@@ -194,6 +194,9 @@ export function canonicalizeValue(value: unknown): unknown {
       );
     }
     if (Array.isArray(val)) {
+      if (Object.getPrototypeOf(val) !== Array.prototype) {
+        throw new CanonicalJsonError("Canonical JSON does not accept array subclasses");
+      }
       if (seen.has(val)) throw new CanonicalJsonError("circular reference in array");
       seen.add(val);
       if (val.length > CANONICAL_JSON_LIMITS_V1.maxArrayItems) {
@@ -201,10 +204,20 @@ export function canonicalizeValue(value: unknown): unknown {
           `array length ${val.length} exceeds maxArrayItems ${CANONICAL_JSON_LIMITS_V1.maxArrayItems}`,
         );
       }
+      if (Object.getOwnPropertySymbols(val).length > 0) {
+        throw new CanonicalJsonError("Canonical JSON does not accept symbol keys");
+      }
+      const names = Object.getOwnPropertyNames(val);
+      if (names.length !== val.length + 1) {
+        throw new CanonicalJsonError("Canonical JSON arrays must be dense and cannot contain extra properties");
+      }
       const out: unknown[] = new Array(val.length);
       for (let i = 0; i < val.length; i++) {
-        const item: unknown = val[i] as unknown;
-        out[i] = visit(item, depth + 1);
+        const descriptor = Object.getOwnPropertyDescriptor(val, String(i));
+        if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
+          throw new CanonicalJsonError("Canonical JSON arrays must contain enumerable data properties");
+        }
+        out[i] = visit(descriptor.value, depth + 1);
       }
       seen.delete(val);
       return out;
@@ -248,8 +261,11 @@ export function canonicalizeValue(value: unknown): unknown {
             `property name utf8 bytes ${keyBytes} exceeds maxPropertyNameUtf8Bytes ${CANONICAL_JSON_LIMITS_V1.maxPropertyNameUtf8Bytes}`,
           );
         }
-        const v = obj[key];
-        out[key] = visit(v, depth + 1);
+        const descriptor = Object.getOwnPropertyDescriptor(obj, key);
+        if (!descriptor || !("value" in descriptor)) {
+          throw new CanonicalJsonError("Canonical JSON does not accept accessors");
+        }
+        out[key] = visit(descriptor.value, depth + 1);
       }
       seen.delete(obj);
       return out;

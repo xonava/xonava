@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { materializeDueSchedules } from "../scheduleDispatcher"
+import { materializeDueSchedules, type ScheduleRenewalClock } from "../scheduleDispatcher"
 import type { JobStore } from "../types"
 import type { FencedScheduleClaim, ScheduleStore } from "../scheduleStore"
 
@@ -53,6 +53,48 @@ function makeStores(claims: FencedScheduleClaim[]) {
     markSucceeded: vi.fn(), markRetrying: vi.fn(), markFailed: vi.fn(), cancel: vi.fn(), findPending: vi.fn(),
   }
   return { scheduleStore, jobStore, enqueued, claimDueSchedules, advanceSchedule, enqueue, getByIdempotencyKey, getByCorrelationId, getLatestPriorScheduleExecution }
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
+}
+
+class ManualRenewalClock implements ScheduleRenewalClock {
+  private nextHandle = 0
+  private readonly timers = new Map<number, () => void>()
+  private nowMs = Date.parse("2026-08-01T10:30:00.000Z")
+
+  now(): Date {
+    const value = new Date(this.nowMs)
+    this.nowMs += 1
+    return value
+  }
+
+  setTimeout(callback: () => void, _ms: number): unknown {
+    const handle = ++this.nextHandle
+    this.timers.set(handle, callback)
+    return handle
+  }
+
+  clearTimeout(handle: unknown): void {
+    this.timers.delete(handle as number)
+  }
+
+  fireNext(): boolean {
+    const entry = this.timers.entries().next().value as [number, () => void] | undefined
+    if (!entry) return false
+    this.timers.delete(entry[0])
+    entry[1]()
+    return true
+  }
+
+  get activeTimers(): number {
+    return this.timers.size
+  }
 }
 
 describe("schedule dispatcher", () => {
@@ -226,6 +268,119 @@ describe("schedule dispatcher", () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it("serializes slow background renewal and makes assertHeld join it", async () => {
+    const stores = makeStores([makeClaim()])
+    const clock = new ManualRenewalClock()
+    const prior = deferred<null>()
+    const firstRenewal = deferred<boolean>()
+    let activeRenewals = 0
+    let maximumActiveRenewals = 0
+    stores.getLatestPriorScheduleExecution.mockImplementationOnce(() => prior.promise)
+    stores.scheduleStore.renewScheduleLease = vi.fn(async () => {
+      activeRenewals += 1
+      maximumActiveRenewals = Math.max(maximumActiveRenewals, activeRenewals)
+      try {
+        if (vi.mocked(stores.scheduleStore.renewScheduleLease).mock.calls.length === 1) {
+          return await firstRenewal.promise
+        }
+        return true
+      } finally {
+        activeRenewals -= 1
+      }
+    })
+
+    const work = materializeDueSchedules({
+      ...stores,
+      workerId: "worker-1",
+      now: new Date("2026-08-01T10:30:00Z"),
+      leaseDurationMs: 30,
+      renewalClock: clock,
+    })
+    await vi.waitFor(() => expect(clock.activeTimers).toBe(1))
+
+    expect(clock.fireNext()).toBe(true)
+    await vi.waitFor(() => expect(stores.scheduleStore.renewScheduleLease).toHaveBeenCalledTimes(1))
+    // Serialized scheduling: only the renewal's fail-closed deadline exists;
+    // no next-interval timer is scheduled while renewal is pending.
+    expect(clock.activeTimers).toBe(1)
+
+    prior.resolve(null)
+    await Promise.resolve()
+    await Promise.resolve()
+    // The first foreground fence joins the same pending store operation.
+    expect(stores.scheduleStore.renewScheduleLease).toHaveBeenCalledTimes(1)
+
+    firstRenewal.resolve(true)
+    await expect(work).resolves.toMatchObject({ schedulesProcessed: 1, jobsEnqueued: 1, errors: [] })
+    expect(maximumActiveRenewals).toBe(1)
+    const renewalTimes = vi.mocked(stores.scheduleStore.renewScheduleLease).mock.calls.map(([request]) => request.now.getTime())
+    expect(new Set(renewalTimes).size).toBe(renewalTimes.length)
+    expect(clock.activeTimers).toBe(0)
+  })
+
+  it("permanently records a false background renewal as lease loss", async () => {
+    const stores = makeStores([makeClaim()])
+    const clock = new ManualRenewalClock()
+    const prior = deferred<null>()
+    stores.getLatestPriorScheduleExecution.mockImplementationOnce(() => prior.promise)
+    stores.scheduleStore.renewScheduleLease = vi.fn(async () => false)
+
+    const work = materializeDueSchedules({
+      ...stores,
+      workerId: "worker-1",
+      now: new Date("2026-08-01T10:30:00Z"),
+      leaseDurationMs: 30,
+      renewalClock: clock,
+    })
+    await vi.waitFor(() => expect(clock.activeTimers).toBe(1))
+    expect(clock.fireNext()).toBe(true)
+    await vi.waitFor(() => expect(stores.scheduleStore.renewScheduleLease).toHaveBeenCalledOnce())
+
+    prior.resolve(null)
+    const result = await work
+
+    expect(result.errors).toEqual(["Schedule schedule-1 lease was lost."])
+    expect(stores.scheduleStore.renewScheduleLease).toHaveBeenCalledOnce()
+    expect(stores.enqueue).not.toHaveBeenCalled()
+    expect(stores.advanceSchedule).not.toHaveBeenCalled()
+    expect(clock.activeTimers).toBe(0)
+  })
+
+  it("awaits an in-flight background renewal during shutdown", async () => {
+    const stores = makeStores([makeClaim()])
+    const clock = new ManualRenewalClock()
+    const advance = deferred<boolean>()
+    const backgroundRenewal = deferred<boolean>()
+    stores.advanceSchedule.mockImplementationOnce(() => advance.promise)
+    stores.scheduleStore.renewScheduleLease = vi.fn(async () => {
+      if (vi.mocked(stores.scheduleStore.renewScheduleLease).mock.calls.length === 4) {
+        return await backgroundRenewal.promise
+      }
+      return true
+    })
+
+    let settled = false
+    const work = materializeDueSchedules({
+      ...stores,
+      workerId: "worker-1",
+      now: new Date("2026-08-01T10:30:00Z"),
+      leaseDurationMs: 30,
+      renewalClock: clock,
+    }).finally(() => { settled = true })
+    await vi.waitFor(() => expect(stores.advanceSchedule).toHaveBeenCalled())
+    expect(clock.fireNext()).toBe(true)
+    await vi.waitFor(() => expect(stores.scheduleStore.renewScheduleLease).toHaveBeenCalledTimes(4))
+
+    advance.resolve(true)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(settled).toBe(false)
+
+    backgroundRenewal.resolve(true)
+    await expect(work).resolves.toMatchObject({ schedulesProcessed: 1, jobsEnqueued: 1, errors: [] })
+    expect(clock.activeTimers).toBe(0)
   })
 
   it.each([

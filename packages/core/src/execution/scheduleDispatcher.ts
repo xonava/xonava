@@ -12,6 +12,20 @@ export interface MaterializeResult {
   errors: string[]
 }
 
+/** Clock/timer boundary used by schedule lease renewal. Timer handles are opaque. */
+export interface ScheduleRenewalClock {
+  /** Returns a fresh wall-clock value for each lease-renewal request. */
+  now(): Date
+  setTimeout(callback: () => void, ms: number): unknown
+  clearTimeout(handle: unknown): void
+}
+
+const systemScheduleRenewalClock: ScheduleRenewalClock = {
+  now: () => new Date(),
+  setTimeout: (callback, ms) => setTimeout(callback, ms),
+  clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+}
+
 /** Keep persisted schedule payloads within the same durable admission budget as jobs. */
 export const MAX_STORED_SCHEDULE_PAYLOAD_BYTES = 1024 * 1024
 
@@ -32,6 +46,8 @@ export async function materializeDueSchedules(args: {
   tzAdapter?: CronTimezoneAdapter
   telemetry?: TelemetryPort
   leaseDurationMs?: number
+  /** Injectable clock and cancellable timers for lease renewal. */
+  renewalClock?: ScheduleRenewalClock
   decodePayload?: (input: unknown) => Record<string, unknown>
   calendarExclusionProvider?: { isExcluded(key: string, instant: Date): Promise<boolean> }
 }): Promise<MaterializeResult> {
@@ -62,6 +78,7 @@ export async function materializeDueSchedules(args: {
         claimToken: claim.claimToken,
         workerId: args.workerId,
         leaseDurationMs,
+        clock: args.renewalClock ?? systemScheduleRenewalClock,
       })
       const lifecycleExcluded = claim.lifecycle !== undefined && !isScheduleEffective(claim.lifecycle, now)
       const calendarExcluded = claim.lifecycle?.calendarExclusionKey !== undefined && await args.calendarExclusionProvider?.isExcluded(claim.lifecycle.calendarExclusionKey, claim.nextRunAt) === true
@@ -286,7 +303,7 @@ export async function materializeDueSchedules(args: {
 
       result.errors.push(msg)
     } finally {
-      renewal?.stop()
+      await renewal?.stop()
     }
   }
 
@@ -341,7 +358,7 @@ async function advanceSchedule(
 }
 
 interface LeaseRenewal {
-  stop: () => void
+  stop: () => Promise<void>
   assertHeld: () => Promise<void>
 }
 
@@ -351,50 +368,102 @@ function startLeaseRenewal(args: {
   claimToken: string
   workerId: string
   leaseDurationMs: number
+  clock: ScheduleRenewalClock
 }): LeaseRenewal {
   let stopped = false
   let leaseLost = false
-  const interval = setInterval(() => {
-    void args.scheduleStore.renewScheduleLease({
-      scheduleId: args.claim.scheduleId,
-      workerId: args.workerId,
-      claimToken: args.claimToken,
-      now: new Date(),
-      extendByMs: args.leaseDurationMs,
-    }).then((renewed) => {
-      if (!renewed) leaseLost = true
-    }).catch(() => {
-      leaseLost = true
-    })
-  }, Math.max(1, Math.floor(args.leaseDurationMs / 3)))
+  let inFlight: Promise<void> | undefined
+  let waitHandle: unknown
+  let cancelWait: (() => void) | undefined
+  let stopPromise: Promise<void> | undefined
+  const renewalIntervalMs = Math.max(1, Math.floor(args.leaseDurationMs / 3))
 
-  return {
-    assertHeld: async () => {
-      if (leaseLost) throw new ScheduleLeaseLostError(args.claim.scheduleId)
-      let renewed: boolean
+  const lostError = (): ScheduleLeaseLostError => new ScheduleLeaseLostError(args.claim.scheduleId)
+
+  const renewNow = (): Promise<void> => {
+    if (leaseLost) return Promise.reject(lostError())
+    if (inFlight) return inFlight
+
+    const operation = (async (): Promise<void> => {
+      let timeoutHandle: unknown
       try {
-        renewed = await args.scheduleStore.renewScheduleLease({
+        const renewal = args.scheduleStore.renewScheduleLease({
           scheduleId: args.claim.scheduleId,
           workerId: args.workerId,
           claimToken: args.claimToken,
-          now: new Date(),
+          now: args.clock.now(),
           extendByMs: args.leaseDurationMs,
         })
+        const timeout = new Promise<never>((_resolve, reject) => {
+          timeoutHandle = args.clock.setTimeout(() => reject(lostError()), Math.max(1, Math.floor(args.leaseDurationMs / 2)))
+        })
+        const renewed = await Promise.race([renewal, timeout])
+        if (!renewed) throw lostError()
       } catch {
-        // P1-08: any renewal throw is a fence failure; treat as lease lost
-        // so the schedule is not incorrectly advanced past the occurrence.
+        // Renewal failure is permanent for this claim. A later completion must
+        // never revive it, even when the backing store responds out of order.
         leaseLost = true
-        throw new ScheduleLeaseLostError(args.claim.scheduleId)
+        throw lostError()
+      } finally {
+        if (timeoutHandle !== undefined) args.clock.clearTimeout(timeoutHandle)
       }
-      if (!renewed) {
+    })()
+
+    let tracked: Promise<void>
+    tracked = operation.then(
+      () => {
+        if (inFlight === tracked) inFlight = undefined
+      },
+      (error: unknown) => {
+        if (inFlight === tracked) inFlight = undefined
+        throw error
+      },
+    )
+    inFlight = tracked
+    return tracked
+  }
+
+  const waitForNextRenewal = (): Promise<boolean> => new Promise((resolve) => {
+    let settled = false
+    const settle = (elapsed: boolean): void => {
+      if (settled) return
+      settled = true
+      waitHandle = undefined
+      cancelWait = undefined
+      resolve(elapsed)
+    }
+    waitHandle = args.clock.setTimeout(() => settle(true), renewalIntervalMs)
+    cancelWait = () => {
+      if (waitHandle !== undefined) args.clock.clearTimeout(waitHandle)
+      settle(false)
+    }
+  })
+
+  // The loop owns exactly one cancellable wait or one shared renewal promise.
+  // A new interval starts only after the preceding renewal settles.
+  const loopPromise = (async (): Promise<void> => {
+    while (!stopped && !leaseLost) {
+      try {
+        if (!await waitForNextRenewal()) return
+        if (stopped) return
+        await renewNow()
+      } catch {
         leaseLost = true
-        throw new ScheduleLeaseLostError(args.claim.scheduleId)
+        return
       }
-    },
+    }
+  })()
+
+  return {
+    assertHeld: renewNow,
     stop: () => {
-      if (stopped) return
+      if (stopPromise) return stopPromise
       stopped = true
-      clearInterval(interval)
+      cancelWait?.()
+      // loopPromise includes any background renewal. assertHeld uses that same
+      // promise, so settling the loop leaves no renewal activity owned here.
+      stopPromise = loopPromise.then(() => undefined)
+      return stopPromise
     },
   }
 }

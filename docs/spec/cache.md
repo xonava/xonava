@@ -14,9 +14,9 @@ The canonical profile limits nesting to 100, object members to 10,000, collectio
 
 Lookup MUST return stored value, explicit absence, or failure. Store associates a value and OPTIONAL positive expiry. Delete reports whether removal occurred. Membership reports presence without conflating failure. Clear removes entries in the cache namespace. Expired entries MUST NOT be returned as present. A language profile MUST document its configured/default expiry behavior; the neutral specification does not impose a default.
 
-Tag addition associates key and tag; tag lookup returns associations; tag deletion removes the tag namespace. Correctness-critical tagged caching MUST require declared linearizable generation consistency, fleet-shared coherence, generation lookup, and atomic generation advancement. A resolver MUST avoid publishing a value when invalidation advanced the observed generation.
+Tag addition associates key and tag; tag lookup returns associations; tag deletion removes the tag namespace. Correctness-critical tagged caching MUST require declared linearizable generation consistency, fleet-shared coherence, generation lookup, and atomic generation advancement. A resolver MUST avoid publishing a value when invalidation advanced the observed generation. Process-local fallback generation state MUST be bounded independently of caller-controlled tag cardinality and MUST NOT permit an evicted or forgotten generation to make stale data readable again.
 
-In-flight coalescing MAY combine misses in one service instance. It MUST NOT imply cross-process single-flight behavior or provide correctness.
+In-flight coalescing MAY combine misses in one service instance. It MUST be bounded and MUST NOT imply cross-process single-flight behavior or provide correctness.
 
 ## Errors
 

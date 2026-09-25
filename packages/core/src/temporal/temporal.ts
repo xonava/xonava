@@ -1,5 +1,6 @@
 import { ConfigurationError } from "../domain"
 import { assertEntityVersion } from "../serialization"
+import { snapshotData } from "../kernel/snapshotData"
 import type { TemporalHistoryStore, TemporalReconstruction, TemporalResource, TemporalRevision, TemporalSnapshot } from "./types"
 
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/
@@ -16,12 +17,12 @@ export function validateTemporalRevision<TState extends Readonly<Record<string, 
   if (value.kind !== "deleted" && value.state === null) throw new ConfigurationError("Non-deleted temporal revision must have state")
   if (value.entityVersion !== undefined) assertEntityVersion(value.entityVersion)
   for (const [name, id] of [["event", value.eventId], ["audit", value.auditId]] as const) if (id !== undefined && !KEY.test(id)) throw new ConfigurationError(`Temporal ${name} identity is invalid`)
-  return Object.freeze({ ...value, occurredAt: new Date(value.occurredAt), ...(value.state ? { state: Object.freeze({ ...value.state }) } : {}) })
+  return snapshotData(value, { label: "Temporal revision" })
 }
 
 export function validateTemporalSnapshot<TState extends Readonly<Record<string, unknown>>>(value: TemporalSnapshot<TState>): TemporalSnapshot<TState> {
   resource(value); revision(value.revision, true); if (!validDate(value.occurredAt)) throw new ConfigurationError("Temporal snapshot timestamp is invalid"); state(value.state)
-  return Object.freeze({ ...value, occurredAt: new Date(value.occurredAt), ...(value.state ? { state: Object.freeze({ ...value.state }) } : {}) })
+  return snapshotData(value, { label: "Temporal snapshot" })
 }
 
 export async function reconstructAsOf<TState extends Readonly<Record<string, unknown>>>(store: TemporalHistoryStore<TState>, target: TemporalResource, asOf: Date, options: { maxRevisions?: number; pageSize?: number } = {}): Promise<TemporalReconstruction<TState>> {
@@ -47,5 +48,5 @@ export async function reconstructAsOf<TState extends Readonly<Record<string, unk
     if (!page.hasMore) break
     if (replayed >= max) throw new ConfigurationError("Temporal replay exceeds the configured revision limit")
   }
-  return Object.freeze({ resource: Object.freeze({ ...target }), asOf: new Date(asOf), revision: currentRevision || null, state: currentState, deleted: currentRevision > 0 && currentState === null, replayedRevisions: replayed })
+  return snapshotData({ resource: target, asOf, revision: currentRevision || null, state: currentState, deleted: currentRevision > 0 && currentState === null, replayedRevisions: replayed }, { label: "Temporal reconstruction" })
 }

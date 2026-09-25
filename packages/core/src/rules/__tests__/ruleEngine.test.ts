@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { ConfigurationError, Predicate } from "../../domain"
 import { compileRuleSet, evaluateRuleSet, isCompiledRuleSet, type RuleSetDefinition } from ".."
 
-type Action = Readonly<{ type: string; value?: number }>
+type Action = Readonly<{ type: string; value?: number; dates?: readonly Date[] }>
 
 const rule = (overrides: Record<string, unknown> = {}) => ({
   key: "discount.standard", version: 1, priority: 10,
@@ -100,7 +100,8 @@ describe("business rule engine", () => {
   })
 
   it("defensively snapshots definitions, actions, facts, dates, and results", () => {
-    const action = { type: "discount", value: 10 }
+    const actionDate = new Date("2026-01-03T00:00:00.000Z")
+    const action = { type: "discount", value: 10, dates: [actionDate] }
     const predicate = Predicate.gte("total", 100)
     const rules = [rule({ actions: [action], when: predicate })]
     const compiled = compile(rules)
@@ -109,8 +110,12 @@ describe("business rule engine", () => {
     rules.length = 0
     const factDate = new Date("2026-01-01T00:00:00.000Z")
     const result = evaluateRuleSet(compiled, { total: 100, factDate }, new Date("2026-01-02T00:00:00.000Z"))
+    const evaluatedAt = result.evaluatedAt
     factDate.setUTCFullYear(2030)
-    expect(result.actions).toEqual([{ type: "discount", value: 10 }])
+    actionDate.setTime(0); evaluatedAt.setTime(0); result.actions[0]!.dates![0]!.setTime(0)
+    expect(result.evaluatedAt.toISOString()).toBe("2026-01-02T00:00:00.000Z")
+    expect(result.actions[0]!.dates![0]!.toISOString()).toBe("2026-01-03T00:00:00.000Z")
+    expect(result.actions).toEqual([{ type: "discount", value: 10, dates: [new Date("2026-01-03T00:00:00.000Z")] }])
     expect(Object.isFrozen(compiled)).toBe(true)
     expect(Object.isFrozen(compiled.rules)).toBe(true)
     expect(Object.isFrozen(result)).toBe(true)
@@ -142,6 +147,7 @@ describe("business rule engine", () => {
     const getter = Object.defineProperty({}, "secret", { get: () => "executed", enumerable: true })
     expect(() => evaluateRuleSet(compile(), getter, new Date())).toThrow(/accessors/)
     expect(() => evaluateRuleSet(compile(), { amount: NaN }, new Date())).toThrow(/non-finite/)
+    expect(() => compile([rule({ actions: [{ type: "x", at: new Date(NaN) }] })])).toThrow(/invalid date/)
   })
 
   it("rejects malformed predicate trees instead of silently treating them as false", () => {

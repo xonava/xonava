@@ -1,4 +1,5 @@
 import { RuntimeCapabilityError, ValidationError } from "../domain/errors"
+import { snapshotData } from "../kernel/snapshotData"
 
 export type ObjectBytes = Uint8Array | ReadableStream<Uint8Array>
 export interface ObjectChecksum { readonly algorithm: "sha256" | "md5" | string; readonly value: string }
@@ -47,10 +48,10 @@ export function validateObjectMetadata(metadata:ObjectMetadata):ObjectMetadata{
   if(!Number.isSafeInteger(metadata.contentLength)||metadata.contentLength<0)throw new ValidationError("Object metadata contentLength is invalid")
   validateChecksum(metadata.checksum)
   if(metadata.lastModified!==undefined&&(!(metadata.lastModified instanceof Date)||Number.isNaN(metadata.lastModified.getTime())))throw new ValidationError("Object metadata lastModified is invalid")
-  return Object.freeze({...metadata,...(metadata.checksum?{checksum:Object.freeze({...metadata.checksum})}:{}),...(metadata.lastModified?{lastModified:new Date(metadata.lastModified)}:{})})
+  return snapshotData(metadata,{label:"Object metadata"})
 }
 export function validateSignedObjectReference(reference:SignedObjectReference,now=Date.now()):SignedObjectReference{
   if(!reference||typeof reference!=="object"||typeof reference.url!=="string"||!reference.url.trim()||!(reference.expiresAt instanceof Date)||Number.isNaN(reference.expiresAt.getTime())||reference.expiresAt.getTime()<=now)throw new ValidationError("Signed object reference is invalid or expired")
   if(reference.headers!==undefined){if(!reference.headers||typeof reference.headers!=="object"||Array.isArray(reference.headers)||Object.entries(reference.headers).some(([key,value])=>!key.trim()||typeof value!=="string"))throw new ValidationError("Signed object headers are invalid")}
-  return Object.freeze({...reference,expiresAt:new Date(reference.expiresAt),...(reference.headers?{headers:Object.freeze({...reference.headers})}:{})})
+  return snapshotData(reference,{label:"Signed object reference"})
 }

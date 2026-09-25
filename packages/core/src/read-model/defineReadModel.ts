@@ -5,8 +5,16 @@ import { encodeExecutionScopeId } from "../domain/executionScope"
 import { assertQueryBudget } from "../query/queryBudget"
 import type { CompiledMultiSourceReadPlan } from "./types"
 
+export const MAX_READ_MODEL_SOURCES = 32
+export const MAX_READ_MODEL_JOINS = MAX_READ_MODEL_SOURCES - 1
+export const MAX_READ_MODEL_SOURCE_ROWS = 100_000
+export const MAX_READ_MODEL_OUTPUT_ROWS = 100_000
+export const MAX_READ_MODEL_INDEXED_ROWS = 250_000
+
 export function defineReadModel(input:CompiledMultiSourceReadPlan):CompiledMultiSourceReadPlan {
   if(typeof input.key !== "string" || !input.key.trim()||!Number.isSafeInteger(input.version)||input.version<1) throw new ConfigurationError("Read model key and positive version are required")
+  if(input.sources.length>MAX_READ_MODEL_SOURCES) throw new ConfigurationError(`Read model source count exceeds the hard limit of ${MAX_READ_MODEL_SOURCES}`)
+  if(input.joins.length>MAX_READ_MODEL_JOINS) throw new ConfigurationError(`Read model join count exceeds the hard limit of ${MAX_READ_MODEL_JOINS}`)
   if(input.sources.length<1||new Set(input.sources.map(source=>source.sourceKey)).size!==input.sources.length) throw new ConfigurationError("Read model sources must be non-empty and uniquely keyed")
   for(const source of input.sources){ if(!source.datasourceKey.trim()||source.authority.scopeId!==encodeExecutionScopeId(source.authority.scope)) throw new ConfigurationError(`Invalid source envelope: ${source.sourceKey}`) }
   if (!["fail-whole-read", "allow-partial-with-explicit-metadata"].includes(input.partialFailurePolicy)) throw new ConfigurationError("Invalid partial source failure policy")
@@ -28,6 +36,8 @@ export function defineReadModel(input:CompiledMultiSourceReadPlan):CompiledMulti
   if(input.consistency.kind==="bounded-staleness"){ const maximum=input.consistency.maxStalenessMs; if(!Number.isSafeInteger(maximum)||maximum<0||input.sources.some(source=>source.maxStalenessMs===undefined||source.maxStalenessMs>maximum)) throw new ConfigurationError("Sources do not prove the bounded-staleness requirement") }
   if(input.consistency.kind==="application-defined-snapshot"){ const coordinator=input.consistency.coordinatorKey; if(typeof coordinator!=="string"||!coordinator.trim()||typeof input.consistency.snapshotTokenFormat!=="string"||!input.consistency.snapshotTokenFormat.trim())throw new ConfigurationError("Snapshot coordinator and token format are required"); if(input.sources.some(source=>!source.snapshotCoordinatorKeys?.has(coordinator))) throw new ConfigurationError("Snapshot coordinator is not supported by every source") }
   if(!Number.isSafeInteger(input.maxSourceRows)||input.maxSourceRows<1||!Number.isSafeInteger(input.maxOutputRows)||input.maxOutputRows<1) throw new ConfigurationError("Read model row budgets must be positive")
+  if(input.maxSourceRows>MAX_READ_MODEL_SOURCE_ROWS) throw new ConfigurationError(`Read model source row budget exceeds the hard limit of ${MAX_READ_MODEL_SOURCE_ROWS}`)
+  if(input.maxOutputRows>MAX_READ_MODEL_OUTPUT_ROWS) throw new ConfigurationError(`Read model output row budget exceeds the hard limit of ${MAX_READ_MODEL_OUTPUT_ROWS}`)
   assertQueryBudget(input.budget)
   return cloneAndFreezeDefinition({...input,sources:input.sources.map(source=>({...source,
     readableFields:readonlySet(source.readableFields),filterableFields:readonlySet(source.filterableFields),

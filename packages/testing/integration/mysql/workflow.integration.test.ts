@@ -14,6 +14,8 @@ describe("MYSQL1 workflow store",()=>{
       const next=applyWorkflowStep(claim!.instance,{kind:"wait",signal:"approve"},new Date())
       const fence={instanceId:"wf-mysql",workerId:"worker",claimToken:claim!.claimToken,revision:claim!.instance.revision}
       expect(await store.assertLease(fence)).toBe(true)
+      expect(await store.renewLease(fence,60_000)).toBe(true)
+      expect(await store.renewLease({...fence,claimToken:"wrong"},60_000)).toBe(false)
       expect(await store.assertLease({...fence,claimToken:"wrong"})).toBe(false)
       expect(await store.commit(fence,next)).toBe(true)
       expect(await store.assertLease(fence)).toBe(false)

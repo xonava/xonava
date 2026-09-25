@@ -36,7 +36,12 @@ export interface ScheduleStore {
   advanceSchedule(args: FencedAdvanceScheduleArgs): Promise<boolean>
   /** Releases the lease without advancing; fenced by claimToken. */
   releaseSchedule(args: FencedReleaseScheduleArgs): Promise<boolean>
-  /** Renews the lease for the given claimToken; returns false if lease was lost or token mismatched. */
+  /**
+   * Atomically verifies the claimToken and extends its lease, returning false
+   * on lease loss or token mismatch. The resulting expiry must move
+   * monotonically forward: a delayed request with an older `now` must never
+   * shorten the lease established by a newer request.
+   */
   renewScheduleLease(args: RenewScheduleLeaseArgs): Promise<boolean>
 }
 

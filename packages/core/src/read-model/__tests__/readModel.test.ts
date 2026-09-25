@@ -1,8 +1,8 @@
-import { describe,expect,it } from "vitest"
+import { afterEach,describe,expect,it,vi } from "vitest"
 import { Predicate } from "../../domain/predicate"
 import { encodeExecutionScopeId } from "../../domain/executionScope"
 import { DEFAULT_QUERY_BUDGET } from "../../query/queryBudget"
-import { defineReadModel,executeReadModel,type CompiledMultiSourceReadPlan } from ".."
+import { defineReadModel,executeReadModel,MAX_READ_MODEL_JOINS,MAX_READ_MODEL_OUTPUT_ROWS,MAX_READ_MODEL_SOURCE_ROWS,MAX_READ_MODEL_SOURCES,MAX_READ_MODEL_TIMEOUT_MS,ReadModelCancelledError,ReadModelDeadlineExceededError,type CompiledMultiSourceReadPlan } from ".."
 import { validateSearchRequest } from "../../query/search"
 
 const scope={kind:"tenant",tenantId:"t1"} as const
@@ -59,5 +59,132 @@ describe("release read-model hardening", () => {
   })
   it("enforces output budget before materializing join expansion", async () => {
     await expect(executeReadModel(plan({ maxOutputRows: 1, joins: [{ leftSourceKey: "orders", rightSourceKey: "customers", type: "inner", leftKey: "customerId", rightKey: "id", cardinality: "one-to-many", maxExpansion: 10 }] }), [{ sourceKey: "orders", execute: async () => ({ consistency: "eventual", rows: [{ tenantId: "t1", customerId: "c" }] }) }, { sourceKey: "customers", execute: async () => ({ consistency: "eventual", rows: [{ tenantId: "t1", id: "c" }, { tenantId: "t1", id: "c" }] }) }])).rejects.toThrow("output row budget")
+  })
+})
+
+describe("bounded and cancellable read-model execution",()=>{
+  afterEach(()=>vi.useRealTimers())
+
+  it("does not invoke providers when the caller is already cancelled",async()=>{
+    const controller=new AbortController()
+    controller.abort("stop")
+    const execute=vi.fn(async()=>({consistency:"eventual" as const,rows:[]}))
+    await expect(executeReadModel(plan({sources:[source("orders")],joins:[]}),[{sourceKey:"orders",execute}],{signal:controller.signal})).rejects.toBeInstanceOf(ReadModelCancelledError)
+    expect(execute).not.toHaveBeenCalled()
+  })
+
+  it("propagates one signal and effective absolute deadline to every provider",async()=>{
+    const contexts:Array<{signal:AbortSignal;deadline:number}>=[]
+    await executeReadModel(plan(),[
+      {sourceKey:"orders",execute:async(_source,context)=>{contexts.push(context);return {consistency:"eventual",rows:[]}}},
+      {sourceKey:"customers",execute:async(_source,context)=>{contexts.push(context);return {consistency:"eventual",rows:[]}}},
+    ],{now:()=>1_000,deadline:2_000,timeoutMs:500})
+    expect(contexts).toHaveLength(2)
+    expect(contexts[0]!.signal).toBe(contexts[1]!.signal)
+    expect(contexts.map(context=>context.deadline)).toEqual([1_500,1_500])
+    expect(contexts[0]!.signal.aborted).toBe(false)
+  })
+
+  it("cancels all pending providers and ignores the partial policy",async()=>{
+    const controller=new AbortController()
+    let propagated:AbortSignal|undefined
+    const pending=executeReadModel(plan({partialFailurePolicy:"allow-partial-with-explicit-metadata"}),[
+      {sourceKey:"orders",execute:(_source,context)=>{propagated=context.signal;return new Promise(()=>{})}},
+      {sourceKey:"customers",execute:()=>new Promise(()=>{})},
+    ],{signal:controller.signal,timeoutMs:1_000})
+    await Promise.resolve()
+    controller.abort("caller stopped")
+    await expect(pending).rejects.toBeInstanceOf(ReadModelCancelledError)
+    expect(propagated?.aborted).toBe(true)
+  })
+
+  it("rejects an elapsed deadline before provider invocation",async()=>{
+    const execute=vi.fn(async()=>({consistency:"eventual" as const,rows:[]}))
+    await expect(executeReadModel(plan({sources:[source("orders")],joins:[]}),[{sourceKey:"orders",execute}],{now:()=>10,deadline:10})).rejects.toBeInstanceOf(ReadModelDeadlineExceededError)
+    expect(execute).not.toHaveBeenCalled()
+  })
+
+  it("terminates a never-settling source at the deadline and observes a late rejection",async()=>{
+    vi.useFakeTimers()
+    vi.setSystemTime(1_000)
+    let rejectLate:(reason?:unknown)=>void=()=>{}
+    const pending=executeReadModel(plan({sources:[source("orders")],joins:[]}),[{sourceKey:"orders",execute:(_source,context)=>new Promise((_resolve,reject)=>{
+      rejectLate=reject
+      expect(context.deadline).toBe(1_010)
+      expect(context.signal.aborted).toBe(false)
+    })}],{timeoutMs:10})
+    const rejection=expect(pending).rejects.toBeInstanceOf(ReadModelDeadlineExceededError)
+    await vi.advanceTimersByTimeAsync(10)
+    await rejection
+    rejectLate(new Error("late"))
+    await Promise.resolve()
+  })
+
+  it("removes the parent abort listener and deadline timer after success",async()=>{
+    vi.useFakeTimers()
+    const controller=new AbortController()
+    const add=vi.spyOn(controller.signal,"addEventListener")
+    const remove=vi.spyOn(controller.signal,"removeEventListener")
+    await executeReadModel(plan({sources:[source("orders")],joins:[]}),[{sourceKey:"orders",execute:async()=>({consistency:"eventual",rows:[]})}],{signal:controller.signal,timeoutMs:10})
+    expect(add).toHaveBeenCalledWith("abort",expect.any(Function),{once:true})
+    expect(remove).toHaveBeenCalledWith("abort",expect.any(Function))
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it("rejects invalid timeout configuration",async()=>{
+    await expect(executeReadModel(plan({sources:[source("orders")],joins:[]}),[{sourceKey:"orders",execute:async()=>({consistency:"eventual",rows:[]})}],{timeoutMs:MAX_READ_MODEL_TIMEOUT_MS+1})).rejects.toThrow("timeout")
+  })
+})
+
+describe("indexed read-model joins",()=>{
+  const runJoin=(orders:readonly Record<string,unknown>[],customers:readonly Record<string,unknown>[],overrides:Partial<CompiledMultiSourceReadPlan>={})=>executeReadModel(plan(overrides),[
+    {sourceKey:"orders",execute:async()=>({consistency:"eventual",rows:orders})},
+    {sourceKey:"customers",execute:async()=>({consistency:"eventual",rows:customers})},
+  ])
+
+  it("supports no-match, one-to-one, one-to-many and left joins",async()=>{
+    await expect(runJoin([{tenantId:"t1",customerId:"none"}],[{tenantId:"t1",id:"c"}])).resolves.toMatchObject({rows:[]})
+    await expect(runJoin([{tenantId:"t1",customerId:"c"}],[{tenantId:"t1",id:"c"}])).resolves.toMatchObject({rows:[{orders:{customerId:"c"},customers:{id:"c"}}]})
+    const many=await runJoin([{tenantId:"t1",customerId:"c"}],[{tenantId:"t1",id:"c",name:"A"},{tenantId:"t1",id:"c",name:"B"}],{joins:[{leftSourceKey:"orders",rightSourceKey:"customers",type:"inner",leftKey:"customerId",rightKey:"id",cardinality:"one-to-many",maxExpansion:2}]})
+    expect(many.rows).toHaveLength(2)
+    const left=await runJoin([{tenantId:"t1",customerId:"none"}],[],{joins:[{leftSourceKey:"orders",rightSourceKey:"customers",type:"left",leftKey:"customerId",rightKey:"id",cardinality:"many-to-one",maxExpansion:1}]})
+    expect(left.rows).toEqual([{orders:{tenantId:"t1",customerId:"none"},customers:{}}])
+  })
+
+  it("preserves nullish, NaN, and object-identity key semantics",async()=>{
+    const shared={key:true}
+    const distinct={key:true}
+    const result=await runJoin([
+      {tenantId:"t1",customerId:null},
+      {tenantId:"t1",customerId:undefined},
+      {tenantId:"t1",customerId:Number.NaN},
+      {tenantId:"t1",customerId:shared},
+      {tenantId:"t1",customerId:distinct},
+    ],[
+      {tenantId:"t1",id:null},
+      {tenantId:"t1",id:undefined},
+      {tenantId:"t1",id:Number.NaN},
+      {tenantId:"t1",id:shared,name:"same"},
+      {tenantId:"t1",id:{key:true},name:"equal-shape"},
+    ])
+    expect(result.rows).toHaveLength(1)
+    expect((result.rows[0]!.customers as Record<string,unknown>).name).toBe("same")
+  })
+
+  it("enforces absolute definition ceilings",()=>{
+    expect(()=>plan({maxSourceRows:MAX_READ_MODEL_SOURCE_ROWS+1})).toThrow("hard limit")
+    expect(()=>plan({maxOutputRows:MAX_READ_MODEL_OUTPUT_ROWS+1})).toThrow("hard limit")
+    expect(()=>plan({sources:Array.from({length:MAX_READ_MODEL_SOURCES+1},(_,index)=>source(`s${index}`)),joins:[]})).toThrow("source count")
+    expect(()=>plan({joins:Array.from({length:MAX_READ_MODEL_JOINS+1},()=>({leftSourceKey:"orders",rightSourceKey:"customers",type:"inner",leftKey:"customerId",rightKey:"id",cardinality:"many-to-one",maxExpansion:1}))})).toThrow("join count")
+  })
+
+  it("indexes a 5,000 by 5,000 no-match join in near-linear time",async()=>{
+    const count=5_000
+    const orders=Array.from({length:count},(_,index)=>({tenantId:"t1",customerId:`left-${index}`}))
+    const customers=Array.from({length:count},(_,index)=>({tenantId:"t1",id:`right-${index}`}))
+    const started=performance.now()
+    const result=await runJoin(orders,customers,{maxSourceRows:count,maxOutputRows:count})
+    expect(result.rows).toHaveLength(0)
+    expect(performance.now()-started).toBeLessThan(300)
   })
 })
