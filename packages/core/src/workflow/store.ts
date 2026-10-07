@@ -15,4 +15,9 @@ export interface WorkflowStore {
   commit(fence: WorkflowFence, next: WorkflowInstance): Promise<boolean>
   deliverSignal(signal: Omit<WorkflowSignal, "deliveredAt">, now?: Date): Promise<{ delivered: boolean; duplicate: boolean }>
   cancel(instanceId: string, now?: Date): Promise<boolean>
+  /**
+   * Optional: the most recently delivered signal with this name. When present,
+   * the dispatcher hands the signal that resumed a step to that step.
+   */
+  getSignal?(instanceId: string, name: string): Promise<WorkflowSignal | null>
 }

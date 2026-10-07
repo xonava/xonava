@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS workflows (
   id VARCHAR(100) PRIMARY KEY, workflow_type VARCHAR(100) NOT NULL, workflow_version INT NOT NULL,
   execution_scope JSON NOT NULL, status VARCHAR(30) NOT NULL, current_step VARCHAR(100) NOT NULL,
   variables JSON NOT NULL, step_attempt INT NOT NULL DEFAULT 0, compensation_stack JSON NOT NULL,
-  waiting_signal VARCHAR(100) NULL, wake_at DATETIME(3) NULL, outcome VARCHAR(30) NULL,
+  waiting_signal VARCHAR(100) NULL, wake_at DATETIME(3) NULL, outcome VARCHAR(30) NULL, failure JSON NULL,
   revision BIGINT NOT NULL DEFAULT 0, lease_owner VARCHAR(100) NULL, claim_token VARCHAR(100) NULL,
   lease_expires_at DATETIME(3) NULL, created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)

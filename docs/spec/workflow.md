@@ -17,3 +17,30 @@ Activities may be retried only under declared idempotency/retry semantics. A wor
 Invalid transition/input/signal is validation or conflict as defined; stale claim/revision conflict; unsupported version configuration; activity failure follows retry/compensation policy. Conformance covers transition tables, concurrent signals, duplicate signal receipts, timer recovery, stale fencing, activity retry, compensation ordering/failure, migration, and crash at every durable boundary.
 
 Traceability: `packages/core/src/workflow`; workflow unit and provider integration suites; W1 certification.
+
+## Attempts, retry, and failure (normative)
+
+**Attempt counting.** `stepAttempt` is the number of attempts started for the current step or compensation step. A store MUST increment it atomically when it claims an instance, so crashed, hung, and timed-out attempts are counted. Moving to a new step, entering compensation, finishing a compensation step, and cancellation reset it to 0.
+
+**Retry policy.** Each step MAY declare `retry` and `compensationRetry` using the shared serializable backoff policy (`maxAttempts`, `initialDelayMs`, `backoffMultiplier`, `maxDelayMs`, `jitter: "none" | "equal"`; see resilience). The default is 3 attempts, 1 s initial delay, ×2, capped at 60 s, equal jitter. A retry is a durable timer (`wakeAt`); workers are never held while waiting.
+
+**Classification.**
+
+| Event | Execution step | Compensation step |
+|---|---|---|
+| `retry` result | retry under policy, then `RETRY_EXHAUSTED` | n/a |
+| `fail` result | fail immediately (`STEP_FAILED`) | `compensation_failed` |
+| error with `retryable: true` or `kind: "retryable"` | retry under policy | retry under policy |
+| any other error | fail immediately (error code) | retry under policy |
+| deadline exceeded, step stopped within the grace period | retry only if `idempotent: true`, else fail (`TIMEOUT`) | retry under policy |
+| deadline exceeded, step ignored cancellation | nothing is committed (`stalled`); the lease lapses and the next claim counts the attempt | same |
+| attempt counter already above `maxAttempts` at claim | fail without running (`ATTEMPTS_EXHAUSTED`) | `compensation_failed` |
+| definition version unknown to this worker | hand back without consuming an attempt (`deferred`) | same |
+
+A failed execution step enters `compensating` when the compensation stack is non-empty, otherwise `failed`. Compensation runs the stack in reverse order; a compensation step that exhausts its policy stops the instance in the terminal state `compensation_failed`, keeping the remaining stack for manual intervention. A dispatcher MUST NOT record a failure (and so start compensation) while a timed-out step may still be running.
+
+**Failure record.** The instance carries `failure: { code, message, step, phase, attempt, at }` for the most recent terminal or compensating failure. Messages are sanitized (contact details and dates redacted), limited to 512 characters, and never include stack traces. Cancellation records code `CANCELLED`; a cancelled instance that finishes compensation ends `cancelled`, not `failed`.
+
+**Signals.** Delivering a signal moves the instance from `waiting` to `pending` and keeps the signal name recorded until the step's next transition. Stores that implement `getSignal` let the dispatcher pass the delivered signal (payload deep-frozen) to the resumed step as `context.signal`.
+
+**Concurrency.** A dispatcher MAY run up to `concurrency` claims of one batch at a time (default 1, at most the claim limit). Each claim keeps its own lease lifecycle.

@@ -28,7 +28,7 @@ function setup(execute: Parameters<typeof defineWorkflow>[0]["steps"][string]["e
   const registry = createWorkflowRegistry()
   registry.register(defineWorkflow({ type: "order", version: 1, initialStep: "run", steps: { run: { name: "run", datasource: "primary", execute } }, decodeVariables: value => value as Record<string, unknown> }))
   const instance = workflowInstance()
-  const commit = vi.fn(async () => true)
+  const commit = vi.fn(async (_fence: unknown, _next: WorkflowInstance) => true)
   const store = {
     claimDue: vi.fn(async () => [{ instance, workerId: "worker", claimToken: "token" }]),
     assertLease: vi.fn(async () => true),
@@ -39,7 +39,7 @@ function setup(execute: Parameters<typeof defineWorkflow>[0]["steps"][string]["e
 }
 
 describe("workflow dispatcher lifecycle hardening", () => {
-  it("aborts a step at its deadline and does not commit", async () => {
+  it("aborts a step at its deadline and records a TIMEOUT failure once it stops", async () => {
     const clock = new ManualClock()
     let started!: () => void
     const stepStarted = new Promise<void>(resolve => { started = resolve })
@@ -53,7 +53,8 @@ describe("workflow dispatcher lifecycle hardening", () => {
     clock.advance(10)
 
     await expect(dispatch).resolves.toMatchObject({ failed: 1, advanced: 0, leaseLost: 0 })
-    expect(commit).not.toHaveBeenCalled()
+    expect(commit).toHaveBeenCalledTimes(1)
+    expect(commit.mock.calls[0]![1]).toMatchObject({ status: "failed", outcome: "failed", failure: { code: "TIMEOUT", phase: "execute", step: "run" } })
     expect(clock.timers.size).toBe(0)
   })
 
