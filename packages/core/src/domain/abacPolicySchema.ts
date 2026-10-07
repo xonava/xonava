@@ -221,6 +221,9 @@ export function parseFieldAccessStrict(
       for (const [field, mode] of Object.entries(record.read)) {
         if (field.length === 0) {
           errors.push({ path: `${path}.read`, message: "Field name must not be empty", value: field })
+        } else if (field === "__proto__" || field === "constructor" || field === "prototype") {
+          // A {} literal silently drops "__proto__"; reject reserved names outright.
+          errors.push({ path: `${path}.read`, message: `Reserved field name: ${field}`, value: field })
         } else if (!VALID_MODES.has(mode as FieldPolicyReadMode)) {
           errors.push({ path: `${path}.read.${field}`, message: `Invalid read mode: ${mode}`, value: mode })
         } else {

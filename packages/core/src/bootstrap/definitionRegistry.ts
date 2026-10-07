@@ -25,6 +25,10 @@ export class FrameworkDefinitionRegistry {
     if (legal[expected] !== next) throw new ConfigurationError(`illegal registry transition ${expected} -> ${next}`)
     this.#state = next
   }
+  /** Returns a registry whose compilation failed to OPEN so definitions can be corrected and compiled again. */
+  reopenAfterFailedCompilation(): void {
+    if (this.#state === "NORMALIZING" || this.#state === "RESOLVING" || this.#state === "COMPILING") this.#state = "OPEN"
+  }
   snapshot(): readonly FrameworkDefinition[] {
     return Object.freeze([...this.#definitions.values()])
   }

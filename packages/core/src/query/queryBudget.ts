@@ -9,6 +9,9 @@ export const DEFAULT_QUERY_BUDGET: QueryBudget = Object.freeze({ maxPredicateDep
 /** Hard syntax limits which are independent of an individual query's work budget. */
 const MAX_QUERY_FIELD_BYTES = 1024
 const MAX_QUERY_CURSOR_BYTES = 16_384
+/** Per string literal and per plan, so `in` lists cannot carry megabytes of values. */
+export const MAX_QUERY_VALUE_BYTES = 8192
+export const MAX_QUERY_TOTAL_VALUE_BYTES = 65_536
 
 const encoder = new TextEncoder()
 const budgetKeys = Object.keys(DEFAULT_QUERY_BUDGET) as (keyof QueryBudget)[]
@@ -77,7 +80,16 @@ function positiveInteger(value: unknown, label: string): number {
   return value as number
 }
 
-function scalar(value: unknown, label: string, active: ReadonlySet<object>): void {
+function scalar(value: unknown, label: string, active: ReadonlySet<object>, valueBytes?: { total: number }): void {
+  if (typeof value === "string") {
+    const bytes = encoder.encode(value).byteLength
+    if (bytes > MAX_QUERY_VALUE_BYTES) fail(`${label} exceeds ${MAX_QUERY_VALUE_BYTES} UTF-8 bytes`)
+    if (valueBytes) {
+      valueBytes.total += bytes
+      if (valueBytes.total > MAX_QUERY_TOTAL_VALUE_BYTES) fail(`query predicate values exceed ${MAX_QUERY_TOTAL_VALUE_BYTES} UTF-8 bytes`)
+    }
+    return
+  }
   if (value instanceof Date) {
     if (Object.getPrototypeOf(value) !== Date.prototype || !Number.isFinite(Date.prototype.getTime.call(value))) fail(`${label} must be a valid Date`)
     return
@@ -103,6 +115,7 @@ export function validateQueryPlan(plan: QueryPlan, budget: QueryBudget = DEFAULT
   const active = new Set<object>()
   let nodes = 0
   let orBranches = 0
+  const valueBytes = { total: 0 }
 
   const enter = (value: object): void => {
     if (active.has(value)) fail("query plan contains a cycle")
@@ -139,7 +152,7 @@ export function validateQueryPlan(plan: QueryPlan, budget: QueryBudget = DEFAULT
         if (!hasValue) fail(`predicate operator ${typedOp} requires a value`)
         if (listOps.has(typedOp)) {
           const values = denseArray(node.value, `${typedOp} predicate.value`, limits.maxInValues, "query predicate exceeds maximum IN values")
-          for (const item of values) scalar(item, `${typedOp} predicate value`, active)
+          for (const item of values) scalar(item, `${typedOp} predicate value`, active, valueBytes)
           return
         }
         if (typedOp === "between") {
@@ -148,12 +161,12 @@ export function validateQueryPlan(plan: QueryPlan, budget: QueryBudget = DEFAULT
           try {
             const range = dataRecord(node.value, "between predicate.value", ["from", "to"])
             if (!own(range, "from") && !own(range, "to")) fail("between predicate requires at least one bound")
-            if (own(range, "from")) scalar(range.from, "between predicate.from", active)
-            if (own(range, "to")) scalar(range.to, "between predicate.to", active)
+            if (own(range, "from")) scalar(range.from, "between predicate.from", active, valueBytes)
+            if (own(range, "to")) scalar(range.to, "between predicate.to", active, valueBytes)
           } finally { leave(node.value) }
           return
         }
-        scalar(node.value, `${typedOp} predicate.value`, active)
+        scalar(node.value, `${typedOp} predicate.value`, active, valueBytes)
         return
       }
       if (kind === "and" || kind === "or") {

@@ -97,8 +97,8 @@ describe("ABAC compiler uncovered values and operators", () => {
     if (truth.success) expect(evaluatePredicate({ bool: true }, truth.predicate)).toBe(true)
 
     const objectValue = policyClauseToPredicate({ clause: { field: "text", operator: "equals", value: { unexpected: true } }, context, fieldCatalog: fields })
-    expect(objectValue.success).toBe(true)
-    if (objectValue.success) expect(evaluatePredicate({ text: "[object Object]" }, objectValue.predicate)).toBe(true)
+    // Non-scalar values are rejected rather than String()-coerced to "[object Object]".
+    expect(objectValue.success).toBe(false)
   })
 
   it("resolves every supported user attribute", () => {

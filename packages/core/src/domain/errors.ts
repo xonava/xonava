@@ -79,9 +79,13 @@ export class FrameworkCoreError extends Error {
     const cause = options.cause !== undefined ? options.cause : details instanceof Error ? details : undefined
     super(message, cause === undefined ? undefined : { cause })
     this.name = this.constructor.name
-    this.code = code
-    this.details = details
-    const defaults = ERROR_DEFAULTS[code]
+    // An unknown code (from untyped callers) degrades to an internal error
+    // rather than crashing while the original error is being reported.
+    const known = Object.hasOwn(ERROR_DEFAULTS, code)
+    this.code = known ? code : "CONFIGURATION_ERROR"
+    // Details may hold sensitive input; keep them off JSON/structured-clone output.
+    Object.defineProperty(this, "details", { value: details, enumerable: false, writable: false, configurable: false })
+    const defaults = ERROR_DEFAULTS[this.code]
     this.safeMessage = defaults.safeMessage
     this.retryable = defaults.retryable
     this.category = defaults.category

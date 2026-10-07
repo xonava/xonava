@@ -110,6 +110,17 @@ export function normalizeAbacPolicy(args: {
   }
   const inactive = !isActive(args.policy.source, at)
 
+  // Anything but an explicit allow/deny would otherwise fall through tier
+  // resolution as an allow; NaN/fractional priorities break tier grouping.
+  const effect: unknown = args.policy.effect
+  if (effect !== "allow" && effect !== "deny") {
+    errors.push({ code: "POLICY_EFFECT_INVALID", message: `Policy effect must be "allow" or "deny"`, path: "effect", policyId: args.policy.source.policyId })
+  }
+  const priority: unknown = args.policy.priority
+  if (typeof priority !== "number" || !Number.isSafeInteger(priority)) {
+    errors.push({ code: "POLICY_PRIORITY_INVALID", message: "Policy priority must be a safe integer", path: "priority", policyId: args.policy.source.policyId })
+  }
+
   if (args.policy.moduleKey !== args.catalog.moduleKey) {
     errors.push({
       code: "MODULE_KEY_MISMATCH",
@@ -139,6 +150,7 @@ export function normalizeAbacPolicy(args: {
     conditions: args.policy.payload.conditions,
     context: args.context,
     fieldCatalog: args.catalog.fields,
+    effect: args.policy.effect,
   })
 
   if (!compileResult.success) {

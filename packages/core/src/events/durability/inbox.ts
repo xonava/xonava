@@ -29,7 +29,12 @@ export interface InboxKey { readonly consumerKey: string; readonly messageId: st
 export interface InboxPort {
   observe(record: InboxRecord): Promise<InboxRecord>
   get(key: InboxKey): Promise<InboxRecord | null>
-  claim(key: InboxKey, owner: string, leaseMs: number): Promise<InboxRecord | null>
+  /**
+   * Runs claimInboxRecord atomically. Stores MUST forward `maxAttempts`; the
+   * claim then dead-letters (and returns) a record whose attempts are
+   * exhausted instead of claiming it.
+   */
+  claim(key: InboxKey, owner: string, leaseMs: number, maxAttempts?: number): Promise<InboxRecord | null>
   renew(key: InboxKey, token: string, leaseMs: number): Promise<InboxRecord>
   acknowledge<T>(key: InboxKey, token: string, localMutation: (transaction?: unknown) => Promise<T>): Promise<{ record: InboxRecord; result: T }>
   scheduleRetry(key: InboxKey, token: string, failureCode: string, delayMs: number, maxAttempts: number): Promise<InboxRecord>

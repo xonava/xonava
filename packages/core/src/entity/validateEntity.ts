@@ -1,4 +1,4 @@
-import { ConfigurationError, ValidationError } from "../domain"
+import { ConfigurationError } from "../domain"
 import type { CrudRouteKey, EntityDefinitionInput, EntityRouteConfig } from "./defineEntity"
 import type { RateLimitConfig, RateLimitPolicy } from "../rate-limit/rateLimit"
 import { isRuntimeCapability } from "../bootstrap/runtimeCapabilities"
@@ -79,7 +79,7 @@ export function validateEntity<
     if (desc.type === "integer" && desc.format !== undefined) throw new ConfigurationError(`Entity "${entityName}" integer field "${fieldName}" cannot declare a string format.`)
     if (desc.type === "decimal" && (!Number.isSafeInteger(desc.precision) || !Number.isSafeInteger(desc.scale) || Number(desc.precision) < 1 || Number(desc.scale) < 0 || Number(desc.scale) > Number(desc.precision))) throw new ConfigurationError(`Entity "${entityName}" has invalid decimal precision/scale for "${fieldName}".`)
     if (desc.type === "enum" && (!Array.isArray(desc.enumValues) || desc.enumValues.length === 0 || new Set(desc.enumValues).size !== desc.enumValues.length || desc.enumValues.some(value => typeof value !== "string" || value.length === 0))) throw new ConfigurationError(`Entity "${entityName}" has invalid enum values for "${fieldName}".`)
-    if (desc.type === "custom" && (typeof desc.durableCodec !== "string" || !input.durableCodecs?.[desc.durableCodec])) throw new ConfigurationError(`Entity "${entityName}" custom field "${fieldName}" requires a registered durable codec.`)
+    if (desc.type === "custom" && (typeof desc.durableCodec !== "string" || !(input.durableCodecs && Object.hasOwn(input.durableCodecs, desc.durableCodec) && input.durableCodecs[desc.durableCodec]))) throw new ConfigurationError(`Entity "${entityName}" custom field "${fieldName}" requires a registered durable codec.`)
     if (desc.classification !== undefined && !["public", "internal", "confidential", "restricted"].includes(String(desc.classification))) throw new ConfigurationError(`Entity "${entityName}" has invalid data classification for "${fieldName}".`)
   }
 
@@ -135,7 +135,7 @@ export function validateEntity<
     if (input.listDefaults.sortColumn !== undefined) {
       requireField(input.listDefaults.sortColumn, "default sort")
       if (input.sortableColumns && !input.sortableColumns.includes(input.listDefaults.sortColumn)) {
-        throw new ValidationError(
+        throw new ConfigurationError(
           `Entity "${entityName}" default sort column "${input.listDefaults.sortColumn}" must be declared in sortableColumns.`,
         )
       }

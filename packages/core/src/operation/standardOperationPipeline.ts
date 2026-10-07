@@ -1,5 +1,5 @@
 import { runAfterHooks, runBeforeHooks } from "./hooks"
-import { assertRequestBoundToOperation, createOperationRunContext, createPostCommitOperationContext, createReadOperationContext, createMutationOperationContext, createRetryableOperationContext, createRepresentationContext, createAuthorizationOperationContext, createPreparationOperationContext, type AuthorizationOperationContext, type PostCommitContext } from "./operationContext"
+import { assertRequestBoundToOperation, createOperationRunContext, createPostCommitOperationContext, createReadExecutionContext, createMutationOperationContext, createRetryableOperationContext, createRepresentationContext, createAuthorizationOperationContext, createPreparationOperationContext, type AuthorizationOperationContext, type NestedOperationInvoke, type PostCommitContext } from "./operationContext"
 import type { InternalOperationRunContext } from "./operationRunContext"
 import { runAfterCommitHooks } from "./hooks"
 import { classifyAuditValue, defaultAuditSanitizer, type AuditRecord } from "../events/durability/audit"
@@ -16,18 +16,28 @@ import { reportCommittedEffectFailure } from "./committedEffectFailure"
 
 type ExecutableStandardOperationDefinition<TInput, TResult> = StandardOperationDefinition<TInput, TResult> | RetryableMutationOperationDefinition<TInput, TResult>
 
+/** Creates the `invoke` exposed to one execution of an operation's `execute`. */
+export type NestedInvokeFactory = (parent: InternalOperationRunContext, options: { readonly joinTransaction: boolean; readonly readOnly: boolean }) => NestedOperationInvoke
+
 export async function runStandardOperation<TInput, TResult>(args: {
   operation: InternalOperationRunContext
   definition: ExecutableStandardOperationDefinition<TInput, TResult>
   input: TInput
   onBusinessResult?: (result: TResult, operation: PostCommitContext) => Promise<void>
+  /** The parent run whose open transaction this nested run joins. */
+  joinedParent?: InternalOperationRunContext
+  createNestedInvoke?: NestedInvokeFactory
 }): Promise<TResult> {
   assertExecutionActive(args.operation.signal, args.operation.deadline, args.operation.services.clock)
   assertRequestBoundToOperation(args.operation, args.definition.key)
   const mode = resolveMode(args.definition)
   requireRuntimeCapabilities(args.operation, args.definition.requiredRuntimeCapabilities)
-  const supportsTransactions = supportsInteractiveTransactions(args.operation.persistence)
+  const joinedParent = args.joinedParent
+  if (joinedParent && args.definition.execution !== undefined) throw new ConfigurationError(`Operation ${args.definition.key} manages its own transaction retries and cannot run inside another transaction.`)
+  const supportsTransactions = joinedParent !== undefined || supportsInteractiveTransactions(args.operation.persistence)
   if (!supportsTransactions && args.definition.execution !== undefined) throw new ConfigurationError(`Operation ${args.definition.key} requires interactive transaction execution.`)
+  // A joined run is inside the parent's transaction whatever its own mode is.
+  const inTransaction = joinedParent !== undefined || (mode !== "none" && supportsTransactions)
   if (mode === "required" && !supportsTransactions && args.definition.kind === "mutation" && "atomicBatch" in args.definition && args.definition.atomicBatch) {
     const batchDefinition = {
       ...args.definition,
@@ -47,6 +57,7 @@ export async function runStandardOperation<TInput, TResult>(args: {
 
   const auditMode = resolveAuditDelivery(args.definition, supportsTransactions)
   const execute = async (operation: InternalOperationRunContext): Promise<{ input: TInput; result: TResult; operation: InternalOperationRunContext }> => {
+    const nested = trackNestedInvocations(args.createNestedInvoke?.(operation, { joinTransaction: inTransaction, readOnly: args.definition.kind === "read" }))
     assertExecutionActive(operation.signal, operation.deadline, operation.services.clock)
     const plan = await authorizeOperation({ operation: createAuthorizationOperationContext(operation), definition: args.definition, input: args.input })
     assertExecutionActive(operation.signal, operation.deadline, operation.services.clock)
@@ -63,15 +74,16 @@ export async function runStandardOperation<TInput, TResult>(args: {
     if (isRetryableDefinition(args.definition)) {
       result = await args.definition.execute({ operation: createRetryableOperationContext(executionOperation), input })
     } else if (args.definition.kind === "read") {
-      result = await args.definition.execute({ operation: createReadOperationContext(executionOperation), input })
+      result = await args.definition.execute({ operation: createReadExecutionContext(executionOperation, nested.invoke), input })
     } else {
-      result = await args.definition.execute({ operation: createMutationOperationContext(executionOperation), input })
+      result = await args.definition.execute({ operation: createMutationOperationContext(executionOperation, nested.invoke), input })
     }
+    nested.assertSettled(args.definition.key)
     assertExecutionActive(operation.signal, operation.deadline, operation.services.clock)
     await revalidateAuthorizationFacts({ plan, operation, ...(operation.authorizationFactRevalidator !== undefined ? { revalidator: operation.authorizationFactRevalidator } : {}) })
     assertExecutionActive(operation.signal, operation.deadline, operation.services.clock)
     const finalResult = await runAfterHooks({ operation: createRepresentationContext(operation), input, result, ...(args.definition.after !== undefined ? { hooks: args.definition.after } : {}) })
-    if ((!supportsTransactions || mode === "none") && operation.outboxRecords.length > 0) {
+    if (!inTransaction && operation.outboxRecords.length > 0) {
       throw new ConfigurationError(`Operation ${args.definition.key} registered durable effects without an active transaction.`)
     }
     const audit = buildAudit({ operation, definition: args.definition, input, result: finalResult, auditMode })
@@ -124,6 +136,15 @@ export async function runStandardOperation<TInput, TResult>(args: {
     }
   }
 
+  if (joinedParent) {
+    // The parent owns the transaction: run inline on its transaction-scoped
+    // persistence, and hand post-commit work to the parent so it runs only if
+    // and after the parent commits. A parent rollback disposes it unrun.
+    const completed = await run(args.operation)
+    const pendingEffects = completed.operation.takePreCommitEffects()
+    joinedParent.effects.addBestEffortEffect(`nested:${args.definition.key}`, () => finish(completed.operation, completed.input, completed.result, pendingEffects, args.onBusinessResult).then(() => undefined))
+    return completed.result
+  }
   if (mode !== "none" && supportsTransactions) {
     const provider = args.operation.persistence as InteractiveTransactionProvider
     const execution = args.definition.execution
@@ -146,6 +167,34 @@ export async function runStandardOperation<TInput, TResult>(args: {
   const completed = await run(operation)
   const pendingEffects = completed.operation.takePreCommitEffects()
   return finish(completed.operation, completed.input, completed.result, pendingEffects, args.onBusinessResult)
+}
+
+/**
+ * Wraps a nested invoker so the parent cannot commit over a failed or still
+ * running child: a joined child's writes share the parent's transaction, so
+ * either outcome would commit partial work.
+ */
+function trackNestedInvocations(invoke: NestedOperationInvoke | undefined): { invoke: NestedOperationInvoke | undefined; assertSettled(key: string): void } {
+  if (!invoke) return { invoke: undefined, assertSettled: () => undefined }
+  let pending = 0
+  let failed = false
+  return {
+    invoke: async (definition, input) => {
+      pending += 1
+      try {
+        return await invoke(definition, input)
+      } catch (error) {
+        failed = true
+        throw error
+      } finally {
+        pending -= 1
+      }
+    },
+    assertSettled: (key) => {
+      if (pending > 0) throw new ConfigurationError(`Operation ${key} returned before its nested operations completed.`)
+      if (failed) throw new ConfigurationError(`Operation ${key} cannot complete after a nested operation failed.`)
+    },
+  }
 }
 
 function isRetryableDefinition<TInput, TResult>(
@@ -270,6 +319,7 @@ async function runTransactionWithRetry<TInput, TResult>(args: {
     const attemptContext = args.retryPolicy
       ? createOperationRunContext(args.operation, {
           operationId: args.operation.operationId,
+          effectFailures: args.operation.effectFailures,
           ...(args.operation.correlationId !== undefined ? { correlationId: args.operation.correlationId } : {}),
         })
       : args.operation

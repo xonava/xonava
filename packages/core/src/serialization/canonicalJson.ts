@@ -90,6 +90,13 @@ export function decodeBase64UrlUnpadded(s: string): Uint8Array {
   if (s.length % 4 === 1) {
     throw new CanonicalJsonError("invalid base64url length");
   }
+  // Canonical form only: the unused low bits of a final partial group must be
+  // zero, so each byte string has exactly one accepted spelling.
+  const tail = s.length % 4;
+  if (tail !== 0) {
+    const last = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".indexOf(s[s.length - 1]!);
+    if ((last & (tail === 2 ? 0x0f : 0x03)) !== 0) throw new CanonicalJsonError("non-canonical base64url encoding");
+  }
   let b64 = s.replace(/-/g, "+").replace(/_/g, "/");
   const pad = (4 - (b64.length % 4)) % 4;
   if (pad) b64 += "=".repeat(pad);

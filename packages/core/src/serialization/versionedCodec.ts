@@ -40,7 +40,14 @@ export interface VersionedCodecConfig<T> {
   readonly currentVersion: FormatVersion;
   readonly readableVersions: readonly FormatVersion[];
   readonly encode: (value: T) => JsonValue;
-  readonly decode: (encoded: JsonValue) => T;
+  /**
+   * Decodes a payload of the given envelope version. A codec that reads more
+   * than one version must branch on `version` (or migrate) and declare so with
+   * `decodesEveryReadableVersion`, so an older payload can never be read
+   * silently with the current layout.
+   */
+  readonly decode: (encoded: JsonValue, version: FormatVersion) => T;
+  readonly decodesEveryReadableVersion?: boolean;
 }
 
 function assertCodecConfig<T>(config: VersionedCodecConfig<T>): void {
@@ -77,6 +84,12 @@ function assertCodecConfig<T>(config: VersionedCodecConfig<T>): void {
       code: INVALID_ENVELOPE_ERROR,
     });
   }
+  if (new Set(config.readableVersions).size > 1 && config.decodesEveryReadableVersion !== true) {
+    throw new CanonicalJsonError(
+      "a codec with several readableVersions must set decodesEveryReadableVersion and decode by version",
+      { code: INVALID_ENVELOPE_ERROR },
+    );
+  }
 }
 
 export function createVersionedCodec<T>(config: VersionedCodecConfig<T>): VersionedCodec<T> {
@@ -104,7 +117,7 @@ export function createVersionedCodec<T>(config: VersionedCodecConfig<T>): Versio
           { code: UNSUPPORTED_FORMAT_VERSION_ERROR },
         );
       }
-      return config.decode(parsed.payload as JsonValue);
+      return config.decode(parsed.payload as JsonValue, parsed.version);
     },
   };
   return Object.freeze(codec);

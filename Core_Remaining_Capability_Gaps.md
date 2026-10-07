@@ -54,7 +54,39 @@ deployments and scales with explicit concurrency and capability flags.
 | Outbox provenance not persisted | Framework-owned `provenance` column |
 | PostgreSQL stores hard-coded the `framework_test` schema | Validated schema/table options with production defaults |
 
+## Second review (resolved)
+
+A second, adversarial pass over every core module found the gaps below. Each
+fix has a regression test that failed before the fix.
+
+| Id | Gap | Resolution |
+|---|---|---|
+| S1 | A policy `effect` other than exactly `"allow"`/`"deny"` was accepted and treated as allow on the record path | Normalizer rejects unknown effects and non-integer priorities; only an explicit `"allow"` allows |
+| S2 | Plan-constrained updates checked only the pre-image, so an update could move a row out of the actor's scope | Update data must satisfy every mandatory-predicate conjunct it touches; partial changes to a compound conjunct are forbidden |
+| S3 | Nested operations ran in their own transaction and committed (with post-commit hooks) before the parent; the nesting-depth budget was never enforced | `execute` contexts expose `invoke`: a child joins the parent's transaction, its post-commit work runs only after the parent commits, a failed or unfinished child fails the parent, and depth is enforced; read operations may invoke only reads |
+| S4 | A missing user attribute compiled to the literal `"undefined"` (and `null` to `0`) | Unresolved attributes make allow clauses false and deny clauses true; coercion rejects non-scalar values |
+| S5 | Field-level reads leaked through nested arrays, extra paged-result keys, allowlists keyed on the trusted record, and query grants from deny policies; entities kept restricted fields filterable/sortable | Recursive projection; paged envelope allowlist; allowlists default to omit; deny-omitted fields are never re-granted; restricted fields are not filterable or sortable |
+| R1 | Expired, out-of-scope, or non-permitted authority surfaced as `ConfigurationError` (500) | `UnauthorizedError` for not-yet/no-longer-valid authority, `ForbiddenError` for authority that does not cover the request; bounded clock-skew tolerance for `issuedAt` (default 30 s); expiry must follow issuance |
+| R2 | The request's `signal` and `deadline` did not bound the operation | Run context combines environment and request signals and uses the earlier deadline |
+| C1 | Quota denials always failed validation | Denials validated against the requested amount |
+| C2 | Cron `*/n` day fields lost their step; DOM-or-DOW expressions could report no next run | Vixie day matching; calendar-date check honours day-of-week |
+| C3 | Timers above 2³¹−1 ms fired after 1 ms | Job, lease, dispatcher, schedule, and resilience timeouts validated against the timer ceiling |
+| C4 | Job retry backoff was uncapped and could yield an Invalid Date | 24 h default cap computed without overflow |
+| C5 | Outbox/inbox claims ignored `maxAttempts`, so a crashing message was never dead-lettered | Claims dead-letter exhausted records; stores forward `maxAttempts` |
+| C6 | A `queue_all` schedule with a large backlog failed every tick forever | Bounded oldest-first drain across ticks |
+| C7 | Cancelling a compensating workflow overwrote its failure and refilled its retry budget | No-op in the state machine and in the PostgreSQL, MySQL, and D1 stores |
+| C8 | A stalled non-idempotent workflow step was re-executed | Stall recorded durably; the next claim fails the step with `TIMEOUT` |
+| C9 | Late results from older circuit-breaker generations changed state; client cancellations counted as failures | Generation-tagged admissions; cancellation is neutral |
+| C10 | A failed compile wedged the definition registry; duplicate or malformed routes were accepted; dependency resolution could overflow the stack | Registry reopens on failure; method allowlist, path-template grammar, ambiguity detection; iterative resolution |
+| C11 | Versioned codecs decoded old payloads with the current layout | `decode(payload, version)`; multi-version codecs must declare version-aware decoding |
+| C12 | Tenant atomic batches could advance any cache-generation tag | Tenant tags use the length-prefixed tenant namespace and foreign tags are rejected; CRUD handlers build tags with it |
+| P2 | Framework-error contract gaps | Cancellation and deadline raise `CancelledError`/`TimeoutError` (operations, object store, streams); predicate string values are byte-bounded; repeated signals cannot skip a retry backoff; outbox appends with a reused id and different payload conflict; telemetry redacts sensitive keys |
+| P3 | Hardening | Error `details` are non-enumerable; prototype-chain lookups replaced with own-property checks; base64url accepts only canonical spellings; post-commit failures of retried attempts reach `runOperationDetailed`; `deepFreeze` freezes children of frozen parents |
+
 ## Remaining
 
 - A code formatter is still not configured; style is enforced only by lint.
 - Commit-outcome classification is proven on PostgreSQL and MySQL; D1 has no interactive transactions.
+- A failed nested operation fails its parent, but its writes are not individually rolled back (no savepoints): the parent's whole transaction rolls back instead.
+- Query grants from conditional allow policies are honoured without evaluating their conditions at query time; only deny-sourced grants are dropped.
+- If an ABAC policy condition itself references a soft-delete field, plan-constrained soft deletes are refused, because the update would leave the policy's scope.

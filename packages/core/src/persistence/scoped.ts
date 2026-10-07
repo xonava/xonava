@@ -183,6 +183,24 @@ export function assertTenantIdempotencyScope(scope: string, tenantId: string): v
   }
 }
 
+/**
+ * Encodes a cache tag in the tenant's length-prefixed namespace. Readers and
+ * writers must both use this form for tenant-owned tags so a tenant-scoped
+ * atomic batch can advance the generation the tenant's cache entries read.
+ */
+export function encodeTenantCacheTag(tenantId: string, tag: string): string {
+  return `${encodeTenantIdempotencyScope(tenantId)}:${tag}`
+}
+
+/** Rejects cache-generation tags that are global or belong to another tenant. */
+export function assertTenantCacheTag(tag: string, tenantId: string): void {
+  if (typeof tag !== "string" || decodeTenantIdempotencyScope(tag) !== tenantId) {
+    throw new TenantScopeViolationError(
+      `Cannot advance cache generation "${String(tag)}" for tenant "${tenantId}".`,
+    )
+  }
+}
+
 /** Tenant attenuation preserves only durable commit operations that carry a scope. */
 export type TenantScopedIdempotencyPort<TResult, TPort extends IdempotencyPort<TResult>> =
   IdempotencyPort<TResult>
@@ -445,6 +463,7 @@ export function createTenantScopedPersistenceProvider<TTenantId extends string>(
             return { kind: "outbox", record: normalizeTenantRecord<OutboxRecord>(item.record, tenantId, "outbox record") }
           }
           if (item.kind === "cache-generation") {
+            assertTenantCacheTag(item.tag, tenantId)
             return { kind: "cache-generation", tag: item.tag }
           }
           assertTenantIdempotencyScope(item.commit.scope, tenantId)

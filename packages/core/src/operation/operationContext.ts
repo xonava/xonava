@@ -12,6 +12,7 @@ import type { InternalOperationRunContext, OperationEnvironment, OperationRunCon
 import { createExecutionDeadline, type Clock, type ExecutionDeadline } from "./deadline"
 import { DEFAULT_EXECUTION_BUDGET, validateExecutionBudget, type ExecutionBudget } from "./executionBudget"
 import type { TelemetryPort } from "../telemetry/telemetry"
+import type { OperationDefinition } from "./operationDefinition"
 
 export type { OperationEnvironment, OperationRunContext }
 
@@ -23,6 +24,21 @@ export interface ReadOperationContext {
   readonly services: OperationServices
   readonly signal: AbortSignal
   readonly deadline: ExecutionDeadline
+}
+
+/**
+ * Runs a child operation as part of the calling operation. The child inherits
+ * identity, scope, correlation, signal, and deadline, runs its own
+ * authorization, and counts against the nesting-depth budget. Inside a
+ * transaction it joins the parent's transaction: its writes and durable
+ * effects commit or roll back with the parent, and its post-commit work runs
+ * only after the parent commits. A failed child fails the parent.
+ */
+export type NestedOperationInvoke = <TInput, TResult, TCommand = unknown>(definition: OperationDefinition<TInput, TResult, TCommand>, input: TInput) => Promise<TResult>
+
+/** Context passed to a read operation's `execute`. Only read operations may be invoked. */
+export interface ReadExecutionContext extends ReadOperationContext {
+  readonly invoke: NestedOperationInvoke
 }
 
 /** Minimal read-only surface used exclusively while deciding authorization. */
@@ -42,6 +58,7 @@ export interface MutationOperationContext {
   readonly signal: AbortSignal
   readonly deadline: ExecutionDeadline
   readonly enforceAbac?: AbacWriteEnforcer
+  readonly invoke: NestedOperationInvoke
   addDurableEffect(entry: { name: string; outbox: NewOutboxRecord }): void
   addBestEffortEffect(name: string, execute: (operation?: PostCommitContext) => Promise<void>): void
 }
@@ -144,13 +161,16 @@ export function createOperationContext<TPersistence extends PersistenceProvider>
 
 export function createOperationRunContext<TPersistence extends PersistenceProvider>(
   environment: OperationEnvironment<TPersistence>,
-  options?: { operationId?: string; correlationId?: string },
+  options?: { operationId?: string; correlationId?: string; effectFailures?: Array<{ phase: string; effectName: string; error: unknown }> },
 ): InternalOperationRunContext<TPersistence> {
   const internalEnvironment = environment as OperationEnvironment & { readonly commitMarkers?: readonly CommitMarkerEntry[] }
   const correlationId = options?.correlationId ?? environment.request?.correlationId ?? environment.request?.requestId
   const executionBudget = validateExecutionBudget(environment.executionBudget ?? DEFAULT_EXECUTION_BUDGET)
-  const signal = environment.signal ?? new AbortController().signal
-  const deadline = environment.deadline ?? createExecutionDeadline(new Date(environment.services.clock.now().getTime() + executionBudget.maxDurationMs))
+  const signal = combineSignals(environment.signal, environment.request?.signal)
+  const deadline = earliestDeadline(
+    environment.deadline ?? createExecutionDeadline(new Date(environment.services.clock.now().getTime() + executionBudget.maxDurationMs)),
+    environment.request?.deadline,
+  )
   const operationId = options?.operationId ?? environment.services.idGenerator()
   const collector = new OperationEffectCollector(
     internalEnvironment.commitMarkers ? { commitMarkers: [...internalEnvironment.commitMarkers] } : undefined,
@@ -161,8 +181,26 @@ export function createOperationRunContext<TPersistence extends PersistenceProvid
     collector,
     operationId,
     correlationId,
-    [],
+    options?.effectFailures ?? [],
   )
+}
+
+/**
+ * The operation stops when either the environment or the request is
+ * cancelled. AbortSignal.any holds its sources weakly, so no listener outlives
+ * the run; runtimes without it fall back to the more specific request signal.
+ */
+function combineSignals(environment: AbortSignal | undefined, request: AbortSignal | undefined): AbortSignal {
+  if (!request || request === environment) return environment ?? new AbortController().signal
+  if (!environment) return request
+  return typeof AbortSignal.any === "function" ? AbortSignal.any([environment, request]) : request
+}
+
+/** The request deadline (validated RFC 3339 instant) can only shorten the operation's budget. */
+function earliestDeadline(deadline: ExecutionDeadline, requestDeadline: string | undefined): ExecutionDeadline {
+  if (requestDeadline === undefined) return deadline
+  const requested = Date.parse(requestDeadline)
+  return Number.isFinite(requested) && requested < deadline.expiresAt.getTime() ? createExecutionDeadline(new Date(requested)) : deadline
 }
 
 /**
@@ -263,6 +301,12 @@ export function createReadOperationContext(operation: InternalOperationRunContex
   })
 }
 
+const unavailableInvoke: NestedOperationInvoke = () => Promise.reject(new ConfigurationError("Nested operations are not available in this context."))
+
+export function createReadExecutionContext(operation: InternalOperationRunContext, invoke: NestedOperationInvoke = unavailableInvoke): ReadExecutionContext {
+  return Object.freeze({ ...createReadOperationContext(operation), invoke })
+}
+
 export function createAuthorizationOperationContext(operation: InternalOperationRunContext): AuthorizationOperationContext {
   return Object.freeze({
     operationId: operation.operationId,
@@ -288,7 +332,7 @@ export function createPreparationOperationContext(operation: InternalOperationRu
   })
 }
 
-export function createMutationOperationContext(operation: InternalOperationRunContext): MutationOperationContext {
+export function createMutationOperationContext(operation: InternalOperationRunContext, invoke: NestedOperationInvoke = unavailableInvoke): MutationOperationContext {
   return Object.freeze({
     operationId: operation.operationId,
     ...(operation.correlationId !== undefined ? { correlationId: operation.correlationId } : {}),
@@ -298,6 +342,7 @@ export function createMutationOperationContext(operation: InternalOperationRunCo
     signal: operation.signal,
     deadline: operation.deadline,
     ...(operation.enforceAbac !== undefined ? { enforceAbac: operation.enforceAbac } : {}),
+    invoke,
     addDurableEffect: operation.addDurableEffect.bind(operation),
     addBestEffortEffect: operation.addBestEffortEffect.bind(operation),
   })

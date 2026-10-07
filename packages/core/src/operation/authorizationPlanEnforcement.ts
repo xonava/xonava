@@ -1,5 +1,6 @@
 import { registerTenantScopedProvider } from "../persistence/tenantScopeBrand"
 import { ConfigurationError, ConflictError, ForbiddenError, evaluatePredicate, executionScopesEqual } from "../domain"
+import { evaluatePredicateTruth } from "../domain/evaluatePredicate"
 import { Predicate, type PredicateNode } from "../domain/predicate"
 import type { AuthorizationFactRevalidator } from "../security/authorizationFacts"
 import { supportsInteractiveTransactions, isTenantScopedPersistenceProvider, type EntityDescriptor, type PersistenceProvider, type TransactionOptions } from "../persistence/provider"
@@ -203,6 +204,29 @@ function assertWritableFields(data: unknown, plan: AuthorizedExecutionPlan): voi
   }
 }
 
+function topLevelConjuncts(predicate: PredicateNode, out: PredicateNode[] = []): PredicateNode[] {
+  if (predicate.kind === "and") for (const child of predicate.filters) topLevelConjuncts(child, out)
+  else out.push(predicate)
+  return out
+}
+
+/**
+ * A where-mutation constrains only the pre-image; the new data must not move
+ * the row out of the mandatory predicate. Each top-level conjunct touching a
+ * written field must be fully determined by the data and evaluate TRUE on it.
+ */
+function assertUpdateDataKeepsPredicate(data: unknown, conjuncts: readonly PredicateNode[] | undefined): void {
+  if (!conjuncts) return
+  const written = new Set(Object.keys(data as object))
+  for (const conjunct of conjuncts) {
+    const fields = [...predicateFields(conjunct)]
+    if (!fields.some((field) => written.has(field))) continue
+    if (!fields.every((field) => written.has(field)) || evaluatePredicateTruth(data as Record<string, unknown>, conjunct) !== true) {
+      throw new ForbiddenError("Authorization plan resource predicate does not permit this update.")
+    }
+  }
+}
+
 function assertDirectMutationIsSafe(required: PredicateNode | undefined): void {
   if (required) {
     throw new ConfigurationError("A predicate-bearing authorization plan requires a conditional where mutation; direct id mutation is not authorized.")
@@ -211,6 +235,7 @@ function assertDirectMutationIsSafe(required: PredicateNode | undefined): void {
 
 function constrainRepository<T, TId>(repository: ReturnType<PersistenceProvider["repository"]>, plan: AuthorizedExecutionPlan, required: PredicateNode | undefined) {
   const requiredFields = required === undefined ? undefined : predicateFields(required)
+  const requiredConjuncts = required === undefined ? undefined : topLevelConjuncts(required)
   const read = {
     findById: async (id: TId): Promise<T | null> => {
       const row = await (repository as { findById(id: TId): Promise<T | null> }).findById(id)
@@ -267,21 +292,24 @@ function constrainRepository<T, TId>(repository: ReturnType<PersistenceProvider[
       return mutation.update(id, data, options)
     },
     ...(mutation.updateOneWhere ? {
-      updateOneWhere: (filter: PredicateNode, data: Partial<T>, options?: unknown) => {
+      updateOneWhere: async (filter: PredicateNode, data: Partial<T>, options?: unknown) => {
         assertWritableFields(data, plan)
+        assertUpdateDataKeepsPredicate(data, requiredConjuncts)
         return mutation.updateOneWhere!(addRequiredPredicate(filter, required)!, data, options)
       },
     } : {}),
     ...(mutation.updateOneWhereReturning ? {
       updateOneWhereReturning: async (filter: PredicateNode, data: Partial<T>, options?: unknown) => {
         assertWritableFields(data, plan)
+        assertUpdateDataKeepsPredicate(data, requiredConjuncts)
         const row = await mutation.updateOneWhereReturning!(addRequiredPredicate(filter, required)!, data, options)
         return permittedRecord(row, required) ? row : null
       },
     } : {}),
     ...(mutation.updateManyWhere ? {
-      updateManyWhere: (filter: PredicateNode, data: Partial<T>, options?: unknown) => {
+      updateManyWhere: async (filter: PredicateNode, data: Partial<T>, options?: unknown) => {
         assertWritableFields(data, plan)
+        assertUpdateDataKeepsPredicate(data, requiredConjuncts)
         return mutation.updateManyWhere!(addRequiredPredicate(filter, required)!, data, options)
       },
     } : {}),
@@ -328,6 +356,7 @@ export interface MaskingOptions {
 }
 
 export const MIN_MASKING_KEY_BYTES = 16
+const PAGED_ENVELOPE_KEYS = ["page", "pageSize", "pageInfo"] as const
 const MASK_DOMAIN = new TextEncoder().encode("framework.authorization-mask:v2\u0000")
 
 /** Applies field visibility and masking at the final representation boundary. */
@@ -338,7 +367,8 @@ export function applyAuthorizationPlanToResult<TResult>(plan: AuthorizedExecutio
   const masks = new Map<string, Extract<AuthorizationObligation, { kind: "mask" }>["strategy"]>()
   for (const obligation of plan.obligations) if (obligation.kind === "mask" && !masks.has(obligation.field)) masks.set(obligation.field, obligation.strategy)
   const projectRecord = (value: unknown): unknown => {
-    if (!value || typeof value !== "object" || Array.isArray(value) || value instanceof Date) return value
+    if (Array.isArray(value)) return Object.freeze(value.map(projectRecord))
+    if (!value || typeof value !== "object" || value instanceof Date) return value
     const projected: Record<string, unknown> = Object.create(null)
     for (const field of plan.readableFields) {
       if (!Object.prototype.hasOwnProperty.call(value, field)) continue
@@ -348,10 +378,14 @@ export function applyAuthorizationPlanToResult<TResult>(plan: AuthorizedExecutio
     }
     return Object.freeze(projected)
   }
-  if (Array.isArray(result)) return Object.freeze(result.map(projectRecord)) as TResult
+  if (Array.isArray(result)) return projectRecord(result) as TResult
   if (result && typeof result === "object" && Array.isArray((result as { rows?: unknown }).rows)) {
-    const value = result as unknown as { rows: unknown[] }
-    return Object.freeze({ ...value, rows: Object.freeze(value.rows.map(projectRecord)), rowCount: value.rows.length }) as TResult
+    // Only the ListResult envelope survives; any other key could carry
+    // unprojected row data (aggregates, debug payloads, summaries).
+    const value = result as unknown as Record<string, unknown> & { rows: unknown[] }
+    const envelope: Record<string, unknown> = {}
+    for (const key of PAGED_ENVELOPE_KEYS) if (Object.prototype.hasOwnProperty.call(value, key)) envelope[key] = value[key]
+    return Object.freeze({ ...envelope, rows: projectRecord(value.rows), rowCount: value.rows.length }) as TResult
   }
   return projectRecord(result) as TResult
 }

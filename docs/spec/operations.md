@@ -14,6 +14,12 @@ Transport parsing and response formatting are outside the operation.
 
 Nested operations MUST consume from the enclosing budget/deadline and MUST NOT amplify authority. Cancellation prevents new work but cannot retroactively undo a committed transaction. Atomic effects are submitted inside the provider transaction/batch; post-commit effects expose warning/failure semantics separately.
 
+## Nested operations (normative)
+
+An operation's `execute` context exposes `invoke(definition, input)`. The child inherits identity, scope, correlation, signal, and deadline, runs its own authorization against the unconstrained persistence of the parent's run, and counts against `maxNestingDepth`. When the parent runs in a transaction the child joins it: the child's writes and durable effects commit or roll back with the parent, and the child's post-commit work (its `afterCommit` hooks and best-effort effects) runs only after the parent commits, reporting failures on the parent's outcome. A child that manages its own transaction retries or uses an atomic batch cannot join a transaction. A parent whose child failed, or is still running when `execute` returns, MUST NOT commit. Read operations may invoke only read operations. `createOperationInvoker(environment)` composes top-level operations that each own their transaction.
+
+The request's `signal` and `deadline` bound the operation together with the environment's: the run aborts when either signal aborts and expires at the earlier deadline.
+
 ## Errors and conformance
 
 Invalid definitions/input are validation; denial authorization; missing service capability/configuration; deadline/cancellation execution failure; closed/disposed/drained effects stable lifecycle errors. Conformance covers ordering, hook trust boundaries, nested attenuation/budgets, cancellation/deadline, atomic and post-commit effects, committed-effect failure, and telemetry redaction.

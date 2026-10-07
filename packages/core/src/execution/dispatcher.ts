@@ -14,7 +14,7 @@ import type {
   StoredJob,
 } from "./types"
 import { InvalidJobPayloadError, MalformedJobPayloadError } from "./types"
-import { assertJobScopeMatches } from "./types"
+import { assertJobScopeMatches, assertTimerDelayWithinLimit } from "./types"
 import { createExecutionContext } from "./executionContext"
 import { ValidationError } from "../domain"
 import { createTelemetryLogger, type TelemetryLogger, type TelemetryPort } from "../telemetry/telemetry"
@@ -64,9 +64,28 @@ export interface JobTimeoutPolicy {
 
 const systemClock: DispatcherClock = {
   now: () => new Date(),
-  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  sleep: (ms, signal) => abortableSleep(ms, signal),
   setTimeout: (callback, ms) => setTimeout(callback, ms),
   clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+}
+
+/** setTimeout-backed sleep that clears its timer and resolves early when `signal` aborts. */
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve()
+      return
+    }
+    const onAbort = (): void => {
+      clearTimeout(handle)
+      resolve()
+    }
+    const handle = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort)
+      resolve()
+    }, ms)
+    signal?.addEventListener("abort", onAbort, { once: true })
+  })
 }
 
 export function decodeJobPayload<TPayload = Record<string, unknown>>(payload: string, decode: (input: unknown) => TPayload = (input) => input as TPayload): TPayload {
@@ -365,10 +384,13 @@ async function executeJob(args: DispatcherConfig & { job: StoredJob; log: Dispat
   let heartbeatPromise: Promise<void> | undefined
   let resolveHeartbeatStop: (() => void) | undefined
   const heartbeatStop = new Promise<void>((resolve) => { resolveHeartbeatStop = resolve })
+  // Aborted when execution finishes so the pending heartbeat timer is cleared
+  // instead of keeping the process alive for up to leaseDurationMs / 3.
+  const heartbeatAbort = new AbortController()
   const heartbeat = async (): Promise<void> => {
     while (!stopped) {
       try {
-        await Promise.race([clock.sleep(Math.max(1, leaseDurationMs / 3)), heartbeatStop])
+        await Promise.race([clock.sleep(Math.max(1, leaseDurationMs / 3), heartbeatAbort.signal), heartbeatStop])
       } catch (sleepError) {
         log.warn?.("Job heartbeat sleep failed; treating as lease lost", { jobId: job.id, error: errorMessage(sleepError) })
         const error = new Error("Job lease renewal failed")
@@ -442,6 +464,7 @@ async function executeJob(args: DispatcherConfig & { job: StoredJob; log: Dispat
     return handleJobError({ job, store, def, retryPolicy, workerId, claimToken: job.claimToken, execution, error: message, failureKind: timedOut ? "retryable" : classifyFailure(error), now: () => clock.now(), log })
   } finally {
     stopped = true
+    heartbeatAbort.abort()
     resolveHeartbeatStop?.()
     await heartbeatPromise
     if (timeoutId !== undefined) {
@@ -457,13 +480,17 @@ function validateDispatcherConfig(config: DispatcherConfig): void {
   const MAX_CLAIM_LIMIT = 100
   if (config.claimLimit > MAX_CLAIM_LIMIT) throw new ValidationError(`Claim limit ${config.claimLimit} exceeds maximum ${MAX_CLAIM_LIMIT}`)
   if (!Number.isFinite(config.leaseDurationMs) || config.leaseDurationMs <= 0) throw new ValidationError("leaseDurationMs must be positive")
+  // leaseDurationMs is the default execution timeout, grace period and heartbeat basis.
+  assertTimerDelayWithinLimit("leaseDurationMs", config.leaseDurationMs)
   if (config.timeoutPolicy) {
     if (!Number.isFinite(config.timeoutPolicy.cancellationGraceMs) || config.timeoutPolicy.cancellationGraceMs < 0) {
       throw new ValidationError("cancellationGraceMs must be finite and non-negative")
     }
+    assertTimerDelayWithinLimit("cancellationGraceMs", config.timeoutPolicy.cancellationGraceMs)
     if (config.timeoutPolicy.timeoutMs !== undefined && (!Number.isFinite(config.timeoutPolicy.timeoutMs) || config.timeoutPolicy.timeoutMs <= 0)) {
       throw new ValidationError("timeoutMs must be finite and positive")
     }
+    if (config.timeoutPolicy.timeoutMs !== undefined) assertTimerDelayWithinLimit("timeoutMs", config.timeoutPolicy.timeoutMs)
   }
 }
 

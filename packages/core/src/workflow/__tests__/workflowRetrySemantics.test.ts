@@ -183,7 +183,7 @@ describe("workflow retry, failure, and compensation semantics", () => {
     }
   })
 
-  it("never commits while a timed-out step ignores cancellation (stalled)", async () => {
+  it("never fails or compensates while a timed-out step ignores cancellation (stalled)", async () => {
     let finish!: () => void
     const { clock, store, dispatch } = harness({ reserve: { execute: () => new Promise<WorkflowStepResult>((resolve) => { finish = () => resolve({ kind: "complete" }) }) } }, { cancellationGraceMs: 20 })
     store.add({ id: "wf", currentStep: "reserve" })
@@ -193,7 +193,9 @@ describe("workflow retry, failure, and compensation semantics", () => {
     await vi.waitFor(() => expect([...clock.timers.values()].some((timer) => timer.at === clock.current + 20)).toBe(true))
     clock.advance(20)
     await expect(run).resolves.toMatchObject({ stalled: 1, failed: 0 })
-    expect(store.commits).toHaveLength(0)
+    // Only the stalled-attempt marker is committed; the instance is held for one lease.
+    expect(store.commits).toHaveLength(1)
+    expect(store.commits[0]).toMatchObject({ status: "waiting", outcome: null, wakeAt: new Date(clock.current + 600), failure: { code: "TIMEOUT", phase: "execute", step: "reserve" } })
     expect(clock.timers.size).toBe(0)
     finish()
   })
@@ -277,5 +279,42 @@ describe("workflow state machine records", () => {
   it("a `fail` on a compensating instance can no longer loop", () => {
     const compensating = { ...base, status: "compensating" as const }
     expect(applyWorkflowStep(compensating, { kind: "fail", error: "refund failed" }, at)).toMatchObject({ status: "compensation_failed", outcome: "failed", failure: { phase: "compensate", step: "reserve" } })
+  })
+})
+
+describe("stalled timed-out steps (C8)", () => {
+  const ignoreCancellation = () => new Promise<WorkflowStepResult>(() => undefined)
+
+  async function stall(clock: ManualClock, run: Promise<unknown>): Promise<void> {
+    await vi.waitFor(() => expect(clock.timers.size).toBeGreaterThan(0))
+    clock.advance(50)
+    await vi.waitFor(() => expect([...clock.timers.values()].some((timer) => timer.at === clock.current + 20)).toBe(true))
+    clock.advance(20)
+    await expect(run).resolves.toMatchObject({ stalled: 1, failed: 0 })
+  }
+
+  it("fails a stalled non-idempotent step with TIMEOUT on the next claim instead of re-running it", async () => {
+    const execute = vi.fn(ignoreCancellation)
+    const compensate = vi.fn(async () => undefined)
+    const { clock, store, dispatch } = harness({ charge: { execute, compensate, retry: fastRetry } }, { cancellationGraceMs: 20 })
+    store.add({ id: "wf", currentStep: "charge", compensationStack: ["charge"] })
+    await stall(clock, dispatch())
+    expect(store.rows.get("wf")).toMatchObject({ status: "waiting", failure: { code: "TIMEOUT", step: "charge", phase: "execute", attempt: 1 } })
+    clock.advance(600)
+    await expect(dispatch()).resolves.toMatchObject({ failed: 1 })
+    expect(execute).toHaveBeenCalledTimes(1)
+    expect(store.rows.get("wf")).toMatchObject({ status: "compensating", failure: { code: "TIMEOUT", step: "charge", phase: "execute" } })
+  })
+
+  it("still retries a stalled idempotent step under its policy", async () => {
+    let calls = 0
+    const execute = vi.fn(async (): Promise<WorkflowStepResult> => (++calls === 1 ? ignoreCancellation() : { kind: "complete" }))
+    const { clock, store, dispatch } = harness({ reserve: { execute, idempotent: true, retry: fastRetry } }, { cancellationGraceMs: 20 })
+    store.add({ id: "wf", currentStep: "reserve" })
+    await stall(clock, dispatch())
+    clock.advance(600)
+    await expect(dispatch()).resolves.toMatchObject({ advanced: 1 })
+    expect(execute).toHaveBeenCalledTimes(2)
+    expect(store.rows.get("wf")!.status).toBe("succeeded")
   })
 })

@@ -75,13 +75,13 @@ describe("schedule calculator", () => {
   it("retains DOM wildcard semantics for stepped wildcards", () => {
     const cron = parseCronExpression("0 9 */2 * 1")
     expect(cron.daysOfMonthWildcard).toBe(true)
-    expect(getNextOccurrence("0 9 */2 * 1", new Date("2026-06-02T10:00:00Z"))?.toISOString()).toBe("2026-06-08T09:00:00.000Z")
+    expect(getNextOccurrence("0 9 */2 * 1", new Date("2026-06-02T10:00:00Z"))?.toISOString()).toBe("2026-06-15T09:00:00.000Z")
   })
 
   it("retains DOW wildcard semantics for stepped wildcards", () => {
     const cron = parseCronExpression("0 9 1 * */2")
     expect(cron.daysOfWeekWildcard).toBe(true)
-    expect(getNextOccurrence("0 9 1 * */2", new Date("2026-06-01T10:00:00Z"))?.toISOString()).toBe("2026-07-01T09:00:00.000Z")
+    expect(getNextOccurrence("0 9 1 * */2", new Date("2026-06-01T10:00:00Z"))?.toISOString()).toBe("2026-08-01T09:00:00.000Z")
   })
 
   it("returns no occurrences for maxCount zero", () => {

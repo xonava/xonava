@@ -109,7 +109,7 @@ export interface ListQueryInput {
 
 export type CrudMutationHookOperation = Omit<
   MutationOperationContext,
-  "persistence" | "enforceAbac" | "addDurableEffect" | "addBestEffortEffect"
+  "persistence" | "enforceAbac" | "invoke" | "addDurableEffect" | "addBestEffortEffect"
 > & { readonly persistence: ReadOnlyPersistenceProvider }
 
 export type CrudReadHookOperation = Pick<

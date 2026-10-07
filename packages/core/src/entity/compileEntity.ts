@@ -141,6 +141,10 @@ export function compileEntity<
     ...definition.dataClassification,
   } as Record<string, DataClassification>
   const auditFieldClassification = Object.fromEntries(Object.entries(dataClassification).map(([field, classification]) => [field, classification === "restricted" ? "omit" : classification === "confidential" ? "mask" : "include"]))
+  // Filter/sort are as revealing as search (oracle by predicate or ordering),
+  // so all three use the search classification ceiling.
+  const searchAllowed = fieldsAllowedForPurpose(dataClassification, "search")
+  const queryable = (field: string) => dataClassification[field] === undefined || searchAllowed.includes(field)
   const compiledScope = compileEntityScope<TRow>(
     definition.entityScope.kind === "tenant"
       ? { kind: "tenant" as const, ...(definition.entity.tenantField ? { field: definition.entity.tenantField } : {}) }
@@ -163,7 +167,7 @@ export function compileEntity<
     requiredRuntimeRequirements: requirements,
     compiledScope,
     compiledPersistence: { source: definition.persistenceSource, access: "read-write" as const },
-    compiledQuery: { budget: { ...DEFAULT_QUERY_BUDGET, ...definition.queryLimits }, filterableFields: [...definition.filterableColumns], sortableFields: [...definition.sortableColumns], searchableFields: definition.searchableColumns.filter(field => fieldsAllowedForPurpose(dataClassification, "search").includes(field) || dataClassification[field] === undefined) },
+    compiledQuery: { budget: { ...DEFAULT_QUERY_BUDGET, ...definition.queryLimits }, filterableFields: definition.filterableColumns.filter(queryable), sortableFields: definition.sortableColumns.filter(queryable), searchableFields: definition.searchableColumns.filter(queryable) },
     compiledPagination: { strategy: "offset" as const, ...(definition.queryLimits?.maxOffset !== undefined ? { maxOffset: definition.queryLimits.maxOffset } : {}) },
     compiledAudit: { enabled: definition.audit !== false, guarantee: definition.audit === false ? "best-effort" : definition.audit.auditGuarantee ?? "best-effort", fieldClassification: auditFieldClassification },
     compiledCache: { enabled: definition.cache !== false, guarantee: definition.cache !== false ? "generation-qualified" as const : "none" as const },

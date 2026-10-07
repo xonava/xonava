@@ -136,7 +136,7 @@ describe("A1 canonical principal and authority", () => {
     expect(isRfc3339UtcInstant("2026-02-31T00:00:00.000Z")).toBe(false)
     expect(isRfc3339UtcInstant("2026-02-28T00:00:00.123456789Z")).toBe(true)
     const value = provenance({ expiresAt: "2026-02-31T00:00:00.000Z" })
-    expect(() => assertAuthorityProvenance(value, value.grant.target.scope, value.grant.target.scopeId, now)).toThrow(/expired or has an invalid expiry/)
+    expect(() => assertAuthorityProvenance(value, value.grant.target.scope, value.grant.target.scopeId, now)).toThrow(/invalid expiry/)
   })
 
   it("rejects delegation source mismatch, tenant rebinding and depth above one", () => {

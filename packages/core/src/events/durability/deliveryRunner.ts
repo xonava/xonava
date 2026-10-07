@@ -73,7 +73,9 @@ export async function deliverOutboxMessage(args: DeliverOutboxMessageArgs): Prom
   const timeoutMs = boundedLeaseWork(args.leaseMs, args.publishTimeoutMs)
   const policy = args.retry ?? DEFAULT_BACKOFF_POLICY
   if (args.signal?.aborted) return { outcome: "cancelled", record: null }
-  const claimed = await args.store.claim(args.key, args.owner, args.leaseMs)
+  const claimed = await args.store.claim(args.key, args.owner, args.leaseMs, policy.maxAttempts)
+  // A claim of an exhausted record dead-letters it instead of starting another attempt.
+  if (claimed?.state === "dead_lettered") return { outcome: "dead_lettered", record: claimed }
   if (!claimed || !claimed.claim) return { outcome: "not_claimable", record: claimed }
   const token = claimed.claim.token
   try {
@@ -145,10 +147,12 @@ export async function consumeInboxMessage<T>(args: ConsumeInboxMessageArgs<T>): 
   const key: InboxKey = { consumerKey: consumer.key, messageId: envelope.messageId, scopeId: envelope.scopeId }
   const observed = await args.inbox.observe(createInboxRecord(envelope, consumer, (args.now ?? (() => new Date()))()))
   if (observed.state === "processed") return { outcome: "already_processed", record: observed }
-  const claimed = await args.inbox.claim(key, args.owner, args.leaseMs)
+  const maxAttempts = consumer.backoff?.maxAttempts ?? consumer.retry.maxAttempts
+  const claimed = await args.inbox.claim(key, args.owner, args.leaseMs, maxAttempts)
+  // A claim of an exhausted record dead-letters it instead of starting another attempt.
+  if (claimed?.state === "dead_lettered") return { outcome: "dead_lettered", record: claimed }
   if (!claimed || !claimed.claim) return { outcome: "not_claimable", record: claimed }
   const token = claimed.claim.token
-  const maxAttempts = consumer.backoff?.maxAttempts ?? consumer.retry.maxAttempts
   const fail = async (code: string, permanent: boolean): Promise<{ outcome: DeliveryOutcome; record: InboxRecord | null }> => {
     try {
       const record = permanent

@@ -1,4 +1,5 @@
 import { ConfigurationError } from "../domain/errors"
+import { MAX_BACKOFF_DELAY_MS } from "./backoff"
 
 export type ExternalCallSemantics = {readonly kind:"read"}|{readonly kind:"idempotent-mutation";readonly idempotencyKey:string}|{readonly kind:"non-idempotent-mutation"}
 export interface RetryPolicy { readonly maxAttempts: number; readonly backoffMs?: number }
@@ -16,6 +17,8 @@ export function validateResiliencePolicy(policy: ResiliencePolicy, semantics: Ex
   }
   const positive=(value:number|undefined,name:string)=>{if(value!==undefined&&(!Number.isSafeInteger(value)||value<=0)) throw new ConfigurationError(`${name} must be a positive safe integer`)}
   positive(policy.timeoutMs,"timeoutMs");positive(policy.retry?.maxAttempts,"retry.maxAttempts");positive(policy.retry?.backoffMs,"retry.backoffMs");positive(policy.circuitBreaker?.failureThreshold,"circuitBreaker.failureThreshold");positive(policy.circuitBreaker?.resetAfterMs,"circuitBreaker.resetAfterMs");positive(policy.bulkhead?.maxConcurrent,"bulkhead.maxConcurrent")
+  // Timers above 2^31-1 ms fire immediately; one shared cap (7 days) bounds every resilience delay.
+  if(policy.timeoutMs!==undefined&&policy.timeoutMs>MAX_BACKOFF_DELAY_MS) throw new ConfigurationError(`timeoutMs must not exceed ${MAX_BACKOFF_DELAY_MS}`)
   if(policy.bulkhead?.maxQueue!==undefined&&(!Number.isSafeInteger(policy.bulkhead.maxQueue)||policy.bulkhead.maxQueue<0)) throw new ConfigurationError("bulkhead.maxQueue must be a non-negative safe integer")
   if(semantics.kind==="idempotent-mutation"&&(typeof semantics.idempotencyKey!=="string"||!semantics.idempotencyKey.trim())) throw new ConfigurationError("idempotent mutation requires a non-empty idempotency key")
   if(semantics.kind==="non-idempotent-mutation"&&(policy.retry?.maxAttempts??1)>1) throw new ConfigurationError("non-idempotent external mutations cannot be retried automatically")

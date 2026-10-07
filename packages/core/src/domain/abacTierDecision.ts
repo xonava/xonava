@@ -34,7 +34,8 @@ export function resolveTieredDecision<TPolicy>(args: {
 
     if (matched.length === 0) continue
 
-    const denies = matched.filter((p) => args.getEffect(p) === "deny")
+    // Fail closed: only an explicit "allow" can allow; any other effect denies.
+    const denies = matched.filter((p) => args.getEffect(p) !== "allow")
 
     if (denies.length > 0) {
       return {

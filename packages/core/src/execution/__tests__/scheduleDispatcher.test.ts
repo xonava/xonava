@@ -147,7 +147,7 @@ describe("schedule dispatcher", () => {
     expect(new Set(stores.enqueued.map(({ job }) => job.idempotencyKey)).size).toBe(3)
   })
 
-  it("does not advance or discard queue_all occurrences over its configured limit", async () => {
+  it("enqueues the oldest queue_all occurrences up to its limit and keeps the rest due", async () => {
     const claim = makeClaim({ misfirePolicy: { type: "queue_all" }, nextRunAt: new Date("2026-08-01T08:00:00Z") })
     const stores = makeStores([claim])
 
@@ -158,11 +158,13 @@ describe("schedule dispatcher", () => {
       maxQueueAllOccurrences: 2,
     })
 
-    expect(result.schedulesProcessed).toBe(0)
-    expect(result.jobsEnqueued).toBe(0)
-    expect(result.errors).toEqual(["Schedule schedule-1 has more than 2 missed occurrences"])
-    expect(stores.enqueue).not.toHaveBeenCalled()
-    expect(stores.advanceSchedule).toHaveBeenCalledWith(expect.objectContaining({ nextRunAt: claim.nextRunAt, lastStatus: "failed" }))
+    expect(result.schedulesProcessed).toBe(1)
+    expect(result.jobsEnqueued).toBe(2)
+    expect(result.errors).toEqual([])
+    expect(result.backlogTruncated).toEqual(["schedule-1"])
+    expect(stores.enqueued.map(({ job }) => job.runAt?.toISOString())).toEqual(["2026-08-01T08:00:00.000Z", "2026-08-01T09:00:00.000Z"])
+    // The oldest un-enqueued occurrence (10:00) is still due, so the next tick drains it.
+    expect(stores.advanceSchedule).toHaveBeenCalledWith(expect.objectContaining({ nextRunAt: new Date("2026-08-01T10:00:00Z"), lastStatus: "fired" }))
   })
 
   it("keeps the claimed occurrence when enqueue fails", async () => {

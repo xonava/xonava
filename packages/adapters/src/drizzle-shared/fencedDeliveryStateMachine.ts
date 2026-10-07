@@ -27,10 +27,10 @@ export class FencedInboxStore implements InboxPort {
     return this.backend.transact({ consumerKey: record.consumerKey, messageId: record.messageId, scopeId: record.scopeId }, (current, now) => { const next = observeInboxRecord(current, record, now); return { record: next, result: next } })
   }
   get(key: InboxKey): Promise<InboxRecord | null> { return this.backend.read(key) }
-  claim(key: InboxKey, owner: string, leaseMs: number): Promise<InboxRecord | null> {
+  claim(key: InboxKey, owner: string, leaseMs: number, maxAttempts?: number): Promise<InboxRecord | null> {
     return this.backend.transact<InboxRecord | null>(key, (current, now, freshToken) => {
       const record = existing(current, "Inbox record not observed")
-      const next = claimInboxRecord(record, { owner, token: freshToken(), leaseMs, now })
+      const next = claimInboxRecord(record, { owner, token: freshToken(), leaseMs, now, ...(maxAttempts !== undefined ? { maxAttempts } : {}) })
       return { record: next ?? record, result: next }
     })
   }
@@ -69,10 +69,10 @@ export class FencedOutboxStore implements OutboxStore {
     return this.backend.transact({ messageId: record.envelope.messageId, scopeId: record.scopeId }, (current) => { const next = appendOutboxDelivery(current, record); return { record: next, result: next } })
   }
   get(key: OutboxDeliveryKey) { return this.backend.read(key) }
-  claim(key: OutboxDeliveryKey, owner: string, leaseMs: number): Promise<OutboxDeliveryRecord | null> {
+  claim(key: OutboxDeliveryKey, owner: string, leaseMs: number, maxAttempts?: number): Promise<OutboxDeliveryRecord | null> {
     return this.backend.transact<OutboxDeliveryRecord | null>(key, (current, now, freshToken) => {
       const record = existing(current)
-      const next = claimOutboxDelivery(record, { owner, token: freshToken(), leaseMs, now })
+      const next = claimOutboxDelivery(record, { owner, token: freshToken(), leaseMs, now, ...(maxAttempts !== undefined ? { maxAttempts } : {}) })
       return { record: next ?? record, result: next }
     })
   }

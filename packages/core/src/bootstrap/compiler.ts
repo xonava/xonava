@@ -75,9 +75,45 @@ function sealFormats(registry: CompiledDurableFormatRegistry): CompiledDurableFo
   return deepFreeze({ entries, byFormatId: readonlyMap(entries.map(entry => [entry.formatId, entry] as const)) })
 }
 
+const HTTP_METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
+const PATH_PARAMETER = /^:[A-Za-z_][A-Za-z0-9_]*$/
+const PATH_LITERAL = /^[A-Za-z0-9._~!$&'()*+,;=@%-]+$/
+
+/**
+ * Validates an HTTP path template ("/", "/orders/:id") and returns its shape
+ * with parameter names erased, so "/orders/:id" and "/orders/:orderId"
+ * collide as the ambiguous routes they are.
+ */
+function routeShape(route: RouteDefinition): string {
+  nonEmpty(route.path, `route ${route.key} path`)
+  if (route.path === "/") return "/"
+  if (!route.path.startsWith("/") || route.path.endsWith("/")) fail(`route ${route.key} path must start with "/" and must not end with "/"`)
+  const names = new Set<string>()
+  return route.path.split("/").slice(1).map((segment) => {
+    if (PATH_PARAMETER.test(segment)) {
+      if (names.has(segment)) fail(`route ${route.key} repeats path parameter ${segment}`)
+      names.add(segment)
+      return "/:"
+    }
+    if (segment === "." || segment === ".." || !PATH_LITERAL.test(segment)) fail(`route ${route.key} has an invalid path segment ${JSON.stringify(segment)}`)
+    return `/${segment}`
+  }).join("")
+}
+
 export function compileFramework(registry: FrameworkDefinitionRegistry, options: CompileFrameworkOptions): CompiledFrameworkPlan {
   nonEmpty(options.frameworkVersion, "frameworkVersion"); nonEmpty(options.sourceRevision, "sourceRevision")
   registry.transition("OPEN", "NORMALIZING")
+  try {
+    return compileOpenedRegistry(registry, options)
+  } catch (error) {
+    // A failed compile must not wedge the process: the registry returns to
+    // OPEN so the application can correct its definitions and compile again.
+    registry.reopenAfterFailedCompilation()
+    throw error
+  }
+}
+
+function compileOpenedRegistry(registry: FrameworkDefinitionRegistry, options: CompileFrameworkOptions): CompiledFrameworkPlan {
   const definitions = registry.snapshot().map(normalize)
   registry.transition("NORMALIZING", "RESOLVING")
   const startupOrder = resolveDependencyOrder(definitions)
@@ -106,7 +142,15 @@ export function compileFramework(registry: FrameworkDefinitionRegistry, options:
   for (const key of resolverPorts.keys()) if (!resolverDefinitions.some(d => d.key === key)) fail(`scope resolver runtime ${key} has no definition`)
   const resolverMap = readonlyMap(resolverBindings)
   const routeEntries: [string, CompiledRoutePlan][] = []
+  const routeShapes = new Map<string, string>()
   for (const raw of definitions.filter(d => d.kind === "route") as RouteDefinition[]) {
+    nonEmpty(raw.method, `route ${raw.key} method`)
+    const method = raw.method.toUpperCase()
+    if (!HTTP_METHODS.has(method)) fail(`route ${raw.key} has unsupported HTTP method ${raw.method}`)
+    const shape = `${method} ${routeShape(raw)}`
+    const clash = routeShapes.get(shape)
+    if (clash !== undefined) fail(`routes ${clash} and ${raw.key} both handle ${method} ${raw.path}`)
+    routeShapes.set(shape, raw.key)
     const operation = byId.get(`operation:${raw.operationKey}`); if (!operation) fail(`route ${raw.key} references missing operation ${raw.operationKey}`)
     const policyKey = raw.authorizationPlanKey ?? raw.policyKey ?? operation.policyKey; if (!policyKey || !byId.has(`policy:${policyKey}`)) fail(`route ${raw.key} references missing authorization policy`)
     const scopeResolution = raw.scopeResolution
@@ -114,7 +158,7 @@ export function compileFramework(registry: FrameworkDefinitionRegistry, options:
     if (scopeResolution.kind === "resolver") { const binding = resolverMap.get(scopeResolution.resolverKey); if (!binding) fail(`route ${raw.key} references missing scope resolver ${scopeResolution.resolverKey}`); unique(scopeResolution.allowedTargetKinds, "route target kind"); if (scopeResolution.allowedTargetKinds.length === 0) fail(`route ${raw.key} has no allowed target kinds`); if (scopeResolution.allowedTargetKinds.some(k => !binding.allowedTargetKinds.includes(k))) fail(`route ${raw.key} widens resolver target kinds`) }
     else { encodeExecutionScopeId(scopeResolution.scope); if (raw.exposure === "public") fail(`public route ${raw.key} must use resolver scope resolution`) }
     const isPublic = raw.exposure === "public"
-    routeEntries.push([raw.key, deepFreeze({ key: raw.key, routeKey: raw.key, definitionVersion: raw.definitionVersion, transport: "http", method: raw.method.toUpperCase(), pathTemplate: raw.path, exposure: raw.exposure, operationKey: raw.operationKey, scopeResolution, anonymousPrincipal: isPublic ? { allowed: true, principal: { kind: "anonymous", id: "anonymous", authentication: { kind: "anonymous" } } } : { allowed: false }, inputPolicy: raw.inputPolicy ?? {}, outputPolicy: raw.outputPolicy ?? {}, mutation: raw.mutation ?? { allowed: false }, authorizationPlanKey: policyKey })])
+    routeEntries.push([raw.key, deepFreeze({ key: raw.key, routeKey: raw.key, definitionVersion: raw.definitionVersion, transport: "http", method, pathTemplate: raw.path, exposure: raw.exposure, operationKey: raw.operationKey, scopeResolution, anonymousPrincipal: isPublic ? { allowed: true, principal: { kind: "anonymous", id: "anonymous", authentication: { kind: "anonymous" } } } : { allowed: false }, inputPolicy: raw.inputPolicy ?? {}, outputPolicy: raw.outputPolicy ?? {}, mutation: raw.mutation ?? { allowed: false }, authorizationPlanKey: policyKey })])
   }
   for (const raw of definitions.filter(d => d.kind === "delegationRule") as DelegationRuleDefinition[]) { unique(raw.fromKinds, "delegation source kind"); unique(raw.toKinds, "delegation target kind"); unique(raw.capabilities, "delegation capability"); if ((raw.maximumDepth ?? 1) !== 1) fail(`delegation rule ${raw.key} must use maximum depth 1`); if (raw.allowImpersonation) fail(`delegation rule ${raw.key} cannot enable nested impersonation`) }
   const certificationEntries: [string, GuaranteeCertificationV1][] = []; for (const cert of options.certifications ?? []) { const key = assertCertification(cert, options); if (certificationEntries.some(([k]) => k === key)) fail(`duplicate guarantee certification ${key}`); certificationEntries.push([key, cloneAndFreezeDefinition(cert, true)]) }

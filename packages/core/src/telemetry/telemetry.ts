@@ -29,6 +29,26 @@ export interface TelemetryLogger {
 
 const logEncoder = new TextEncoder()
 
+/** Replacement value for attributes whose key names a secret. */
+export const TELEMETRY_REDACTED = "[REDACTED]"
+
+/**
+ * Key fragments that mark a log attribute as secret. Keys are compared
+ * case-insensitively with `_`, `-`, `.` and spaces removed, and a key matches
+ * when it contains any fragment: password, passwd, secret, token (claimToken,
+ * accessToken, refresh_token...), authorization, cookie, apikey (apiKey,
+ * api_key), credential, privatekey, sessionid. Matching values are replaced by
+ * TELEMETRY_REDACTED whatever their type. The match is deliberately broad:
+ * over-redacting an operational attribute is preferable to leaking a secret.
+ */
+export const SENSITIVE_TELEMETRY_KEY_PATTERNS: readonly string[] = Object.freeze(["password", "passwd", "secret", "token", "authorization", "cookie", "apikey", "credential", "privatekey", "sessionid"])
+
+/** Whether a telemetry attribute key names a secret (see SENSITIVE_TELEMETRY_KEY_PATTERNS). */
+export function isSensitiveTelemetryKey(key: string): boolean {
+  const normalized = String(key).toLowerCase().replace(/[\s_.-]/g, "")
+  return SENSITIVE_TELEMETRY_KEY_PATTERNS.some((pattern) => normalized.includes(pattern))
+}
+
 function boundedTelemetryString(value: string): string {
   if (value.length <= MAX_TELEMETRY_LOG_STRING_BYTES / 4) return value
   if (logEncoder.encode(value).byteLength <= MAX_TELEMETRY_LOG_STRING_BYTES) return value
@@ -44,8 +64,10 @@ function boundedTelemetryString(value: string): string {
 /**
  * Converts operational log data into bounded telemetry attributes. Only
  * primitive values survive (objects, arrays, functions, and non-finite numbers
- * are dropped), strings are truncated rather than rejected, and the attribute
- * count is capped. It never throws, so logging can never alter semantics.
+ * are dropped), values under sensitive keys (SENSITIVE_TELEMETRY_KEY_PATTERNS)
+ * are replaced by TELEMETRY_REDACTED, strings are truncated rather than
+ * rejected, and the attribute count is capped. It never throws, so logging can
+ * never alter semantics.
  */
 export function boundedTelemetryAttributes(message: string, data?: Readonly<Record<string, unknown>>): Readonly<Record<string, TelemetryAttributeValue>> {
   const output: Record<string, TelemetryAttributeValue> = Object.create(null) as Record<string, TelemetryAttributeValue>
@@ -56,7 +78,8 @@ export function boundedTelemetryAttributes(message: string, data?: Readonly<Reco
       if (count >= MAX_TELEMETRY_LOG_ATTRIBUTES) break
       if (key === "message" || key.length > 64) continue
       const value = data[key]
-      if (typeof value === "string") output[key] = boundedTelemetryString(value)
+      if (isSensitiveTelemetryKey(key) && (typeof value === "string" || typeof value === "boolean" || typeof value === "number" || value instanceof Date)) output[key] = TELEMETRY_REDACTED
+      else if (typeof value === "string") output[key] = boundedTelemetryString(value)
       else if (typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value))) output[key] = value
       else if (value instanceof Date && Number.isFinite(value.getTime())) output[key] = value.toISOString()
       else continue

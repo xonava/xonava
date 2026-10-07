@@ -1,5 +1,5 @@
 import type { Clock } from "../kernel/clock"
-import { TenantScopeViolationError } from "../domain/errors"
+import { ConfigurationError, TenantScopeViolationError } from "../domain/errors"
 import { validateExecutionScope, type ExecutionScope } from "../domain/executionScope"
 
 export type JobStatus = "pending" | "running" | "succeeded" | "retrying" | "failed" | "dead_letter" | "cancelled"
@@ -459,10 +459,23 @@ export function requesterJobScope(requester: JobRequester): JobScope {
   return requester.scope
 }
 
+/**
+ * Largest delay a host timer accepts. Larger values overflow the signed 32-bit
+ * timer field and fire after ~1ms in Node and browsers, so every duration that
+ * is fed to setTimeout must be validated against this ceiling.
+ */
+export const MAX_TIMER_DELAY_MS = 2_147_483_647
+
+/** Throws ConfigurationError when a timer duration exceeds MAX_TIMER_DELAY_MS. */
+export function assertTimerDelayWithinLimit(name: string, ms: number): void {
+  if (ms > MAX_TIMER_DELAY_MS) throw new ConfigurationError(`${name} must not exceed ${MAX_TIMER_DELAY_MS}ms (got ${ms}ms).`)
+}
+
 /** Job execution clock: the canonical core Clock plus sleep and optional timers. */
 export interface ExecutionClock extends Clock {
   now(): Date
-  sleep(ms: number): Promise<void>
+  /** Resolves after `ms`. Implementations should cancel the wait (and resolve) when `signal` aborts. */
+  sleep(ms: number, signal?: AbortSignal): Promise<void>
   setTimeout?(callback: () => void, ms: number): unknown
   clearTimeout?(handle: unknown): void
 }

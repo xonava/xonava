@@ -1,4 +1,4 @@
-import type { JobDefinition } from "./types"
+import { assertTimerDelayWithinLimit, type JobDefinition } from "./types"
 import { ConfigurationError, ValidationError } from "../domain"
 import { cloneAndFreezeDefinition } from "../kernel/definitionIntegrity"
 
@@ -75,6 +75,7 @@ function validateJobDefinition(definition: JobDefinition): void {
   if (!Number.isFinite(definition.retryDelayMs) || definition.retryDelayMs < 0) throw new ValidationError("retryDelayMs must be finite and non-negative.")
   if (!Number.isFinite(definition.retryBackoffMultiplier) || definition.retryBackoffMultiplier <= 0) throw new ValidationError("retryBackoffMultiplier must be finite and greater than zero.")
   if (definition.timeoutMs !== undefined && (!Number.isFinite(definition.timeoutMs) || definition.timeoutMs <= 0)) throw new ValidationError("timeoutMs must be finite and greater than zero.")
+  if (definition.timeoutMs !== undefined) assertTimerDelayWithinLimit("timeoutMs", definition.timeoutMs)
   if (typeof definition.decodePayload !== "function") throw new ValidationError("Job definition must provide decodePayload.")
   if (typeof definition.execute !== "function") throw new ValidationError("Job definition must provide execute.")
 }

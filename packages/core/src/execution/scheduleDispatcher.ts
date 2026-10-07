@@ -1,6 +1,6 @@
 import type { TimerClock } from "../kernel/clock"
 import type { JobStore, NewJob, CronTimezoneAdapter, JobRequester, JobStatus, PriorScheduleExecutionStatus } from "./types"
-import { scheduleCorrelationId } from "./types"
+import { assertTimerDelayWithinLimit, scheduleCorrelationId } from "./types"
 import type { FencedScheduleClaim, ScheduleStore } from "./scheduleStore"
 import { computeScheduleOccurrences, shouldFireSchedule, calculateNextRun } from "./scheduleCalculator"
 import { ValidationError } from "../domain"
@@ -11,6 +11,12 @@ export interface MaterializeResult {
   schedulesProcessed: number
   jobsEnqueued: number
   errors: string[]
+  /**
+   * queue_all schedules whose missed-occurrence backlog exceeded
+   * maxQueueAllOccurrences this tick. Only the oldest occurrences were
+   * enqueued; the schedule stays due so the rest drain on later ticks.
+   */
+  backlogTruncated?: string[]
 }
 
 /** Clock/timer boundary used by schedule lease renewal. Timer handles are opaque. */
@@ -53,6 +59,7 @@ export async function materializeDueSchedules(args: {
   const log = createTelemetryLogger(args.telemetry, "execution.schedule", () => new Date())
   const leaseDurationMs = args.leaseDurationMs ?? 30_000
   if (!Number.isFinite(leaseDurationMs) || leaseDurationMs <= 0) throw new ValidationError("Schedule lease duration must be finite and positive.")
+  assertTimerDelayWithinLimit("Schedule lease duration", leaseDurationMs)
 
   const claims = await args.scheduleStore.claimDueSchedules({
     workerId: args.workerId,
@@ -132,7 +139,7 @@ export async function materializeDueSchedules(args: {
         continue
       }
 
-      const occurrences = claim.misfirePolicy.type === "fire_now"
+      const computedOccurrences = claim.misfirePolicy.type === "fire_now"
         ? [claim.nextRunAt]
         : computeScheduleOccurrences({
             schedule: {
@@ -147,8 +154,14 @@ export async function materializeDueSchedules(args: {
             ...(args.tzAdapter ? { tzAdapter: args.tzAdapter } : {}),
           })
 
-      if (claim.misfirePolicy.type === "queue_all" && occurrences.length > queueAllLimit) {
-        throw new ValidationError(`Schedule ${claim.scheduleId} has more than ${queueAllLimit} missed occurrences`)
+      // Bounded per tick: enqueue the oldest queueAllLimit occurrences and advance
+      // past the last one; the schedule remains due so the backlog drains on
+      // subsequent ticks instead of failing forever.
+      const backlogTruncated = claim.misfirePolicy.type === "queue_all" && computedOccurrences.length > queueAllLimit
+      const occurrences = backlogTruncated ? computedOccurrences.slice(0, queueAllLimit) : computedOccurrences
+      if (backlogTruncated) {
+        result.backlogTruncated = [...(result.backlogTruncated ?? []), claim.scheduleId]
+        log.warn("Schedule queue_all backlog truncated for this tick", { scheduleId: claim.scheduleId, maxQueueAllOccurrences: queueAllLimit, oldestOccurrence: claim.nextRunAt.toISOString() })
       }
 
       if (occurrences.length === 0) {
