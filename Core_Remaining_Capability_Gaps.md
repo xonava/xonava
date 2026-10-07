@@ -30,26 +30,31 @@ deployments and scales with explicit concurrency and capability flags.
 | G17 | No error `cause`; no timeout/cancellation/unavailable codes; workflow configuration errors reported as 409 | `cause` chaining; `TIMEOUT`, `CANCELLED`, `UNAVAILABLE`; workflow option errors are configuration errors |
 | G22 | Workflow claims ran strictly serially | Bounded `concurrency` option |
 | H3 | No protection against runtime import cycles or layer inversion | Core test guards a cycle-free runtime graph and foundation-layer independence |
+| G15 | Sequences reset only at UTC boundaries, had no period token, and no injectable clock | IANA time-zone resets (default UTC), embedded period formats, injectable clock |
+| G16 | Rate-limit `fail-open` was silently ignored on atomic limiters | Contradictory configuration rejected; more window units |
+| G18 | `hash` masking was an unsalted digest; `partial` revealed most of short values | HMAC-SHA256 with an environment masking key (fails closed without one); `partial` reveals at most the last four characters of 8+ character values |
+| G19 | Cursors had no expiry or key rotation | Integrity-protected `expiresAt`; rotating integrity helper |
+| G21 | Fingerprint domain separators were unconstrained | Separator grammar that makes domain ‖ value provably unambiguous; existing digests unchanged |
+| G23 | Plan-constrained query re-check dropped every row whose projection omitted a predicate field | Rows without predicate fields trust the pushed-down filter; complete rows are still re-checked |
+| N1 | Four clock abstractions | One `Clock` / `TimerClock` in `core/kernel`; the others are defined in terms of it |
+| H1 | ESLint had three rules | Type-aware rules on core production code (floating/misused promises, `any`, non-Error throws, loose equality, type-only imports) |
+| H2 | Few property tests | Generator-based properties for predicates, canonical JSON, cache keys, cursors, and workflow state |
 
-## Open in core
+## Adapter phase (resolved, verified on PostgreSQL 16, MySQL 8.4, and SQLite/D1)
 
-| Id | Gap | Notes |
-|---|---|---|
-| N1 | Four clock abstractions and raw `new Date()` defaults in ~12 places | Unify on one `Clock` port; mostly API consolidation |
-| G15 | Sequences: caller-supplied `at` selects the period; UTC-only resets; no period token in formats; no block allocation | Use `core/business-calendar` time zones; inject the clock |
-| G16 | Rate limit `fail-open` silently ignored unless `best-effort`; minimal time-window units | Validate the combination explicitly |
-| G18 | `hash` masking is an unsalted digest (reversible for low-entropy values); `partial` reveals first/last characters | Keyed masking through a secret port |
-| G19 | Cursors have no key id (rotation) or expiry; offset pages have no `hasNext` | Versioned cursor format v2 |
-| G21 | Fingerprint domain separator is not length-prefixed | New fingerprint format version; never change v1 in place |
-| G23 | Plan-constrained `findMany` post-filters rows, so page counts can disagree | Rely on pushdown; report filtered counts |
-| H1 | ESLint has three rules; no formatter | Add type-aware rules (`no-floating-promises`, `no-misused-promises`) and a formatter |
-| H2 | Few property/fault-injection tests outside the areas above | Extend the generator-based tests to cache keys, cursors, and job dispatch |
+| Gap | Resolution |
+|---|---|
+| Temporal history could never advance past creation on PostgreSQL or MySQL (CHECK evaluated before ON CONFLICT) | Guarded update + create-only insert; rejections are `ConflictError` |
+| Every `contains`/`startsWith`/`endsWith` predicate was a syntax error on MySQL (`ESCAPE '\'`) | MySQL escapes with `!` |
+| Predicate results depended on column collation (PostgreSQL ICU ordering, MySQL `_ci` equality) | Dialect-aware compilation; 1500-predicate differential test passes on all three engines and both collation modes |
+| COMMIT-time serialization failures escaped as raw driver errors and were never retried | `TransactionRolledBackError` classification; proven with a real serializable write-skew retried to success |
+| MySQL rejected `accessMode`, so transactional reads always failed | Access mode passed through |
+| No database-enforced deadline | PostgreSQL `SET LOCAL statement_timeout`; `TIMEOUT` mapping |
+| Unknown job types consumed attempts | `JobStore.release` on all stores |
+| Outbox provenance not persisted | Framework-owned `provenance` column |
+| PostgreSQL stores hard-coded the `framework_test` schema | Validated schema/table options with production defaults |
 
-## Adapter phase (found while fixing core)
+## Remaining
 
-- PostgreSQL locale collation and MySQL `_ci` collations break predicate parity for string ordering and equality; port the D1 differential test to both and use binary collation.
-- Workflow stores are hard-coded to the `framework_test` schema.
-- `JobStore` needs a `release()` that does not consume an attempt, so unknown job definitions can be deferred for free.
-- PostgreSQL and MySQL workflow-store SQL changes (failure column, compensation wake gating, `getSignal`, cancellation rules) need their integration suites run against real servers.
-- Providers should raise `TransactionRolledBackError` for serialization failures and deadlocks reported at COMMIT, declare and enforce `transactionTimeouts`, and hydrate DECIMAL columns into typed values.
-- Outbox sinks should persist the record's provenance.
+- A code formatter is still not configured; style is enforced only by lint.
+- Commit-outcome classification is proven on PostgreSQL and MySQL; D1 has no interactive transactions.
