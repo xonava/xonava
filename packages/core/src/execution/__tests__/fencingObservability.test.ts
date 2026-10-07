@@ -60,8 +60,8 @@ describe("P1-08 fencing + P2-04 observability", () => {
     const emit = vi.fn()
     const result = await dispatchDueJobs({ store, registry, workerId: "worker-1", leaseDurationMs: 100, claimLimit: 1, requester: { scope: "system" }, telemetry: { emit } })
     expect(result.succeeded).toBe(1)
-    expect(emit).toHaveBeenCalledWith(expect.objectContaining({ name: "execution.dispatch", attributes: { message: "Dispatch claimed jobs" } }))
-    expect(emit).toHaveBeenCalledWith(expect.objectContaining({ name: "execution.dispatch", attributes: { message: "Dispatch batch completed" } }))
+    expect(emit).toHaveBeenCalledWith(expect.objectContaining({ name: "execution.dispatch", attributes: expect.objectContaining({ message: "Dispatch claimed jobs", workerId: "worker-1", claimed: 1 }) }))
+    expect(emit).toHaveBeenCalledWith(expect.objectContaining({ name: "execution.dispatch", attributes: expect.objectContaining({ message: "Dispatch batch completed" }) }))
   })
 
   it("dispatcher warns when claimed job has no claim token (fencing)", async () => {
@@ -76,7 +76,7 @@ describe("P1-08 fencing + P2-04 observability", () => {
     const emit = vi.fn()
     const result = await dispatchDueJobs({ store, registry, workerId: "worker-1", leaseDurationMs: 100, claimLimit: 1, requester: { scope: "system" }, telemetry: { emit } })
     expect(result.leaseLost).toBe(1)
-    expect(emit).toHaveBeenCalledWith(expect.objectContaining({ severity: "warn", attributes: { message: "Claimed job missing claim token" } }))
+    expect(emit).toHaveBeenCalledWith(expect.objectContaining({ severity: "warn", attributes: expect.objectContaining({ message: "Claimed job missing claim token" }) }))
   })
 
   it("dispatcher warns on re-fence rejection (heartbeat leaseLost)", async () => {
@@ -91,7 +91,7 @@ describe("P1-08 fencing + P2-04 observability", () => {
     const emit = vi.fn()
     const result = await dispatchDueJobs({ store, registry, workerId: "worker-1", leaseDurationMs: 100, claimLimit: 1, requester: { scope: "system" }, telemetry: { emit } })
     expect(result.leaseLost).toBe(1)
-    expect(emit).toHaveBeenCalledWith(expect.objectContaining({ severity: "warn", attributes: { message: "Job lease re-fence rejected" } }))
+    expect(emit).toHaveBeenCalledWith(expect.objectContaining({ severity: "warn", attributes: expect.objectContaining({ message: "Job lease re-fence rejected" }) }))
   })
 
   it("scheduleDispatcher double-fences enqueue and logs occurrence enqueue", async () => {
@@ -112,9 +112,9 @@ describe("P1-08 fencing + P2-04 observability", () => {
     expect(result.jobsEnqueued).toBe(1)
     // assertHeld called at least: before getByIdempotencyKey, after, and before final advance => >=3
     expect(renewScheduleLease.mock.calls.length).toBeGreaterThanOrEqual(3)
-    expect(emit).toHaveBeenCalledWith(expect.objectContaining({ attributes: { message: "Schedules claimed" } }))
-    expect(emit).toHaveBeenCalledWith(expect.objectContaining({ attributes: { message: "Enqueueing schedule occurrence" } }))
-    expect(emit).toHaveBeenCalledWith(expect.objectContaining({ attributes: { message: "Schedule advanced" } }))
+    expect(emit).toHaveBeenCalledWith(expect.objectContaining({ attributes: expect.objectContaining({ message: "Schedules claimed" }) }))
+    expect(emit).toHaveBeenCalledWith(expect.objectContaining({ attributes: expect.objectContaining({ message: "Enqueueing schedule occurrence" }) }))
+    expect(emit).toHaveBeenCalledWith(expect.objectContaining({ attributes: expect.objectContaining({ message: "Schedule advanced" }) }))
   })
 
   it("scheduleDispatcher logs best-effort advance failure", async () => {
@@ -134,7 +134,7 @@ describe("P1-08 fencing + P2-04 observability", () => {
     const emit = vi.fn()
     const result = await materializeDueSchedules({ scheduleStore, jobStore, workerId: "worker-1", now: new Date("2026-08-01T10:30:00Z"), telemetry: { emit } })
     expect(result.errors[0]).toContain("not valid JSON")
-     expect(emit).toHaveBeenCalledWith(expect.objectContaining({ severity: "error", attributes: { message: "Failed to mark schedule failed after processing error" } }))
+     expect(emit).toHaveBeenCalledWith(expect.objectContaining({ severity: "error", attributes: expect.objectContaining({ message: "Failed to mark schedule failed after processing error" }) }))
   })
 
   it("fencedEffect blocks on lease loss and logs", async () => {

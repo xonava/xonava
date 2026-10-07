@@ -21,3 +21,11 @@ Idempotency receipt, audit, outbox, and cache-generation effects declared atomic
 Stale versions are conflict, invalid versions validation, unavailable transaction/isolation capability configuration/capability failure, and transient provider faults retryable only when normalized safely. Conformance covers rollback, commit visibility, independent verifier connections, concurrent winners, TOCTOU authorization, every atomic side effect, termination at named failpoints, fresh-process replay, and repetition thresholds.
 
 Traceability: provider transaction/OCC/race/crash suites; V1 and MYSQL1 evidence.
+
+## Commit outcome classification
+
+Providers MUST distinguish a transaction that definitely did not commit from one whose outcome is unknown. A serialization failure or deadlock reported at COMMIT, for which the database guarantees rollback, SHOULD be raised as `TransactionRolledBackError` (a `RetryablePersistenceError`); the operation pipeline may then re-run the transaction. A lost connection or timeout during COMMIT has an unknown outcome and MUST NOT be raised as `TransactionRolledBackError`.
+
+## Transaction deadline
+
+`TransactionOptions.timeoutMs` bounds a whole transaction. Providers that declare `capabilities.transactionTimeouts` MUST enforce it inside the database (for example `SET LOCAL statement_timeout` or a transaction timeout) and roll back when it elapses. When the provider declares the capability, the operation pipeline sets `timeoutMs` to the operation's remaining execution deadline (or the operation's own smaller value), so a hung statement cannot outlive its request.

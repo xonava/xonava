@@ -184,7 +184,7 @@ export function createDrizzleRepository<T extends SelectableRow, TId = string>(
 ): UnversionedRepository<T, TId>
 export function createDrizzleRepository<T extends SelectableRow, TId = string>(args: CreateDrizzleRepositoryArgs<T>): InternalDynamicRepository<T, TId>
 export function createDrizzleRepository<T extends SelectableRow, TId = string>(args: CreateDrizzleRepositoryArgs<T>): InternalDynamicRepository<T, TId> {
-  const predicateCompiler = args.predicateCompiler ?? new DefaultDrizzlePredicateCompiler(args.columnMap)
+  const predicateCompiler = args.predicateCompiler ?? new DefaultDrizzlePredicateCompiler(args.columnMap, { dialect: "sqlite" })
   const primaryKey = resolvePrimaryKey(args.entity, args.columnMap)
    const primaryKeyColumn = args.columnMap[primaryKey]!
   const versionField = resolveVersionField(args.entity)

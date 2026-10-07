@@ -35,7 +35,8 @@ describe("drizzle predicate compiler", () => {
     expect(query.sql).toContain("tenant_id")
     expect(query.sql).toContain("generic_name")
     expect(query.sql).toContain("status")
-    expect(query.params).toEqual(["tenant-1", "%aspirin%", "active"])
+    expect(query.sql).toContain("instr(")
+    expect(query.params).toEqual(["tenant-1", "aspirin", "active"])
   })
 
   it("compiles between and array predicates", () => {
@@ -71,7 +72,16 @@ describe("drizzle predicate compiler", () => {
     expect(nullQuery).toEqual({ sql: 'COALESCE("drug_formulary"."status" is null, FALSE)', params: [] })
     expect(notNullQuery).toEqual({ sql: 'COALESCE("drug_formulary"."status" is not null, FALSE)', params: [] })
     expect(inQuery.params).toEqual(["active"])
-    expect(likeQuery.params).toEqual(["%50\\%\\_\\\\path%"])
+    // SQLite LIKE is ASCII case-insensitive; instr() is exact, so no escaping is needed.
+    expect(likeQuery).toMatchObject({ sql: 'COALESCE(instr("drug_formulary"."generic_name", ?) > 0, FALSE)', params: ["50%_\\path"] })
+    const genericLike = dialect.sqlToQuery(compileDrizzlePredicate(Predicate.contains("genericName", "50%_\\path"), columnMap, { dialect: "generic" }))
+    expect(genericLike.params).toEqual(["%50\\%\\_\\\\path%"])
+    const prefix = dialect.sqlToQuery(compileDrizzlePredicate(Predicate.startsWith("genericName", "As"), columnMap))
+    const suffix = dialect.sqlToQuery(compileDrizzlePredicate(Predicate.endsWith("genericName", "in"), columnMap))
+    const empty = dialect.sqlToQuery(compileDrizzlePredicate(Predicate.contains("genericName", ""), columnMap))
+    expect(prefix.sql).toBe('COALESCE(substr("drug_formulary"."generic_name", 1, length(?)) = ?, FALSE)')
+    expect(suffix.sql).toBe('COALESCE(substr("drug_formulary"."generic_name", -length(?)) = ?, FALSE)')
+    expect(empty.sql).toBe('COALESCE("drug_formulary"."generic_name" = "drug_formulary"."generic_name", FALSE)')
   })
 
   it("rejects includesAll instead of compiling non-portable array SQL", () => {

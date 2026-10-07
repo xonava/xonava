@@ -13,7 +13,9 @@ import { createDrizzleRepository } from "./drizzleRepository"
 import type { DrizzleColumnMap } from "../drizzle-shared/predicateCompiler"
 import { ConfigurationError, ConflictError, ImmutableFieldViolationError, TenantScopeViolationError } from "core/domain"
 import { Predicate } from "core/domain"
-import { compileDrizzlePredicate } from "../drizzle-shared/predicateCompiler"
+import { compileDrizzlePredicate, type PredicateCompilerOptions } from "../drizzle-shared/predicateCompiler"
+
+const SQLITE_PREDICATES: PredicateCompilerOptions = Object.freeze({ dialect: "sqlite" })
 import { assertD1BatchLimits, estimateD1Statement } from "./d1BatchLimits"
 import { d1CurrentEpochMilliseconds, getAffectedRows } from "./d1Utils"
 import { assertOutboxFingerprintMatches, assertOutboxProtectedFields, fingerprintOutboxRecord } from "../drizzle-shared/outbox"
@@ -277,7 +279,7 @@ function createTenantCommandEncoder(
           ...(command.expectedAffectedRows !== undefined ? { expectedAffectedRows: command.expectedAffectedRows } : {}),
           statement: adapter.raw.update(mapping.table)
             .set(drizzleValues(command, mapping, values))
-            .where(compileDrizzlePredicate(versionedFilter, mapping.columnMap)) as RunnableQuery<unknown, "sqlite">
+            .where(compileDrizzlePredicate(versionedFilter, mapping.columnMap, SQLITE_PREDICATES)) as RunnableQuery<unknown, "sqlite">
         }
       }
       if (mapping.entity.versionField && command.expectedVersion === undefined) {
@@ -291,7 +293,7 @@ function createTenantCommandEncoder(
         kind: "statement",
         ...(command.expectedAffectedRows !== undefined ? { expectedAffectedRows: command.expectedAffectedRows } : {}),
         statement: adapter.raw.delete(mapping.table)
-          .where(compileDrizzlePredicate(versionedFilter, mapping.columnMap)) as RunnableQuery<unknown, "sqlite">
+          .where(compileDrizzlePredicate(versionedFilter, mapping.columnMap, SQLITE_PREDICATES)) as RunnableQuery<unknown, "sqlite">
       }
     },
   }
@@ -331,7 +333,7 @@ function createUnscopedCommandEncoder(
         ...(command.expectedAffectedRows !== undefined ? { expectedAffectedRows: command.expectedAffectedRows } : {}),
         statement: adapter.raw.update(mapping.table)
           .set(drizzleValues(command, mapping, values))
-          .where(compileDrizzlePredicate(filter, mapping.columnMap)) as RunnableQuery<unknown, "sqlite">
+          .where(compileDrizzlePredicate(filter, mapping.columnMap, SQLITE_PREDICATES)) as RunnableQuery<unknown, "sqlite">
       }
     }
     if (mapping.entity.versionField && command.expectedVersion === undefined) {
@@ -344,7 +346,7 @@ function createUnscopedCommandEncoder(
       kind: "statement",
       ...(command.expectedAffectedRows !== undefined ? { expectedAffectedRows: command.expectedAffectedRows } : {}),
       statement: adapter.raw.delete(mapping.table)
-        .where(compileDrizzlePredicate(filter, mapping.columnMap)) as RunnableQuery<unknown, "sqlite">
+        .where(compileDrizzlePredicate(filter, mapping.columnMap, SQLITE_PREDICATES)) as RunnableQuery<unknown, "sqlite">
     }
   }
 }

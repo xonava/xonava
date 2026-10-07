@@ -10,6 +10,7 @@ export type ConformanceVectorKind =
   | "execution-scope-id"
   | "fingerprint"
   | "architecture-invariant"
+  | "predicate"
 
 export interface ConformanceVector {
   readonly id: string
@@ -50,6 +51,7 @@ const VECTOR_KINDS: readonly ConformanceVectorKind[] = [
   "execution-scope-id",
   "fingerprint",
   "architecture-invariant",
+  "predicate",
 ]
 
 function isRecord(value: unknown): value is Record<string, unknown> {

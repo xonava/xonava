@@ -1,4 +1,4 @@
-import { ConfigurationError, evaluatePredicate, type PredicateNode } from "../domain"
+import { ConfigurationError, compareCodePoints, evaluatePredicate, type PredicateNode } from "../domain"
 import { snapshotRuleData } from "./snapshot"
 import type { CompiledRuleSet, RuleAction, RuleDefinition, RuleEvaluationResult, RuleEvaluationTraceEntry, RuleMatch, RuleSetDefinition } from "./types"
 
@@ -75,7 +75,7 @@ function active(rule: RuleDefinition, now: number): boolean {
 }
 
 function compareRules(a: RuleDefinition, b: RuleDefinition): number {
-  return b.priority - a.priority || a.key.localeCompare(b.key) || b.version - a.version
+  return b.priority - a.priority || compareCodePoints(a.key, b.key) || b.version - a.version
 }
 
 function selectWinner<TAction extends RuleAction>(rules: readonly RuleDefinition<TAction>[], tie: "rule-key" | "error", scope: string): RuleDefinition<TAction> {

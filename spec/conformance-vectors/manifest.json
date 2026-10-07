@@ -11,6 +11,7 @@
     "canonical-binary.json",
     "execution-scope-id.json",
     "fingerprints.json",
-    "f1-exact-bytes-digests.json"
+    "f1-exact-bytes-digests.json",
+    "predicate-semantics.json"
   ]
 }

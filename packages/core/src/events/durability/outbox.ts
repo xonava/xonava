@@ -1,6 +1,7 @@
 import type { PersistenceProvider } from "../../persistence/provider"
 import type { EventEnvelope } from "../eventEnvelope"
-import { ConfigurationError, encodeExecutionScopeId, type ExecutionScope, type ExecutionScopeId } from "../../domain"
+import { ConfigurationError, encodeExecutionScopeId, type DurableAuthorityProvenanceV1, type ExecutionScope, type ExecutionScopeId } from "../../domain"
+import { createEventEnvelope } from "../eventEnvelope"
 
 export interface NewOutboxRecord {
   id?: string
@@ -17,6 +18,8 @@ export interface NewOutboxRecord {
   correlationId?: string
   causationId?: string
   producer?: EventEnvelope["producer"]
+  /** Authority under which the event was produced; required to publish it as an envelope. */
+  provenance?: DurableAuthorityProvenanceV1
 }
 
 export interface OutboxRecord extends NewOutboxRecord {
@@ -38,12 +41,30 @@ export function createOutboxRecordFromEnvelope(envelope: EventEnvelope, idempote
     correlationId: envelope.correlationId,
     ...(envelope.causationId === undefined ? {} : { causationId: envelope.causationId }),
     producer: envelope.producer,
+    provenance: envelope.provenance,
     aggregateType: aggregate.type,
     aggregateId: aggregate.id,
     payload: envelope.payload,
     idempotencyKey,
     occurredAt: new Date(envelope.occurredAt),
   }
+}
+
+/**
+ * Rebuilds the publishable envelope from a committed outbox record. Fails
+ * closed when the record has no producer or provenance rather than inventing
+ * authority for an event.
+ */
+export function createEnvelopeFromOutboxRecord(record: OutboxRecord): EventEnvelope {
+  if (!record.provenance) throw new ConfigurationError("Outbox record has no authority provenance; it cannot be published as an event envelope")
+  if (!record.producer) throw new ConfigurationError("Outbox record has no producer identity")
+  const correlationId = record.correlationId ?? record.provenance.correlationId
+  if (typeof correlationId !== "string" || !correlationId) throw new ConfigurationError("Outbox record has no correlation id")
+  return createEventEnvelope({
+    messageId: record.id, eventType: record.type, payloadVersion: record.version, occurredAt: record.occurredAt.toISOString(),
+    scope: record.scope, correlationId, ...(record.causationId !== undefined ? { causationId: record.causationId } : {}),
+    producer: record.producer, provenance: record.provenance, payload: record.payload,
+  })
 }
 
 export function normalizeOutboxRecord(record: NewOutboxRecord, defaults: { id: string; occurredAt: Date }): OutboxRecord {

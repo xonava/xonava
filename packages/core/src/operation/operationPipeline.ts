@@ -4,6 +4,8 @@ import { runStandardOperation } from "./standardOperationPipeline"
 import type { AtomicBatchOperationDefinition, OperationDefinition } from "./operationDefinition"
 import type { InternalOperationRunContext } from "./operationRunContext"
 import { validateOperationDefinition } from "./validateOperationDefinition"
+import { emitTelemetry, explicitlySafeTelemetryAttributes } from "../telemetry/telemetry"
+import { FrameworkCoreError } from "../domain/errors"
 
 export type { OperationDefinition, StandardAtomicity, StandardAtomicityMode, AtomicBatchAtomicity, OperationAtomicity, OperationKind, StandardOperationDefinition, StandardReadOperationDefinition, StandardMutationOperationDefinition, AtomicBatchOperationDefinition, OperationAuditConfig, OperationAuthorizationPort } from "./operationDefinition"
 export type { AuditGuarantee } from "./operationDefinition"
@@ -81,10 +83,45 @@ async function executeValidatedOperation<TInput, TResult, TCommand>(args: {
 }): Promise<{ result: TResult; operation: InternalOperationRunContext; committed: boolean }> {
   const committed = true
   const operation = createOperationRunContext(args.operation)
-  const result = isAtomicBatchDefinition(args.definition)
-    ? await runAtomicBatchOperation({ operation, definition: args.definition, input: args.input, ...(args.onBusinessResult ? { onBusinessResult: args.onBusinessResult } : {}) })
-    : await runStandardOperation({ operation, definition: args.definition, input: args.input, ...(args.onBusinessResult ? { onBusinessResult: args.onBusinessResult } : {}) })
-  return { result, operation, committed }
+  const startedAt = safeNow(operation)
+  try {
+    const result = isAtomicBatchDefinition(args.definition)
+      ? await runAtomicBatchOperation({ operation, definition: args.definition, input: args.input, ...(args.onBusinessResult ? { onBusinessResult: args.onBusinessResult } : {}) })
+      : await runStandardOperation({ operation, definition: args.definition, input: args.input, ...(args.onBusinessResult ? { onBusinessResult: args.onBusinessResult } : {}) })
+    emitCompleted(operation, args.definition, startedAt, operation.effectFailures.length > 0 ? "committed_with_effect_failures" : "success")
+    return { result, operation, committed }
+  } catch (error) {
+    emitCompleted(operation, args.definition, startedAt, error instanceof OperationCommittedEffectError ? "committed_with_effect_failures" : "error", error)
+    throw error
+  }
+}
+
+function safeNow(operation: InternalOperationRunContext): number {
+  try { return operation.services.clock.now().getTime() } catch { return Number.NaN }
+}
+
+/** One `operation.completed` event per run: the core latency/outcome signal. Never throws. */
+function emitCompleted(operation: InternalOperationRunContext, definition: { readonly key: string; readonly kind?: string }, startedAt: number, outcome: "success" | "committed_with_effect_failures" | "error", error?: unknown): void {
+  try {
+    const durationMs = Math.max(0, safeNow(operation) - startedAt)
+    const errorCode = error instanceof FrameworkCoreError ? error.code : error instanceof Error ? error.name : error === undefined ? undefined : "unknown"
+    emitTelemetry(operation.services.telemetry, {
+      name: "operation.completed",
+      severity: outcome === "error" ? "warn" : "info",
+      timestamp: operation.services.clock.now(),
+      attributes: explicitlySafeTelemetryAttributes({
+        operationKey: definition.key.slice(0, 256),
+        operationKind: definition.kind ?? "read",
+        operationId: operation.operationId,
+        outcome,
+        ...(Number.isFinite(durationMs) ? { durationMs } : {}),
+        ...(errorCode !== undefined ? { errorCode: errorCode.slice(0, 128) } : {}),
+        ...(operation.correlationId !== undefined ? { correlationId: operation.correlationId.slice(0, 256) } : {}),
+      }),
+    })
+  } catch {
+    // Telemetry is observational and must never alter operation semantics.
+  }
 }
 
 function isAtomicBatchDefinition<TInput, TResult, TCommand>(

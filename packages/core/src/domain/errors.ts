@@ -21,12 +21,49 @@ export type FrameworkCoreErrorCode =
   | "EFFECTS_ALREADY_DRAINED"
   | "STALE_CLAIM"
   | "PERSISTENCE_ERROR"
+  | "TIMEOUT"
+  | "CANCELLED"
+  | "UNAVAILABLE"
 
 export type FrameworkErrorCategory = "authentication" | "authorization" | "validation" | "conflict" | "not-found" | "rate-limit" | "configuration" | "dependency" | "internal"
 export type SafeErrorMetadata = Readonly<Record<string, string | number | boolean>>
-interface ErrorDefaults { readonly safeMessage:string; readonly retryable:boolean; readonly category:FrameworkErrorCategory; readonly publicCode:string }
-const ERROR_DEFAULTS:Readonly<Record<FrameworkCoreErrorCode,ErrorDefaults>>={
-  UNAUTHORIZED:{safeMessage:"Unauthorized",retryable:false,category:"authentication",publicCode:"UNAUTHORIZED"},FORBIDDEN:{safeMessage:"Forbidden",retryable:false,category:"authorization",publicCode:"FORBIDDEN"},CAPABILITY_REQUIRED:{safeMessage:"Forbidden",retryable:false,category:"authorization",publicCode:"CAPABILITY_REQUIRED"},VALIDATION_ERROR:{safeMessage:"Validation failed",retryable:false,category:"validation",publicCode:"VALIDATION_ERROR"},BAD_REQUEST:{safeMessage:"Business rule violation",retryable:false,category:"validation",publicCode:"BAD_REQUEST"},CONFLICT:{safeMessage:"Conflict",retryable:false,category:"conflict",publicCode:"CONFLICT"},OPTIMISTIC_CONCURRENCY_FAILED:{safeMessage:"Conflict",retryable:false,category:"conflict",publicCode:"OPTIMISTIC_CONCURRENCY_FAILED"},STALE_CLAIM:{safeMessage:"Conflict",retryable:false,category:"conflict",publicCode:"STALE_CLAIM"},NOT_FOUND:{safeMessage:"Not found",retryable:false,category:"not-found",publicCode:"NOT_FOUND"},RATE_LIMIT_EXCEEDED:{safeMessage:"Rate limit exceeded",retryable:true,category:"rate-limit",publicCode:"RATE_LIMIT_EXCEEDED"},RETRYABLE_PERSISTENCE_ERROR:{safeMessage:"Service temporarily unavailable",retryable:true,category:"dependency",publicCode:"SERVICE_UNAVAILABLE"},PERSISTENCE_ERROR:{safeMessage:"Internal Server Error",retryable:false,category:"dependency",publicCode:"INTERNAL_SERVER_ERROR"},RUNTIME_CAPABILITY_REQUIRED:{safeMessage:"Internal Server Error",retryable:false,category:"configuration",publicCode:"INTERNAL_SERVER_ERROR"},CONFIGURATION_ERROR:{safeMessage:"Internal Server Error",retryable:false,category:"configuration",publicCode:"INTERNAL_SERVER_ERROR"},INVALID_POLICY_CONFIGURATION:{safeMessage:"Internal Server Error",retryable:false,category:"configuration",publicCode:"INTERNAL_SERVER_ERROR"},AUDIT_SINK_MISSING:{safeMessage:"Internal Server Error",retryable:false,category:"configuration",publicCode:"INTERNAL_SERVER_ERROR"},AUDIT_ACTOR_MISSING:{safeMessage:"Internal Server Error",retryable:false,category:"configuration",publicCode:"INTERNAL_SERVER_ERROR"},OUTBOX_SINK_MISSING:{safeMessage:"Internal Server Error",retryable:false,category:"configuration",publicCode:"INTERNAL_SERVER_ERROR"},OPERATION_CONTEXT_INACTIVE:{safeMessage:"Internal Server Error",retryable:false,category:"internal",publicCode:"INTERNAL_SERVER_ERROR"},EFFECT_REGISTRATION_CLOSED:{safeMessage:"Internal Server Error",retryable:false,category:"internal",publicCode:"INTERNAL_SERVER_ERROR"},EFFECT_COLLECTOR_DISPOSED:{safeMessage:"Internal Server Error",retryable:false,category:"internal",publicCode:"INTERNAL_SERVER_ERROR"},EFFECTS_ALREADY_DRAINED:{safeMessage:"Internal Server Error",retryable:false,category:"internal",publicCode:"INTERNAL_SERVER_ERROR"},
+interface ErrorDefaults { readonly safeMessage: string; readonly retryable: boolean; readonly category: FrameworkErrorCategory; readonly publicCode: string }
+
+const internalConfiguration: ErrorDefaults = { safeMessage: "Internal Server Error", retryable: false, category: "configuration", publicCode: "INTERNAL_SERVER_ERROR" }
+const internalState: ErrorDefaults = { safeMessage: "Internal Server Error", retryable: false, category: "internal", publicCode: "INTERNAL_SERVER_ERROR" }
+
+/** Language-neutral error taxonomy: code -> public message, retryability, category, and public code. */
+const ERROR_DEFAULTS: Readonly<Record<FrameworkCoreErrorCode, ErrorDefaults>> = Object.freeze({
+  UNAUTHORIZED: { safeMessage: "Unauthorized", retryable: false, category: "authentication", publicCode: "UNAUTHORIZED" },
+  FORBIDDEN: { safeMessage: "Forbidden", retryable: false, category: "authorization", publicCode: "FORBIDDEN" },
+  CAPABILITY_REQUIRED: { safeMessage: "Forbidden", retryable: false, category: "authorization", publicCode: "CAPABILITY_REQUIRED" },
+  VALIDATION_ERROR: { safeMessage: "Validation failed", retryable: false, category: "validation", publicCode: "VALIDATION_ERROR" },
+  BAD_REQUEST: { safeMessage: "Business rule violation", retryable: false, category: "validation", publicCode: "BAD_REQUEST" },
+  CONFLICT: { safeMessage: "Conflict", retryable: false, category: "conflict", publicCode: "CONFLICT" },
+  OPTIMISTIC_CONCURRENCY_FAILED: { safeMessage: "Conflict", retryable: false, category: "conflict", publicCode: "OPTIMISTIC_CONCURRENCY_FAILED" },
+  STALE_CLAIM: { safeMessage: "Conflict", retryable: false, category: "conflict", publicCode: "STALE_CLAIM" },
+  NOT_FOUND: { safeMessage: "Not found", retryable: false, category: "not-found", publicCode: "NOT_FOUND" },
+  RATE_LIMIT_EXCEEDED: { safeMessage: "Rate limit exceeded", retryable: true, category: "rate-limit", publicCode: "RATE_LIMIT_EXCEEDED" },
+  RETRYABLE_PERSISTENCE_ERROR: { safeMessage: "Service temporarily unavailable", retryable: true, category: "dependency", publicCode: "SERVICE_UNAVAILABLE" },
+  UNAVAILABLE: { safeMessage: "Service temporarily unavailable", retryable: true, category: "dependency", publicCode: "SERVICE_UNAVAILABLE" },
+  TIMEOUT: { safeMessage: "The operation timed out", retryable: true, category: "dependency", publicCode: "TIMEOUT" },
+  CANCELLED: { safeMessage: "The operation was cancelled", retryable: false, category: "internal", publicCode: "CANCELLED" },
+  PERSISTENCE_ERROR: { safeMessage: "Internal Server Error", retryable: false, category: "dependency", publicCode: "INTERNAL_SERVER_ERROR" },
+  RUNTIME_CAPABILITY_REQUIRED: internalConfiguration,
+  CONFIGURATION_ERROR: internalConfiguration,
+  INVALID_POLICY_CONFIGURATION: internalConfiguration,
+  AUDIT_SINK_MISSING: internalConfiguration,
+  AUDIT_ACTOR_MISSING: internalConfiguration,
+  OUTBOX_SINK_MISSING: internalConfiguration,
+  OPERATION_CONTEXT_INACTIVE: internalState,
+  EFFECT_REGISTRATION_CLOSED: internalState,
+  EFFECT_COLLECTOR_DISPOSED: internalState,
+  EFFECTS_ALREADY_DRAINED: internalState,
+})
+
+export interface FrameworkErrorOptions {
+  /** Underlying error. When omitted and `details` is an Error, it becomes the cause. */
+  readonly cause?: unknown
 }
 
 export class FrameworkCoreError extends Error {
@@ -38,17 +75,39 @@ export class FrameworkCoreError extends Error {
   public readonly safeMetadata: SafeErrorMetadata
   public readonly publicCode: string
 
-  constructor(message: string, code: FrameworkCoreErrorCode, details?: unknown, safeMetadata: SafeErrorMetadata = {}) {
-    super(message)
+  constructor(message: string, code: FrameworkCoreErrorCode, details?: unknown, safeMetadata: SafeErrorMetadata = {}, options: FrameworkErrorOptions = {}) {
+    const cause = options.cause !== undefined ? options.cause : details instanceof Error ? details : undefined
+    super(message, cause === undefined ? undefined : { cause })
     this.name = this.constructor.name
     this.code = code
     this.details = details
-    const defaults=ERROR_DEFAULTS[code]
-    this.safeMessage=defaults.safeMessage
-    this.retryable=defaults.retryable
-    this.category=defaults.category
-    this.safeMetadata=Object.freeze({...safeMetadata})
-    this.publicCode=defaults.publicCode
+    const defaults = ERROR_DEFAULTS[code]
+    this.safeMessage = defaults.safeMessage
+    this.retryable = defaults.retryable
+    this.category = defaults.category
+    this.safeMetadata = Object.freeze({ ...safeMetadata })
+    this.publicCode = defaults.publicCode
+  }
+}
+
+/** A deadline elapsed before the work completed. The work's outcome may be unknown. */
+export class TimeoutError extends FrameworkCoreError {
+  constructor(message: string = "The operation timed out", details?: unknown) {
+    super(message, "TIMEOUT", details)
+  }
+}
+
+/** The work was cancelled by its caller or by shutdown before it completed. */
+export class CancelledError extends FrameworkCoreError {
+  constructor(message: string = "The operation was cancelled", details?: unknown) {
+    super(message, "CANCELLED", details)
+  }
+}
+
+/** A dependency is temporarily unavailable; the request may be retried later. */
+export class UnavailableError extends FrameworkCoreError {
+  constructor(message: string = "Service temporarily unavailable", details?: unknown) {
+    super(message, "UNAVAILABLE", details)
   }
 }
 
@@ -81,6 +140,17 @@ export class RetryablePersistenceError extends FrameworkCoreError {
 
   constructor(message: string = "A transient persistence failure occurred", details?: unknown) {
     super(message, "RETRYABLE_PERSISTENCE_ERROR", details)
+  }
+}
+
+/**
+ * The provider guarantees the transaction did not commit (for example a
+ * serialization failure or deadlock reported at COMMIT). Unlike an unknown
+ * commit outcome, the whole transaction may safely be re-run.
+ */
+export class TransactionRolledBackError extends RetryablePersistenceError {
+  constructor(message: string = "The transaction was rolled back by the database", details?: unknown) {
+    super(message, details)
   }
 }
 

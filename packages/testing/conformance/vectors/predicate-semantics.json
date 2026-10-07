@@ -1,0 +1,1585 @@
+{
+  "schema": "framework.conformance-vectors",
+  "schemaVersion": 1,
+  "suiteId": "predicate-semantics",
+  "suiteVersion": 1,
+  "description": "Normative three-valued predicate semantics (docs/spec/persistence/predicates.md). Values JSON cannot express use tags: {\"$nan\":true} is IEEE NaN; {\"$date\":\"<RFC3339>\"} is an instant. An absent record key is a missing field. expected is the three-valued truth: true, false, or unknown; a WHERE/match boundary treats unknown as no match.",
+  "vectors": [
+    {
+      "id": "eq-match",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": 1
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "eq",
+          "value": 1
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "eq-mismatch",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": 2
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "eq",
+          "value": 1
+        }
+      },
+      "expected": "false"
+    },
+    {
+      "id": "eq-missing-field-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {},
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "eq",
+          "value": 1
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "eq-null-field-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": null
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "eq",
+          "value": 1
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "eq-null-literal-on-null",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": null
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "eq",
+          "value": null
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "eq-null-literal-on-missing",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {},
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "eq",
+          "value": null
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "eq-null-literal-on-value",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": 1
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "eq",
+          "value": null
+        }
+      },
+      "expected": "false"
+    },
+    {
+      "id": "neq-match",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": 1
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "neq",
+          "value": 2
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "neq-equal",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": 1
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "neq",
+          "value": 1
+        }
+      },
+      "expected": "false"
+    },
+    {
+      "id": "neq-null-field-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": null
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "neq",
+          "value": 1
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "neq-null-literal-on-null",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": null
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "neq",
+          "value": null
+        }
+      },
+      "expected": "false"
+    },
+    {
+      "id": "neq-null-literal-on-value",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": 1
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "neq",
+          "value": null
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "missing-field-is-null-not-inherited",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {},
+        "predicate": {
+          "kind": "condition",
+          "field": "constructor",
+          "op": "isNull"
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "mismatch-string-vs-boolean",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "1"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "eq",
+          "value": true
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "mismatch-non-decimal-string-vs-number-eq",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "abc"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "eq",
+          "value": 1
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "mismatch-non-decimal-string-gte",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "abc"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "gte",
+          "value": 5
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "mismatch-non-decimal-string-lte",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "abc"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "lte",
+          "value": 5
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "nan-lte-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": {
+            "$nan": true
+          }
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "lte",
+          "value": 100
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "nan-gte-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": {
+            "$nan": true
+          }
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "gte",
+          "value": 100
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "nan-between-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": {
+            "$nan": true
+          }
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "between",
+          "value": {
+            "from": 1,
+            "to": 10
+          }
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "nan-neq-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": {
+            "$nan": true
+          }
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "neq",
+          "value": 1
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "object-gt-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": {
+            "a": 1
+          }
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "gt",
+          "value": 1
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "array-eq-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": [
+            1
+          ]
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "eq",
+          "value": 1
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "string-number-eq-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "100"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "eq",
+          "value": 100
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "string-number-neq-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "100"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "neq",
+          "value": 100
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "string-number-lte-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "9"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "lte",
+          "value": 100
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "number-string-in-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": 100
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "in",
+          "value": [
+            "100"
+          ]
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "number-boolean-eq-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": 1
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "eq",
+          "value": true
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "numeric-strings-compare-as-text",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "10"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "lt",
+          "value": "9"
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "string-code-point-uppercase-before-lowercase",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "B"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "lt",
+          "value": "a"
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "string-code-point-latin1-after-ascii",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "é"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "gt",
+          "value": "z"
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "string-code-point-astral-after-bmp",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "😀"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "gt",
+          "value": "￿"
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "string-prefix-orders-first",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "ab"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "lt",
+          "value": "abc"
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "contains-case-sensitive-miss",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "Abc"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "contains",
+          "value": "a"
+        }
+      },
+      "expected": "false"
+    },
+    {
+      "id": "contains-case-sensitive-hit",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "Abc"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "contains",
+          "value": "A"
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "contains-metacharacters-literal",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "50%_off"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "contains",
+          "value": "%_"
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "contains-empty-needle",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "abc"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "contains",
+          "value": ""
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "contains-null-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": null
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "contains",
+          "value": "a"
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "contains-number-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": 5
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "contains",
+          "value": "5"
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "starts-with-case-sensitive",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "Abc"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "startsWith",
+          "value": "ab"
+        }
+      },
+      "expected": "false"
+    },
+    {
+      "id": "ends-with-hit",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "Abc"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "endsWith",
+          "value": "bc"
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "ends-with-null-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {},
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "endsWith",
+          "value": "bc"
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "instant-vs-rfc3339-string",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": {
+            "$date": "2026-01-02T00:00:00.000Z"
+          }
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "gt",
+          "value": "2026-01-01T00:00:00.000Z"
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "instant-vs-full-date",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": {
+            "$date": "2026-01-02T00:00:00.000Z"
+          }
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "eq",
+          "value": "2026-01-02"
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "instant-vs-offset-date-time",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": {
+            "$date": "2026-01-02T00:00:00.000Z"
+          }
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "eq",
+          "value": "2026-01-02T05:30:00+05:30"
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "instant-vs-lenient-host-date-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": {
+            "$date": "2001-01-01T00:00:00.000Z"
+          }
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "eq",
+          "value": "1"
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "instant-vs-impossible-date-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": {
+            "$date": "2026-02-28T00:00:00.000Z"
+          }
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "lt",
+          "value": "2026-02-30"
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "instant-vs-unparseable-string",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": {
+            "$date": "2026-01-02T00:00:00.000Z"
+          }
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "gt",
+          "value": "not-a-date"
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "instant-vs-instant-eq",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": {
+            "$date": "2026-01-02T00:00:00.000Z"
+          }
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "eq",
+          "value": {
+            "$date": "2026-01-02T00:00:00.000Z"
+          }
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "is-true-on-true",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": true
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "isTrue"
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "is-true-on-false",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": false
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "isTrue"
+        }
+      },
+      "expected": "false"
+    },
+    {
+      "id": "is-true-on-null-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": null
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "isTrue"
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "is-true-on-string-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "true"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "isTrue"
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "is-false-on-false",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": false
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "isFalse"
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "boolean-ordering",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": true
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "gt",
+          "value": false
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "is-empty-on-missing",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {},
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "isEmpty"
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "is-empty-on-empty-string",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": ""
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "isEmpty"
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "is-empty-on-value",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "a"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "isEmpty"
+        }
+      },
+      "expected": "false"
+    },
+    {
+      "id": "is-not-empty-on-null",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": null
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "isNotEmpty"
+        }
+      },
+      "expected": "false"
+    },
+    {
+      "id": "is-not-null-on-value",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": 0
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "isNotNull"
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "in-hit",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "a"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "in",
+          "value": [
+            "a",
+            "b"
+          ]
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "in-miss",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "c"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "in",
+          "value": [
+            "a"
+          ]
+        }
+      },
+      "expected": "false"
+    },
+    {
+      "id": "in-null-field-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": null
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "in",
+          "value": [
+            "a"
+          ]
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "in-null-field-empty-list-is-false",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": null
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "in",
+          "value": []
+        }
+      },
+      "expected": "false"
+    },
+    {
+      "id": "in-empty-list-is-false",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "a"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "in",
+          "value": []
+        }
+      },
+      "expected": "false"
+    },
+    {
+      "id": "in-null-members-are-ignored-hit",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "a"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "in",
+          "value": [
+            null,
+            "a"
+          ]
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "in-null-members-are-ignored-miss",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "c"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "in",
+          "value": [
+            null,
+            "a"
+          ]
+        }
+      },
+      "expected": "false"
+    },
+    {
+      "id": "in-array-field-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": [
+            "a"
+          ]
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "in",
+          "value": [
+            "a"
+          ]
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "in-mixed-kinds-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": "a"
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "in",
+          "value": [
+            1
+          ]
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "between-inclusive",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": 10
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "between",
+          "value": {
+            "from": 1,
+            "to": 10
+          }
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "between-open-lower",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": 0
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "between",
+          "value": {
+            "from": 1
+          }
+        }
+      },
+      "expected": "false"
+    },
+    {
+      "id": "between-null-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": null
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "between",
+          "value": {
+            "from": 1,
+            "to": 10
+          }
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "between-no-bounds-is-false",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": 5
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "between",
+          "value": {}
+        }
+      },
+      "expected": "false"
+    },
+    {
+      "id": "between-nan-with-nan-bound-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": {
+            "$nan": true
+          }
+        },
+        "predicate": {
+          "kind": "condition",
+          "field": "x",
+          "op": "between",
+          "value": {
+            "from": 1,
+            "to": {
+              "$nan": true
+            }
+          }
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "not-unknown-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {},
+        "predicate": {
+          "kind": "not",
+          "filter": {
+            "kind": "condition",
+            "field": "x",
+            "op": "eq",
+            "value": 1
+          }
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "not-neq-on-null-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": null
+        },
+        "predicate": {
+          "kind": "not",
+          "filter": {
+            "kind": "condition",
+            "field": "x",
+            "op": "neq",
+            "value": 1
+          }
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "not-in-on-null-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": null
+        },
+        "predicate": {
+          "kind": "not",
+          "filter": {
+            "kind": "condition",
+            "field": "x",
+            "op": "in",
+            "value": [
+              "a"
+            ]
+          }
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "not-contains-on-null-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": null
+        },
+        "predicate": {
+          "kind": "not",
+          "filter": {
+            "kind": "condition",
+            "field": "x",
+            "op": "contains",
+            "value": "a"
+          }
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "not-nan-lte-is-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": {
+            "$nan": true
+          }
+        },
+        "predicate": {
+          "kind": "not",
+          "filter": {
+            "kind": "condition",
+            "field": "x",
+            "op": "lte",
+            "value": 100
+          }
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "not-is-null-two-valued",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {},
+        "predicate": {
+          "kind": "not",
+          "filter": {
+            "kind": "condition",
+            "field": "x",
+            "op": "isNull"
+          }
+        }
+      },
+      "expected": "false"
+    },
+    {
+      "id": "and-false-dominates-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": null
+        },
+        "predicate": {
+          "kind": "and",
+          "filters": [
+            {
+              "kind": "condition",
+              "field": "x",
+              "op": "eq",
+              "value": 1
+            },
+            {
+              "kind": "literal",
+              "value": false
+            }
+          ]
+        }
+      },
+      "expected": "false"
+    },
+    {
+      "id": "and-true-with-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": null
+        },
+        "predicate": {
+          "kind": "and",
+          "filters": [
+            {
+              "kind": "condition",
+              "field": "x",
+              "op": "eq",
+              "value": 1
+            },
+            {
+              "kind": "literal",
+              "value": true
+            }
+          ]
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "or-true-dominates-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": null
+        },
+        "predicate": {
+          "kind": "or",
+          "filters": [
+            {
+              "kind": "condition",
+              "field": "x",
+              "op": "eq",
+              "value": 1
+            },
+            {
+              "kind": "literal",
+              "value": true
+            }
+          ]
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "or-false-with-unknown",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "x": null
+        },
+        "predicate": {
+          "kind": "or",
+          "filters": [
+            {
+              "kind": "condition",
+              "field": "x",
+              "op": "eq",
+              "value": 1
+            },
+            {
+              "kind": "literal",
+              "value": false
+            }
+          ]
+        }
+      },
+      "expected": "unknown"
+    },
+    {
+      "id": "empty-and-is-true",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {},
+        "predicate": {
+          "kind": "and",
+          "filters": []
+        }
+      },
+      "expected": "true"
+    },
+    {
+      "id": "empty-or-is-false",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {},
+        "predicate": {
+          "kind": "or",
+          "filters": []
+        }
+      },
+      "expected": "false"
+    },
+    {
+      "id": "deny-list-does-not-admit-null",
+      "kind": "predicate",
+      "formatVersion": 1,
+      "input": {
+        "record": {
+          "status": null
+        },
+        "predicate": {
+          "kind": "not",
+          "filter": {
+            "kind": "condition",
+            "field": "status",
+            "op": "in",
+            "value": [
+              "banned",
+              "locked"
+            ]
+          }
+        }
+      },
+      "expected": "unknown"
+    }
+  ]
+}

@@ -33,11 +33,21 @@ describe("dispatcher focused validation and result branches", () => {
     await expect(dispatchDueJobs({ store: empty.store, registry: empty.registry, workerId: "w", leaseDurationMs: 1, claimLimit: 1, requester: { scope: "system" }, timeoutPolicy: { mode: "cooperative", cancellationGraceMs: -1 } })).rejects.toThrow("cancellationGrace")
     await expect(dispatchDueJobs({ store: empty.store, registry: empty.registry, workerId: "w", leaseDurationMs: 1, claimLimit: 1, requester: { scope: "system" }, timeoutPolicy: { mode: "cooperative", cancellationGraceMs: 0, timeoutMs: 0 } })).rejects.toThrow("timeoutMs")
 
+    // Unknown definitions (rolling deploys) are deferred to another worker, not failed.
     const unknown = setup(async () => ({ success: true }))
     unknown.stored.jobType = "missing"
+    ;(unknown.store.markRetrying as ReturnType<typeof vi.fn>).mockResolvedValue({ applied: true })
     const unknownResult = await dispatchDueJobs({ store: unknown.store, registry: unknown.registry, workerId: "w", leaseDurationMs: 1, claimLimit: 1, requester: { scope: "system" } })
-    expect(unknownResult.failed).toBe(1)
+    expect(unknownResult).toMatchObject({ retried: 1, failed: 0, deadLettered: 0 })
+    expect(unknown.store.markRetrying).toHaveBeenCalledWith(expect.objectContaining({ error: "Unknown job definition: missing@1" }))
 
+    // Once the store refuses another attempt, the job is dead-lettered (not silently failed).
+    ;(unknown.store.markRetrying as ReturnType<typeof vi.fn>).mockResolvedValue({ applied: false })
+    const exhausted = await dispatchDueJobs({ store: unknown.store, registry: unknown.registry, workerId: "w", leaseDurationMs: 1, claimLimit: 1, requester: { scope: "system" } })
+    expect(exhausted.deadLettered).toBe(1)
+    expect(unknown.store.markFailed).toHaveBeenLastCalledWith(expect.objectContaining({ status: "dead_letter" }))
+
+    ;(unknown.store.markRetrying as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("db down"))
     ;(unknown.store.markFailed as ReturnType<typeof vi.fn>).mockResolvedValue({ applied: false })
     const unknownLost = await dispatchDueJobs({ store: unknown.store, registry: unknown.registry, workerId: "w", leaseDurationMs: 1, claimLimit: 1, requester: { scope: "system" } })
     expect(unknownLost.leaseLost).toBe(1)

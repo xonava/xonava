@@ -26,6 +26,16 @@ import type {
 
 export type DrizzleColumnMap = Record<string, AnyColumn>
 
+/**
+ * Text semantics differ by engine. The normative semantics are case-sensitive,
+ * code-point ordered string comparison.
+ * - "sqlite": LIKE is ASCII case-insensitive, so substring operators compile to
+ *   instr()/substr() with the default BINARY collation (code-point order).
+ * - "generic": LIKE-based operators; the engine collation must be binary.
+ */
+export type PredicateDialect = "generic" | "sqlite"
+export interface PredicateCompilerOptions { readonly dialect?: PredicateDialect }
+
 function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, "\\$&")
 }
@@ -59,7 +69,15 @@ function strictBoolean(expression: SQL<unknown>): SQL<unknown> {
   return sql`COALESCE(${expression}, FALSE)`
 }
 
-function compileCondition(columnMap: DrizzleColumnMap, condition: PredicateCondition): SQL<unknown> {
+function sqliteTextMatch(column: AnyColumn, op: "contains" | "startsWith" | "endsWith", needle: string): SQL<unknown> {
+  // An empty needle matches every non-null string; `col = col` stays UNKNOWN for NULL.
+  if (needle.length === 0) return sql`${column} = ${column}`
+  if (op === "contains") return sql`instr(${column}, ${needle}) > 0`
+  if (op === "startsWith") return sql`substr(${column}, 1, length(${needle})) = ${needle}`
+  return sql`substr(${column}, -length(${needle})) = ${needle}`
+}
+
+function compileCondition(columnMap: DrizzleColumnMap, condition: PredicateCondition, dialect: PredicateDialect): SQL<unknown> {
   const column = requireColumn(columnMap, condition.field)
 
   switch (condition.op) {
@@ -70,16 +88,19 @@ function compileCondition(columnMap: DrizzleColumnMap, condition: PredicateCondi
     case "contains": {
       const value = requireScalarValue(condition)
       if (typeof value !== "string") throw new Error(`Predicate operator contains requires a string value`)
+      if (dialect === "sqlite") return sqliteTextMatch(column, "contains", value)
       return sql`${column} LIKE ${`%${escapeLike(value)}%`} ESCAPE '\\'`
     }
     case "startsWith": {
       const value = requireScalarValue(condition)
       if (typeof value !== "string") throw new Error(`Predicate operator startsWith requires a string value`)
+      if (dialect === "sqlite") return sqliteTextMatch(column, "startsWith", value)
       return sql`${column} LIKE ${`${escapeLike(value)}%`} ESCAPE '\\'`
     }
     case "endsWith": {
       const value = requireScalarValue(condition)
       if (typeof value !== "string") throw new Error(`Predicate operator endsWith requires a string value`)
+      if (dialect === "sqlite") return sqliteTextMatch(column, "endsWith", value)
       return sql`${column} LIKE ${`%${escapeLike(value)}`} ESCAPE '\\'`
     }
     case "isEmpty":
@@ -124,33 +145,49 @@ function compileCondition(columnMap: DrizzleColumnMap, condition: PredicateCondi
   }
 }
 
+/**
+ * Compiles the neutral predicate AST with SQL-native Kleene three-valued
+ * logic, which is the normative predicate semantics shared with the core
+ * in-memory evaluator. Leaves and composites are left three-valued so NOT
+ * UNKNOWN stays UNKNOWN; only the root collapses UNKNOWN to FALSE.
+ */
 export class DrizzlePredicateCompiler implements PredicateCompiler<SQL<unknown>> {
-  constructor(private readonly columnMap: DrizzleColumnMap) {}
+  private readonly dialect: PredicateDialect
+
+  constructor(private readonly columnMap: DrizzleColumnMap, options: PredicateCompilerOptions = {}) {
+    this.dialect = options.dialect ?? "generic"
+  }
 
   compile(filter: PredicateNode): SQL<unknown> {
+    // Literals are already two-valued and stay unwrapped for readable plans.
+    if (filter.kind === "literal") return this.compileNode(filter)
+    return strictBoolean(this.compileNode(filter))
+  }
+
+  private compileNode(filter: PredicateNode): SQL<unknown> {
     switch (filter.kind) {
       case "literal":
         return filter.value ? sql`1 = 1` : sql`1 = 0`
       case "condition":
-        return strictBoolean(compileCondition(this.columnMap, filter))
+        return compileCondition(this.columnMap, filter, this.dialect)
       case "and": {
         if (filter.filters.length === 0) return sql`1 = 1`
-        const compiled = filter.filters.map((child) => this.compile(child))
-          return strictBoolean(compiled.length === 1 ? compiled[0]! : and(...compiled) ?? sql`1 = 1`)
+        const compiled = filter.filters.map((child) => this.compileNode(child))
+        return compiled.length === 1 ? sql`(${compiled[0]!})` : and(...compiled) ?? sql`1 = 1`
       }
       case "or": {
         if (filter.filters.length === 0) return sql`1 = 0`
-        const compiled = filter.filters.map((child) => this.compile(child))
-          return strictBoolean(compiled.length === 1 ? compiled[0]! : or(...compiled) ?? sql`1 = 0`)
+        const compiled = filter.filters.map((child) => this.compileNode(child))
+        return compiled.length === 1 ? sql`(${compiled[0]!})` : or(...compiled) ?? sql`1 = 0`
       }
       case "not":
-        return strictBoolean(not(this.compile(filter.filter)))
+        return not(this.compileNode(filter.filter))
       default:
         throw new Error(`Unsupported predicate node kind: ${(filter as PredicateNode).kind}`)
     }
   }
 }
 
-export function compileDrizzlePredicate(filter: PredicateNode, columnMap: DrizzleColumnMap): SQL<unknown> {
-  return new DrizzlePredicateCompiler(columnMap).compile(filter)
+export function compileDrizzlePredicate(filter: PredicateNode, columnMap: DrizzleColumnMap, options: PredicateCompilerOptions = {}): SQL<unknown> {
+  return new DrizzlePredicateCompiler(columnMap, options).compile(filter)
 }
