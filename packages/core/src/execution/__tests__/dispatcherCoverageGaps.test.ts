@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { ConfigurationError } from "../../domain/errors"
 import { decodeJobPayload, dispatchDueJobs } from "../dispatcher"
 import { createJobRegistry } from "../jobRegistry"
 import { InvalidJobPayloadError, MalformedJobPayloadError } from "../types"
@@ -270,5 +271,15 @@ describe("dispatcher focused validation and result branches", () => {
     retry.stored.maxAttempts = 2
     const retryResult = await dispatchDueJobs({ store: retry.store, registry: retry.registry, workerId: "w", leaseDurationMs: 10, claimLimit: 1, requester: { scope: "system" } })
     expect(retryResult.retried).toBe(1)
+  })
+})
+
+describe("dispatcher workerId contract", () => {
+  it("rejects a missing, non-string or blank workerId as ConfigurationError", async () => {
+    const empty = setup(async () => ({ success: true }))
+    for (const workerId of [undefined as never, 42 as never, null as never, " "]) {
+      await expect(dispatchDueJobs({ store: empty.store, registry: empty.registry, workerId, leaseDurationMs: 1, claimLimit: 1, requester: { scope: "system" } })).rejects.toBeInstanceOf(ConfigurationError)
+    }
+    expect(empty.store.claimDue).not.toHaveBeenCalled()
   })
 })

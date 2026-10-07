@@ -1,4 +1,5 @@
 import { CancelledError, ConfigurationError, FrameworkCoreError, TimeoutError, UnavailableError } from "../domain/errors"
+import { abortSignalError } from "./abortSignal"
 import { computeBackoffDelayMs, MAX_BACKOFF_DELAY_MS, type BackoffPolicy } from "./backoff"
 import { validateResiliencePolicy, type CircuitBreakerPolicy, type ExternalCallSemantics, type ResiliencePolicy } from "./resilience"
 
@@ -132,14 +133,14 @@ export function createBulkhead(maxConcurrent: number, maxQueue = 0): Bulkhead {
     get active() { return active },
     get queued() { return waiters.length },
     acquire(signal) {
-      if (signal?.aborted) return Promise.reject(signal.reason ?? new CancelledError())
+      if (signal?.aborted) return Promise.reject(abortSignalError(signal))
       if (active < maxConcurrent) { active++; return Promise.resolve(releaser()) }
       if (waiters.length >= maxQueue) return Promise.reject(new UnavailableError("Bulkhead capacity exhausted"))
       return new Promise((resolve, reject) => {
         const onAbort = (): void => {
           const index = waiters.indexOf(waiter)
           if (index >= 0) waiters.splice(index, 1)
-          reject(signal?.reason ?? new CancelledError())
+          reject(signal ? abortSignalError(signal) : new CancelledError())
         }
         // The slot passes directly from the releasing caller to this waiter.
         const waiter = { grant: () => { signal?.removeEventListener("abort", onAbort); resolve(releaser()) }, reject }
@@ -169,12 +170,16 @@ function retryBackoff(policy: ResiliencePolicy): BackoffPolicy | undefined {
 function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
   if (ms <= 0) return Promise.resolve()
   return new Promise((resolve, reject) => {
-    const onAbort = (): void => { clearTimeout(timer); reject(signal?.reason ?? new CancelledError()) }
+    const onAbort = (): void => { clearTimeout(timer); reject(signal ? abortSignalError(signal) : new CancelledError()) }
     const timer = setTimeout(() => { signal?.removeEventListener("abort", onAbort); resolve() }, ms)
     signal?.addEventListener("abort", onAbort, { once: true })
   })
 }
 
+/**
+ * Runs one attempt. The work's own signal carries the caller's raw abort
+ * reason; the executor maps what it throws to the caller (see withResilience).
+ */
 async function attemptWithTimeout<T>(work: (signal: AbortSignal) => Promise<T>, timeoutMs: number | undefined, parent?: AbortSignal): Promise<T> {
   const controller = new AbortController()
   const onParentAbort = (): void => controller.abort(parent?.reason ?? new CancelledError())
@@ -205,23 +210,37 @@ export async function withResilience<T>(policy: ResiliencePolicy, semantics: Ext
   const backoff = semantics.kind === "non-idempotent-mutation" ? undefined : retryBackoff(validated)
   const maxAttempts = backoff?.maxAttempts ?? 1
   const release = runtime.bulkhead ? await runtime.bulkhead.acquire(runtime.signal) : undefined
+  // The bulkhead slot is held until every attempt's work has settled: a
+  // timed-out attempt that ignores its signal still occupies the downstream,
+  // so the caller gets its TimeoutError promptly but the slot is not reused.
+  let outstanding = 0
+  let finished = false
+  const settle = (): void => { if (finished && outstanding === 0) release?.() }
+  const tracked = (signal: AbortSignal): Promise<T> => {
+    outstanding++
+    const running = (async () => work(signal))()
+    void running.then(() => { outstanding--; settle() }, () => { outstanding--; settle() })
+    return running
+  }
   try {
     for (let attempt = 1; ; attempt++) {
-      if (runtime.signal?.aborted) throw runtime.signal.reason ?? new CancelledError()
+      if (runtime.signal?.aborted) throw abortSignalError(runtime.signal)
       const complete = runtime.breaker?.admit()
       try {
-        const result = await attemptWithTimeout(work, validated.timeoutMs, runtime.signal)
+        const result = await attemptWithTimeout(tracked, validated.timeoutMs, runtime.signal)
         complete?.("success")
         return result
       } catch (error) {
         // The caller's own cancellation says nothing about the downstream.
         complete?.(runtime.signal?.aborted ? "cancelled" : "failure")
+        if (runtime.signal?.aborted) throw abortSignalError(runtime.signal)
         const permanent = error instanceof FrameworkCoreError && !error.retryable
-        if (permanent || runtime.signal?.aborted || attempt >= maxAttempts || !backoff) throw error
+        if (permanent || attempt >= maxAttempts || !backoff) throw error
         await abortableDelay(computeBackoffDelayMs(backoff, attempt, runtime.random), runtime.signal)
       }
     }
   } finally {
-    release?.()
+    finished = true
+    settle()
   }
 }

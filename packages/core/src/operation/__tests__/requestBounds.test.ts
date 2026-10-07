@@ -31,3 +31,27 @@ describe("request cancellation and deadline bound the operation", () => {
     expect(longer.deadline.expiresAt.toISOString()).toBe("2026-10-01T00:01:00.000Z")
   })
 })
+
+describe("signal combination without AbortSignal.any", () => {
+  it("combines manually and detaches listeners when the run is disposed", () => {
+    const original = AbortSignal.any
+    // Simulate an older runtime.
+    Object.defineProperty(AbortSignal, "any", { value: undefined, configurable: true, writable: true })
+    try {
+      const environment = new AbortController()
+      const request = new AbortController()
+      const removed: string[] = []
+      const remove = environment.signal.removeEventListener.bind(environment.signal)
+      environment.signal.removeEventListener = ((type: string, listener: EventListenerOrEventListenerObject) => { removed.push(type); remove(type, listener) }) as typeof environment.signal.removeEventListener
+      const run = createOperationRunContext({ ...createOperationContext({ persistence, runtimeCapabilities, clock, signal: environment.signal }), request: { requestId: "r", signal: request.signal } as never })
+      environment.abort(new Error("shutdown"))
+      expect(run.signal.aborted).toBe(true)
+      const second = createOperationRunContext({ ...createOperationContext({ persistence, runtimeCapabilities, clock, signal: new AbortController().signal }), request: { requestId: "r", signal: request.signal } as never })
+      second.dispose()
+      expect(second.signal.aborted).toBe(false)
+      expect(removed).toContain("abort")
+    } finally {
+      Object.defineProperty(AbortSignal, "any", { value: original, configurable: true, writable: true })
+    }
+  })
+})

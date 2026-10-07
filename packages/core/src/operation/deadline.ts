@@ -1,22 +1,12 @@
-import { CancelledError, ConfigurationError, TimeoutError } from "../domain"
+import { ConfigurationError, TimeoutError } from "../domain"
+import { abortSignalError } from "../resilience/abortSignal"
 
 import type { Clock } from "../kernel/clock"
 export type { Clock } from "../kernel/clock"
 export interface ExecutionDeadline { readonly expiresAt: Date }
 
-/**
- * The framework error for an aborted signal. A reason that already is a
- * framework CancelledError or TimeoutError is returned unchanged (e.g. a
- * dispatcher aborting work at its deadline); any other reason becomes a
- * CancelledError that keeps the original reason as its `cause`.
- */
-export function abortSignalError(signal: AbortSignal, message = "The operation was cancelled"): CancelledError | TimeoutError {
-  const reason: unknown = signal.reason
-  if (reason instanceof CancelledError || reason instanceof TimeoutError) return reason
-  const error = new CancelledError(message, reason instanceof Error ? reason : undefined)
-  if (reason !== undefined && !(reason instanceof Error)) Object.defineProperty(error, "cause", { value: reason, writable: true, configurable: true, enumerable: false })
-  return error
-}
+/** Re-exported from the resilience layer, which owns it so foundation modules can use it too. */
+export { abortSignalError } from "../resilience/abortSignal"
 
 /** Throws CancelledError when `signal` is aborted and TimeoutError once `deadline` has passed. */
 export function assertExecutionActive(signal: AbortSignal, deadline: ExecutionDeadline, clock: Clock): void {

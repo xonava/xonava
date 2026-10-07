@@ -50,7 +50,7 @@ describe("transaction retry", () => {
         definition: { key: "abort-backoff", kind: "mutation", authorization: allow, atomicity: { kind: "standard", mode: "required" }, execution: retrying(5, 10_000), execute: async () => { attempts++; throw new RetryablePersistenceError("busy") } },
         input: {},
       })
-      const assertion = expect(run).rejects.toThrow("shutting down")
+      const assertion = expect(run).rejects.toMatchObject({ code: "CANCELLED", cause: expect.objectContaining({ message: "shutting down" }) })
       await vi.advanceTimersByTimeAsync(0)
       expect(vi.getTimerCount()).toBe(1)
       controller.abort(new Error("shutting down"))

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { ConfigurationError, UnavailableError, ValidationError } from "../../domain/errors"
 import { enforceRateLimit, parseTimeWindowMs, checkRateLimit, type AtomicRateLimitStore, type RateLimitStore } from "../rateLimit"
 
 function store(count: number, atomicIncrement = true): RateLimitStore | AtomicRateLimitStore {
@@ -120,5 +121,44 @@ describe("rate-limit configuration hardening", () => {
     expect(() => parseTimeWindowMs("0s")).toThrow()
     expect(() => parseTimeWindowMs("1 week")).toThrow()
     expect(() => parseTimeWindowMs("9999999999 days")).toThrow()
+  })
+})
+
+describe("rate-limit error contract", () => {
+  it("treats an invalid store bucket as a dependency fault, not a client error", async () => {
+    const malformed: AtomicRateLimitStore = {
+      increment: vi.fn(async () => ({ count: Number.NaN, resetAt: 10_000 })),
+      incrementAtomically: vi.fn(async () => ({ count: 1, resetAt: Number.POSITIVE_INFINITY })),
+    }
+    await expect(checkRateLimit({ store: malformed, key: "key", limit: 3, windowMs: 1000 })).rejects.toBeInstanceOf(UnavailableError)
+    await expect(checkRateLimit({ store: malformed, key: "key", limit: 3, windowMs: 1000, consistency: "best-effort" })).rejects.toBeInstanceOf(UnavailableError)
+  })
+
+  it("applies fail-open to an invalid store bucket on a best-effort limiter", async () => {
+    const malformed: RateLimitStore = { increment: vi.fn(async () => ({ count: -1, resetAt: 10_000 })) }
+    await expect(checkRateLimit({ store: malformed, key: "key", limit: 3, windowMs: 1000, consistency: "best-effort", failureMode: "fail-open", nowMs: () => 5 })).resolves.toEqual({ allowed: true, remaining: 3, resetAt: 1005 })
+  })
+
+  it("reports limiter misconfiguration as a ConfigurationError", async () => {
+    const atomic = { increment: vi.fn(), incrementAtomically: vi.fn(async () => ({ count: 1, resetAt: 1 })) }
+    await expect(checkRateLimit({ store: atomic, key: "k", limit: 1, windowMs: 1000, failureMode: "fail-open" })).rejects.toBeInstanceOf(ConfigurationError)
+    await expect(checkRateLimit({ store: atomic, key: "k", limit: 0, windowMs: 1000 })).rejects.toBeInstanceOf(ConfigurationError)
+    await expect(checkRateLimit({ store: atomic, key: "k", limit: 1, windowMs: Number.NaN })).rejects.toBeInstanceOf(ConfigurationError)
+    await expect(checkRateLimit({ store: atomic, key: "k", limit: 1, windowMs: 1000, cost: 0 })).rejects.toBeInstanceOf(ConfigurationError)
+    await expect(checkRateLimit({ store: atomic, key: "k", limit: 1, windowMs: 1000, algorithm: "leaky" as never })).rejects.toBeInstanceOf(ConfigurationError)
+    await expect(checkRateLimit({ store: atomic, key: "k", limit: 1, windowMs: 1000, consistency: "typo" as never })).rejects.toBeInstanceOf(ConfigurationError)
+    await expect(checkRateLimit({ store: atomic, key: "k", limit: 1, windowMs: 1000, consistency: "atomic", policy: { consistency: "best-effort" } })).rejects.toBeInstanceOf(ConfigurationError)
+    await expect(checkRateLimit({ store: atomic, key: "k", limit: 1, windowMs: 1000, failureMode: "typo" as never })).rejects.toBeInstanceOf(ConfigurationError)
+    await expect(checkRateLimit({ store: atomic, key: "k", limit: 1, windowMs: 1000, failureMode: "fail-closed", policy: { failureMode: "fail-open", consistency: "best-effort" } })).rejects.toBeInstanceOf(ConfigurationError)
+    await expect(enforceRateLimit({ store: atomic, key: "k", config: { max: Number.NaN, timeWindow: 1000 } })).rejects.toBeInstanceOf(ConfigurationError)
+    await expect(enforceRateLimit({ store: atomic, key: "k", config: { max: 1, timeWindow: 1000, consistency: "atomic" }, consistency: "best-effort" })).rejects.toBeInstanceOf(ConfigurationError)
+    await expect(enforceRateLimit({ store: atomic, key: "k", config: { max: 1, timeWindow: "1 fortnight" } })).rejects.toBeInstanceOf(ConfigurationError)
+    expect(() => parseTimeWindowMs("0s")).toThrow(ConfigurationError)
+    expect(() => parseTimeWindowMs(-1)).toThrow(ConfigurationError)
+    expect(() => parseTimeWindowMs(null as never)).toThrow(ConfigurationError)
+  })
+
+  it("keeps a blank request-derived key a ValidationError", async () => {
+    await expect(checkRateLimit({ store: store(1), key: " ", limit: 1, windowMs: 1000 })).rejects.toBeInstanceOf(ValidationError)
   })
 })

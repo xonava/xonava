@@ -5,7 +5,7 @@ import type {
   PriorScheduleExecutionStatus,
   ScheduleDefinition,
 } from "./types"
-import { ValidationError } from "../domain"
+import { ConfigurationError, ValidationError } from "../domain"
 
 const MAX_ITERATIONS = 5256000
 
@@ -274,7 +274,8 @@ export function computeScheduleOccurrences(args: {
   tzAdapter?: CronTimezoneAdapter
   disambiguation?: CronDisambiguation
 }): Date[] {
-  if (!args.schedule.enabled || !args.schedule.nextRunAt || args.maxCount <= 0) return []
+  if (!Number.isSafeInteger(args.maxCount) || args.maxCount < 1) throw new ConfigurationError("Schedule occurrence maxCount must be a positive safe integer.")
+  if (!args.schedule.enabled || !args.schedule.nextRunAt) return []
   const results: Date[] = []
   let current = args.schedule.nextRunAt
   if (current <= args.now) results.push(current)

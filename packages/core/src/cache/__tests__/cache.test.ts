@@ -492,3 +492,44 @@ describe("cache ports", () => {
     await expect(cache.get("key")).resolves.toBeUndefined()
   })
 })
+
+describe("shared tag generations (final pass)", () => {
+  function sharedAdapter(): CacheAdapter {
+    const values = new Map<string, unknown>()
+    const generations = new Map<string, number>()
+    return {
+      get: async <T>(key: string) => values.get(key) as T | undefined,
+      set: async (key: string, value: unknown) => { values.set(key, value) },
+      delete: async (key: string) => values.delete(key),
+      has: async (key: string) => values.has(key),
+      clear: async () => { values.clear() },
+      addToTag: async () => undefined,
+      getTagKeys: async () => [],
+      deleteTag: async () => undefined,
+      getTagGeneration: async (tag: string) => String(generations.get(tag) ?? 0),
+      advanceTagGeneration: async (tag: string) => { const next = (generations.get(tag) ?? 0) + 1; generations.set(tag, next); return String(next) },
+    }
+  }
+
+  it("keeps sharing entries across instances after an unrelated invalidation", async () => {
+    const adapter = sharedAdapter()
+    const a = new CacheService({ adapter })
+    const b = new CacheService({ adapter })
+    await a.invalidateTag("unrelated")
+    const resolver = vi.fn(async () => "value")
+    await a.getOrSet("user:1", resolver, ["users"])
+    await b.getOrSet("user:1", resolver, ["users"])
+    expect(resolver).toHaveBeenCalledTimes(1)
+  })
+
+  it("still fences entries when their own tag is invalidated", async () => {
+    const adapter = sharedAdapter()
+    const a = new CacheService({ adapter })
+    const b = new CacheService({ adapter })
+    const resolver = vi.fn(async () => "value")
+    await a.getOrSet("user:1", resolver, ["users"])
+    await b.invalidateTag("users")
+    await a.getOrSet("user:1", resolver, ["users"])
+    expect(resolver).toHaveBeenCalledTimes(2)
+  })
+})

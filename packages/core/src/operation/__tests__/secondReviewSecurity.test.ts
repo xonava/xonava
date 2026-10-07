@@ -19,7 +19,7 @@ const capabilities = {
 function plan(overrides: Record<string, unknown> = {}) {
   return createAuthorizedExecutionPlan({
     identity: { actor: principal, subject: principal }, scope, action: "records.update", operationKind: "mutation",
-    readableFields: new Set(["id", "name"]), writableFields: new Set(["status", "branchId", "region", "tenantId"]),
+    readableFields: new Set(["id", "name"]), writableFields: new Set(["status", "branchId", "region", "tenantId", "ownerId", "assigneeId"]),
     obligations: [], dynamicFacts: [], policy: { key: "policy", version: 1, digest: "a".repeat(64) },
     ...overrides,
   } as never)
@@ -49,9 +49,38 @@ describe("S2: conditional updates cannot move a row out of the mandatory predica
     expect(repository[method]).not.toHaveBeenCalled()
   })
 
-  it("rejects a partial write to a compound conjunct", async () => {
+  it("decides a compound conjunct on the post-image: written fields by data, the rest in the WHERE", async () => {
+    const { repository, constrained } = repo(required)
+    // region "eu" keeps the OR true outright.
+    await expect(constrained.updateManyWhere!(Predicate.eq("id", "1"), { region: "eu" } as never)).resolves.toBe(1)
+    // region "us" leaves the OR depending on tenantId, which the WHERE must now require.
+    await constrained.updateManyWhere!(Predicate.eq("id", "1"), { region: "us" } as never)
+    const where = JSON.stringify((repository.updateManyWhere.mock.calls.at(-1) as unknown[])[0])
+    expect(where).toContain('"field":"tenantId","op":"eq","value":"x"')
+  })
+
+  it("allows an owner to reassign while an OR on an unwritten field still holds", async () => {
+    const { repository, constrained } = repo(Predicate.or(Predicate.eq("ownerId", "u1"), Predicate.eq("assigneeId", "u1")))
+    await expect(constrained.updateOneWhere!(Predicate.eq("id", "1"), { status: "x" } as never)).resolves.toEqual({ updatedCount: 1 })
+    expect(JSON.stringify((repository.updateOneWhere.mock.calls.at(-1) as unknown[])[0])).toContain('"ownerId"')
+  })
+
+  it("rejects writing NULL into a compared field", async () => {
     const { constrained } = repo(required)
-    await expect(constrained.updateManyWhere!(Predicate.eq("id", "1"), { region: "eu" } as never)).rejects.toThrow(ForbiddenError)
+    await expect(constrained.updateManyWhere!(Predicate.eq("id", "1"), { branchId: null } as never)).rejects.toThrow(ForbiddenError)
+  })
+
+  it("treats dynamic-fact equalities as pre-image guards so compare-and-set transitions work", async () => {
+    const repository = {
+      findById: vi.fn(), findMany: vi.fn(), insert: vi.fn(), update: vi.fn(), delete: vi.fn(),
+      updateOneWhereReturning: vi.fn(async (_f: unknown, data: object) => ({ id: "1", tenantId: "tenant-1", status: "draft", ...data })),
+    }
+    const constrained = createPlanConstrainedPersistenceProvider(
+      { dialect: "test", capabilities, repository: () => repository } as PersistenceProvider,
+      plan({ mandatoryResourcePredicate: Predicate.eq("tenantId", "tenant-1"), dynamicFacts: [{ factKey: "status", version: "1", observedAt: "2026-09-10T00:00:00.000Z", revalidation: { kind: "mutation-predicate", field: "status", expectedValue: "draft" } }] }),
+    ).repository({ name: "records", fields: {} })
+    await expect(constrained.updateOneWhereReturning!(Predicate.eq("id", "1"), { status: "submitted" } as never)).resolves.toMatchObject({ status: "submitted" })
+    expect(JSON.stringify(repository.updateOneWhereReturning.mock.calls[0]![0])).toContain('"value":"draft"')
   })
 
   it("permits data that keeps every touched conjunct true and untouched conjuncts", async () => {

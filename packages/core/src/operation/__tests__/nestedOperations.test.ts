@@ -170,4 +170,22 @@ describe("nested operations join the parent transaction", () => {
     await expect(createOperationInvoker(createOperationContext({ persistence: root, runtimeCapabilities })).invoke(child(log), "solo")).resolves.toBe("child-solo")
     expect(committed).toEqual(["child:solo"])
   })
+
+  it("works inside a routed request whose route is bound to the parent", async () => {
+    const { root, committed, log } = recordingProvider()
+    const human = { id: "u1", kind: "human", authentication: { kind: "authenticated", method: "session", authenticatedAt: "2026-09-10T00:00:00.000Z" } }
+    const request = { requestId: "r1", correlationId: "c1", identity: { actor: human, subject: human }, route: { routeKey: "POST /parent", operationKey: "parent", definitionVersion: 1 }, signal: new AbortController().signal } as never
+    await expect(runOperation({
+      operation: { ...createOperationContext({ persistence: root, runtimeCapabilities }), request },
+      definition: mutation({ key: "parent", kind: "mutation", authorization: allow, atomicity: { kind: "standard", mode: "required" }, execute: ({ operation }) => operation.invoke(child(log), "routed") }),
+      input: {},
+    })).resolves.toBe("child-routed")
+    expect(committed).toEqual(["child:routed"])
+    // The root operation is still bound to its route.
+    await expect(runOperation({
+      operation: { ...createOperationContext({ persistence: root, runtimeCapabilities }), request },
+      definition: child(log),
+      input: "direct",
+    })).rejects.toThrow('bound to operation "parent"')
+  })
 })

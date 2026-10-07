@@ -481,9 +481,9 @@ export class CacheService {
       if (this.backendGenerationUnavailable) {
         this.backendGenerationUnavailable = false
         this.advanceLocalFallbackEpoch()
-        return this.remoteGeneration(generations, this.localFallbackEpoch)
+        return this.remoteGeneration(tags, generations, this.localFallbackEpoch)
       }
-      return this.remoteGeneration(generations, epochAtStart)
+      return this.remoteGeneration(tags, generations, epochAtStart)
     } catch (error) {
       if (this.correctnessCritical) throw error
       // Entering fallback is itself a fence. Remaining unavailable is stable,
@@ -497,21 +497,24 @@ export class CacheService {
   }
 
   private async advanceTagGeneration(tag: string): Promise<void> {
-    // Advance synchronously: invalidation fences local reads and in-flight
-    // writes even if the backend operation fails or is still pending.
-    this.advanceLocalFallbackEpoch()
+    // The backend generation is the shared fence: a value written under an
+    // older generation is never read again, so instances sharing a backend
+    // keep sharing entries. The instance-local epoch is advanced only when the
+    // backend cannot advance, so this instance still stops serving entries it
+    // was told to invalidate (best-effort mode).
     try {
       if (this.adapter.advanceTagGeneration) {
         await this.adapter.advanceTagGeneration(tag)
       } else {
         if (this.correctnessCritical) throw new CacheAdapterError("advanceTagGeneration")
+        this.advanceLocalFallbackEpoch()
       }
     } catch (error) {
       if (this.correctnessCritical) {
         if (error instanceof CacheAdapterError) throw error
         throw new CacheAdapterError("advanceTagGeneration", { cause: error })
       }
-      // Invalidation remains best effort; the local fence was already advanced.
+      this.advanceLocalFallbackEpoch()
     }
   }
 
@@ -523,8 +526,8 @@ export class CacheService {
     return `fallback:${this.localFallbackEpoch}`
   }
 
-  private remoteGeneration(generations: readonly (string | undefined)[], epoch: bigint): string {
-    return serializeCacheKeyPart([`local:${epoch}`, ...generations.map((generation) => generation ?? "0")])
+  private remoteGeneration(tags: readonly string[], generations: readonly (string | undefined)[], epoch: bigint): string {
+    return serializeCacheKeyPart([`local:${epoch}`, ...tags.flatMap((tag, index) => [tag, generations[index] ?? "0"])])
   }
 
   private requireSharedGeneration(tags: string[]): void {

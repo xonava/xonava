@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { ConfigurationError } from "../../domain/errors"
 import {
   computeScheduleOccurrences,
   createIntlCronTimezoneAdapter,
@@ -84,11 +85,17 @@ describe("schedule calculator", () => {
     expect(getNextOccurrence("0 9 1 * */2", new Date("2026-06-01T10:00:00Z"))?.toISOString()).toBe("2026-08-01T09:00:00.000Z")
   })
 
-  it("returns no occurrences for maxCount zero", () => {
+  it("rejects a maxCount that is not a positive safe integer", () => {
+    for (const maxCount of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1, "3" as never]) {
+      expect(() => computeScheduleOccurrences({
+        schedule: { cronExpression: "* * * * *", enabled: true, nextRunAt: new Date("2026-01-01T00:00:00Z") },
+        now: new Date("2026-01-01T01:00:00Z"), maxCount,
+      })).toThrow(ConfigurationError)
+    }
     expect(computeScheduleOccurrences({
       schedule: { cronExpression: "* * * * *", enabled: true, nextRunAt: new Date("2026-01-01T00:00:00Z") },
-      now: new Date("2026-01-01T01:00:00Z"), maxCount: 0,
-    })).toEqual([])
+      now: new Date("2026-01-01T01:00:00Z"), maxCount: 2,
+    })).toHaveLength(2)
   })
 
   it("skips a spring-forward gap and disambiguates the fall-back overlap", () => {

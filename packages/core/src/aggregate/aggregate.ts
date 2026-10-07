@@ -5,16 +5,21 @@ import type { AggregateDefinition, AggregateInvariantPhase, AggregateSnapshot, A
 const compiledAggregates = new WeakSet<object>()
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
-function immutable(value: unknown, seen = new WeakSet<object>()): unknown {
+/** Deep-frozen copy. Only the active path detects cycles, so shared (DAG) references are allowed. */
+function immutable(value: unknown, active = new WeakSet<object>()): unknown {
   if (value === null || typeof value !== "object") return value
-  if (seen.has(value)) throw new ConfigurationError("Aggregate snapshot must not contain cycles")
-  seen.add(value)
-  if (Array.isArray(value)) return Object.freeze(value.map(item => immutable(item, seen)))
-  const prototype = Object.getPrototypeOf(value) as unknown
-  if (prototype !== Object.prototype && prototype !== null) throw new ConfigurationError("Aggregate snapshot values must be plain records and arrays")
-  const copy: Record<string, unknown> = Object.create(null) as Record<string, unknown>
-  for (const [key, item] of Object.entries(value)) copy[key] = immutable(item, seen)
-  return Object.freeze(copy)
+  if (active.has(value)) throw new ConfigurationError("Aggregate snapshot must not contain cycles")
+  active.add(value)
+  try {
+    if (Array.isArray(value)) return Object.freeze(value.map(item => immutable(item, active)))
+    const prototype = Object.getPrototypeOf(value) as unknown
+    if (prototype !== Object.prototype && prototype !== null) throw new ConfigurationError("Aggregate snapshot values must be plain records and arrays")
+    const copy: Record<string, unknown> = Object.create(null) as Record<string, unknown>
+    for (const [key, item] of Object.entries(value)) copy[key] = immutable(item, active)
+    return Object.freeze(copy)
+  } finally {
+    active.delete(value)
+  }
 }
 
 export class AggregateInvariantError extends ConflictError {

@@ -3,7 +3,7 @@ import type { JobStore, NewJob, CronTimezoneAdapter, JobRequester, JobStatus, Pr
 import { assertTimerDelayWithinLimit, scheduleCorrelationId } from "./types"
 import type { FencedScheduleClaim, ScheduleStore } from "./scheduleStore"
 import { computeScheduleOccurrences, shouldFireSchedule, calculateNextRun } from "./scheduleCalculator"
-import { ValidationError } from "../domain"
+import { ConfigurationError, ValidationError } from "../domain"
 import { isScheduleEffective } from "./scheduleLifecycle"
 import { createTelemetryLogger, type TelemetryPort } from "../telemetry/telemetry"
 
@@ -28,6 +28,9 @@ const systemScheduleRenewalClock: ScheduleRenewalClock = {
   setTimeout: (callback, ms) => setTimeout(callback, ms),
   clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
 }
+
+/** Upper bound on schedules claimed per materialization tick, matching the job dispatcher claim limit. */
+export const MAX_SCHEDULE_CLAIM_LIMIT = 100
 
 /** Keep persisted schedule payloads within the same durable admission budget as jobs. */
 export const MAX_STORED_SCHEDULE_PAYLOAD_BYTES = 1024 * 1024
@@ -54,6 +57,9 @@ export async function materializeDueSchedules(args: {
   decodePayload?: (input: unknown) => Record<string, unknown>
   calendarExclusionProvider?: { isExcluded(key: string, instant: Date): Promise<boolean> }
 }): Promise<MaterializeResult> {
+  if (typeof args.workerId !== "string" || args.workerId.trim().length === 0) throw new ConfigurationError("Schedule workerId must be a non-empty string.")
+  const limit = args.limit ?? 20
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_SCHEDULE_CLAIM_LIMIT) throw new ConfigurationError(`Schedule claim limit must be an integer between 1 and ${MAX_SCHEDULE_CLAIM_LIMIT}.`)
   const result: MaterializeResult = { schedulesProcessed: 0, jobsEnqueued: 0, errors: [] }
   const now = args.now ?? new Date()
   const log = createTelemetryLogger(args.telemetry, "execution.schedule", () => new Date())
@@ -63,7 +69,7 @@ export async function materializeDueSchedules(args: {
 
   const claims = await args.scheduleStore.claimDueSchedules({
     workerId: args.workerId,
-    limit: args.limit ?? 20,
+    limit,
     now,
     leaseDurationMs,
   })

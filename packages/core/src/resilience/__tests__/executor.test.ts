@@ -53,11 +53,12 @@ describe("bulkhead", () => {
     const controller = new AbortController()
     const waiting = bulkhead.acquire(controller.signal)
     controller.abort(new Error("client gone"))
-    await expect(waiting).rejects.toThrow("client gone")
+    // The abort surfaces as a framework CancelledError that keeps the reason as its cause.
+    await expect(waiting).rejects.toMatchObject({ code: "CANCELLED", cause: controller.signal.reason })
     expect(bulkhead.queued).toBe(0)
     release()
     expect(bulkhead.active).toBe(0)
-    await expect(bulkhead.acquire(controller.signal)).rejects.toThrow("client gone")
+    await expect(bulkhead.acquire(controller.signal)).rejects.toMatchObject({ code: "CANCELLED", cause: controller.signal.reason })
   })
 })
 

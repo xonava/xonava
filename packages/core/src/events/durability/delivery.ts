@@ -111,12 +111,27 @@ function exhaustedClaimCode(record: Claimable & { readonly attempt: number }, ma
 
 // ---------------------------------------------------------------- outbox
 
+/**
+ * Deterministic, key-sorted form of a JSON-normalised value. Used when
+ * canonical JSON refuses a value (e.g. an unsafe integer) so equal payloads
+ * still compare equal regardless of object key order.
+ */
+function stableJsonForm(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJsonForm).join(",")}]`
+  if (value !== null && typeof value === "object") {
+    const record = value as Record<string, unknown>
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableJsonForm(record[key])}`).join(",")}}`
+  }
+  if (typeof value === "number") return String(value)
+  return JSON.stringify(value) ?? "null"
+}
+
 function payloadForm(record: OutboxDeliveryRecord): string {
   const value = { scopeId: record.scopeId, eventType: record.envelope?.eventType, payloadVersion: record.envelope?.payloadVersion, payload: record.envelope?.payload }
   // Normalise through JSON first so stores that drop undefined members or
   // rebuild objects compare equal; fall back if canonicalisation is refused.
   const plain: unknown = JSON.parse(JSON.stringify(value) ?? "null")
-  try { return canonicalJsonString(plain) } catch { return JSON.stringify(plain) }
+  try { return canonicalJsonString(plain) } catch { return stableJsonForm(plain) }
 }
 
 /**

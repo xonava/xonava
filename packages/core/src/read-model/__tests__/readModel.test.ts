@@ -188,3 +188,15 @@ describe("indexed read-model joins",()=>{
     expect(performance.now()-started).toBeLessThan(300)
   })
 })
+
+describe("read-model final pass",()=>{
+  it("joins Date keys by instant",async()=>{
+    const joined=await executeReadModel(plan(),[{sourceKey:"orders",execute:async()=>({consistency:"eventual",rows:[{id:"o1",tenantId:"t1",customerId:new Date(5)}]})},{sourceKey:"customers",execute:async()=>({consistency:"eventual",rows:[{id:new Date(5),tenantId:"t1",name:"A"}]})}])
+    expect(joined.rows).toHaveLength(1)
+  })
+  it("checks snapshot tokens of the sources that succeeded even when one failed",async()=>{
+    const coordinated=(key:string)=>({...source(key),snapshotCoordinatorKeys:new Set(["snapshot"])})
+    const partial=plan({partialFailurePolicy:"allow-partial-with-explicit-metadata",joins:[{leftSourceKey:"orders",rightSourceKey:"customers",type:"left",leftKey:"customerId",rightKey:"id",cardinality:"many-to-one",maxExpansion:1},{leftSourceKey:"orders",rightSourceKey:"payments",type:"left",leftKey:"customerId",rightKey:"id",cardinality:"many-to-one",maxExpansion:1}],consistency:{kind:"application-defined-snapshot",coordinatorKey:"snapshot",snapshotTokenFormat:"opaque"},sources:[coordinated("orders"),coordinated("customers"),coordinated("payments")]})
+    await expect(executeReadModel(partial,[{sourceKey:"orders",execute:async()=>({consistency:"eventual",snapshotToken:"T1",rows:[]})},{sourceKey:"customers",execute:async()=>({consistency:"eventual",snapshotToken:"T2",rows:[]})},{sourceKey:"payments",execute:async()=>{throw new Error("down")}}])).rejects.toThrow("snapshot token mismatch")
+  })
+})

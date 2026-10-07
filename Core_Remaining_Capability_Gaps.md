@@ -83,10 +83,35 @@ fix has a regression test that failed before the fix.
 | P2 | Framework-error contract gaps | Cancellation and deadline raise `CancelledError`/`TimeoutError` (operations, object store, streams); predicate string values are byte-bounded; repeated signals cannot skip a retry backoff; outbox appends with a reused id and different payload conflict; telemetry redacts sensitive keys |
 | P3 | Hardening | Error `details` are non-enumerable; prototype-chain lookups replaced with own-property checks; base64url accepts only canonical spellings; post-commit failures of retried attempts reach `runOperationDetailed`; `deepFreeze` freezes children of frozen parents |
 
+## Final pass (resolved)
+
+A last review covered the second-review fixes themselves, the less-reviewed
+modules, and cross-cutting resource and error-contract hygiene.
+
+| Gap | Resolution |
+|---|---|
+| Nested `invoke` failed inside any routed request (route bound to the parent) | Route binding is asserted for the root operation only |
+| The S2 update check rejected compare-and-set fact transitions and over-rejected OR/NOT predicates | Exact post-image rewrite: written fields are decided by the new data and the residual predicate over unwritten fields is added to the WHERE clause; fact equalities remain pre-image guards |
+| Cache instances sharing a backend stopped sharing entries after any invalidation | Backend tag generations are the shared fence; the local epoch advances only when the backend cannot |
+| Temporal reconstruction accepted a snapshot for another resource, and revision-0 snapshots with state | Snapshot identity and revision-0 state checked |
+| Aggregate snapshots rejected shared (non-cyclic) references | Active-path cycle detection |
+| Read-model joins never matched `Date` keys; snapshot tokens unchecked on partial results | Value-keyed Date joins; tokens checked for every successful source |
+| Raw abort reasons (DOMException) surfaced as 500 from resilience and retry backoff | All caller-visible aborts are `CancelledError`/`TimeoutError` |
+| Bulkhead slots were released while timed-out work kept running | Slot released when the work settles |
+| Delivery and inbox work ran after a shutdown that arrived during claim | Already-aborted parent stops the work before it starts |
+| Outbox payload comparison fell back to key-order-dependent JSON | Key-sorted fallback |
+| Workflow lease/step timeouts were unbounded | Timer ceiling enforced |
+| Rate-limit store faults and misconfiguration were 400s and skipped fail-open | Store faults `UnavailableError` (fail-open applies); misconfiguration `ConfigurationError` |
+| Search cancellation, deadlines, and provider faults were 400s; results re-checked against the deadline | `CancelledError`/`TimeoutError`/`ConfigurationError`; no post-result deadline check |
+| Unvalidated schedule/dispatcher options | Validated before any claim |
+| Without `AbortSignal.any` the environment signal was dropped | Manual combination with listener cleanup on dispose |
+
 ## Remaining
 
 - A code formatter is still not configured; style is enforced only by lint.
 - Commit-outcome classification is proven on PostgreSQL and MySQL; D1 has no interactive transactions.
 - A failed nested operation fails its parent, but its writes are not individually rolled back (no savepoints): the parent's whole transaction rolls back instead.
 - Query grants from conditional allow policies are honoured without evaluating their conditions at query time; only deny-sourced grants are dropped.
+- Some dispatcher and schedule option checks (claim limit, lease, timeouts, `maxQueueAllOccurrences`) still raise `ValidationError` rather than `ConfigurationError`; these are worker configuration, never request input.
+- Telemetry redaction is intentionally broad (`token` also matches keys such as `maxTokens`).
 - If an ABAC policy condition itself references a soft-delete field, plan-constrained soft deletes are refused, because the update would leave the policy's scope.

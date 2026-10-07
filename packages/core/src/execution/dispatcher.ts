@@ -16,7 +16,7 @@ import type {
 import { InvalidJobPayloadError, MalformedJobPayloadError } from "./types"
 import { assertJobScopeMatches, assertTimerDelayWithinLimit } from "./types"
 import { createExecutionContext } from "./executionContext"
-import { ValidationError } from "../domain"
+import { ConfigurationError, ValidationError } from "../domain"
 import { createTelemetryLogger, type TelemetryLogger, type TelemetryPort } from "../telemetry/telemetry"
 
 export const MAX_STORED_JOB_PAYLOAD_BYTES = 1024 * 1024
@@ -475,7 +475,7 @@ async function executeJob(args: DispatcherConfig & { job: StoredJob; log: Dispat
 }
 
 function validateDispatcherConfig(config: DispatcherConfig): void {
-  if (config.workerId.trim().length === 0) throw new ValidationError("workerId must be non-empty")
+  if (typeof config.workerId !== "string" || config.workerId.trim().length === 0) throw new ConfigurationError("workerId must be a non-empty string")
   if (!Number.isInteger(config.claimLimit) || config.claimLimit < 1) throw new ValidationError("claimLimit must be a positive integer")
   const MAX_CLAIM_LIMIT = 100
   if (config.claimLimit > MAX_CLAIM_LIMIT) throw new ValidationError(`Claim limit ${config.claimLimit} exceeds maximum ${MAX_CLAIM_LIMIT}`)

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { ConfigurationError } from "../../domain/errors"
 import { MAX_STORED_SCHEDULE_PAYLOAD_BYTES, materializeDueSchedules } from "../scheduleDispatcher"
 import type { JobStore, StoredJob } from "../types"
 import type { FencedScheduleClaim, ScheduleStore } from "../scheduleStore"
@@ -131,5 +132,23 @@ describe("schedule dispatcher validation branches", () => {
     const enqueue = vi.mocked(Reflect.get(lost.jobStore, "enqueue") as ReturnType<typeof vi.fn>)
     expect(enqueue).not.toHaveBeenCalled()
     vi.useRealTimers()
+  })
+})
+
+describe("schedule dispatcher option contract", () => {
+  it("rejects invalid limit and workerId as ConfigurationError before claiming", async () => {
+    for (const limit of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 101, "5" as never]) {
+      const s = stores([])
+      await expect(materializeDueSchedules({ ...s, workerId: "w", limit })).rejects.toBeInstanceOf(ConfigurationError)
+      expect(s.scheduleStore.claimDueSchedules).not.toHaveBeenCalled()
+    }
+    for (const workerId of ["", "  ", undefined as never, 42 as never]) {
+      const s = stores([])
+      await expect(materializeDueSchedules({ ...s, workerId })).rejects.toBeInstanceOf(ConfigurationError)
+      expect(s.scheduleStore.claimDueSchedules).not.toHaveBeenCalled()
+    }
+    const ok = stores([])
+    await expect(materializeDueSchedules({ ...ok, workerId: "w", limit: 100 })).resolves.toMatchObject({ schedulesProcessed: 0 })
+    expect(ok.scheduleStore.claimDueSchedules).toHaveBeenCalledWith(expect.objectContaining({ limit: 100, workerId: "w" }))
   })
 })

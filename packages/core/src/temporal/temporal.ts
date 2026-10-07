@@ -22,6 +22,7 @@ export function validateTemporalRevision<TState extends Readonly<Record<string, 
 
 export function validateTemporalSnapshot<TState extends Readonly<Record<string, unknown>>>(value: TemporalSnapshot<TState>): TemporalSnapshot<TState> {
   resource(value); revision(value.revision, true); if (!validDate(value.occurredAt)) throw new ConfigurationError("Temporal snapshot timestamp is invalid"); state(value.state)
+  if (value.revision === 0 && value.state !== null) throw new ConfigurationError("A revision-0 temporal snapshot cannot carry state")
   return snapshotData(value, { label: "Temporal snapshot" })
 }
 
@@ -31,7 +32,7 @@ export async function reconstructAsOf<TState extends Readonly<Record<string, unk
   if (!Number.isSafeInteger(max) || max < 1 || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > max) throw new ConfigurationError("Temporal replay limits are invalid")
   const base = await store.latestSnapshot(target, asOf)
   let currentRevision = 0, currentState: TState | null = null, replayed = 0, cursor = 0
-  if (base) { const checked = validateTemporalSnapshot<TState>(base); if (checked.occurredAt > asOf) throw new ConfigurationError("Temporal store returned a future snapshot"); currentRevision = checked.revision; cursor = checked.revision; currentState = checked.state }
+  if (base) { const checked = validateTemporalSnapshot<TState>(base); if (checked.scopeId !== target.scopeId || checked.entityType !== target.entityType || checked.entityId !== target.entityId) throw new ConfigurationError("Temporal store returned a snapshot outside the request"); if (checked.occurredAt > asOf) throw new ConfigurationError("Temporal store returned a future snapshot"); currentRevision = checked.revision; cursor = checked.revision; currentState = checked.state }
   while (true) {
     const page = await store.revisions(target, { afterRevision: cursor, asOf, limit: Math.min(pageSize, max - replayed) })
     if (!page || !Array.isArray(page.items) || typeof page.hasMore !== "boolean" || (page.hasMore && page.items.length === 0)) throw new ConfigurationError("Temporal store returned an invalid revision page")

@@ -9,7 +9,7 @@ import { AuditActorMissingError, AuditSinkMissingError, ConfigurationError, Outb
 import type { StandardOperationDefinition, StandardAtomicityMode, RetryableTransactionExecution, RetryableMutationOperationDefinition } from "./operationDefinition"
 import { requireRuntimeCapability } from "../bootstrap/runtimeCapabilities"
 import { runAtomicBatchOperation } from "./atomicBatchOperationPipeline"
-import { assertExecutionActive } from "./deadline"
+import { abortSignalError, assertExecutionActive } from "./deadline"
 import { applyAuthorizationPlanToResult, authorizeOperation, createPlanConstrainedPersistenceProvider, revalidateAuthorizationFacts } from "./authorizationPlanEnforcement"
 import { emitTelemetry, explicitlySafeTelemetryAttributes } from "../telemetry/telemetry"
 import { reportCommittedEffectFailure } from "./committedEffectFailure"
@@ -27,9 +27,11 @@ export async function runStandardOperation<TInput, TResult>(args: {
   /** The parent run whose open transaction this nested run joins. */
   joinedParent?: InternalOperationRunContext
   createNestedInvoke?: NestedInvokeFactory
+  /** Invoked by another operation: the request's route is bound to the root operation, not to this one. */
+  nested?: boolean
 }): Promise<TResult> {
   assertExecutionActive(args.operation.signal, args.operation.deadline, args.operation.services.clock)
-  assertRequestBoundToOperation(args.operation, args.definition.key)
+  if (args.nested !== true) assertRequestBoundToOperation(args.operation, args.definition.key)
   const mode = resolveMode(args.definition)
   requireRuntimeCapabilities(args.operation, args.definition.requiredRuntimeCapabilities)
   const joinedParent = args.joinedParent
@@ -48,6 +50,7 @@ export async function runStandardOperation<TInput, TResult>(args: {
       operation: args.operation,
       definition: batchDefinition,
       input: args.input,
+      ...(args.nested === true ? { nested: true } : {}),
       ...(args.onBusinessResult ? { onBusinessResult: args.onBusinessResult } : {}),
     })
   }
@@ -367,12 +370,12 @@ async function waitBeforeRetry(operation: InternalOperationRunContext, policy: R
   const base = Math.min(policy.maxDelay, policy.delay * Math.pow(policy.backoff, Math.min(failedAttempt - 1, 64)))
   const delayMs = Math.max(0, Math.floor(base / 2 + (Math.random() * base) / 2))
   const signal = operation.signal
-  if (signal.aborted) throw signal.reason ?? lastError
+  if (signal.aborted) throw abortSignalError(signal)
   const remaining = operation.deadline.expiresAt.getTime() - operation.services.clock.now().getTime()
   if (!Number.isFinite(remaining) || remaining <= delayMs) throw lastError
   if (delayMs === 0) return
   await new Promise<void>((resolve, reject) => {
-    const onAbort = (): void => { clearTimeout(timer); reject(signal.reason ?? lastError) }
+    const onAbort = (): void => { clearTimeout(timer); reject(abortSignalError(signal)) }
     const timer = setTimeout(() => { signal.removeEventListener("abort", onAbort); resolve() }, delayMs)
     signal.addEventListener("abort", onAbort, { once: true })
   })

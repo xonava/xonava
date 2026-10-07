@@ -6,6 +6,7 @@ import { WorkflowDefinitionError, WorkflowLeaseLostError, WorkflowStateError, Wo
 import type { WorkflowRegistry } from "./workflowRegistry"
 import type { WorkflowDefinition, WorkflowInstance, WorkflowSignal, WorkflowStepDefinition, WorkflowStepResult } from "./types"
 import { TimeoutError } from "../domain/errors"
+import { assertTimerDelayWithinLimit } from "../execution/types"
 import { canRetryAfter, computeBackoffDelayMs, DEFAULT_BACKOFF_POLICY, type BackoffPolicy } from "../resilience/backoff"
 
 export const DEFAULT_WORKFLOW_STEP_TIMEOUT_MS = 30_000
@@ -56,12 +57,16 @@ function validateOptions(args: WorkflowDispatchOptions): void {
   if (typeof args.workerId !== "string" || !args.workerId.trim()) throw new WorkflowDefinitionError("Workflow workerId must be non-empty")
   if (!Number.isSafeInteger(args.claimLimit) || args.claimLimit < 1 || args.claimLimit > MAX_WORKFLOW_CLAIM_LIMIT) throw new WorkflowDefinitionError(`Workflow claimLimit must be between 1 and ${MAX_WORKFLOW_CLAIM_LIMIT}`)
   if (!Number.isSafeInteger(args.leaseDurationMs) || args.leaseDurationMs < 3) throw new WorkflowDefinitionError("Workflow leaseDurationMs must be a safe integer of at least 3")
+  // The lease drives heartbeat and renewal timers; beyond the platform limit they would fire after ~1ms.
+  assertTimerDelayWithinLimit("Workflow leaseDurationMs", args.leaseDurationMs)
   const timeout = args.stepTimeoutMs ?? DEFAULT_WORKFLOW_STEP_TIMEOUT_MS
   if (!Number.isSafeInteger(timeout) || timeout < 1 || timeout > MAX_WORKFLOW_STEP_TIMEOUT_MS) throw new WorkflowDefinitionError(`Workflow stepTimeoutMs must be between 1 and ${MAX_WORKFLOW_STEP_TIMEOUT_MS}`)
   const concurrency = args.concurrency ?? 1
   if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > args.claimLimit) throw new WorkflowDefinitionError("Workflow concurrency must be between 1 and claimLimit")
   const grace = args.cancellationGraceMs ?? DEFAULT_WORKFLOW_CANCELLATION_GRACE_MS
   if (!Number.isSafeInteger(grace) || grace < 0 || grace > MAX_WORKFLOW_CANCELLATION_GRACE_MS) throw new WorkflowDefinitionError(`Workflow cancellationGraceMs must be between 0 and ${MAX_WORKFLOW_CANCELLATION_GRACE_MS}`)
+  assertTimerDelayWithinLimit("Workflow stepTimeoutMs", timeout)
+  assertTimerDelayWithinLimit("Workflow cancellationGraceMs", grace)
   if (args.random !== undefined && typeof args.random !== "function") throw new WorkflowDefinitionError("Workflow random must be a function")
   if (args.signal !== undefined && !(args.signal instanceof AbortSignal)) throw new WorkflowDefinitionError("Workflow signal must be an AbortSignal")
 }
