@@ -1,6 +1,6 @@
 import type { NewTemporalRevision, TemporalHistoryStore, TemporalResource, TemporalRevision, TemporalRevisionPage, TemporalSnapshot } from "core/temporal"
 import { validateTemporalRevision, validateTemporalSnapshot } from "core/temporal"
-interface MySqlResult { insertId?: number }
+import { ConflictError } from "core/domain"
 export interface MySqlTemporalConnection { query(sql: string, values?: unknown[]): Promise<[unknown, unknown]>; beginTransaction?(): Promise<void>; commit?(): Promise<void>; rollback?(): Promise<void>; release?(): void }
 export interface MySqlTemporalPool extends MySqlTemporalConnection { getConnection(): Promise<MySqlTemporalConnection> }
 const rows = (value: unknown): Record<string, unknown>[] => value as Record<string, unknown>[]
@@ -12,9 +12,19 @@ export class DrizzleMySqlTemporalHistoryStore<T extends Readonly<Record<string, 
   async append(value: NewTemporalRevision<T>): Promise<TemporalRevision<T>> {
     const input = validateTemporalRevision({ ...value, revision: 1 })
     return this.session(async connection => {
-      const [result] = await connection.query("INSERT INTO temporal_heads(scope_id,entity_type,entity_id,revision,occurred_at,kind) VALUES(?,?,?,LAST_INSERT_ID(1),?,?) ON DUPLICATE KEY UPDATE revision=IF(occurred_at<=VALUES(occurred_at) AND ((kind='deleted' AND VALUES(kind)='restored') OR (kind<>'deleted' AND VALUES(kind) IN ('updated','deleted'))),LAST_INSERT_ID(revision+1),0),occurred_at=VALUES(occurred_at),kind=VALUES(kind)", [input.scopeId, input.entityType, input.entityId, input.occurredAt, input.kind])
-      const assigned = Number((result as MySqlResult).insertId)
-      if (!Number.isSafeInteger(assigned) || assigned < 1) throw new Error("MySQL temporal revision allocation failed")
+      // MySQL evaluates CHECK constraints on the proposed row before ON DUPLICATE
+      // KEY UPDATE, so a single upsert cannot advance a head. Advance an existing
+      // head with a guarded UPDATE, and insert a head only for "created".
+      const [advanced] = await connection.query("UPDATE temporal_heads SET revision=LAST_INSERT_ID(revision+1),occurred_at=?,kind=? WHERE scope_id=? AND entity_type=? AND entity_id=? AND occurred_at<=? AND ((kind='deleted' AND ?='restored') OR (kind<>'deleted' AND ? IN ('updated','deleted')))", [input.occurredAt, input.kind, input.scopeId, input.entityType, input.entityId, input.occurredAt, input.kind, input.kind])
+      let assigned = 0
+      if (Number((advanced as { affectedRows?: number }).affectedRows) === 1) {
+        const [selected] = await connection.query("SELECT LAST_INSERT_ID() AS revision")
+        assigned = Number(rows(selected)[0]?.revision)
+      } else if (input.kind === "created") {
+        const [created] = await connection.query("INSERT IGNORE INTO temporal_heads(scope_id,entity_type,entity_id,revision,occurred_at,kind) VALUES(?,?,?,1,?,'created')", [input.scopeId, input.entityType, input.entityId, input.occurredAt])
+        if (Number((created as { affectedRows?: number }).affectedRows) === 1) assigned = 1
+      }
+      if (!Number.isSafeInteger(assigned) || assigned < 1) throw new ConflictError("Temporal revision rejected: not chronological, not a valid lifecycle transition, or the entity already exists")
       await connection.query("INSERT INTO temporal_revisions(scope_id,entity_type,entity_id,revision,occurred_at,kind,state,entity_version,event_id,audit_id) VALUES(?,?,?,?,?,?,?,?,?,?)", [input.scopeId, input.entityType, input.entityId, assigned, input.occurredAt, input.kind, input.state === null ? null : JSON.stringify(input.state), input.entityVersion ?? null, input.eventId ?? null, input.auditId ?? null])
       return validateTemporalRevision({ ...input, revision: assigned })
     })

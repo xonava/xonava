@@ -28,16 +28,57 @@ export type DrizzleColumnMap = Record<string, AnyColumn>
 
 /**
  * Text semantics differ by engine. The normative semantics are case-sensitive,
- * code-point ordered string comparison.
+ * Unicode code-point ordered string comparison (docs/spec/persistence/predicates.md).
  * - "sqlite": LIKE is ASCII case-insensitive, so substring operators compile to
- *   instr()/substr() with the default BINARY collation (code-point order).
- * - "generic": LIKE-based operators; the engine collation must be binary.
+ *   instr()/substr(); the default BINARY collation is code-point ordered.
+ * - "postgres": ordering comparisons on text use COLLATE "C" (UTF-8 byte order,
+ *   i.e. code-point order) so locale/ICU column collations cannot reorder
+ *   results. Equality and LIKE are already exact under deterministic collations,
+ *   so equality indexes remain usable.
+ * - "mysql": default `_ci` collations ignore case even for `=`, so every text
+ *   comparison is made through utf8mb4_bin. When the schema declares binary
+ *   collations on every predicate column (verify with assertMySqlBinaryCollation),
+ *   set `mysqlBinaryCollation: true` to compare columns directly and keep index use.
+ * - "generic": plain operators; the engine collation must already be binary.
  */
-export type PredicateDialect = "generic" | "sqlite"
-export interface PredicateCompilerOptions { readonly dialect?: PredicateDialect }
+export type PredicateDialect = "generic" | "sqlite" | "postgres" | "mysql"
+export interface PredicateCompilerOptions {
+  readonly dialect?: PredicateDialect
+  /** MySQL only: every mapped text column already uses a binary collation. */
+  readonly mysqlBinaryCollation?: boolean
+}
+
+interface TextSemantics {
+  /** Expression used for equality, membership, and substring matching. */
+  readonly exact: (column: AnyColumn) => AnyColumn | SQL<unknown>
+  /** Expression used for ordering comparisons. */
+  readonly ordered: (column: AnyColumn) => AnyColumn | SQL<unknown>
+}
+
+function isTextColumn(column: AnyColumn): boolean {
+  return (column as { dataType?: unknown }).dataType === "string"
+}
+
+function textSemantics(options: PredicateCompilerOptions): TextSemantics {
+  const identity = (column: AnyColumn) => column
+  if (options.dialect === "postgres") return { exact: identity, ordered: (column) => isTextColumn(column) ? sql`(${column} COLLATE "C")` : column }
+  if (options.dialect === "mysql" && options.mysqlBinaryCollation !== true) {
+    const binary = (column: AnyColumn) => isTextColumn(column) ? sql`(CONVERT(${column} USING utf8mb4) COLLATE utf8mb4_bin)` : column
+    return { exact: binary, ordered: binary }
+  }
+  return { exact: identity, ordered: identity }
+}
 
 function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, "\\$&")
+}
+
+/**
+ * MySQL treats backslash as an escape inside string literals, so `ESCAPE '\'`
+ * is an unterminated literal there. MySQL uses `!` as the LIKE escape instead.
+ */
+function escapeLikeForMySql(value: string): string {
+  return value.replace(/[!%_]/g, "!$&")
 }
 
 function asArray(value: PredicateValue | undefined): PredicatePrimitive[] {
@@ -77,44 +118,52 @@ function sqliteTextMatch(column: AnyColumn, op: "contains" | "startsWith" | "end
   return sql`substr(${column}, -length(${needle})) = ${needle}`
 }
 
-function compileCondition(columnMap: DrizzleColumnMap, condition: PredicateCondition, dialect: PredicateDialect): SQL<unknown> {
+function compileCondition(columnMap: DrizzleColumnMap, condition: PredicateCondition, dialect: PredicateDialect, text: TextSemantics): SQL<unknown> {
   const column = requireColumn(columnMap, condition.field)
+  // Text expressions are SQL wrappers; drizzle binds the compared value as a plain
+  // parameter for them. Non-text columns stay columns so their encoders apply.
+  const exact = text.exact(column) as AnyColumn
+  const ordered = text.ordered(column) as AnyColumn
+  const like = (pattern: (escape: (value: string) => string) => string): SQL<unknown> =>
+    dialect === "mysql"
+      ? sql`${exact} LIKE ${pattern(escapeLikeForMySql)} ESCAPE '!'`
+      : sql`${exact} LIKE ${pattern(escapeLike)} ESCAPE '\\'`
 
   switch (condition.op) {
     case "eq":
-      return condition.value === null ? isNull(column) : eq(column, requireScalarValue(condition) as never)
+      return condition.value === null ? isNull(column) : eq(exact, requireScalarValue(condition) as never)
     case "neq":
-      return condition.value === null ? isNotNull(column) : ne(column, requireScalarValue(condition) as never)
+      return condition.value === null ? isNotNull(column) : ne(exact, requireScalarValue(condition) as never)
     case "contains": {
       const value = requireScalarValue(condition)
       if (typeof value !== "string") throw new Error(`Predicate operator contains requires a string value`)
       if (dialect === "sqlite") return sqliteTextMatch(column, "contains", value)
-      return sql`${column} LIKE ${`%${escapeLike(value)}%`} ESCAPE '\\'`
+      return like((escape) => `%${escape(value)}%`)
     }
     case "startsWith": {
       const value = requireScalarValue(condition)
       if (typeof value !== "string") throw new Error(`Predicate operator startsWith requires a string value`)
       if (dialect === "sqlite") return sqliteTextMatch(column, "startsWith", value)
-      return sql`${column} LIKE ${`${escapeLike(value)}%`} ESCAPE '\\'`
+      return like((escape) => `${escape(value)}%`)
     }
     case "endsWith": {
       const value = requireScalarValue(condition)
       if (typeof value !== "string") throw new Error(`Predicate operator endsWith requires a string value`)
       if (dialect === "sqlite") return sqliteTextMatch(column, "endsWith", value)
-      return sql`${column} LIKE ${`%${escapeLike(value)}`} ESCAPE '\\'`
+      return like((escape) => `%${escape(value)}`)
     }
     case "isEmpty":
-      return or(isNull(column), eq(column, "")) ?? sql`1 = 0`
+      return or(isNull(column), eq(exact, "")) ?? sql`1 = 0`
     case "isNotEmpty":
-      return and(isNotNull(column), ne(column, "")) ?? sql`1 = 0`
+      return and(isNotNull(column), ne(exact, "")) ?? sql`1 = 0`
     case "gt":
-      return gt(column, requireScalarValue(condition) as never)
+      return gt(ordered, requireScalarValue(condition) as never)
     case "lt":
-      return lt(column, requireScalarValue(condition) as never)
+      return lt(ordered, requireScalarValue(condition) as never)
     case "gte":
-      return gte(column, requireScalarValue(condition) as never)
+      return gte(ordered, requireScalarValue(condition) as never)
     case "lte":
-      return lte(column, requireScalarValue(condition) as never)
+      return lte(ordered, requireScalarValue(condition) as never)
     case "isTrue":
       return eq(column, true)
     case "isFalse":
@@ -126,7 +175,7 @@ function compileCondition(columnMap: DrizzleColumnMap, condition: PredicateCondi
     case "in": {
       if (!Array.isArray(condition.value)) throw new Error("Predicate operator in requires a value list")
       const values = asArray(condition.value).filter((value) => value !== null)
-      return values.length > 0 ? inArray(column, values as never[]) : sql`1 = 0`
+      return values.length > 0 ? inArray(exact, values as never[]) : sql`1 = 0`
     }
     case "includesAny":
     case "includesAll":
@@ -135,10 +184,10 @@ function compileCondition(columnMap: DrizzleColumnMap, condition: PredicateCondi
       const range = asRange(condition.value)
       if (!range) throw new Error("Predicate operator between requires a range value")
       const clauses: SQL<unknown>[] = []
-      if (range.from !== undefined) clauses.push(gte(column, range.from as never))
-      if (range.to !== undefined) clauses.push(lte(column, range.to as never))
+      if (range.from !== undefined) clauses.push(gte(ordered, range.from as never))
+      if (range.to !== undefined) clauses.push(lte(ordered, range.to as never))
       if (clauses.length === 0) return sql`1 = 0`
-       return clauses.length === 1 ? clauses[0]! : and(...clauses) ?? sql`1 = 0`
+      return clauses.length === 1 ? clauses[0]! : and(...clauses) ?? sql`1 = 0`
     }
     default:
       throw new Error(`Unsupported predicate operator: ${String(condition.op)}`)
@@ -153,9 +202,11 @@ function compileCondition(columnMap: DrizzleColumnMap, condition: PredicateCondi
  */
 export class DrizzlePredicateCompiler implements PredicateCompiler<SQL<unknown>> {
   private readonly dialect: PredicateDialect
+  private readonly text: TextSemantics
 
   constructor(private readonly columnMap: DrizzleColumnMap, options: PredicateCompilerOptions = {}) {
     this.dialect = options.dialect ?? "generic"
+    this.text = textSemantics(options)
   }
 
   compile(filter: PredicateNode): SQL<unknown> {
@@ -169,7 +220,7 @@ export class DrizzlePredicateCompiler implements PredicateCompiler<SQL<unknown>>
       case "literal":
         return filter.value ? sql`1 = 1` : sql`1 = 0`
       case "condition":
-        return compileCondition(this.columnMap, filter, this.dialect)
+        return compileCondition(this.columnMap, filter, this.dialect, this.text)
       case "and": {
         if (filter.filters.length === 0) return sql`1 = 1`
         const compiled = filter.filters.map((child) => this.compileNode(child))

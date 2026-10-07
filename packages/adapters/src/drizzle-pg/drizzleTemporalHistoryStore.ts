@@ -1,5 +1,6 @@
 import type { NewTemporalRevision, TemporalHistoryStore, TemporalResource, TemporalRevision, TemporalRevisionPage, TemporalSnapshot } from "core/temporal"
 import { validateTemporalRevision, validateTemporalSnapshot } from "core/temporal"
+import { ConflictError } from "core/domain"
 
 interface PgResult { rows: Record<string, unknown>[] }
 export interface PgTemporalClient { query(text: string, values?: unknown[]): Promise<PgResult> }
@@ -12,8 +13,14 @@ export class DrizzlePgTemporalHistoryStore<T extends Readonly<Record<string, unk
   constructor(private readonly db: PgTemporalClient, private readonly schema = "framework_test") { if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(schema)) throw new Error("Unsafe temporal schema") }
   async append(value: NewTemporalRevision<T>): Promise<TemporalRevision<T>> {
     const input = validateTemporalRevision({ ...value, revision: 1 })
-    const result = await this.db.query(`WITH next AS (INSERT INTO ${this.schema}.temporal_heads(scope_id,entity_type,entity_id,revision,occurred_at,kind) VALUES($1,$2,$3,1,$4,$5) ON CONFLICT(scope_id,entity_type,entity_id) DO UPDATE SET revision=${this.schema}.temporal_heads.revision+1,occurred_at=EXCLUDED.occurred_at,kind=EXCLUDED.kind WHERE ${this.schema}.temporal_heads.occurred_at<=EXCLUDED.occurred_at AND ((${this.schema}.temporal_heads.kind='deleted' AND EXCLUDED.kind='restored') OR (${this.schema}.temporal_heads.kind<>'deleted' AND EXCLUDED.kind IN ('updated','deleted'))) RETURNING revision) INSERT INTO ${this.schema}.temporal_revisions(scope_id,entity_type,entity_id,revision,occurred_at,kind,state,entity_version,event_id,audit_id) SELECT $1,$2,$3,next.revision,$4,$5,$6::jsonb,$7,$8,$9 FROM next RETURNING *`, [input.scopeId, input.entityType, input.entityId, input.occurredAt, input.kind, input.state === null ? null : JSON.stringify(input.state), input.entityVersion ?? null, input.eventId ?? null, input.auditId ?? null])
-    if (!result.rows[0]) throw new Error("PostgreSQL temporal append returned no revision")
+    // PostgreSQL evaluates CHECK constraints on the proposed row before it
+    // resolves ON CONFLICT, so an upsert that proposes revision 1 with a
+    // non-"created" kind always fails. Advance an existing head with a guarded
+    // UPDATE (row-locked, re-checked after the lock) and insert a new head only
+    // for "created". Anything else returns no row and is rejected below.
+    const h = `${this.schema}.temporal_heads`
+    const result = await this.db.query(`WITH advanced AS (UPDATE ${h} SET revision=revision+1,occurred_at=$4,kind=$5::text WHERE scope_id=$1 AND entity_type=$2 AND entity_id=$3 AND occurred_at<=$4 AND ((kind='deleted' AND $5::text='restored') OR (kind<>'deleted' AND $5::text IN ('updated','deleted'))) RETURNING revision), created AS (INSERT INTO ${h}(scope_id,entity_type,entity_id,revision,occurred_at,kind) SELECT $1,$2,$3,1,$4,$5::text WHERE $5::text='created' AND NOT EXISTS (SELECT 1 FROM advanced) ON CONFLICT(scope_id,entity_type,entity_id) DO NOTHING RETURNING revision), next AS (SELECT revision FROM advanced UNION ALL SELECT revision FROM created) INSERT INTO ${this.schema}.temporal_revisions(scope_id,entity_type,entity_id,revision,occurred_at,kind,state,entity_version,event_id,audit_id) SELECT $1,$2,$3,next.revision,$4,$5::text,$6::jsonb,$7,$8,$9 FROM next RETURNING *`, [input.scopeId, input.entityType, input.entityId, input.occurredAt, input.kind, input.state === null ? null : JSON.stringify(input.state), input.entityVersion ?? null, input.eventId ?? null, input.auditId ?? null])
+    if (!result.rows[0]) throw new ConflictError("Temporal revision rejected: not chronological, not a valid lifecycle transition, or the entity already exists")
     return decode<T>(result.rows[0])
   }
   async saveSnapshot(value: TemporalSnapshot<T>): Promise<void> { const s = validateTemporalSnapshot(value); await this.db.query(`INSERT INTO ${this.schema}.temporal_snapshots(scope_id,entity_type,entity_id,revision,occurred_at,state) VALUES($1,$2,$3,$4,$5,$6::jsonb) ON CONFLICT DO NOTHING`, [s.scopeId, s.entityType, s.entityId, s.revision, s.occurredAt, s.state === null ? null : JSON.stringify(s.state)]) }

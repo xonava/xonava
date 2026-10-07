@@ -20,11 +20,11 @@ export type MySqlDatabaseLike=MySql2Database<any>
 type Row=Record<string,unknown>
 const guard=(filter:PredicateNode|undefined,operation:string)=>{if(!filter)throw new ValidationError(`${operation} requires a predicate`);if(filter.kind==="literal"&&filter.value)throw new ConfigurationError(`All-row ${operation} is forbidden`)}
 
-export function createDrizzleMySqlRepository<T extends Row,TId=string>(args:{db:MySqlDatabaseLike;table:AnyMySqlTable;entity:VersionedEntityDescriptor<T>;columnMap:DrizzleColumnMap;maxPageSize?:number}):VersionedRepository<T,TId>
-export function createDrizzleMySqlRepository<T extends Row,TId=string>(args:{db:MySqlDatabaseLike;table:AnyMySqlTable;entity:UnversionedEntityDescriptor<T>;columnMap:DrizzleColumnMap;maxPageSize?:number}):UnversionedRepository<T,TId>
-export function createDrizzleMySqlRepository<T extends Row,TId=string>(args:{db:MySqlDatabaseLike;table:AnyMySqlTable;entity:EntityDescriptor<T>;columnMap:DrizzleColumnMap;maxPageSize?:number}):InternalDynamicRepository<T,TId>{
+export function createDrizzleMySqlRepository<T extends Row,TId=string>(args:{db:MySqlDatabaseLike;table:AnyMySqlTable;entity:VersionedEntityDescriptor<T>;columnMap:DrizzleColumnMap;maxPageSize?:number;mysqlBinaryCollation?:boolean}):VersionedRepository<T,TId>
+export function createDrizzleMySqlRepository<T extends Row,TId=string>(args:{db:MySqlDatabaseLike;table:AnyMySqlTable;entity:UnversionedEntityDescriptor<T>;columnMap:DrizzleColumnMap;maxPageSize?:number;mysqlBinaryCollation?:boolean}):UnversionedRepository<T,TId>
+export function createDrizzleMySqlRepository<T extends Row,TId=string>(args:{db:MySqlDatabaseLike;table:AnyMySqlTable;entity:EntityDescriptor<T>;columnMap:DrizzleColumnMap;maxPageSize?:number;mysqlBinaryCollation?:boolean}):InternalDynamicRepository<T,TId>{
   const primaryKey=args.entity.primaryKey??("id" as keyof T&string);const primaryColumn=args.columnMap[primaryKey];if(!primaryColumn)throw new ConfigurationError(`Entity ${args.entity.name} is missing its primary-key mapping`)
-  const versionField=args.entity.versionField;const versionColumn=requireMappedVersionColumn(args.entity,versionField,args.columnMap);const compiler=new DrizzlePredicateCompiler(args.columnMap);const maxPageSize=args.maxPageSize??DEFAULT_MAX_PAGE_SIZE
+  const versionField=args.entity.versionField;const versionColumn=requireMappedVersionColumn(args.entity,versionField,args.columnMap);const compiler=new DrizzlePredicateCompiler(args.columnMap,{dialect:"mysql",...(args.mysqlBinaryCollation!==undefined?{mysqlBinaryCollation:args.mysqlBinaryCollation}:{})});const maxPageSize=args.maxPageSize??DEFAULT_MAX_PAGE_SIZE
   const first=async(where:SQL<unknown>|undefined):Promise<T|null>=>((await args.db.select().from(args.table).where(where).limit(1))[0] as T|undefined)??null
   const repository:InternalDynamicRepository<T,TId>={
     findById:id=>first(eq(primaryColumn,id as never)),
