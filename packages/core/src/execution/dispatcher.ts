@@ -17,7 +17,7 @@ import { InvalidJobPayloadError, MalformedJobPayloadError } from "./types"
 import { assertJobScopeMatches } from "./types"
 import { createExecutionContext } from "./executionContext"
 import { ValidationError } from "../domain"
-import { createNoopTelemetry, emitTelemetry, explicitlySafeTelemetryAttributes, type TelemetryPort } from "../telemetry/telemetry"
+import { createTelemetryLogger, type TelemetryLogger, type TelemetryPort } from "../telemetry/telemetry"
 
 export const MAX_STORED_JOB_PAYLOAD_BYTES = 1024 * 1024
 
@@ -41,12 +41,7 @@ export interface DispatchError {
 
 export type DispatcherClock = ExecutionClock
 
-interface DispatcherLogger {
-  info(message: string, data?: Record<string, unknown>): void
-  warn(message: string, data?: Record<string, unknown>): void
-  error(message: string, data?: Record<string, unknown>): void
-  debug(message: string, data?: Record<string, unknown>): void
-}
+type DispatcherLogger = TelemetryLogger
 
 export interface DispatcherConfig {
   store: JobStore
@@ -72,18 +67,6 @@ const systemClock: DispatcherClock = {
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   setTimeout: (callback, ms) => setTimeout(callback, ms),
   clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
-}
-
-function createDispatcherTelemetry(telemetry: TelemetryPort): DispatcherLogger {
-  const write = (severity: "debug" | "info" | "warn" | "error", message: string): void => {
-    emitTelemetry(telemetry, { name: "execution.dispatch", severity, timestamp: new Date(), attributes: explicitlySafeTelemetryAttributes({ message }) })
-  }
-  return {
-    debug: (message) => write("debug", message),
-    info: (message) => write("info", message),
-    warn: (message) => write("warn", message),
-    error: (message) => write("error", message),
-  }
 }
 
 export function decodeJobPayload<TPayload = Record<string, unknown>>(payload: string, decode: (input: unknown) => TPayload = (input) => input as TPayload): TPayload {
@@ -175,7 +158,7 @@ export async function dispatchDueJobs(config: DispatcherConfig): Promise<Dispatc
   validateDispatcherConfig(config)
   const clock = config.clock ?? systemClock
   const result: DispatchResult = { claimed: 0, succeeded: 0, failed: 0, retried: 0, deadLettered: 0, leaseLost: 0, stalled: 0, errors: [] }
-  const log = createDispatcherTelemetry(config.telemetry ?? createNoopTelemetry())
+  const log = createTelemetryLogger(config.telemetry, "execution.dispatch", () => clock.now())
   const jobs = await config.store.claimDue({
     limit: config.claimLimit,
     workerId: config.workerId,

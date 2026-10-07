@@ -4,7 +4,7 @@ import type { FencedScheduleClaim, ScheduleStore } from "./scheduleStore"
 import { computeScheduleOccurrences, shouldFireSchedule, calculateNextRun } from "./scheduleCalculator"
 import { ValidationError } from "../domain"
 import { isScheduleEffective } from "./scheduleLifecycle"
-import { createNoopTelemetry, emitTelemetry, explicitlySafeTelemetryAttributes, type TelemetryPort } from "../telemetry/telemetry"
+import { createTelemetryLogger, type TelemetryPort } from "../telemetry/telemetry"
 
 export interface MaterializeResult {
   schedulesProcessed: number
@@ -52,12 +52,8 @@ export async function materializeDueSchedules(args: {
   calendarExclusionProvider?: { isExcluded(key: string, instant: Date): Promise<boolean> }
 }): Promise<MaterializeResult> {
   const result: MaterializeResult = { schedulesProcessed: 0, jobsEnqueued: 0, errors: [] }
-  const telemetry = args.telemetry ?? createNoopTelemetry()
-  const log = {
-    info: (message: string, _data?: Record<string, unknown>) => emitTelemetry(telemetry, { name: "execution.schedule", severity: "info", timestamp: new Date(), attributes: explicitlySafeTelemetryAttributes({ message }) }),
-    error: (message: string, _data?: Record<string, unknown>) => emitTelemetry(telemetry, { name: "execution.schedule", severity: "error", timestamp: new Date(), attributes: explicitlySafeTelemetryAttributes({ message }) }),
-  }
   const now = args.now ?? new Date()
+  const log = createTelemetryLogger(args.telemetry, "execution.schedule", () => new Date())
   const leaseDurationMs = args.leaseDurationMs ?? 30_000
   if (!Number.isFinite(leaseDurationMs) || leaseDurationMs <= 0) throw new ValidationError("Schedule lease duration must be finite and positive.")
 
