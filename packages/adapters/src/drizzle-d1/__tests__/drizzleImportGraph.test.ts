@@ -33,6 +33,6 @@ describe("drizzle-d1 import graph", () => {
       expect(barrel).toContain(`export * from "./${moduleName}"`)
     }
     expect(barrel).toContain('export type { DrizzleColumnMap } from "../drizzle-shared/predicateCompiler"')
-    expect(barrel).toContain('export { compileDrizzlePredicate } from "../drizzle-shared/predicateCompiler"')
+    expect(barrel).toContain('export { compileDrizzlePredicate } from "./sqlitePredicate"')
   })
 })
