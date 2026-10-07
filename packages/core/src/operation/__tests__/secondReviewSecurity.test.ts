@@ -55,14 +55,14 @@ describe("S2: conditional updates cannot move a row out of the mandatory predica
     await expect(constrained.updateManyWhere!(Predicate.eq("id", "1"), { region: "eu" } as never)).resolves.toBe(1)
     // region "us" leaves the OR depending on tenantId, which the WHERE must now require.
     await constrained.updateManyWhere!(Predicate.eq("id", "1"), { region: "us" } as never)
-    const where = JSON.stringify(repository.updateManyWhere.mock.calls.at(-1)![0])
+    const where = JSON.stringify((repository.updateManyWhere.mock.calls.at(-1) as unknown[])[0])
     expect(where).toContain('"field":"tenantId","op":"eq","value":"x"')
   })
 
   it("allows an owner to reassign while an OR on an unwritten field still holds", async () => {
     const { repository, constrained } = repo(Predicate.or(Predicate.eq("ownerId", "u1"), Predicate.eq("assigneeId", "u1")))
     await expect(constrained.updateOneWhere!(Predicate.eq("id", "1"), { status: "x" } as never)).resolves.toEqual({ updatedCount: 1 })
-    expect(JSON.stringify(repository.updateOneWhere.mock.calls.at(-1)![0])).toContain('"ownerId"')
+    expect(JSON.stringify((repository.updateOneWhere.mock.calls.at(-1) as unknown[])[0])).toContain('"ownerId"')
   })
 
   it("rejects writing NULL into a compared field", async () => {

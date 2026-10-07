@@ -44,7 +44,7 @@ describe("circuit breaker admission generations (C9)", () => {
     const controller = new AbortController()
     const run = withResilience(policyWithBreaker, { kind: "read" }, (signal) => new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason))), { breaker, signal: controller.signal })
     controller.abort(new Error("caller left"))
-    await expect(run).rejects.toThrow("caller left")
+    await expect(run).rejects.toMatchObject({ code: "CANCELLED", cause: { message: "caller left" } })
     expect(breaker.state).toMatchObject({ status: "closed", consecutiveFailures: 0 })
 
     breaker.admit()("failure"); breaker.admit()("failure")
@@ -53,7 +53,7 @@ describe("circuit breaker admission generations (C9)", () => {
     const probe = withResilience(policyWithBreaker, { kind: "read" }, (signal) => new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason))), { breaker, signal: probeController.signal })
     expect(breaker.state).toMatchObject({ status: "half_open", trialInFlight: true })
     probeController.abort(new Error("caller left"))
-    await expect(probe).rejects.toThrow("caller left")
+    await expect(probe).rejects.toMatchObject({ code: "CANCELLED", cause: { message: "caller left" } })
     expect(breaker.state).toMatchObject({ status: "half_open", trialInFlight: false })
     breaker.admit()("success")
     expect(breaker.state.status).toBe("closed")

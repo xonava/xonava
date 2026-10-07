@@ -1,4 +1,5 @@
 import { CancelledError, ConfigurationError, FrameworkCoreError, StaleClaimError, TimeoutError } from "../../domain/errors"
+import { abortSignalError } from "../../resilience/abortSignal"
 import { canRetryAfter, computeBackoffDelayMs, DEFAULT_BACKOFF_POLICY, type BackoffPolicy } from "../../resilience/backoff"
 import type { EventEnvelope } from "../eventEnvelope"
 import type { ConsumerDefinition } from "../consumerDefinition"
@@ -42,6 +43,8 @@ async function withDeadline<T>(parent: AbortSignal | undefined, timeoutMs: numbe
   const controller = new AbortController()
   const onParentAbort = (): void => controller.abort(parent?.reason ?? new CancelledError())
   parent?.addEventListener("abort", onParentAbort, { once: true })
+  // Aborted before we subscribed (e.g. shutdown during claim): `once` listeners never fire for a past abort.
+  if (parent?.aborted) controller.abort(parent.reason ?? new CancelledError())
   let timer: ReturnType<typeof setTimeout> | undefined
   const deadline = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => { const error = new TimeoutError("Delivery work deadline exceeded"); controller.abort(error); reject(error) }, timeoutMs)
@@ -49,7 +52,9 @@ async function withDeadline<T>(parent: AbortSignal | undefined, timeoutMs: numbe
   })
   void deadline.catch(() => undefined)
   try {
-    return await Promise.race([Promise.resolve().then(() => work(controller.signal)), deadline])
+    // Never start work (publish / handler) once the run is already aborted.
+    const start = (): Promise<T> => { if (controller.signal.aborted) throw abortSignalError(controller.signal); return work(controller.signal) }
+    return await Promise.race([Promise.resolve().then(start), deadline])
   } finally {
     if (timer !== undefined) clearTimeout(timer)
     parent?.removeEventListener("abort", onParentAbort)
