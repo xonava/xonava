@@ -1,3 +1,4 @@
+import type { TimerClock } from "../kernel/clock"
 import type { JobStore, NewJob, CronTimezoneAdapter, JobRequester, JobStatus, PriorScheduleExecutionStatus } from "./types"
 import { scheduleCorrelationId } from "./types"
 import type { FencedScheduleClaim, ScheduleStore } from "./scheduleStore"
@@ -13,12 +14,8 @@ export interface MaterializeResult {
 }
 
 /** Clock/timer boundary used by schedule lease renewal. Timer handles are opaque. */
-export interface ScheduleRenewalClock {
-  /** Returns a fresh wall-clock value for each lease-renewal request. */
-  now(): Date
-  setTimeout(callback: () => void, ms: number): unknown
-  clearTimeout(handle: unknown): void
-}
+/** Lease-renewal clock: the canonical core TimerClock; `now()` must be fresh per call. */
+export type ScheduleRenewalClock = TimerClock
 
 const systemScheduleRenewalClock: ScheduleRenewalClock = {
   now: () => new Date(),

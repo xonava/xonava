@@ -1,6 +1,7 @@
 import { ConfigurationError } from "../domain"
 
-export interface Clock { now(): Date }
+import type { Clock } from "../kernel/clock"
+export type { Clock } from "../kernel/clock"
 export interface ExecutionDeadline { readonly expiresAt: Date }
 
 export function assertExecutionActive(signal: AbortSignal, deadline: ExecutionDeadline, clock: Clock): void {

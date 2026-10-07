@@ -1,3 +1,4 @@
+import type { Clock } from "../kernel/clock"
 import { TenantScopeViolationError } from "../domain/errors"
 import { validateExecutionScope, type ExecutionScope } from "../domain/executionScope"
 
@@ -458,7 +459,8 @@ export function requesterJobScope(requester: JobRequester): JobScope {
   return requester.scope
 }
 
-export interface ExecutionClock {
+/** Job execution clock: the canonical core Clock plus sleep and optional timers. */
+export interface ExecutionClock extends Clock {
   now(): Date
   sleep(ms: number): Promise<void>
   setTimeout?(callback: () => void, ms: number): unknown
