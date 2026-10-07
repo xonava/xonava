@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { Predicate } from "../../domain/predicate"
-import { ValidationError } from "../../domain/errors"
+import { CancelledError, ConfigurationError, TimeoutError, ValidationError } from "../../domain/errors"
 import { assertQueryBudget, validateQueryPlan, type QueryBudget } from "../queryBudget"
 import { validateSearchRequest, validateSearchResult, type SearchCapability, type SearchRequest } from "../search"
 
@@ -63,9 +63,43 @@ describe("search request and provider-result coverage", () => {
       { hits: [{ ...hit, fields: [] }], consistency: "eventual" },
       { hits: [{ ...hit, fields: { secret: true } }], consistency: "eventual" },
     ]
-    for (const value of invalid) expect(() => validateSearchResult(capability, request, value as never)).toThrow(ValidationError)
+    for (const value of invalid) expect(() => validateSearchResult(capability, request, value as never)).toThrow(ConfigurationError)
     const result = validateSearchResult(capability, request, { hits: [hit], consistency: "eventual", total: 1 })
     expect(result).toEqual({ hits: [hit], consistency: "eventual", total: 1 })
     expect(Object.isFrozen(result.hits[0]?.fields.name)).toBe(true)
+  })
+})
+
+describe("search error contract", () => {
+  it("reports cancellation as CancelledError carrying the abort reason", () => {
+    const controller = new AbortController(); const reason = new Error("client went away"); controller.abort(reason)
+    let thrown: unknown
+    try { validateSearchRequest(capability, { ...request, signal: controller.signal }) } catch (error) { thrown = error }
+    expect(thrown).toBeInstanceOf(CancelledError)
+    expect((thrown as Error).cause).toBe(reason)
+  })
+
+  it("reports an expired deadline as TimeoutError using the injected clock", () => {
+    expect(() => validateSearchRequest(capability, { ...request, deadline: 1_000 }, 1_000)).toThrow(TimeoutError)
+    expect(() => validateSearchRequest(capability, { ...request, deadline: 1_000 }, 999)).not.toThrow()
+    expect(() => validateSearchRequest(capability, { ...request, deadline: 1_000 }, { now: () => new Date(2_000) })).toThrow(TimeoutError)
+    expect(() => validateSearchRequest(capability, { ...request, deadline: 1_000 }, { now: () => new Date(500) })).not.toThrow()
+    expect(() => validateSearchRequest(capability, { ...request, deadline: Number.NaN }, 0)).toThrow(ValidationError)
+    expect(() => validateSearchRequest(capability, { ...request, deadline: 1_000 }, Number.NaN)).toThrow(ConfigurationError)
+  })
+
+  it("does not re-check cancellation or deadline when validating a provider result", () => {
+    const controller = new AbortController(); controller.abort()
+    const late = { ...request, signal: controller.signal, deadline: Date.now() - 1 }
+    expect(validateSearchResult(capability, late, { hits: [], consistency: "eventual" })).toEqual({ hits: [], consistency: "eventual" })
+  })
+
+  it("reports provider contract violations as ConfigurationError", () => {
+    const hit = { id: "1", score: 1, fields: { name: "A" } }
+    expect(() => validateSearchResult(capability, request, { hits: [hit, { ...hit, id: "2" }, { ...hit, id: "3" }], consistency: "eventual" })).toThrow(ConfigurationError)
+    expect(() => validateSearchResult(capability, request, { hits: [], consistency: "strong" })).toThrow(ConfigurationError)
+    expect(() => validateSearchResult(capability, request, { hits: [hit], consistency: "eventual", total: 0 })).toThrow(ConfigurationError)
+    expect(() => validateSearchResult(capability, request, { hits: [{ ...hit, score: Number.NaN }], consistency: "eventual" })).toThrow(ConfigurationError)
+    expect(() => validateSearchResult(capability, request, { hits: [{ ...hit, fields: { secret: true } }], consistency: "eventual" })).toThrow(ConfigurationError)
   })
 })
