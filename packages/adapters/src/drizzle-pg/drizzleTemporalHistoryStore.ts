@@ -1,3 +1,4 @@
+import { pgSchemaName } from "./pgSchemaName"
 import type { NewTemporalRevision, TemporalHistoryStore, TemporalResource, TemporalRevision, TemporalRevisionPage, TemporalSnapshot } from "core/temporal"
 import { validateTemporalRevision, validateTemporalSnapshot } from "core/temporal"
 import { ConflictError } from "core/domain"
@@ -10,7 +11,7 @@ function decode<T extends Readonly<Record<string, unknown>>>(row: Record<string,
 }
 
 export class DrizzlePgTemporalHistoryStore<T extends Readonly<Record<string, unknown>> = Readonly<Record<string, unknown>>> implements TemporalHistoryStore<T> {
-  constructor(private readonly db: PgTemporalClient, private readonly schema = "framework_test") { if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(schema)) throw new Error("Unsafe temporal schema") }
+  constructor(private readonly db: PgTemporalClient, private readonly schema = "public") { pgSchemaName(schema) }
   async append(value: NewTemporalRevision<T>): Promise<TemporalRevision<T>> {
     const input = validateTemporalRevision({ ...value, revision: 1 })
     // PostgreSQL evaluates CHECK constraints on the proposed row before it
@@ -28,4 +29,10 @@ export class DrizzlePgTemporalHistoryStore<T extends Readonly<Record<string, unk
   async revisions(resource: TemporalResource, options: { afterRevision: number; asOf: Date; limit: number }): Promise<TemporalRevisionPage<T>> { const result = await this.db.query(`SELECT * FROM ${this.schema}.temporal_revisions WHERE scope_id=$1 AND entity_type=$2 AND entity_id=$3 AND revision>$4 AND occurred_at<=$5 ORDER BY revision LIMIT $6`, [resource.scopeId, resource.entityType, resource.entityId, options.afterRevision, options.asOf, options.limit + 1]); return { items: result.rows.slice(0, options.limit).map(decode<T>), hasMore: result.rows.length > options.limit } }
 }
 
-export const POSTGRES_TEMPORAL_SCHEMA_SQL = `CREATE TABLE IF NOT EXISTS framework_test.temporal_heads(scope_id text NOT NULL,entity_type text NOT NULL,entity_id text NOT NULL,revision bigint NOT NULL CHECK(revision>0),occurred_at timestamptz NOT NULL,kind text NOT NULL CHECK(kind IN ('created','updated','deleted','restored')),CHECK(revision>1 OR kind='created'),PRIMARY KEY(scope_id,entity_type,entity_id));CREATE TABLE IF NOT EXISTS framework_test.temporal_revisions(scope_id text NOT NULL,entity_type text NOT NULL,entity_id text NOT NULL,revision bigint NOT NULL CHECK(revision>0),occurred_at timestamptz NOT NULL,kind text NOT NULL CHECK(kind IN ('created','updated','deleted','restored')),state jsonb,entity_version bigint,event_id text,audit_id text,CHECK((kind='deleted' AND state IS NULL) OR (kind<>'deleted' AND state IS NOT NULL)),PRIMARY KEY(scope_id,entity_type,entity_id,revision));CREATE INDEX IF NOT EXISTS temporal_revisions_time_idx ON framework_test.temporal_revisions(scope_id,entity_type,entity_id,occurred_at,revision);CREATE TABLE IF NOT EXISTS framework_test.temporal_snapshots(scope_id text NOT NULL,entity_type text NOT NULL,entity_id text NOT NULL,revision bigint NOT NULL CHECK(revision>=0),occurred_at timestamptz NOT NULL,state jsonb,PRIMARY KEY(scope_id,entity_type,entity_id,revision));`
+/** DDL for this store in the given schema. */
+export function postgresTemporalSchemaSql(schema = "public"): string {
+  pgSchemaName(schema)
+  return `CREATE TABLE IF NOT EXISTS ${schema}.temporal_heads(scope_id text NOT NULL,entity_type text NOT NULL,entity_id text NOT NULL,revision bigint NOT NULL CHECK(revision>0),occurred_at timestamptz NOT NULL,kind text NOT NULL CHECK(kind IN ('created','updated','deleted','restored')),CHECK(revision>1 OR kind='created'),PRIMARY KEY(scope_id,entity_type,entity_id));CREATE TABLE IF NOT EXISTS ${schema}.temporal_revisions(scope_id text NOT NULL,entity_type text NOT NULL,entity_id text NOT NULL,revision bigint NOT NULL CHECK(revision>0),occurred_at timestamptz NOT NULL,kind text NOT NULL CHECK(kind IN ('created','updated','deleted','restored')),state jsonb,entity_version bigint,event_id text,audit_id text,CHECK((kind='deleted' AND state IS NULL) OR (kind<>'deleted' AND state IS NOT NULL)),PRIMARY KEY(scope_id,entity_type,entity_id,revision));CREATE INDEX IF NOT EXISTS temporal_revisions_time_idx ON ${schema}.temporal_revisions(scope_id,entity_type,entity_id,occurred_at,revision);CREATE TABLE IF NOT EXISTS ${schema}.temporal_snapshots(scope_id text NOT NULL,entity_type text NOT NULL,entity_id text NOT NULL,revision bigint NOT NULL CHECK(revision>=0),occurred_at timestamptz NOT NULL,state jsonb,PRIMARY KEY(scope_id,entity_type,entity_id,revision));`
+}
+/** @deprecated use postgresTemporalSchemaSql(schema); kept for the test fixture schema. */
+export const POSTGRES_TEMPORAL_SCHEMA_SQL = postgresTemporalSchemaSql("framework_test")

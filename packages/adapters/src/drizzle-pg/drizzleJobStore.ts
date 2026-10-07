@@ -7,7 +7,7 @@ import type {
   RenewLeaseArgs,
   CompleteJobArgs,
   RetryJobArgs,
-  FailJobArgs,
+  FailJobArgs, ReleaseJobArgs,
   CancelJobArgs,
   GetJobByIdArgs,
   GetByCorrelationIdArgs,
@@ -338,6 +338,13 @@ export class DrizzleJobStore implements JobStore {
      if (!affected) return { applied: false, reason: "LEASE_LOST" }
        const history = await this.recordExecution(args.jobId, "retrying", args.attempt, args.workerId, args.error, now)
      return { applied: true, transitionToken: history.token }
+  }
+
+  /** Gives a live claim back without consuming the attempt counted at claim time. */
+  async release(args: ReleaseJobArgs): Promise<JobTransitionResult> {
+    const where = and(eq(this.jobs.id!, args.jobId), eq(this.jobs.leaseOwner!, args.workerId), eq(this.jobs.claimToken!, args.claimToken), eq(this.jobs.status!, "running"), gt(this.jobs.leaseExpiresAt!, sql`now()`))
+    const result = await this.db.update(this.jobsTable).set({ status: "retrying", attempts: sql`CASE WHEN attempts > 0 THEN attempts - 1 ELSE 0 END`, nextAttemptAt: args.nextAttemptAt, lastError: args.reason.slice(0, 512), leaseOwner: null, leaseExpiresAt: null, claimToken: null }).where(where)
+    return getAffectedRows(result) > 0 ? { applied: true } : { applied: false, reason: "LEASE_LOST" }
   }
 
   async markFailed(args: FailJobArgs): Promise<JobTransitionResult> {

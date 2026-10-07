@@ -7,7 +7,7 @@ import type { AnySQLiteTable } from "drizzle-orm/sqlite-core"
 import { and, eq } from "drizzle-orm"
 import { ConfigurationError } from "core/domain"
 import { getDrizzleSession, PLATFORM_IDEMPOTENCY_SCOPE } from "./drizzlePersistenceProvider"
-import { assertOutboxFingerprintMatches, assertOutboxProtectedFields, fingerprintOutboxRecord } from "../drizzle-shared/outbox"
+import { assertOutboxFingerprintMatches, assertOutboxProtectedFields, fingerprintOutboxRecord, outboxProvenanceColumn } from "../drizzle-shared/outbox"
 import { getAffectedRows } from "./d1Utils"
 import { validateD1AtomicOutboxColumns, type D1OutboxColumns } from "./d1OutboxSchema"
 
@@ -53,6 +53,7 @@ export class DrizzleOutboxSink implements OutboxSink {
       idempotencyScope: scope,
       idempotencyKey: record.idempotencyKey,
       eventFingerprint: fingerprint,
+      ...outboxProvenanceColumn(columns, record),
     })
     if (typeof (insertion as { onConflictDoNothing?: unknown }).onConflictDoNothing !== "function") {
       throw new ConfigurationError("D1 outbox requires Drizzle onConflictDoNothing support")

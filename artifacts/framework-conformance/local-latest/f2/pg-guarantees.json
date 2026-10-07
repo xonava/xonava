@@ -10,7 +10,7 @@
       "suite": "f2-pg-conformance",
       "assertions": 17,
       "sourceDigest": "2ae86053956446f9f340a26cfb84568300fbbaad582eb124b1ed3de6bfc633e7",
-      "recordedAt": "2026-10-07T06:20:37.020Z"
+      "recordedAt": "2026-10-07T06:32:13.937Z"
     },
     {
       "guaranteeId": "persistence.conditionalVersionedMutation",
@@ -19,7 +19,7 @@
       "suite": "f2-pg-conformance",
       "assertions": 17,
       "sourceDigest": "2ae86053956446f9f340a26cfb84568300fbbaad582eb124b1ed3de6bfc633e7",
-      "recordedAt": "2026-10-07T06:20:37.020Z"
+      "recordedAt": "2026-10-07T06:32:13.938Z"
     },
     {
       "guaranteeId": "persistence.conditionalAuthorizedMutation",
@@ -28,7 +28,7 @@
       "suite": "f2-pg-conformance",
       "assertions": 17,
       "sourceDigest": "2ae86053956446f9f340a26cfb84568300fbbaad582eb124b1ed3de6bfc633e7",
-      "recordedAt": "2026-10-07T06:20:37.020Z"
+      "recordedAt": "2026-10-07T06:32:13.938Z"
     },
     {
       "guaranteeId": "idempotency.atomicCommitReceipt",
@@ -37,7 +37,7 @@
       "suite": "f2-pg-conformance",
       "assertions": 17,
       "sourceDigest": "2ae86053956446f9f340a26cfb84568300fbbaad582eb124b1ed3de6bfc633e7",
-      "recordedAt": "2026-10-07T06:20:37.020Z"
+      "recordedAt": "2026-10-07T06:32:13.938Z"
     },
     {
       "guaranteeId": "audit.atomic",
@@ -46,7 +46,7 @@
       "suite": "f2-pg-conformance",
       "assertions": 17,
       "sourceDigest": "2ae86053956446f9f340a26cfb84568300fbbaad582eb124b1ed3de6bfc633e7",
-      "recordedAt": "2026-10-07T06:20:37.020Z"
+      "recordedAt": "2026-10-07T06:32:13.938Z"
     },
     {
       "guaranteeId": "outbox.atomic",
@@ -55,7 +55,7 @@
       "suite": "f2-pg-conformance",
       "assertions": 17,
       "sourceDigest": "2ae86053956446f9f340a26cfb84568300fbbaad582eb124b1ed3de6bfc633e7",
-      "recordedAt": "2026-10-07T06:20:37.020Z"
+      "recordedAt": "2026-10-07T06:32:13.938Z"
     },
     {
       "guaranteeId": "cacheGeneration.atomic",
@@ -64,7 +64,7 @@
       "suite": "f2-pg-conformance",
       "assertions": 17,
       "sourceDigest": "2ae86053956446f9f340a26cfb84568300fbbaad582eb124b1ed3de6bfc633e7",
-      "recordedAt": "2026-10-07T06:20:37.020Z"
+      "recordedAt": "2026-10-07T06:32:13.938Z"
     },
     {
       "guaranteeId": "temporal.atomicAppend",
@@ -73,7 +73,7 @@
       "suite": "f2-pg-conformance",
       "assertions": 17,
       "sourceDigest": "2ae86053956446f9f340a26cfb84568300fbbaad582eb124b1ed3de6bfc633e7",
-      "recordedAt": "2026-10-07T06:20:37.020Z"
+      "recordedAt": "2026-10-07T06:32:13.938Z"
     },
     {
       "guaranteeId": "temporal.monotonicRevision",
@@ -82,7 +82,7 @@
       "suite": "f2-pg-conformance",
       "assertions": 17,
       "sourceDigest": "2ae86053956446f9f340a26cfb84568300fbbaad582eb124b1ed3de6bfc633e7",
-      "recordedAt": "2026-10-07T06:20:37.020Z"
+      "recordedAt": "2026-10-07T06:32:13.938Z"
     },
     {
       "guaranteeId": "sequence.atomicGapless",
@@ -91,7 +91,7 @@
       "suite": "f2-pg-conformance",
       "assertions": 17,
       "sourceDigest": "2ae86053956446f9f340a26cfb84568300fbbaad582eb124b1ed3de6bfc633e7",
-      "recordedAt": "2026-10-07T06:20:37.020Z"
+      "recordedAt": "2026-10-07T06:32:13.938Z"
     }
   ]
 }
