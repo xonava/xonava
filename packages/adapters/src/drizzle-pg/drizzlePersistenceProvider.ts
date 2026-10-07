@@ -6,6 +6,8 @@ import type { DrizzleSessionLike } from "./drizzleRepository"
 import { createDrizzleRepository } from "./drizzleRepository"
 import type { DrizzleColumnMap } from "../drizzle-shared/predicateCompiler"
 import { ConfigurationError } from "core/domain"
+import { sql } from "drizzle-orm"
+import { classifyTransactionFailure, statementTimeoutMs } from "../drizzle-shared/transactionOutcome"
 import { createPgSession, type PgDatabaseLike } from "./pgSession"
 
 const sessionByProvider = new WeakMap<PersistenceProvider, DrizzleSessionLike>()
@@ -100,6 +102,8 @@ export function createDrizzlePersistenceProvider(args: PgProviderArgs): Interact
      exactDecimal: false,
     persistentConnection: true,
     conditionalAbacUpdate: true,
+    // TransactionOptions.timeoutMs is enforced with SET LOCAL statement_timeout.
+    transactionTimeouts: true,
     maxPageSize: maxPageSize ?? 100,
     execution: Object.freeze({
       "transaction.interactive": { status: "proven", evidence: "framework-conformance/v1/pg-guarantees.json" },
@@ -143,10 +147,19 @@ export function createDrizzlePersistenceProvider(args: PgProviderArgs): Interact
          const transactionOptions: PgTransactionConfig = {}
          if (options?.isolationLevel !== undefined) transactionOptions.isolationLevel = options.isolationLevel
          if (options?.accessMode !== undefined) transactionOptions.accessMode = options.accessMode
-         return args.db.transaction(async (tx) => {
-           const txProvider = createScopedProvider(tx, true)
-           return work(txProvider)
-         }, transactionOptions)
+        const timeoutMs = statementTimeoutMs(options?.timeoutMs)
+        let callbackCompleted = false
+        try {
+          return await args.db.transaction(async (tx) => {
+            // SET cannot take bind parameters; the value is a validated integer.
+            if (timeoutMs !== undefined) await tx.execute(sql.raw(`SET LOCAL statement_timeout = ${timeoutMs}`))
+            const result = await work(createScopedProvider(tx, true))
+            callbackCompleted = true
+            return result
+          }, transactionOptions)
+        } catch (error) {
+          throw classifyTransactionFailure(error, "postgresql", callbackCompleted)
+        }
       },
     }
     sessionByProvider.set(provider, session)

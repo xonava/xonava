@@ -14,7 +14,7 @@ export function buildSafeTelemetryAttributes(values:Readonly<Record<string,unkno
 }
 export function explicitlySafeTelemetryAttributes(values:Readonly<Record<string,TelemetryAttributeValue>>,classification:DataClassification="internal"):Readonly<Record<string,TelemetryAttributeValue>>{return buildSafeTelemetryAttributes(values,Object.fromEntries(Object.keys(values).map(key=>[key,classification])))}
 /** Telemetry is observational and must never alter framework semantics. */
-export function emitTelemetry(port:TelemetryPort|undefined,event:TelemetryEvent):void{if(!port)return;try{const result=port.emit(Object.freeze({...event,attributes:Object.freeze({...event.attributes})}));if(result&&typeof (result as Promise<void>).catch==="function")void (result as Promise<void>).catch(()=>undefined)}catch{/* best effort */}}
+export function emitTelemetry(port:TelemetryPort|undefined,event:TelemetryEvent):void{if(!port)return;try{const result=port.emit(Object.freeze({...event,attributes:Object.freeze({...event.attributes})}));if(result&&typeof (result).catch==="function")void (result).catch(()=>undefined)}catch{/* best effort */}}
 export function createNoopTelemetry():TelemetryPort{return {emit(){}}}
 
 export const MAX_TELEMETRY_LOG_ATTRIBUTES = 32

@@ -55,7 +55,7 @@ function internalRepositoryForDescriptor<T, TId = string>(
   const repository = entity.versionField
     ? provider.repository<T, TId>(entity as VersionedEntityDescriptor<T>)
     : provider.repository<T, TId>(entity as UnversionedEntityDescriptor<T>)
-  return repository as FrameworkRepository<T, TId>
+  return repository
 }
 
 function withTenantScope(filter: PredicateNode | undefined, tenantField: string, tenantId: string): PredicateNode {
@@ -411,9 +411,9 @@ export function createTenantScopedPersistenceProvider<TTenantId extends string>(
 
       if (entity.versionField) {
         const { updateManyWhere: _removed, ...versioned } = common
-        return versioned as VersionedRepository<T, TId>
+        return versioned
       }
-      return common as UnversionedRepository<T, TId>
+      return common
     },
   } satisfies TenantScopedPersistenceProvider<TTenantId>
 

@@ -11,9 +11,17 @@ export interface FingerprintRecipe {
   readonly domainSeparator: string
 }
 
+/**
+ * Domain separators end in `:v<n>:` and use only [a-z0-9-] segments. Because a
+ * canonical JSON value never starts with ':' and a JSON number or literal never
+ * contains ':', `separator || canonicalJson` is unambiguous across all valid
+ * separators: no two (separator, value) pairs produce the same digest input.
+ */
+const DOMAIN_SEPARATOR = /^[a-z][a-z0-9-]*(?::[a-z0-9-]+)*:v[0-9]+:$/
+
 export function fingerprintWithDomainSeparator(domainSeparator: string, value: unknown): string {
-  if (typeof domainSeparator !== "string" || domainSeparator.length === 0) {
-    throw new CanonicalJsonError("domainSeparator must be non-empty string")
+  if (typeof domainSeparator !== "string" || !DOMAIN_SEPARATOR.test(domainSeparator)) {
+    throw new CanonicalJsonError("domainSeparator must look like `name(:segment)*:v<n>:` (lowercase)")
   }
   const canonicalBytes = canonicalJsonBytes(value)
   // Enforce per-format lower limit for idempotency etc is 1 MiB, but fingerprint input itself must respect absolute ceiling

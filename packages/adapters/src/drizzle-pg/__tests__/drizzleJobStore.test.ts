@@ -545,3 +545,18 @@ describe("PostgreSQL job-store column-rename conformance (P1-11)", () => {
     expect(query.sql).toContain('"app_jobs"."pk_id"')
   })
 })
+
+describe("job release without consuming an attempt", () => {
+  it("fences on worker, token, running status, and live lease, and gives the attempt back", async () => {
+    const { store, getWhere, update } = createStore({ affectedRows: 1 })
+    await expect(store.release({ jobId: "j1", workerId: "w", claimToken: "t", nextAttemptAt: new Date("2026-01-01T00:00:00.000Z"), reason: "Unknown job definition: x@2" })).resolves.toEqual({ applied: true })
+    expect(update).toHaveBeenCalledOnce()
+    const where = new PgDialect().sqlToQuery(getWhere()!).sql
+    for (const fragment of ["id", "lease_owner", "claim_token", "status", "lease_expires_at"]) expect(where).toContain(fragment)
+  })
+
+  it("reports a lost lease when the fenced update matches nothing", async () => {
+    const { store } = createStore({ affectedRows: 0 })
+    await expect(store.release({ jobId: "j1", workerId: "w", claimToken: "stale", nextAttemptAt: new Date(), reason: "x" })).resolves.toEqual({ applied: false, reason: "LEASE_LOST" })
+  })
+})

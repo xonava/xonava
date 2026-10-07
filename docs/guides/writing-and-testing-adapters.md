@@ -10,3 +10,13 @@
 8. Produce source-bound certification evidence.
 
 For HTTP, translate request data to canonical operation input and map canonical output/errors back to HTTP. Do not place request/response objects in core operations.
+
+## Provider obligations added by the core hardening
+
+- **Commit outcome.** Classify transaction failures with the callback's completion: a serialization failure or deadlock reported at COMMIT is `TransactionRolledBackError`; any other COMMIT failure keeps an unknown outcome; raw driver errors are always normalized (`classifyTransactionFailure`).
+- **Transaction deadlines.** Declare `capabilities.transactionTimeouts` only when `TransactionOptions.timeoutMs` is enforced inside the database (PostgreSQL: `SET LOCAL statement_timeout`); statement timeouts map to `TIMEOUT`.
+- **Access mode.** Honour `accessMode: "read only"`; the operation pipeline requests it for transactional reads.
+- **Predicate text semantics.** Compile predicates with the engine's dialect (`postgres`, `mysql`, `sqlite`) so string comparison is case-sensitive and code-point ordered regardless of column collation. MySQL schemas may opt into direct comparison only after `assertMySqlBinaryCollation`. Every compiler must pass the shared differential test in `packages/testing/integration/shared/predicateParity.ts`.
+- **Job release.** Implement `JobStore.release` so a worker can hand back a job it cannot run without consuming an attempt.
+- **Outbox provenance.** Give outbox tables a `provenance` column; sinks write it as framework-owned data.
+- **Schemas.** Store constructors take the schema (and table names where needed) explicitly; nothing defaults to a test schema.

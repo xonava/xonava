@@ -5,6 +5,7 @@ import {
   assertCursorBinding,
   assertReadConsistencySupported,
   assertStableCursorSort,
+  createRotatingCursorIntegrity,
   decodeCursor,
   encodeCursor,
   resolveProjection,
@@ -60,5 +61,29 @@ describe("Q2 cursor contracts", () => {
     expect(() => assertStableCursorSort([{ field: "createdAt", direction: "asc" }], ["id"])).toThrow(/tie breaker/)
     expect(() => assertStableCursorSort([{ field: "createdAt", direction: "asc" }, { field: "id", direction: "asc" }], ["id"], ["createdAt"])).toThrow(/null ordering/)
     expect(() => assertStableCursorSort([{ field: "createdAt", direction: "asc", nulls: "last" }, { field: "id", direction: "asc" }], ["id"], ["createdAt"])).not.toThrow()
+  })
+})
+
+describe("cursor expiry and key rotation", () => {
+  const mac = (secret: number) => ({
+    sign: async (payload: Uint8Array) => Uint8Array.of(payload.reduce((sum, byte) => (sum + byte * secret) % 251, secret)),
+    verify: async (payload: Uint8Array, signature: Uint8Array) => signature.length === 1 && signature[0] === payload.reduce((sum, byte) => (sum + byte * secret) % 251, secret),
+  })
+  const payload = { format: "framework.cursor" as const, version: 1 as const, direction: "after" as const, values: ["a", 1], routeHash: "r", queryHash: "q", scopeHash: "s", sortHash: "o" }
+
+  it("rejects an expired cursor and accepts it before expiry", async () => {
+    const cursor = await encodeCursor({ ...payload, expiresAt: 1_000 }, mac(3))
+    await expect(decodeCursor(cursor, mac(3), 8192, { now: 999 })).resolves.toMatchObject({ expiresAt: 1_000 })
+    await expect(decodeCursor(cursor, mac(3), 8192, { now: 1_000 })).rejects.toThrow("cursor expired")
+    await expect(encodeCursor({ ...payload, expiresAt: -1 }, mac(3))).rejects.toThrow("malformed")
+  })
+
+  it("verifies cursors signed by a previous key during rotation and signs with the current key", async () => {
+    const old = await encodeCursor(payload, mac(3))
+    const rotating = createRotatingCursorIntegrity(mac(5), [mac(3)])
+    await expect(decodeCursor(old, rotating)).resolves.toMatchObject({ routeHash: "r" })
+    const fresh = await encodeCursor(payload, rotating)
+    await expect(decodeCursor(fresh, mac(5))).resolves.toMatchObject({ routeHash: "r" })
+    await expect(decodeCursor(old, mac(5))).rejects.toThrow("integrity")
   })
 })

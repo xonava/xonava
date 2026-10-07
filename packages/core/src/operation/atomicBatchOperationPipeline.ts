@@ -179,7 +179,7 @@ export async function runAtomicBatchOperation<TInput, TResult, TCommand>(args: {
       }
     }
     await runPendingEffects(restrictedOperation, postCommitContext)
-    return applyAuthorizationPlanToResult(authorizationPlan, finalResult)
+    return applyAuthorizationPlanToResult(authorizationPlan, finalResult, operation.maskingKey !== undefined ? { maskingKey: operation.maskingKey } : {})
   } finally {
     postCommitOperation?.dispose()
     operation.dispose()

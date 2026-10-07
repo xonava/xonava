@@ -7,7 +7,7 @@
   "freshVerifier": true,
   "repetitions": 1,
   "requiredRepetitions": 20,
-  "recordedAt": "2026-10-07T05:15:24.187Z",
+  "recordedAt": "2026-10-07T06:34:14.740Z",
   "failpoints": [
     {
       "name": "before-transaction",

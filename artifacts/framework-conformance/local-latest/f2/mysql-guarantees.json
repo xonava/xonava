@@ -10,7 +10,7 @@
       "suite": "mysql1-conformance",
       "assertions": 22,
       "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
-      "recordedAt": "2026-09-19T03:29:06.633Z"
+      "recordedAt": "2026-10-07T06:32:49.856Z"
     },
     {
       "guaranteeId": "persistence.conditionalVersionedMutation",
@@ -19,7 +19,7 @@
       "suite": "mysql1-conformance",
       "assertions": 22,
       "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
-      "recordedAt": "2026-09-19T03:29:06.634Z"
+      "recordedAt": "2026-10-07T06:32:49.857Z"
     },
     {
       "guaranteeId": "persistence.conditionalAuthorizedMutation",
@@ -28,7 +28,7 @@
       "suite": "mysql1-conformance",
       "assertions": 22,
       "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
-      "recordedAt": "2026-09-19T03:29:06.634Z"
+      "recordedAt": "2026-10-07T06:32:49.857Z"
     },
     {
       "guaranteeId": "idempotency.atomicCommitReceipt",
@@ -37,7 +37,7 @@
       "suite": "mysql1-conformance",
       "assertions": 22,
       "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
-      "recordedAt": "2026-09-19T03:29:06.634Z"
+      "recordedAt": "2026-10-07T06:32:49.857Z"
     },
     {
       "guaranteeId": "audit.atomic",
@@ -46,7 +46,7 @@
       "suite": "mysql1-conformance",
       "assertions": 22,
       "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
-      "recordedAt": "2026-09-19T03:29:06.634Z"
+      "recordedAt": "2026-10-07T06:32:49.857Z"
     },
     {
       "guaranteeId": "outbox.atomic",
@@ -55,7 +55,7 @@
       "suite": "mysql1-conformance",
       "assertions": 22,
       "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
-      "recordedAt": "2026-09-19T03:29:06.634Z"
+      "recordedAt": "2026-10-07T06:32:49.857Z"
     },
     {
       "guaranteeId": "cacheGeneration.atomic",
@@ -64,7 +64,7 @@
       "suite": "mysql1-conformance",
       "assertions": 22,
       "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
-      "recordedAt": "2026-09-19T03:29:06.634Z"
+      "recordedAt": "2026-10-07T06:32:49.857Z"
     },
     {
       "guaranteeId": "delivery.inboxFenced",
@@ -73,7 +73,7 @@
       "suite": "mysql1-conformance",
       "assertions": 22,
       "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
-      "recordedAt": "2026-09-19T03:29:06.634Z"
+      "recordedAt": "2026-10-07T06:32:49.857Z"
     },
     {
       "guaranteeId": "delivery.outboxFenced",
@@ -82,7 +82,7 @@
       "suite": "mysql1-conformance",
       "assertions": 22,
       "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
-      "recordedAt": "2026-09-19T03:29:06.634Z"
+      "recordedAt": "2026-10-07T06:32:49.857Z"
     },
     {
       "guaranteeId": "lease.fenced",
@@ -91,7 +91,7 @@
       "suite": "mysql1-conformance",
       "assertions": 22,
       "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
-      "recordedAt": "2026-09-19T03:29:06.634Z"
+      "recordedAt": "2026-10-07T06:32:49.857Z"
     },
     {
       "guaranteeId": "jobs.fenced",
@@ -100,7 +100,7 @@
       "suite": "mysql1-conformance",
       "assertions": 22,
       "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
-      "recordedAt": "2026-09-19T03:29:06.634Z"
+      "recordedAt": "2026-10-07T06:32:49.857Z"
     },
     {
       "guaranteeId": "schedules.fenced",
@@ -109,7 +109,7 @@
       "suite": "mysql1-conformance",
       "assertions": 22,
       "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
-      "recordedAt": "2026-09-19T03:29:06.634Z"
+      "recordedAt": "2026-10-07T06:32:49.857Z"
     },
     {
       "guaranteeId": "workflows.fenced",
@@ -118,7 +118,7 @@
       "suite": "mysql1-conformance",
       "assertions": 22,
       "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
-      "recordedAt": "2026-09-19T03:29:06.634Z"
+      "recordedAt": "2026-10-07T06:32:49.857Z"
     },
     {
       "guaranteeId": "temporal.atomicAppend",
@@ -127,7 +127,7 @@
       "suite": "mysql1-conformance",
       "assertions": 22,
       "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
-      "recordedAt": "2026-09-19T03:29:06.634Z"
+      "recordedAt": "2026-10-07T06:32:49.857Z"
     },
     {
       "guaranteeId": "temporal.monotonicRevision",
@@ -136,7 +136,7 @@
       "suite": "mysql1-conformance",
       "assertions": 22,
       "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
-      "recordedAt": "2026-09-19T03:29:06.634Z"
+      "recordedAt": "2026-10-07T06:32:49.857Z"
     },
     {
       "guaranteeId": "sequence.atomicGapless",
@@ -145,7 +145,7 @@
       "suite": "mysql1-conformance",
       "assertions": 22,
       "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
-      "recordedAt": "2026-09-19T03:29:06.634Z"
+      "recordedAt": "2026-10-07T06:32:49.857Z"
     }
   ]
 }

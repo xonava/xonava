@@ -7,7 +7,7 @@ import { GUARANTEE_CERTIFICATION_SCHEMA, GUARANTEE_CERTIFICATION_SCHEMA_VERSION,
 import type { DatasourceDefinition, DelegationRuleDefinition, FrameworkDefinition, FrameworkDefinitionKind, FrameworkReference, RouteDefinition, ScopeResolverDefinition } from "./definition.js"
 import type { CompiledConsumerPlan, CompiledDatasourceBinding, CompiledDefinitionPlan, CompiledDelegationRule, CompiledEntityPlan, CompiledEventPlan, CompiledFrameworkPlan, CompiledJobPlan, CompiledOperationPlan, CompiledPolicyPlan, CompiledPortBindingRequirement, CompiledReadinessRequirement, CompiledReadModelPlan, CompiledRoutePlan, CompiledSchedulePlan, CompiledScopeResolverBinding, CompiledWorkerBinding, CompiledWorkflowPlan, GuaranteeCertificationV1 } from "./compiledPlan.js"
 import { definitionId, resolveDependencyOrder } from "./dependencyGraph.js"
-import { FrameworkDefinitionRegistry } from "./definitionRegistry.js"
+import { type FrameworkDefinitionRegistry } from "./definitionRegistry.js"
 import { cloneAndFreezeDefinition } from "../kernel/definitionIntegrity.js"
 import { readonlyMap } from "../kernel/readonlyCollections.js"
 
@@ -122,20 +122,20 @@ export function compileFramework(registry: FrameworkDefinitionRegistry, options:
   const requirements: [string, readonly GuaranteeId[]][] = []
   for (const definition of definitions) if (definition.requiredGuarantees?.length) { const planKey = definitionId(definition); const required = Object.freeze([...new Set(definition.requiredGuarantees)]); requirements.push([planKey, required]); const datasource = definition.datasourceKey ? byId.get(`datasource:${definition.datasourceKey}`) as DatasourceDefinition | undefined : undefined; for (const guarantee of required) { const matches = [...certifications.values()].filter(c => c.guarantee === guarantee && c.status === "proven" && (!datasource || (c.adapter.packageName === datasource.adapter && (!datasource.adapterBuildId || c.adapter.adapterBuildId === datasource.adapterBuildId)))); if (!matches.length) fail(`missing proven certification ${guarantee} required by ${planKey}`) } }
   const policyEntries = groups.get("policy") ?? []; const policyDigests = readonlyMap(policyEntries.map(([key, plan]) => [key, canonicalSha256Hex(plan)] as const))
-  const datasources = readonlyMap((groups.get("datasource") ?? []).map(([key, plan]) => { const d = plan as CompiledDefinitionPlan & DatasourceDefinition; unique(d.capabilities, "datasource capability"); return [key, d as CompiledDatasourceBinding] as const }))
+  const datasources = readonlyMap((groups.get("datasource") ?? []).map(([key, plan]) => { const d = plan as CompiledDefinitionPlan & DatasourceDefinition; unique(d.capabilities, "datasource capability"); return [key, d] as const }))
   const readinessByKey = new Map<string, CompiledReadinessRequirement>(); const portsByKey = new Map<string, CompiledPortBindingRequirement>(); const workers: CompiledWorkerBinding[] = []
   for (const definition of definitions) { for (const req of definition.readiness ?? []) { const prior = readinessByKey.get(req.key); if (prior && prior.description !== req.description) fail(`conflicting readiness requirement ${req.key}`); readinessByKey.set(req.key, deepFreeze({ ...req })) }; for (const req of definition.requiredPorts ?? []) { const next = deepFreeze({ key: req.key, capability: req.capability, optional: req.optional === true }); const prior = portsByKey.get(req.key); if (prior && (prior.capability !== next.capability || prior.optional !== next.optional)) fail(`conflicting runtime port ${req.key}`); portsByKey.set(req.key, next) }; if (["consumer", "job", "schedule", "workflow"].includes(definition.kind)) workers.push(deepFreeze({ key: definition.key, definitionKey: definitionId(definition), kind: definition.kind as CompiledWorkerBinding["kind"] })) }
   registry.transition("COMPILING", "SEALED")
   return deepFreeze({ framework: { frameworkVersion: options.frameworkVersion, sourceRevision: options.sourceRevision, compiledAt: options.compiledAt ?? new Date().toISOString() }, definitions: {
-    entities: group("entity") as ReadonlyMap<string, CompiledEntityPlan>,
-    operations: group("operation") as ReadonlyMap<string, CompiledOperationPlan>,
-    readModels: group("readModel") as ReadonlyMap<string, CompiledReadModelPlan>,
-    events: group("event") as ReadonlyMap<string, CompiledEventPlan>,
-    consumers: group("consumer") as ReadonlyMap<string, CompiledConsumerPlan>,
-    jobs: group("job") as ReadonlyMap<string, CompiledJobPlan>,
-    schedules: group("schedule") as ReadonlyMap<string, CompiledSchedulePlan>,
-    workflows: group("workflow") as ReadonlyMap<string, CompiledWorkflowPlan>,
+    entities: group("entity"),
+    operations: group("operation"),
+    readModels: group("readModel"),
+    events: group("event"),
+    consumers: group("consumer"),
+    jobs: group("job"),
+    schedules: group("schedule"),
+    workflows: group("workflow"),
   }, routes: readonlyMap(routeEntries), datasources, authority: {
-    delegationRules: group("delegationRule") as ReadonlyMap<string, CompiledDelegationRule>, scopeResolvers: resolverMap,
-  }, authorization: { policies: group("policy") as ReadonlyMap<string, CompiledPolicyPlan>, digests: policyDigests }, guarantees: { certifications, requirementsByPlan: readonlyMap(requirements) }, durableFormats, readiness: { requirements: Object.freeze([...readinessByKey.values()]) }, runtimeBindings: { requiredPorts: Object.freeze([...portsByKey.values()]), workerBindings: Object.freeze(workers), startupOrder } })
+    delegationRules: group("delegationRule"), scopeResolvers: resolverMap,
+  }, authorization: { policies: group("policy"), digests: policyDigests }, guarantees: { certifications, requirementsByPlan: readonlyMap(requirements) }, durableFormats, readiness: { requirements: Object.freeze([...readinessByKey.values()]) }, runtimeBindings: { requiredPorts: Object.freeze([...portsByKey.values()]), workerBindings: Object.freeze(workers), startupOrder } })
 }

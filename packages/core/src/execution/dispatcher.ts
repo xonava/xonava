@@ -246,8 +246,21 @@ async function executeJob(args: DispatcherConfig & { job: StoredJob; log: Dispat
     // attempt budget is exhausted.
     const error = `Unknown job definition: ${job.jobType}@${job.jobVersion}`
     const attempt = job.attemptsCompleted + 1
+    const nextAttemptAt = new Date(clock.now().getTime() + leaseDurationMs)
+    if (typeof store.release === "function") {
+      try {
+        const released = await store.release({ jobId: job.id, workerId, claimToken, nextAttemptAt, reason: error })
+        if (released.applied) {
+          log.warn("Job released: unknown definition", { jobId: job.id, jobType: job.jobType, jobVersion: job.jobVersion })
+          return { kind: "retried", error }
+        }
+        return { kind: "lease_lost", error: "Job lease was lost" }
+      } catch (releaseError) {
+        log.warn("Job release failed", { jobId: job.id, error: errorMessage(releaseError) })
+      }
+    }
     try {
-      const deferred = await store.markRetrying({ jobId: job.id, workerId, claimToken, nextAttemptAt: new Date(clock.now().getTime() + leaseDurationMs), error, attempt })
+      const deferred = await store.markRetrying({ jobId: job.id, workerId, claimToken, nextAttemptAt, error, attempt })
       if (deferred.applied) {
         log.warn("Job deferred: unknown definition", { jobId: job.id, jobType: job.jobType, jobVersion: job.jobVersion, attempt })
         return { kind: "retried", error }
@@ -318,8 +331,7 @@ async function executeJob(args: DispatcherConfig & { job: StoredJob; log: Dispat
       const renewed = await renewWithDeadline(store.renewLease({ jobId: job.id, workerId, claimToken, extendByMs: leaseDurationMs }), leaseDurationMs, clock)
       if (!renewed) throw new Error("Job lease was lost")
     })()
-    let tracked: Promise<void>
-    tracked = operation.then(
+    const tracked: Promise<void> = operation.then(
       () => { if (renewalInFlight === tracked) renewalInFlight = undefined },
       (error: unknown) => {
         if (renewalInFlight === tracked) renewalInFlight = undefined

@@ -89,6 +89,8 @@ export interface CreateOperationContextArgs {
   authorizationFactRevalidator?: AuthorizationFactRevalidator
   auditSinkFactory?: AuditSinkFactory
   outboxSinkFactory?: OutboxSinkFactory
+  /** Secret for keyed `hash` masking (>= 16 bytes); without it `hash` masks redact. */
+  maskingKey?: Uint8Array
   /** Alerting hook for best-effort post-commit failures; see OperationEnvironment. */
   onCommittedEffectFailure?: import("./committedEffectFailure").CommittedEffectFailureHandler
   /** Adapter-only commit participants. Never exposed on callback contexts. */
@@ -135,6 +137,7 @@ export function createOperationContext<TPersistence extends PersistenceProvider>
     ...(args.auditSinkFactory !== undefined ? { auditSinkFactory: args.auditSinkFactory } : {}),
     ...(args.outboxSinkFactory !== undefined ? { outboxSinkFactory: args.outboxSinkFactory } : {}),
     ...(args.onCommittedEffectFailure !== undefined ? { onCommittedEffectFailure: args.onCommittedEffectFailure } : {}),
+    ...(args.maskingKey !== undefined ? { maskingKey: args.maskingKey } : {}),
     ...(args.commitMarkers !== undefined ? { commitMarkers: args.commitMarkers } : {}),
   }
 }

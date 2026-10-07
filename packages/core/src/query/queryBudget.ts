@@ -163,8 +163,8 @@ export function validateQueryPlan(plan: QueryPlan, budget: QueryBudget = DEFAULT
           orBranches += filters.length
           if (orBranches > limits.maxOrBranches) fail("query predicate exceeds maximum OR branches")
         }
-        enter(filters as object)
-        try { for (const child of filters) visitPredicate(child, depth + 1) } finally { leave(filters as object) }
+        enter(filters)
+        try { for (const child of filters) visitPredicate(child, depth + 1) } finally { leave(filters) }
         return
       }
       if (kind === "not") {
@@ -177,7 +177,7 @@ export function validateQueryPlan(plan: QueryPlan, budget: QueryBudget = DEFAULT
   }
 
   const root = dataRecord(plan, "query plan", ["filter", "sort", "pagination", "projection", "consistency", "search"])
-  enter(plan as object)
+  enter(plan)
   try {
     if (own(root, "filter")) visitPredicate(root.filter, 1)
     if (own(root, "sort")) {
@@ -225,5 +225,5 @@ export function validateQueryPlan(plan: QueryPlan, budget: QueryBudget = DEFAULT
       if (typeof text !== "string") fail("query search.text must be a string")
       if (encoder.encode(text).byteLength > limits.maxSearchBytes) fail("query search exceeds maximum UTF-8 bytes")
     }
-  } finally { leave(plan as object) }
+  } finally { leave(plan) }
 }

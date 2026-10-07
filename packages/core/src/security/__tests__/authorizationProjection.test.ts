@@ -22,8 +22,11 @@ describe("authorization result projection", () => {
   })
 
   it("projects arrays and applies partial, fallback, hash, and null masking", () => {
-    const result = applyAuthorizationPlanToResult(plan(), [{ id: "1", short: "x", partial: "alice", hashed: "secret", nullable: null, hidden: true }])
-    expect(result[0]).toEqual({ id: "1", short: "[REDACTED]", partial: "a***e", hashed: expect.stringMatching(/^sha256:[a-f0-9]{64}$/), nullable: null })
+    const maskingKey = new TextEncoder().encode("projection-test-masking-key")
+    const result = applyAuthorizationPlanToResult(plan(), [{ id: "1", short: "x", partial: "alice-1234", hashed: "secret", nullable: null, hidden: true }], { maskingKey })
+    expect(result[0]).toEqual({ id: "1", short: "[REDACTED]", partial: "****1234", hashed: expect.stringMatching(/^hmac-sha256:[a-f0-9]{64}$/), nullable: null })
+    // Without a masking key, hash masks fail closed.
+    expect(applyAuthorizationPlanToResult(plan(), [{ id: "1", hashed: "secret" }])[0]).toMatchObject({ hashed: "[REDACTED]" })
     expect(Object.isFrozen(result)).toBe(true)
     expect(Object.isFrozen(result[0])).toBe(true)
   })

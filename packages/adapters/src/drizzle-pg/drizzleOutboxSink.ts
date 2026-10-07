@@ -5,7 +5,7 @@ import type { AnyPgTable } from "drizzle-orm/pg-core"
 import { getTableColumns, sql, type AnyColumn } from "drizzle-orm"
 import { ConfigurationError } from "core/domain"
 import { getDrizzleSession } from "./drizzlePersistenceProvider"
-import { assertOutboxFingerprintMatches, assertOutboxProtectedFields, fingerprintOutboxRecord } from "../drizzle-shared/outbox"
+import { assertOutboxFingerprintMatches, assertOutboxProtectedFields, fingerprintOutboxRecord, outboxProvenanceColumn } from "../drizzle-shared/outbox"
 export type OutboxFingerprintRecord = Pick<OutboxRecord, "type" | "version" | "scopeId" | "aggregateType" | "aggregateId" | "payload">
 export { fingerprintOutboxRecord as computeOutboxFingerprint }
 
@@ -48,6 +48,7 @@ export class DrizzleOutboxSink implements OutboxSink {
       ...(columns.idempotencyScope ? { idempotencyScope: derivedScope } : {}),
       idempotencyKey: record.idempotencyKey,
       eventFingerprint: fingerprint,
+      ...outboxProvenanceColumn(columns, record),
     })
     if (typeof insertion.onConflictDoNothing !== "function") {
       throw new ConfigurationError("PostgreSQL outbox requires Drizzle onConflictDoNothing support")

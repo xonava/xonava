@@ -1,3 +1,4 @@
+import { systemClock, type TimerClock } from "../kernel/clock"
 import type { WorkflowFence, WorkflowStore } from "../workflow/store"
 import { applyWorkflowStep, completeCompensation, createWorkflowFailure, failCompensation, failWorkflowStep, scheduleWorkflowRetry } from "./workflowStateMachine"
 import { createWorkflowContext } from "./workflowContext"
@@ -13,11 +14,8 @@ export const MAX_WORKFLOW_CLAIM_LIMIT = 100
 export const DEFAULT_WORKFLOW_CANCELLATION_GRACE_MS = 5_000
 export const MAX_WORKFLOW_CANCELLATION_GRACE_MS = 60_000
 
-export interface WorkflowDispatcherClock {
-  now(): Date
-  setTimeout(callback: () => void, ms: number): unknown
-  clearTimeout(handle: unknown): void
-}
+/** The workflow dispatcher's clock is the canonical core TimerClock. */
+export type WorkflowDispatcherClock = TimerClock
 
 /**
  * Per-batch outcome counts.
@@ -49,11 +47,7 @@ export interface WorkflowDispatchOptions {
   random?: () => number
 }
 
-const systemClock: WorkflowDispatcherClock = {
-  now: () => new Date(),
-  setTimeout: (callback, ms) => setTimeout(callback, ms),
-  clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
-}
+
 
 const STEP_RESULT_KINDS = new Set(["next", "wait", "sleep", "complete", "retry", "fail"])
 
@@ -121,8 +115,7 @@ function startLeaseLifecycle(args: { store: WorkflowStore; fence: WorkflowFence;
         if (timeout !== undefined) args.clock.clearTimeout(timeout)
       }
     })()
-    let tracked: Promise<void>
-    tracked = operation.then(
+    const tracked: Promise<void> = operation.then(
       () => { if (inFlight === tracked) inFlight = undefined },
       (error: unknown) => { if (inFlight === tracked) inFlight = undefined; throw error },
     )

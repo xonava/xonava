@@ -1,3 +1,4 @@
+import type { Clock } from "../kernel/clock"
 import { TenantScopeViolationError } from "../domain/errors"
 import { validateExecutionScope, type ExecutionScope } from "../domain/executionScope"
 
@@ -292,6 +293,17 @@ export interface RetryJobArgs {
   attempt: number
 }
 
+/** Hands a claimed job back without consuming an attempt (e.g. this worker lacks its definition). */
+export interface ReleaseJobArgs {
+  jobId: string
+  workerId: string
+  claimToken: string
+  /** Earliest time another worker may claim it. */
+  nextAttemptAt: Date
+  /** Stable reason recorded as the job's last error. */
+  reason: string
+}
+
 export interface FailJobArgs {
   jobId: string
   workerId: string
@@ -415,6 +427,12 @@ export interface JobStore {
   markSucceeded(args: CompleteJobArgs): Promise<JobTransitionResult>
   markRetrying(args: RetryJobArgs): Promise<JobTransitionResult>
   markFailed(args: FailJobArgs): Promise<JobTransitionResult>
+  /**
+   * Optional: release a live claim without consuming an attempt. The attempt
+   * counted at claim time is given back, the lease is cleared, and the job is
+   * claimable again at `nextAttemptAt`. Fenced on worker, token, and lease.
+   */
+  release?(args: ReleaseJobArgs): Promise<JobTransitionResult>
   cancel(args: CancelJobArgs): Promise<JobTransitionResult>
   findPending(args: FindPendingArgs): Promise<StoredJob[]>
 }
@@ -441,7 +459,8 @@ export function requesterJobScope(requester: JobRequester): JobScope {
   return requester.scope
 }
 
-export interface ExecutionClock {
+/** Job execution clock: the canonical core Clock plus sleep and optional timers. */
+export interface ExecutionClock extends Clock {
   now(): Date
   sleep(ms: number): Promise<void>
   setTimeout?(callback: () => void, ms: number): unknown

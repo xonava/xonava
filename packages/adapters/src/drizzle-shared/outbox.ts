@@ -36,3 +36,15 @@ export function assertOutboxFingerprintMatches(stored: unknown, expected: string
   if (typeof stored !== "string" || stored.length === 0) throw new Error(OUTBOX_FINGERPRINT_MISSING_ERROR)
   if (stored !== expected) throw new ConflictError("Outbox idempotency key was reused for a different event")
 }
+
+/**
+ * Framework-owned provenance column: when the outbox table declares a
+ * `provenance` column, the record's authority provenance is always written
+ * (mappers cannot replace it), so the envelope can be rebuilt for publishing.
+ */
+export function outboxProvenanceColumn(columns: object, record: { provenance?: unknown }): Record<string, unknown> {
+  const column = (columns as Record<string, { dataType?: unknown } | undefined>).provenance
+  if (!column) return {}
+  if (record.provenance === undefined || record.provenance === null) return { provenance: null }
+  return { provenance: column.dataType === "json" ? record.provenance : JSON.stringify(record.provenance) }
+}

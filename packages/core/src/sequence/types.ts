@@ -6,10 +6,20 @@ export interface SequenceDefinition {
   readonly prefix?: string
   readonly padding?: number
   readonly reset?: SequenceResetPeriod
+  /**
+   * IANA time zone in which reset periods begin (default "UTC"). A monthly
+   * invoice counter for an Indian business resets at local midnight, not 05:30.
+   */
+  readonly timeZone?: string
+  /** Embed the period in the formatted number: "compact" (202603) or "iso" (2026-03). Default "none". */
+  readonly periodFormat?: "none" | "compact" | "iso"
+  /** Separator between an embedded period and the number (default "-", at most 4 characters). */
+  readonly periodSeparator?: string
 }
 export interface SequenceAllocationRequest {
   readonly scopeId: ExecutionScopeId
   readonly definition: SequenceDefinition
+  /** Allocation instant; must come from a trusted server clock, never from client input. */
   readonly at?: Date
 }
 export interface SequenceAllocation {

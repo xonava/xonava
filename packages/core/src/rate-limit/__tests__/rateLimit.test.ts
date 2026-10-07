@@ -106,3 +106,19 @@ describe("rate-limit ports", () => {
     await expect(enforceRateLimit({ store: store(1), key: "key", config: { max: 0, timeWindow: 1 } })).rejects.toThrow()
   })
 })
+
+describe("rate-limit configuration hardening", () => {
+  it("rejects fail-open on an atomic limiter instead of silently failing closed", async () => {
+    const atomic = { increment: vi.fn(), incrementAtomically: vi.fn(async () => { throw new Error("down") }) }
+    await expect(checkRateLimit({ store: atomic, key: "k", limit: 1, windowMs: 1000, consistency: "atomic", failureMode: "fail-open" })).rejects.toThrow("fail-open requires best-effort")
+    await expect(checkRateLimit({ store: atomic, key: "k", limit: 1, windowMs: 1000, failureMode: "fail-open" })).rejects.toThrow("fail-open requires best-effort")
+    expect(atomic.incrementAtomically).not.toHaveBeenCalled()
+  })
+
+  it("parses common window units and rejects overflowing windows", () => {
+    expect(["500ms", "30s", "2 minutes", "1h", "1 day", "7d"].map(parseTimeWindowMs)).toEqual([500, 30_000, 120_000, 3_600_000, 86_400_000, 604_800_000])
+    expect(() => parseTimeWindowMs("0s")).toThrow()
+    expect(() => parseTimeWindowMs("1 week")).toThrow()
+    expect(() => parseTimeWindowMs("9999999999 days")).toThrow()
+  })
+})
