@@ -12,6 +12,8 @@ export interface PersistenceCapabilities {
   exactDecimal: boolean
   persistentConnection: boolean
   conditionalAbacUpdate?: boolean
+  /** The provider enforces TransactionOptions.timeoutMs inside the database. */
+  transactionTimeouts?: boolean
   maxBindParams?: number
   maxStatementBytes?: number
   maxBatchItems?: number

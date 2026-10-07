@@ -228,6 +228,13 @@ export function createReadOnlyPersistenceProvider(provider: PersistenceProvider)
 export interface TransactionOptions {
   isolationLevel?: "read committed" | "repeatable read" | "serializable"
   accessMode?: "read only" | "read write"
+  /**
+   * Upper bound for the whole transaction, in milliseconds. Providers that
+   * declare `capabilities.transactionTimeouts` MUST enforce it in the database
+   * (for example a statement or transaction timeout) and roll back when it is
+   * exceeded. The operation pipeline sets it from the remaining deadline.
+   */
+  timeoutMs?: number
 }
 
 export interface InteractiveTransactionProvider extends PersistenceProvider {

@@ -282,9 +282,9 @@ async function runTransactionWithRetry<TInput, TResult>(args: {
           callbackFailed = true
           throw error
         }
-      }, args.definition.kind === "read"
+      }, transactionOptionsFor(args.provider, args.operation, args.definition.kind === "read"
         ? { ...args.transactionOptions, accessMode: "read only" }
-        : args.transactionOptions)
+        : args.transactionOptions))
     } catch (error) {
       attemptContext.dispose()
       const rolledBack = callbackFailed || error instanceof TransactionRolledBackError
@@ -293,6 +293,18 @@ async function runTransactionWithRetry<TInput, TResult>(args: {
     }
   }
   throw new ConfigurationError(`Transaction retry policy for ${args.definition.key} produced no attempt.`)
+}
+
+/**
+ * Bounds the database transaction by the operation's remaining deadline when
+ * the provider can enforce it, so a hung statement cannot outlive the request.
+ */
+function transactionOptionsFor(provider: InteractiveTransactionProvider, operation: InternalOperationRunContext, options: import("../persistence/provider").TransactionOptions | undefined): import("../persistence/provider").TransactionOptions | undefined {
+  if (provider.capabilities.transactionTimeouts !== true) return options
+  const remaining = Math.floor(operation.deadline.expiresAt.getTime() - operation.services.clock.now().getTime())
+  const deadlineMs = Math.max(1, Number.isFinite(remaining) ? remaining : 1)
+  const timeoutMs = options?.timeoutMs !== undefined ? Math.min(options.timeoutMs, deadlineMs) : deadlineMs
+  return { ...options, timeoutMs }
 }
 
 /**

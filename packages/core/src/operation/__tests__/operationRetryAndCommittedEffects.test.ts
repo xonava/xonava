@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import { runOperation, runOperationDetailed } from "../operationPipeline"
 import { createOperationContext } from "../operationContext"
 import { createExecutionDeadline } from "../deadline"
-import { RetryablePersistenceError, TransactionRolledBackError } from "../../domain/errors"
+import { RetryablePersistenceError, TransactionRolledBackError, ValidationError } from "../../domain/errors"
 import type { InteractiveTransactionProvider, PersistenceProvider } from "../../persistence/provider"
 import type { CommittedEffectFailure } from "../committedEffectFailure"
 import { MAX_RECORDED_EFFECT_FAILURES } from "../committedEffectFailure"
@@ -110,5 +110,50 @@ describe("post-commit failure contract", () => {
     })
     expect(outcome.postCommitEffectFailures).toHaveLength(MAX_RECORDED_EFFECT_FAILURES)
     expect(handler).toHaveBeenCalledTimes(MAX_RECORDED_EFFECT_FAILURES + 20)
+  })
+})
+
+describe("transaction deadline propagation", () => {
+  it("passes the remaining deadline to providers that enforce transaction timeouts", async () => {
+    const now = new Date("2026-01-01T00:00:00.000Z")
+    const seen: unknown[] = []
+    const tx = provider()
+    ;(tx as { capabilities: object }).capabilities = { ...capabilities, transactionTimeouts: true }
+    tx.runInTransaction = async (work, options) => { seen.push(options); return work(tx) }
+    const environment = createOperationContext({ persistence: tx, runtimeCapabilities, clock: { now: () => now }, deadline: createExecutionDeadline(new Date(now.getTime() + 5_000)) })
+    await runOperation({ operation: environment, definition: { key: "deadline-a", kind: "mutation", authorization: allow, atomicity: { kind: "standard", mode: "required", transactionOptions: { isolationLevel: "serializable" } }, execute: async () => 1 }, input: {} })
+    await runOperation({ operation: environment, definition: { key: "deadline-b", kind: "mutation", authorization: allow, atomicity: { kind: "standard", mode: "required", transactionOptions: { timeoutMs: 250 } }, execute: async () => 1 }, input: {} })
+    expect(seen).toEqual([{ isolationLevel: "serializable", timeoutMs: 5_000 }, { timeoutMs: 250 }])
+  })
+
+  it("leaves options untouched for providers without the capability and validates timeoutMs", async () => {
+    const seen: unknown[] = []
+    const tx = provider()
+    tx.runInTransaction = async (work, options) => { seen.push(options); return work(tx) }
+    await runOperation({ operation: createOperationContext({ persistence: tx, runtimeCapabilities }), definition: { key: "plain", kind: "mutation", authorization: allow, atomicity: { kind: "standard", mode: "required" }, execute: async () => 1 }, input: {} })
+    expect(seen).toEqual([undefined])
+    await expect(runOperation({ operation: createOperationContext({ persistence: tx, runtimeCapabilities }), definition: { key: "bad", kind: "mutation", authorization: allow, atomicity: { kind: "standard", mode: "required", transactionOptions: { timeoutMs: 0 } }, execute: async () => 1 }, input: {} })).rejects.toThrow("timeoutMs")
+  })
+})
+
+describe("operation.completed telemetry", () => {
+  it("emits one event per run with outcome, duration, and error code", async () => {
+    let now = 1_000
+    const events: { name: string; attributes: Record<string, unknown> }[] = []
+    const environment = createOperationContext({ persistence: provider(), runtimeCapabilities, clock: { now: () => new Date(now) }, idGenerator: () => "op", telemetry: { emit: (event) => { events.push(event as never) } } })
+    await runOperation({ operation: environment, definition: { key: "ok", kind: "mutation", authorization: allow, atomicity: { kind: "standard", mode: "required" }, execute: async () => { now += 42; return 1 } }, input: {} })
+    await expect(runOperation({ operation: environment, definition: { key: "bad", kind: "mutation", authorization: allow, atomicity: { kind: "standard", mode: "required" }, execute: async () => { throw new ValidationError("nope") } }, input: {} })).rejects.toThrow("nope")
+    await runOperation({ operation: environment, definition: { key: "warn", kind: "mutation", authorization: allow, atomicity: { kind: "standard", mode: "required" }, execute: async () => 1, afterCommit: async () => { throw new Error("x") } }, input: {} })
+    const completed = events.filter((event) => event.name === "operation.completed").map((event) => event.attributes)
+    expect(completed).toEqual([
+      expect.objectContaining({ operationKey: "ok", outcome: "success", durationMs: 42, operationKind: "mutation" }),
+      expect.objectContaining({ operationKey: "bad", outcome: "error", errorCode: "VALIDATION_ERROR" }),
+      expect.objectContaining({ operationKey: "warn", outcome: "committed_with_effect_failures" }),
+    ])
+  })
+
+  it("never lets a failing telemetry sink or clock change the result", async () => {
+    const environment = createOperationContext({ persistence: provider(), runtimeCapabilities, telemetry: { emit: () => { throw new Error("sink down") } } })
+    await expect(runOperation({ operation: environment, definition: { key: "ok", kind: "mutation", authorization: allow, atomicity: { kind: "standard", mode: "required" }, execute: async () => "fine" }, input: {} })).resolves.toBe("fine")
   })
 })

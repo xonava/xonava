@@ -159,8 +159,11 @@ function validateTransactionOptions(options: unknown, operationKey: string): voi
   if (typeof options !== "object" || options === null) {
     throw new ValidationError(`Invalid transaction options for operation ${operationKey}.`)
   }
-  assertExactKeys(options, ["isolationLevel", "accessMode"], `transaction options for operation ${operationKey}`)
-  const candidate = options as { isolationLevel?: unknown; accessMode?: unknown }
+  assertExactKeys(options, ["isolationLevel", "accessMode", "timeoutMs"], `transaction options for operation ${operationKey}`)
+  const candidate = options as { isolationLevel?: unknown; accessMode?: unknown; timeoutMs?: unknown }
+  if (candidate.timeoutMs !== undefined && (!Number.isSafeInteger(candidate.timeoutMs) || (candidate.timeoutMs as number) < 1 || (candidate.timeoutMs as number) > 3_600_000)) {
+    throw new ValidationError(`Transaction timeoutMs must be an integer from 1 to 3600000 for operation ${operationKey}.`)
+  }
   if (candidate.isolationLevel !== undefined && !["read committed", "repeatable read", "serializable"].includes(candidate.isolationLevel as string)) {
     throw new ValidationError(`Invalid transaction isolation level for operation ${operationKey}.`)
   }
