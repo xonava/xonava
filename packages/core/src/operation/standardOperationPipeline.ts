@@ -5,13 +5,14 @@ import { runAfterCommitHooks } from "./hooks"
 import { classifyAuditValue, defaultAuditSanitizer, type AuditRecord } from "../events/durability/audit"
 import type { InteractiveTransactionProvider } from "../persistence/provider"
 import { supportsInteractiveTransactions } from "../persistence/provider"
-import { AuditActorMissingError, AuditSinkMissingError, ConfigurationError, OutboxSinkMissingError, RetryablePersistenceError } from "../domain"
+import { AuditActorMissingError, AuditSinkMissingError, ConfigurationError, OutboxSinkMissingError, RetryablePersistenceError, TransactionRolledBackError } from "../domain"
 import type { StandardOperationDefinition, StandardAtomicityMode, RetryableTransactionExecution, RetryableMutationOperationDefinition } from "./operationDefinition"
 import { requireRuntimeCapability } from "../bootstrap/runtimeCapabilities"
 import { runAtomicBatchOperation } from "./atomicBatchOperationPipeline"
 import { assertExecutionActive } from "./deadline"
 import { applyAuthorizationPlanToResult, authorizeOperation, createPlanConstrainedPersistenceProvider, revalidateAuthorizationFacts } from "./authorizationPlanEnforcement"
 import { emitTelemetry, explicitlySafeTelemetryAttributes } from "../telemetry/telemetry"
+import { reportCommittedEffectFailure } from "./committedEffectFailure"
 
 type ExecutableStandardOperationDefinition<TInput, TResult> = StandardOperationDefinition<TInput, TResult> | RetryableMutationOperationDefinition<TInput, TResult>
 
@@ -24,7 +25,6 @@ export async function runStandardOperation<TInput, TResult>(args: {
   assertExecutionActive(args.operation.signal, args.operation.deadline, args.operation.services.clock)
   assertRequestBoundToOperation(args.operation, args.definition.key)
   const mode = resolveMode(args.definition)
-  const failedAttemptEffects = new WeakMap<object, boolean>()
   requireRuntimeCapabilities(args.operation, args.definition.requiredRuntimeCapabilities)
   const supportsTransactions = supportsInteractiveTransactions(args.operation.persistence)
   if (!supportsTransactions && args.definition.execution !== undefined) throw new ConfigurationError(`Operation ${args.definition.key} requires interactive transaction execution.`)
@@ -90,10 +90,6 @@ export async function runStandardOperation<TInput, TResult>(args: {
     try {
       return await execute(operation)
     } catch (error) {
-      // P1-07: Preserve side-effect signal before disposal so transaction retry
-      // guard can observe it. `dispose()` clears collector state.
-      const hadSideEffects = operation.outboxRecords.length > 0 || operation.commitMarkers.length > 0
-      failedAttemptEffects.set(operation, hadSideEffects)
       operation.dispose()
       throw error
     }
@@ -103,24 +99,26 @@ export async function runStandardOperation<TInput, TResult>(args: {
     const operation = transactionOperation
     const postCommitContext = createPostCommitOperationContext(operation)
     for (const effect of pendingEffects.bestEffortEffects) operation.addBestEffortEffect(effect.name, effect.execute)
-     try {
-       const failures: unknown[] = []
-       try {
-         await onBusinessResult?.(result, postCommitContext)
-       } catch (error) {
-         failures.push(error)
-         reportEffectFailure(operation, "onBusinessResult", "business-result", error)
-       }
+    // The business transaction has committed. Post-commit work is best-effort
+    // by contract: its failures never turn a committed operation into an
+    // error (a caller would retry and duplicate the mutation). They are
+    // reported through telemetry, onCommittedEffectFailure, and
+    // runOperationDetailed instead. Correctness-critical work uses the outbox.
+    try {
+      try {
+        await onBusinessResult?.(result, postCommitContext)
+      } catch (error) {
+        reportCommittedEffectFailure(operation, "onBusinessResult", "business-result", error)
+      }
       for (const hook of asArray(args.definition.afterCommit)) {
         try {
-           await runAfterCommitHooks({ operation: postCommitContext, input, result, hooks: hook })
+          await runAfterCommitHooks({ operation: postCommitContext, input, result, hooks: hook })
         } catch (error) {
-          failures.push(error)
-          reportEffectFailure(operation, "afterCommit", "hooks", error)
+          reportCommittedEffectFailure(operation, "afterCommit", "hooks", error)
         }
-       }
-       await runPendingEffects(operation, postCommitContext)
-        return result
+      }
+      await runPendingEffects(operation, postCommitContext)
+      return result
     } finally {
       operation.dispose()
     }
@@ -135,7 +133,6 @@ export async function runStandardOperation<TInput, TResult>(args: {
       definition: args.definition,
       input: args.input,
       run,
-      failedAttemptEffects,
        ...(execution?.kind === "retryable-transaction" ? { retryPolicy: execution } : {}),
       ...(args.definition.atomicity?.transactionOptions !== undefined ? { transactionOptions: args.definition.atomicity.transactionOptions } : {}),
     })
@@ -232,21 +229,14 @@ async function persistOutbox(operation: InternalOperationRunContext) {
   }
 }
 
-async function runEffects(operation: InternalOperationRunContext, postCommitContext: PostCommitContext, effects: { name: string; execute: (operation?: PostCommitContext) => Promise<void> }[], phase: string, required: boolean): Promise<unknown[]> {
-  const failures: unknown[] = []
-  for (const effect of effects) {
-    try { await effect.execute(postCommitContext) } catch (error) {
-      if (required) failures.push(error)
-      reportEffectFailure(operation, phase, effect.name, error)
-    }
-  }
-  return failures
-}
-
 async function runPendingEffects(operation: InternalOperationRunContext, postCommitContext: PostCommitContext): Promise<void> {
   while (operation.bestEffortEffects.length) {
     const drained = operation.takeDeferredEffects()
-    await runEffects(operation, postCommitContext, drained.bestEffortEffects, "bestEffort", false)
+    for (const effect of drained.bestEffortEffects) {
+      try { await effect.execute(postCommitContext) } catch (error) {
+        reportCommittedEffectFailure(operation, "bestEffort", effect.name, error)
+      }
+    }
   }
 }
 
@@ -256,95 +246,77 @@ async function runTransactionWithRetry<TInput, TResult>(args: {
   definition: ExecutableStandardOperationDefinition<TInput, TResult>
   input: TInput
   run: (operation: InternalOperationRunContext) => Promise<{ input: TInput; result: TResult; operation: InternalOperationRunContext }>
-  failedAttemptEffects: WeakMap<object, boolean>
   retryPolicy?: RetryableTransactionExecution
   transactionOptions?: import("../persistence/provider").TransactionOptions
 }): Promise<{ operation: InternalOperationRunContext; result: { input: TInput; result: TResult; operation: InternalOperationRunContext } }> {
-  // P1-07: Transaction retry safety.
+  // Transaction retry safety (P1-07, revised).
   //
-  // The operation callback (including its hooks and transactional effects) is
-  // rerun from the beginning for each retry attempt. This is safe only when the
-  // callback is idempotent — i.e., rerunning it produces the same result and
-  // has no observable side effects outside the transaction.
+  // A retry re-runs the whole transaction callback with a fresh effect
+  // collector. It is safe exactly when the failed attempt is known not to have
+  // committed:
+  // - the callback itself threw: the provider rolls the transaction back, and
+  //   with it every outbox record, audit row, and commit marker it wrote; or
+  // - the provider reports TransactionRolledBackError at COMMIT.
+  // Any other provider error after the callback returned has an unknown commit
+  // outcome and is never retried.
   //
-  // Risks of non-idempotent retries:
-  // - Transactional effects may have already sent external messages (email,
-  //   webhooks, notifications) that cannot be retracted on rollback.
-  // - Outbox records may have been written but the retry writes them again,
-  //   causing duplicate processing.
-  // - External API calls (HTTP, gRPC, message queues) inside the callback
-  //   are not rolled back by the database transaction.
-  //
-  // Current mitigation: If the operation registered any transactional effects
-  // or outbox records during the failed attempt, we do NOT retry — the side
-  // effects may have partially executed and rerunning could duplicate them.
-  //
+  // No framework-registered effect can escape a rolled-back attempt: the
+  // retryable execute context exposes no effect registration, and best-effort
+  // effects only run after commit. External calls made directly by user code
+  // are the operation author's responsibility, which is why retry is opt-in.
   const maxAttempts = args.retryPolicy?.maxAttempts ?? 1
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     let callbackFailed = false
-    let hadSideEffects = false
     const attemptContext = args.retryPolicy
       ? createOperationRunContext(args.operation, {
-           operationId: args.operation.operationId,
-           ...(args.operation.correlationId !== undefined ? { correlationId: args.operation.correlationId } : {}),
-         })
+          operationId: args.operation.operationId,
+          ...(args.operation.correlationId !== undefined ? { correlationId: args.operation.correlationId } : {}),
+        })
       : args.operation
     try {
       return await args.provider.runInTransaction(async (scoped) => {
-          const operation = attemptContext.withPersistence(scoped)
+        const operation = attemptContext.withPersistence(scoped)
         try {
-          const result = await args.run(operation)
-          // Detect transactional side effects that would make retry unsafe.
-          // Include commit markers: they assert ownership and are non-idempotent.
-           hadSideEffects = operation.outboxRecords.length > 0 || operation.commitMarkers.length > 0
-          return { operation, result }
+          return { operation, result: await args.run(operation) }
         } catch (error) {
           callbackFailed = true
-          // Read private attempt state captured before disposal. Never mutate or trust the thrown error.
-          const flagged = args.failedAttemptEffects.get(operation)
-          if (typeof flagged === "boolean") hadSideEffects = flagged
-           else hadSideEffects = operation.outboxRecords.length > 0 || operation.commitMarkers.length > 0
           throw error
         }
       }, args.definition.kind === "read"
         ? { ...args.transactionOptions, accessMode: "read only" }
         : args.transactionOptions)
     } catch (error) {
-      // A provider error after the callback returns may have an unknown commit
-      // outcome, so it is never safe to rerun the operation.
-      if (!callbackFailed) {
-        attemptContext.dispose()
-        throw error
-      }
-      // P1-07: Do not retry if the failed attempt registered transactional
-      // effects or outbox records — these may have partially executed external
-      // side effects (emails, webhooks, messages) that cannot be retracted.
-      if (hadSideEffects) {
-        attemptContext.dispose()
-        throw error
-      }
-      if (!(error instanceof RetryablePersistenceError) || attempt >= maxAttempts) {
-        attemptContext.dispose()
-        throw error
-      }
-      // Retry with fresh collector — dispose the failed attempt's collector first
       attemptContext.dispose()
-      const delayMs = Math.min(
-         args.retryPolicy!.maxDelay,
-         args.retryPolicy!.delay * Math.pow(args.retryPolicy!.backoff, attempt - 1),
-      )
-      if (delayMs > 0) await new Promise<void>((resolve) => setTimeout(resolve, delayMs))
+      const rolledBack = callbackFailed || error instanceof TransactionRolledBackError
+      if (!rolledBack || !(error instanceof RetryablePersistenceError) || attempt >= maxAttempts) throw error
+      await waitBeforeRetry(args.operation, args.retryPolicy!, attempt, error)
     }
   }
   throw new ConfigurationError(`Transaction retry policy for ${args.definition.key} produced no attempt.`)
 }
 
+/**
+ * Jittered exponential backoff that never outlives the operation: it aborts
+ * with the operation signal and gives up (rethrowing the last error) when the
+ * delay would cross the execution deadline. Timers and listeners are always
+ * released.
+ */
+async function waitBeforeRetry(operation: InternalOperationRunContext, policy: RetryableTransactionExecution, failedAttempt: number, lastError: unknown): Promise<void> {
+  const base = Math.min(policy.maxDelay, policy.delay * Math.pow(policy.backoff, Math.min(failedAttempt - 1, 64)))
+  const delayMs = Math.max(0, Math.floor(base / 2 + (Math.random() * base) / 2))
+  const signal = operation.signal
+  if (signal.aborted) throw signal.reason ?? lastError
+  const remaining = operation.deadline.expiresAt.getTime() - operation.services.clock.now().getTime()
+  if (!Number.isFinite(remaining) || remaining <= delayMs) throw lastError
+  if (delayMs === 0) return
+  await new Promise<void>((resolve, reject) => {
+    const onAbort = (): void => { clearTimeout(timer); reject(signal.reason ?? lastError) }
+    const timer = setTimeout(() => { signal.removeEventListener("abort", onAbort); resolve() }, delayMs)
+    signal.addEventListener("abort", onAbort, { once: true })
+  })
+}
+
 function asArray<T>(value: T | T[] | undefined): T[] {
   if (!value) return []
   return Array.isArray(value) ? value : [value]
-}
-
-function reportEffectFailure(operation: InternalOperationRunContext, phase: string, effectName: string, error: unknown) {
-  operation.effectFailures.push({ phase, effectName, error })
-  emitTelemetry(operation.services.telemetry, { name: "operation.effect.failure", severity: "error", timestamp: operation.services.clock.now(), attributes: explicitlySafeTelemetryAttributes({ operationId: operation.operationId, ...(operation.correlationId ? { correlationId: operation.correlationId } : {}), phase, effectName, errorType: error instanceof Error ? error.name : "unknown" }) })
 }

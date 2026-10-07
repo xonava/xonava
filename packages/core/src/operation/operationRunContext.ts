@@ -23,6 +23,12 @@ export interface OperationEnvironment<TPersistence extends PersistenceProvider =
   readonly authorizationFactRevalidator?: import("../security/authorizationFacts").AuthorizationFactRevalidator
   readonly auditSinkFactory?: import("../events/durability/audit").AuditSinkFactory
   readonly outboxSinkFactory?: import("../events/durability/outbox").OutboxSinkFactory
+  /**
+   * Called for every best-effort post-commit failure (afterCommit hooks,
+   * onBusinessResult, best-effort effects). Use it for alerting: the operation
+   * has committed and returns normally. Errors thrown here are ignored.
+   */
+  readonly onCommittedEffectFailure?: import("./committedEffectFailure").CommittedEffectFailureHandler
 }
 
 export interface OperationRunContext<TPersistence extends PersistenceProvider = PersistenceProvider> extends OperationEnvironment<TPersistence> {

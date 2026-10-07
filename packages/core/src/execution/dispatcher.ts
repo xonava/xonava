@@ -240,9 +240,23 @@ async function executeJob(args: DispatcherConfig & { job: StoredJob; log: Dispat
 
   const def = registry.get(job.jobType, job.jobVersion)
   if (!def) {
+    // This worker does not know the job's type/version — typically a rolling
+    // deploy where a newer worker enqueued it. Hand it back for another worker
+    // instead of failing it permanently; dead-letter only once the store's
+    // attempt budget is exhausted.
     const error = `Unknown job definition: ${job.jobType}@${job.jobVersion}`
-    const status = await markFailedState({ jobId: job.id, workerId, claimToken: job.claimToken, error, status: "failed", attempt: job.attemptsCompleted + 1 }, store)
-    return status.applied ? { kind: "failed", error } : { kind: "lease_lost", error: status.error ?? error }
+    const attempt = job.attemptsCompleted + 1
+    try {
+      const deferred = await store.markRetrying({ jobId: job.id, workerId, claimToken, nextAttemptAt: new Date(clock.now().getTime() + leaseDurationMs), error, attempt })
+      if (deferred.applied) {
+        log.warn("Job deferred: unknown definition", { jobId: job.id, jobType: job.jobType, jobVersion: job.jobVersion, attempt })
+        return { kind: "retried", error }
+      }
+    } catch (deferError) {
+      log.warn("Job deferral failed", { jobId: job.id, error: errorMessage(deferError) })
+    }
+    const status = await markFailedState({ jobId: job.id, workerId, claimToken, error, status: "dead_letter", attempt }, store)
+    return status.applied ? { kind: "dead_letter", error } : { kind: "lease_lost", error: status.error ?? error }
   }
 
   try {

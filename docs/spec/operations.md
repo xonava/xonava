@@ -19,3 +19,13 @@ Nested operations MUST consume from the enclosing budget/deadline and MUST NOT a
 Invalid definitions/input are validation; denial authorization; missing service capability/configuration; deadline/cancellation execution failure; closed/disposed/drained effects stable lifecycle errors. Conformance covers ordering, hook trust boundaries, nested attenuation/budgets, cancellation/deadline, atomic and post-commit effects, committed-effect failure, and telemetry redaction.
 
 Traceability: `packages/core/src/operation`; operation and adversarial suites; OP1/S1/T1 certification.
+
+## Post-commit outcome contract (normative)
+
+Once an operation's business transaction (or atomic batch) has committed, best-effort post-commit work — `onBusinessResult`, `afterCommit` hooks, and best-effort effects — MUST NOT turn the operation into an error, in either pipeline. A caller that saw an error would retry and duplicate a committed mutation. Each such failure MUST instead be reported through telemetry (`operation.effect.failure`), the optional `onCommittedEffectFailure` environment handler (whose own failures are ignored), and `runOperationDetailed().postCommitEffectFailures` (at most 100 retained records per operation). Work that must not be lost belongs in the transactional outbox (`addDurableEffect`).
+
+When an atomic-batch `after` (representation) hook fails after the batch committed, there is no correct result to return: the pipeline throws `OperationCommittedEffectError` with `committed: true`, `operationId`, and the committed result. Callers and transports MUST treat it as committed and MUST NOT retry the mutation.
+
+## Transaction retry (normative)
+
+`execution: { kind: "retryable-transaction" }` re-runs the whole transaction callback, with a fresh effect scope, only when the failed attempt is known not to have committed: the callback threw a `RetryablePersistenceError` (the provider rolls the transaction back, including every outbox record, audit row, and commit marker it wrote), or the provider reports `TransactionRolledBackError` at commit. Any other failure after the callback returned has an unknown commit outcome and is never retried. Retries use jittered exponential backoff (`delay`, `backoff`, `maxDelay`), stop immediately when the operation signal aborts, and give up with the last error rather than wait past the execution deadline.

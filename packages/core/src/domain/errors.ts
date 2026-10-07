@@ -143,6 +143,17 @@ export class RetryablePersistenceError extends FrameworkCoreError {
   }
 }
 
+/**
+ * The provider guarantees the transaction did not commit (for example a
+ * serialization failure or deadlock reported at COMMIT). Unlike an unknown
+ * commit outcome, the whole transaction may safely be re-run.
+ */
+export class TransactionRolledBackError extends RetryablePersistenceError {
+  constructor(message: string = "The transaction was rolled back by the database", details?: unknown) {
+    super(message, details)
+  }
+}
+
 export class NotFoundError extends FrameworkCoreError {
   constructor(message: string = "Not found", details?: unknown) {
     super(message, "NOT_FOUND", details)

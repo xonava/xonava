@@ -89,6 +89,8 @@ export interface CreateOperationContextArgs {
   authorizationFactRevalidator?: AuthorizationFactRevalidator
   auditSinkFactory?: AuditSinkFactory
   outboxSinkFactory?: OutboxSinkFactory
+  /** Alerting hook for best-effort post-commit failures; see OperationEnvironment. */
+  onCommittedEffectFailure?: import("./committedEffectFailure").CommittedEffectFailureHandler
   /** Adapter-only commit participants. Never exposed on callback contexts. */
   commitMarkers?: readonly CommitMarkerEntry[]
   services?: OperationServices
@@ -132,6 +134,7 @@ export function createOperationContext<TPersistence extends PersistenceProvider>
     ...(args.authorizationFactRevalidator !== undefined ? { authorizationFactRevalidator: args.authorizationFactRevalidator } : {}),
     ...(args.auditSinkFactory !== undefined ? { auditSinkFactory: args.auditSinkFactory } : {}),
     ...(args.outboxSinkFactory !== undefined ? { outboxSinkFactory: args.outboxSinkFactory } : {}),
+    ...(args.onCommittedEffectFailure !== undefined ? { onCommittedEffectFailure: args.onCommittedEffectFailure } : {}),
     ...(args.commitMarkers !== undefined ? { commitMarkers: args.commitMarkers } : {}),
   }
 }

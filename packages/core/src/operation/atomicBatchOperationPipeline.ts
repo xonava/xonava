@@ -10,7 +10,7 @@ import { supportsAtomicBatch, supportsTenantScopedAtomicBatch } from "../persist
 import { AuditActorMissingError, ConfigurationError } from "../domain"
 import { assertExecutionActive } from "./deadline"
 import { applyAuthorizationPlanToResult, assertAtomicBatchPlanSupported, authorizeOperation } from "./authorizationPlanEnforcement"
-import { emitTelemetry, explicitlySafeTelemetryAttributes } from "../telemetry/telemetry"
+import { reportCommittedEffectFailure } from "./committedEffectFailure"
 
 export interface CommittedEffectErrorContext {
   operationId?: string
@@ -153,26 +153,29 @@ export async function runAtomicBatchOperation<TInput, TResult, TCommand>(args: {
     try {
       finalResult = await runAfterHooks({ operation: createRepresentationContext(operation), input, result: prepared.result, ...(args.definition.after !== undefined ? { hooks: args.definition.after } : {}) })
     } catch (error) {
+      // The batch has committed but there is no correct representation to
+      // return. Callers must treat OperationCommittedEffectError as committed
+      // and MUST NOT retry the mutation.
+      reportCommittedEffectFailure(operation, "after", "hooks", error)
       throw new OperationCommittedEffectError(`Operation ${args.definition.key} committed, but a post-commit hook failed.`, error, [error], { operationId: operation.operationId, ...(operation.correlationId !== undefined ? { correlationId: operation.correlationId } : {}), result: prepared.result })
     }
     // The atomic provider has committed the command, audit, and outbox items.
     const restrictedOperation = operation.withPersistence(operation.persistence)
     postCommitOperation = restrictedOperation
     const postCommitContext = createPostCommitOperationContext(restrictedOperation)
-    const failures: unknown[] = []
+    // Same post-commit contract as the standard pipeline: best-effort work is
+    // reported, never thrown, because the mutation has already committed.
     try {
       await args.onBusinessResult?.(finalResult, postCommitContext)
     } catch (error) {
-      failures.push(error)
-      reportEffectFailure(operation, "onBusinessResult", "business-result", error)
+      reportCommittedEffectFailure(operation, "onBusinessResult", "business-result", error)
     }
     for (const effect of pendingEffects.bestEffortEffects) restrictedOperation.addBestEffortEffect(effect.name, effect.execute)
     for (const hook of asArray(args.definition.afterCommit)) {
-        try {
-         await runAfterCommitHooks({ operation: postCommitContext, input, result: finalResult, hooks: hook })
+      try {
+        await runAfterCommitHooks({ operation: postCommitContext, input, result: finalResult, hooks: hook })
       } catch (error) {
-        failures.push(error)
-        reportEffectFailure(restrictedOperation, "afterCommit", "hooks", error)
+        reportCommittedEffectFailure(restrictedOperation, "afterCommit", "hooks", error)
       }
     }
     await runPendingEffects(restrictedOperation, postCommitContext)
@@ -233,29 +236,15 @@ function isAtomicBatchItemResult(value: unknown): value is AtomicBatchItemResult
     Object.prototype.hasOwnProperty.call(value, "result")
 }
 
-async function runEffects(operation: InternalOperationRunContext, postCommitContext: PostCommitContext, effects: { name: string; execute: (operation?: PostCommitContext) => Promise<void> }[], phase: string): Promise<unknown[]> {
-  const failures: unknown[] = []
-  for (const effect of effects) {
-    try {
-      await effect.execute(postCommitContext)
-    } catch (error) {
-      failures.push(error)
-      reportEffectFailure(operation, phase, effect.name, error)
-    }
-  }
-  return failures
-}
-
 async function runPendingEffects(operation: InternalOperationRunContext, postCommitContext: PostCommitContext): Promise<void> {
   while (operation.bestEffortEffects.length) {
     const drained = operation.takeDeferredEffects()
-    await runEffects(operation, postCommitContext, drained.bestEffortEffects, "bestEffort")
+    for (const effect of drained.bestEffortEffects) {
+      try { await effect.execute(postCommitContext) } catch (error) {
+        reportCommittedEffectFailure(operation, "bestEffort", effect.name, error)
+      }
+    }
   }
-}
-
-function reportEffectFailure(operation: InternalOperationRunContext, phase: string, effectName: string, error: unknown): void {
-  operation.effectFailures.push({ phase, effectName, error })
-  emitTelemetry(operation.services.telemetry, { name: "operation.effect.failure", severity: "error", timestamp: operation.services.clock.now(), attributes: explicitlySafeTelemetryAttributes({ operationId: operation.operationId, ...(operation.correlationId ? { correlationId: operation.correlationId } : {}), phase, effectName, errorType: error instanceof Error ? error.name : "unknown" }) })
 }
 
 function asArray<T>(value: T | T[] | undefined): T[] {

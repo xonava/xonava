@@ -2239,27 +2239,30 @@ describe("transaction boundary", () => {
     expect(transactionCalls).toBe(3)
   })
 
-  it("does not retry when the failed attempt registered commit markers (P1-07)", async () => {
+  it("retries rolled-back attempts even with idempotency commit markers; the marker commits once (P1-07 revised)", async () => {
     const provider = createTxProvider()
     let transactionCalls = 0
     provider.runInTransaction = async (fn) => {
       transactionCalls += 1
       return fn(provider)
     }
+    const markerCommit = vi.fn(async () => {})
+    let calls = 0
     await expect(runOperation({
       operation: createOperationContext({
         persistence: provider,
         runtimeCapabilities: defaultRuntimeCaps,
-        commitMarkers: [{ name: "idempotency", commit: async () => {} }],
+        commitMarkers: [{ name: "idempotency", commit: markerCommit }],
       }),
       definition: {
-        key: "no-retry-with-marker",
+        key: "retry-with-marker",
          atomicity: { kind: "standard", mode: "required" }, execution: { kind: "retryable-transaction", maxAttempts: 3, delay: 0, backoff: 2, maxDelay: 0 },
-        execute: async () => { throw new RetryablePersistenceError("serialization failure") },
+        execute: async () => { calls++; if (calls < 3) throw new RetryablePersistenceError("serialization failure"); return { ok: true } },
       },
       input: {},
-    })).rejects.toThrow(RetryablePersistenceError)
-    expect(transactionCalls).toBe(1)
+    })).resolves.toEqual({ ok: true })
+    expect(transactionCalls).toBe(3)
+    expect(markerCommit).toHaveBeenCalledTimes(1)
   })
 
   it("does not retry non-retryable transaction failures", async () => {
