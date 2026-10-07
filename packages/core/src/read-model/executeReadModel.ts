@@ -13,8 +13,21 @@ function sanitize(rows:readonly Readonly<Record<string,unknown>>[],source:Compil
   return rows.filter(row=>evaluatePredicate(row as Record<string,unknown>,source.mandatoryPredicate)).map(row=>Object.freeze(Object.fromEntries([...source.readableFields].filter(field=>Object.hasOwn(row,field)).map(field=>[field,row[field]]))))
 }
 
-function isJoinKey(value:unknown):boolean {
-  return value!==undefined&&value!==null&&!(typeof value==="number"&&Number.isNaN(value))
+/**
+ * Join keys compare by value, without cross-kind coercion: "1" never joins 1,
+ * and two Dates join when they denote the same instant. Null, NaN, and invalid
+ * dates never join; other objects join by identity.
+ */
+function joinKey(value:unknown):unknown {
+  switch(typeof value){
+    case "string": return `s:${value}`
+    case "number": return Number.isNaN(value)?undefined:`n:${String(value)}`
+    case "boolean": return `b:${String(value)}`
+    case "bigint": return `i:${value.toString()}`
+    default:
+      if(value instanceof Date) return Number.isFinite(value.getTime())?`d:${value.getTime()}`:undefined
+      return value===null||value===undefined?undefined:value
+  }
 }
 
 function joinRows(left:readonly Record<string,Readonly<Record<string,unknown>>>[],right:readonly Readonly<Record<string,unknown>>[],join:CompiledReadJoin,maxOutputRows:number,indexedRows:{value:number}):Record<string,Readonly<Record<string,unknown>>>[]{
@@ -23,8 +36,8 @@ function joinRows(left:readonly Record<string,Readonly<Record<string,unknown>>>[
   const index=new Map<unknown,Readonly<Record<string,unknown>>[]>()
   for(const candidate of right){
     if(!Object.hasOwn(candidate,join.rightKey)) continue
-    const key=candidate[join.rightKey]
-    if(!isJoinKey(key)) continue
+    const key=joinKey(candidate[join.rightKey])
+    if(key===undefined) continue
     const matches=index.get(key)
     if(matches) matches.push(candidate)
     else index.set(key,[candidate])
@@ -34,7 +47,8 @@ function joinRows(left:readonly Record<string,Readonly<Record<string,unknown>>>[
   for(const row of left){
     const leftRecord=row[join.leftSourceKey]
     const leftValue=leftRecord&&Object.hasOwn(leftRecord,join.leftKey)?leftRecord[join.leftKey]:undefined
-    const matches=isJoinKey(leftValue)?index.get(leftValue):undefined
+    const leftKey=joinKey(leftValue)
+    const matches=leftKey===undefined?undefined:index.get(leftKey)
     const matchCount=matches?.length??0
     if(matchCount>join.maxExpansion||(join.cardinality!=="one-to-many"&&matchCount>1)) throw new ConfigurationError("Read-model join expansion budget exceeded")
     const appended=Math.max(matchCount,join.type==="left"?1:0)
@@ -125,7 +139,8 @@ export async function executeReadModel(plan:CompiledMultiSourceReadPlan,executor
     const sourceConsistency:Record<string,"strong"|"session"|"eventual">=Object.create(null)
     settled.forEach((item,index)=>{const source=plan.sources[index]!;if(item.status==="rejected"){failed.push(source.sourceKey);return}if(!item.value||!Array.isArray(item.value.rows)||!Object.hasOwn(rank,item.value.consistency)||item.value.rows.some(row=>!row||typeof row!=="object"||Array.isArray(row)))throw new ConfigurationError(`Invalid source result or consistency: ${source.sourceKey}`);if(item.value.rows.length>plan.maxSourceRows)throw new ConfigurationError(`Source row budget exceeded: ${source.sourceKey}`);if(rank[item.value.consistency]<rank[source.consistency])throw new ConfigurationError(`Source consistency requirement was not satisfied: ${source.sourceKey}`);results.set(source.sourceKey,item.value);sourceConsistency[source.sourceKey]=item.value.consistency})
     if(failed.length&&plan.partialFailurePolicy==="fail-whole-read")throw new ConfigurationError(`Read-model source failure: ${failed.join(",")}`)
-    if(plan.consistency.kind==="application-defined-snapshot"&&failed.length===0){const tokens=[...results.values()].map(value=>value.snapshotToken);if(tokens.some(token=>typeof token!=="string"||!token)||new Set(tokens).size!==1)throw new ConfigurationError("Application-defined snapshot token mismatch")}
+    // Sources that succeeded must share one snapshot even when others failed.
+    if(plan.consistency.kind==="application-defined-snapshot"&&results.size>0){const tokens=[...results.values()].map(value=>value.snapshotToken);if(tokens.some(token=>typeof token!=="string"||!token)||new Set(tokens).size!==1)throw new ConfigurationError("Application-defined snapshot token mismatch")}
     const available=plan.sources.filter(source=>results.has(source.sourceKey))
     const first=available[0]
     let rows:Record<string,Readonly<Record<string,unknown>>>[]=first?sanitize(results.get(first.sourceKey)!.rows,first).map(row=>({[first.sourceKey]:row})):[]

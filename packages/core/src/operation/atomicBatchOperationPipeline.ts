@@ -42,9 +42,11 @@ export async function runAtomicBatchOperation<TInput, TResult, TCommand>(args: {
   definition: AtomicBatchOperationDefinition<TInput, TResult, TCommand>
   input: TInput
   onBusinessResult?: (result: TResult, operation: PostCommitContext) => Promise<void>
+  /** Invoked by another operation: the request's route is bound to the root operation. */
+  nested?: boolean
 }): Promise<TResult> {
   assertExecutionActive(args.operation.signal, args.operation.deadline, args.operation.services.clock)
-  assertRequestBoundToOperation(args.operation, args.definition.key)
+  if (args.nested !== true) assertRequestBoundToOperation(args.operation, args.definition.key)
   const provider = args.operation.persistence
   for (const capability of args.definition.requiredRuntimeCapabilities ?? []) requireRuntimeCapability(args.operation.runtimeCapabilities, capability)
   if (!supportsAtomicBatch(provider)) throw new ConfigurationError(`Operation ${args.definition.key} requires atomic-batch persistence support.`)

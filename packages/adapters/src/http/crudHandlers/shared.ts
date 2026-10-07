@@ -574,10 +574,11 @@ export function buildScopedCreateRecord<TRow extends SelectableRow>(
  * tag is reserved for genuinely global (platform/public) shared data.
  */
 export function buildScopeCacheTags(tag: string, context: RequestContext): string[] {
-  if (context.scope.kind === "tenant") {
-    return [encodeTenantCacheTag(context.scope.tenantId, tag), encodeTenantCacheTag(context.scope.tenantId, "scope")]
-  }
-  return [`${tag}:${context.scopeId}`, `scope:${context.scopeId}`, tag]
+  const tags = context.scope.kind === "tenant"
+    ? [encodeTenantCacheTag(context.scope.tenantId, tag), encodeTenantCacheTag(context.scope.tenantId, "scope")]
+    : [`${tag}:${context.scopeId}`, `scope:${context.scopeId}`, tag]
+  // A module tag named "scope" would otherwise repeat the scope tag.
+  return [...new Set(tags)]
 }
 
 export function createShared<

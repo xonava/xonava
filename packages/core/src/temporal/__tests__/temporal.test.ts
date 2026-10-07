@@ -19,3 +19,13 @@ describe("temporal reconstruction",()=>{
   it("validates lifecycle/state consistency and identities",()=>{expect(()=>validateTemporalRevision({...rev(1,"2026-01-01",{n:1}),kind:"deleted"})).toThrow(/null state/);expect(()=>validateTemporalRevision({...rev(1,"2026-01-01",null),kind:"updated"})).toThrow(/must have state/);expect(()=>validateTemporalRevision({...rev(1,"2026-01-01",{n:1}),eventId:"bad id"})).toThrow(/identity/)})
   it("rejects invalid lifecycle transitions",async()=>{await expect(reconstructAsOf(store([rev(1,"2026-01-01",{n:1},"updated")]),resource,new Date("2026-02-01"))).rejects.toThrow(/begin with creation/);await expect(reconstructAsOf(store([rev(1,"2026-01-01",{n:1}),rev(2,"2026-01-02",null,"deleted"),rev(3,"2026-01-03",{n:2},"updated")]),resource,new Date("2026-02-01"))).rejects.toThrow(/restored/)})
 })
+
+describe("temporal snapshot identity (final pass)",()=>{
+  it("rejects a snapshot for another resource",async()=>{
+    const foreign={scopeId:resource.scopeId,entityType:"other",entityId:"x9",revision:5,occurredAt:new Date("2026-01-01T00:00:00Z"),state:{secret:1}}
+    await expect(reconstructAsOf(store([],foreign),resource,new Date("2026-02-01"))).rejects.toThrow("snapshot outside the request")
+  })
+  it("rejects a revision-0 snapshot that carries state",()=>{
+    expect(()=>validateTemporalSnapshot({...resource,revision:0,occurredAt:new Date("2026-01-01T00:00:00Z"),state:{ghost:true}})).toThrow("revision-0")
+  })
+})

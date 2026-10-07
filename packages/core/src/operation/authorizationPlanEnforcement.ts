@@ -204,27 +204,55 @@ function assertWritableFields(data: unknown, plan: AuthorizedExecutionPlan): voi
   }
 }
 
-function topLevelConjuncts(predicate: PredicateNode, out: PredicateNode[] = []): PredicateNode[] {
-  if (predicate.kind === "and") for (const child of predicate.filters) topLevelConjuncts(child, out)
-  else out.push(predicate)
-  return out
-}
+const UPDATE_FORBIDDEN = "Authorization plan resource predicate does not permit this update."
 
 /**
- * A where-mutation constrains only the pre-image; the new data must not move
- * the row out of the mandatory predicate. Each top-level conjunct touching a
- * written field must be fully determined by the data and evaluate TRUE on it.
+ * Rewrites the mandatory predicate so it describes the row AFTER the update:
+ * conditions on written fields are decided by the new values, and what
+ * remains mentions only unwritten fields, whose post-image equals their
+ * pre-image. Adding the result to the WHERE clause therefore guarantees the
+ * updated row still satisfies the mandatory predicate, exactly, for any
+ * AND/OR/NOT shape. A written value that makes a condition UNKNOWN (NULL
+ * comparison) is rejected rather than approximated.
  */
-function assertUpdateDataKeepsPredicate(data: unknown, conjuncts: readonly PredicateNode[] | undefined): void {
-  if (!conjuncts) return
-  const written = new Set(Object.keys(data as object))
-  for (const conjunct of conjuncts) {
-    const fields = [...predicateFields(conjunct)]
-    if (!fields.some((field) => written.has(field))) continue
-    if (!fields.every((field) => written.has(field)) || evaluatePredicateTruth(data as Record<string, unknown>, conjunct) !== true) {
-      throw new ForbiddenError("Authorization plan resource predicate does not permit this update.")
+function postImagePredicate(predicate: PredicateNode, data: Readonly<Record<string, unknown>>): PredicateNode {
+  switch (predicate.kind) {
+    case "literal": return predicate
+    case "condition": {
+      if (!Object.hasOwn(data, predicate.field)) return predicate
+      const truth = evaluatePredicateTruth(data, predicate)
+      if (truth === null) throw new ForbiddenError(UPDATE_FORBIDDEN)
+      return Predicate.literal(truth)
     }
+    case "not": {
+      const inner = postImagePredicate(predicate.filter, data)
+      return inner.kind === "literal" ? Predicate.literal(!inner.value) : Predicate.not(inner)
+    }
+    case "and":
+    case "or": {
+      const decisive = predicate.kind === "or"
+      const remaining: PredicateNode[] = []
+      for (const child of predicate.filters) {
+        const next = postImagePredicate(child, data)
+        if (next.kind === "literal") { if (next.value === decisive) return next; continue }
+        remaining.push(next)
+      }
+      if (remaining.length === 0) return Predicate.literal(!decisive)
+      return remaining.length === 1 ? remaining[0]! : predicate.kind === "and" ? Predicate.and(...remaining) : Predicate.or(...remaining)
+    }
+    default: throw new ForbiddenError(UPDATE_FORBIDDEN)
   }
+}
+
+/** The WHERE addition that keeps an updated row inside the mandatory predicate. */
+function postImageFilter(data: unknown, mandatory: PredicateNode | undefined): PredicateNode | undefined {
+  if (!mandatory) return undefined
+  const residual = postImagePredicate(mandatory, data as Readonly<Record<string, unknown>>)
+  if (residual.kind === "literal") {
+    if (!residual.value) throw new ForbiddenError(UPDATE_FORBIDDEN)
+    return undefined
+  }
+  return residual
 }
 
 function assertDirectMutationIsSafe(required: PredicateNode | undefined): void {
@@ -235,7 +263,9 @@ function assertDirectMutationIsSafe(required: PredicateNode | undefined): void {
 
 function constrainRepository<T, TId>(repository: ReturnType<PersistenceProvider["repository"]>, plan: AuthorizedExecutionPlan, required: PredicateNode | undefined) {
   const requiredFields = required === undefined ? undefined : predicateFields(required)
-  const requiredConjuncts = required === undefined ? undefined : topLevelConjuncts(required)
+  // Dynamic-fact equalities guard the pre-image only (compare-and-set); the
+  // post-image must satisfy the mandatory resource predicate.
+  const mandatory = plan.mandatoryResourcePredicate ?? undefined
   const read = {
     findById: async (id: TId): Promise<T | null> => {
       const row = await (repository as { findById(id: TId): Promise<T | null> }).findById(id)
@@ -294,23 +324,20 @@ function constrainRepository<T, TId>(repository: ReturnType<PersistenceProvider[
     ...(mutation.updateOneWhere ? {
       updateOneWhere: async (filter: PredicateNode, data: Partial<T>, options?: unknown) => {
         assertWritableFields(data, plan)
-        assertUpdateDataKeepsPredicate(data, requiredConjuncts)
-        return mutation.updateOneWhere!(addRequiredPredicate(filter, required)!, data, options)
+        return mutation.updateOneWhere!(addRequiredPredicate(addRequiredPredicate(filter, required), postImageFilter(data, mandatory))!, data, options)
       },
     } : {}),
     ...(mutation.updateOneWhereReturning ? {
       updateOneWhereReturning: async (filter: PredicateNode, data: Partial<T>, options?: unknown) => {
         assertWritableFields(data, plan)
-        assertUpdateDataKeepsPredicate(data, requiredConjuncts)
-        const row = await mutation.updateOneWhereReturning!(addRequiredPredicate(filter, required)!, data, options)
-        return permittedRecord(row, required) ? row : null
+        const row = await mutation.updateOneWhereReturning!(addRequiredPredicate(addRequiredPredicate(filter, required), postImageFilter(data, mandatory))!, data, options)
+        return permittedRecord(row, mandatory) ? row : null
       },
     } : {}),
     ...(mutation.updateManyWhere ? {
       updateManyWhere: async (filter: PredicateNode, data: Partial<T>, options?: unknown) => {
         assertWritableFields(data, plan)
-        assertUpdateDataKeepsPredicate(data, requiredConjuncts)
-        return mutation.updateManyWhere!(addRequiredPredicate(filter, required)!, data, options)
+        return mutation.updateManyWhere!(addRequiredPredicate(addRequiredPredicate(filter, required), postImageFilter(data, mandatory))!, data, options)
       },
     } : {}),
     delete: (id: TId, options?: unknown) => {

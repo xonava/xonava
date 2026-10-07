@@ -95,8 +95,8 @@ async function executeValidatedOperation<TInput, TResult, TCommand>(args: {
   try {
     if (joinedParent && isAtomicBatchDefinition(args.definition)) throw new ConfigurationError(`Atomic-batch operation ${args.definition.key} cannot run inside another operation's transaction.`)
     const result = isAtomicBatchDefinition(args.definition)
-      ? await runAtomicBatchOperation({ operation, definition: args.definition, input: args.input, ...(args.onBusinessResult ? { onBusinessResult: args.onBusinessResult } : {}) })
-      : await runStandardOperation({ operation, definition: args.definition, input: args.input, createNestedInvoke, ...(joinedParent ? { joinedParent } : {}), ...(args.onBusinessResult ? { onBusinessResult: args.onBusinessResult } : {}) })
+      ? await runAtomicBatchOperation({ operation, definition: args.definition, input: args.input, ...(parent ? { nested: true } : {}), ...(args.onBusinessResult ? { onBusinessResult: args.onBusinessResult } : {}) })
+      : await runStandardOperation({ operation, definition: args.definition, input: args.input, createNestedInvoke, ...(parent ? { nested: true } : {}), ...(joinedParent ? { joinedParent } : {}), ...(args.onBusinessResult ? { onBusinessResult: args.onBusinessResult } : {}) })
     emitCompleted(operation, args.definition, startedAt, operation.effectFailures.length > 0 ? "committed_with_effect_failures" : "success")
     return { result, operation, committed }
   } catch (error) {

@@ -105,3 +105,14 @@ describe("aggregate consistency boundaries", () => {
     expect(() => assertAggregateInvariants(compiled, { x: {} }, "before")).toThrow(/threw during evaluation/)
   })
 })
+
+describe("aggregate snapshots with shared references (final pass)", () => {
+  it("accepts an object referenced twice and still rejects real cycles", () => {
+    const definition = compileAggregate({ key: "shared", version: 1, members: ["lines"], invariants: [{ key: "ok", phase: "both", check: () => true }] })
+    const line = { sku: "a" }
+    expect(() => assertAggregateInvariants(definition, { lines: [line, line] }, "before")).not.toThrow()
+    const cyclic: Record<string, unknown> = {}
+    cyclic.self = cyclic
+    expect(() => assertAggregateInvariants(definition, { lines: cyclic }, "before")).toThrow(/cycles/)
+  })
+})

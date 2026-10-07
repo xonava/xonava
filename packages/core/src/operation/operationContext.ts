@@ -166,7 +166,8 @@ export function createOperationRunContext<TPersistence extends PersistenceProvid
   const internalEnvironment = environment as OperationEnvironment & { readonly commitMarkers?: readonly CommitMarkerEntry[] }
   const correlationId = options?.correlationId ?? environment.request?.correlationId ?? environment.request?.requestId
   const executionBudget = validateExecutionBudget(environment.executionBudget ?? DEFAULT_EXECUTION_BUDGET)
-  const signal = combineSignals(environment.signal, environment.request?.signal)
+  const combined = combineSignals(environment.signal, environment.request?.signal)
+  const signal = combined.signal
   const deadline = earliestDeadline(
     environment.deadline ?? createExecutionDeadline(new Date(environment.services.clock.now().getTime() + executionBudget.maxDurationMs)),
     environment.request?.deadline,
@@ -175,6 +176,11 @@ export function createOperationRunContext<TPersistence extends PersistenceProvid
   const collector = new OperationEffectCollector(
     internalEnvironment.commitMarkers ? { commitMarkers: [...internalEnvironment.commitMarkers] } : undefined,
   )
+  if (combined.detach) {
+    const dispose = collector.dispose.bind(collector)
+    const detach = combined.detach
+    collector.dispose = () => { detach(); dispose() }
+  }
 
   return createRunContext(
     { ...environment, signal, deadline, executionBudget, nestingDepth: environment.nestingDepth ?? 0 },
@@ -187,13 +193,23 @@ export function createOperationRunContext<TPersistence extends PersistenceProvid
 
 /**
  * The operation stops when either the environment or the request is
- * cancelled. AbortSignal.any holds its sources weakly, so no listener outlives
- * the run; runtimes without it fall back to the more specific request signal.
+ * cancelled. AbortSignal.any holds its sources weakly, so nothing outlives the
+ * run. Runtimes without it get a manual combination whose listeners are
+ * detached when the run is disposed.
  */
-function combineSignals(environment: AbortSignal | undefined, request: AbortSignal | undefined): AbortSignal {
-  if (!request || request === environment) return environment ?? new AbortController().signal
-  if (!environment) return request
-  return typeof AbortSignal.any === "function" ? AbortSignal.any([environment, request]) : request
+function combineSignals(environment: AbortSignal | undefined, request: AbortSignal | undefined): { signal: AbortSignal; detach?: () => void } {
+  if (!request || request === environment) return { signal: environment ?? new AbortController().signal }
+  if (!environment) return { signal: request }
+  if (typeof AbortSignal.any === "function") return { signal: AbortSignal.any([environment, request]) }
+  const controller = new AbortController()
+  const sources = [environment, request]
+  const detach = (): void => { for (const source of sources) source.removeEventListener("abort", onAbort) }
+  function onAbort(this: AbortSignal): void { detach(); controller.abort(this.reason) }
+  for (const source of sources) {
+    if (source.aborted) { controller.abort(source.reason); return { signal: controller.signal } }
+  }
+  for (const source of sources) source.addEventListener("abort", onAbort, { once: true })
+  return { signal: controller.signal, detach }
 }
 
 /** The request deadline (validated RFC 3339 instant) can only shorten the operation's budget. */
