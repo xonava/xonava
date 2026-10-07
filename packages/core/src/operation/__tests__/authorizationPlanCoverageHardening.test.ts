@@ -117,11 +117,35 @@ describe("authorization enforcement defensive convergence", () => {
 
   it("projects collections and applies every masking strategy", () => {
     const partial = plan({ obligations: [{ kind: "mask", field: "secret", strategy: "partial" }] })
-    expect(applyAuthorizationPlanToResult(partial, [{ id: "1", secret: "abcdef", hidden: true }])).toEqual([{ id: "1", secret: "a***f" }])
+    expect(applyAuthorizationPlanToResult(partial, [{ id: "1", secret: "4111111111111111", hidden: true }])).toEqual([{ id: "1", secret: "****1111" }])
+    // Short values reveal nothing: a partial mask must not disclose most of an identifier.
+    expect(applyAuthorizationPlanToResult(partial, [{ id: "1", secret: "abcdef" }])).toEqual([{ id: "1", secret: "[REDACTED]" }])
     expect(applyAuthorizationPlanToResult(partial, { rows: [{ id: "1", secret: "x" }], rowCount: 99 })).toEqual({ rows: [{ id: "1", secret: "[REDACTED]" }], rowCount: 1 })
-    const hash = plan({ obligations: [{ kind: "mask", field: "secret", strategy: "hash" }] })
-    expect(applyAuthorizationPlanToResult(hash, { id: "1", secret: "value" })).toMatchObject({ secret: expect.stringMatching(/^sha256:/) })
     expect(applyAuthorizationPlanToResult(partial, null)).toBeNull()
     expect(applyAuthorizationPlanToResult(undefined, { untouched: true })).toEqual({ untouched: true })
+  })
+
+  it("keys hash masks so they cannot be reversed by dictionary attack, and fails closed without a key", () => {
+    const hash = plan({ obligations: [{ kind: "mask", field: "secret", strategy: "hash" }] })
+    const key = new TextEncoder().encode("0123456789abcdef-masking-key")
+    const otherKey = new TextEncoder().encode("fedcba9876543210-masking-key")
+    expect(applyAuthorizationPlanToResult(hash, { id: "1", secret: "555-0100" })).toMatchObject({ secret: "[REDACTED]" })
+    const masked = applyAuthorizationPlanToResult(hash, { id: "1", secret: "555-0100" }, { maskingKey: key }) as { secret: string }
+    expect(masked.secret).toMatch(/^hmac-sha256:[0-9a-f]{64}$/)
+    // Deterministic under one key (joinable), different under another key.
+    expect(applyAuthorizationPlanToResult(hash, { id: "2", secret: "555-0100" }, { maskingKey: key })).toMatchObject({ secret: masked.secret })
+    expect((applyAuthorizationPlanToResult(hash, { id: "1", secret: "555-0100" }, { maskingKey: otherKey }) as { secret: string }).secret).not.toBe(masked.secret)
+    expect(() => applyAuthorizationPlanToResult(hash, { id: "1", secret: "x" }, { maskingKey: new Uint8Array(8) })).toThrow(/at least 16 bytes/)
+  })
+})
+
+describe("plan-constrained queries with projections", () => {
+  it("does not drop rows whose projection omits a predicate field, but still re-checks complete rows", async () => {
+    const constrained = plan({ mandatoryResourcePredicate: Predicate.eq("ownerId", "u1") })
+    const rows = [{ id: "a", ownerId: "u1" }, { id: "b" }, { id: "c", ownerId: "intruder" }]
+    const base = { dialect: "test", capabilities: { interactiveTransactions: false }, repository: () => ({ findById: async () => null, findMany: async () => ({ rows, rowCount: rows.length, page: 1, pageSize: 10 }), insert: async () => ({}), update: async () => ({}), delete: async () => undefined }) } as never
+    const provider = createPlanConstrainedPersistenceProvider(base, constrained)
+    const result = await provider.repository({ name: "doc", fields: {} } as never).findMany({ projection: { fields: ["id"] } } as never)
+    expect(result.rows).toEqual([{ id: "a", ownerId: "u1" }, { id: "b" }])
   })
 })

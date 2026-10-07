@@ -4,7 +4,7 @@ import { Predicate, type PredicateNode } from "../domain/predicate"
 import type { AuthorizationFactRevalidator } from "../security/authorizationFacts"
 import { supportsInteractiveTransactions, isTenantScopedPersistenceProvider, type EntityDescriptor, type PersistenceProvider, type TransactionOptions } from "../persistence/provider"
 import type { QueryOptions } from "../query"
-import { fingerprintWithDomainSeparator } from "../serialization"
+import { canonicalJsonBytes, hmacSha256Hex } from "../serialization"
 import { isAuthorizedExecutionPlan, type AuthorizationObligation, type AuthorizedExecutionPlan, type DynamicFactEvidence } from "../security"
 import type { AuthorizationOperationContext } from "./operationContext"
 import type { AuthorizationDecision, OperationAuthorizationPort, OperationKind } from "./operationDefinition"
@@ -173,6 +173,27 @@ function permittedRecord(record: unknown, predicate: PredicateNode | undefined):
   return predicate === undefined || (typeof record === "object" && record !== null && evaluatePredicate(record as Record<string, unknown>, predicate))
 }
 
+function predicateFields(predicate: PredicateNode, out = new Set<string>()): Set<string> {
+  if (predicate.kind === "condition") out.add(predicate.field)
+  else if (predicate.kind === "not") predicateFields(predicate.filter, out)
+  else if (predicate.kind === "and" || predicate.kind === "or") for (const child of predicate.filters) predicateFields(child, out)
+  return out
+}
+
+/**
+ * Defence-in-depth re-check of rows returned by a query whose filter already
+ * included the required predicate. A row projected without a predicate field
+ * cannot be re-evaluated in memory (the field would read as NULL), so it is
+ * trusted to the pushed-down filter; any row that carries every field is
+ * re-checked and dropped if it does not satisfy the predicate.
+ */
+function permittedQueriedRecord(record: unknown, predicate: PredicateNode | undefined, fields: ReadonlySet<string> | undefined): boolean {
+  if (predicate === undefined || fields === undefined) return true
+  if (typeof record !== "object" || record === null) return false
+  for (const field of fields) if (!Object.prototype.hasOwnProperty.call(record, field)) return true
+  return evaluatePredicate(record as Record<string, unknown>, predicate)
+}
+
 function assertWritableFields(data: unknown, plan: AuthorizedExecutionPlan): void {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new ConfigurationError("Authorized repository writes must use a data object.")
@@ -189,6 +210,7 @@ function assertDirectMutationIsSafe(required: PredicateNode | undefined): void {
 }
 
 function constrainRepository<T, TId>(repository: ReturnType<PersistenceProvider["repository"]>, plan: AuthorizedExecutionPlan, required: PredicateNode | undefined) {
+  const requiredFields = required === undefined ? undefined : predicateFields(required)
   const read = {
     findById: async (id: TId): Promise<T | null> => {
       const row = await (repository as { findById(id: TId): Promise<T | null> }).findById(id)
@@ -206,7 +228,7 @@ function constrainRepository<T, TId>(repository: ReturnType<PersistenceProvider[
         ? options
         : { ...(options ?? {}), filter }
       const result = await (repository as { findMany(options?: QueryOptions): Promise<{ rows: T[]; rowCount: number; page: number; pageSize: number; pageInfo?: unknown }> }).findMany(constrainedOptions)
-      const rows = result.rows.filter((row) => permittedRecord(row, required))
+      const rows = result.rows.filter((row) => permittedQueriedRecord(row, required, requiredFields))
       return Object.freeze({ ...result, rows: Object.freeze(rows), rowCount: rows.length })
     },
   }
@@ -296,17 +318,33 @@ export async function revalidateAuthorizationFacts(args: {
   }
 }
 
+export interface MaskingOptions {
+  /**
+   * Secret key for `hash` masking (at least 16 bytes). Keyed hashing keeps
+   * masked values joinable without being reversible by dictionary attack;
+   * without a key, `hash` masks fail closed to "[REDACTED]".
+   */
+  readonly maskingKey?: Uint8Array
+}
+
+export const MIN_MASKING_KEY_BYTES = 16
+const MASK_DOMAIN = new TextEncoder().encode("framework.authorization-mask:v2\u0000")
+
 /** Applies field visibility and masking at the final representation boundary. */
-export function applyAuthorizationPlanToResult<TResult>(plan: AuthorizedExecutionPlan | undefined, result: TResult): TResult {
+export function applyAuthorizationPlanToResult<TResult>(plan: AuthorizedExecutionPlan | undefined, result: TResult, options: MaskingOptions = {}): TResult {
   if (!plan) return result
+  const key = options.maskingKey
+  if (key !== undefined && (!(key instanceof Uint8Array) || key.byteLength < MIN_MASKING_KEY_BYTES)) throw new ConfigurationError(`Masking key must be at least ${MIN_MASKING_KEY_BYTES} bytes`)
+  const masks = new Map<string, Extract<AuthorizationObligation, { kind: "mask" }>["strategy"]>()
+  for (const obligation of plan.obligations) if (obligation.kind === "mask" && !masks.has(obligation.field)) masks.set(obligation.field, obligation.strategy)
   const projectRecord = (value: unknown): unknown => {
     if (!value || typeof value !== "object" || Array.isArray(value) || value instanceof Date) return value
     const projected: Record<string, unknown> = Object.create(null)
     for (const field of plan.readableFields) {
       if (!Object.prototype.hasOwnProperty.call(value, field)) continue
       const raw = (value as Record<string, unknown>)[field]
-      const obligation = plan.obligations.find((candidate): candidate is Extract<AuthorizationObligation, { kind: "mask" }> => candidate.kind === "mask" && candidate.field === field)
-      projected[field] = obligation ? maskValue(raw, obligation.strategy) : raw
+      const strategy = masks.get(field)
+      projected[field] = strategy ? maskValue(raw, strategy, field, key) : raw
     }
     return Object.freeze(projected)
   }
@@ -318,12 +356,23 @@ export function applyAuthorizationPlanToResult<TResult>(plan: AuthorizedExecutio
   return projectRecord(result) as TResult
 }
 
-function maskValue(value: unknown, strategy: Extract<AuthorizationObligation, { kind: "mask" }>["strategy"]): unknown {
+export const MIN_PARTIAL_MASK_LENGTH = 8
+
+function maskValue(value: unknown, strategy: Extract<AuthorizationObligation, { kind: "mask" }>["strategy"], field: string, key: Uint8Array | undefined): unknown {
   if (value === null || value === undefined) return value
   if (strategy === "redact") return "[REDACTED]"
   if (strategy === "partial") {
-    if (typeof value !== "string" || value.length < 3) return "[REDACTED]"
-    return `${value.slice(0, 1)}***${value.slice(-1)}`
+    // Reveal at most the last four characters, and only of long values, so a
+    // partial mask never discloses most of a short identifier.
+    if (typeof value !== "string") return "[REDACTED]"
+    const characters = Array.from(value)
+    if (characters.length < MIN_PARTIAL_MASK_LENGTH) return "[REDACTED]"
+    return `****${characters.slice(-4).join("")}`
   }
-  return `sha256:${fingerprintWithDomainSeparator("framework.authorization-mask:v1", value)}`
+  if (!key) return "[REDACTED]"
+  const material = canonicalJsonBytes({ field, value })
+  const message = new Uint8Array(MASK_DOMAIN.byteLength + material.byteLength)
+  message.set(MASK_DOMAIN, 0)
+  message.set(material, MASK_DOMAIN.byteLength)
+  return `hmac-sha256:${hmacSha256Hex(key, message)}`
 }

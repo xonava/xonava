@@ -48,15 +48,16 @@ export function parseTimeWindowMs(value: string | number): number {
   }
   if (typeof value !== "string") throw new ValidationError("Rate-limit time window must be a string or number.")
   const input = value.trim().toLowerCase()
-  const match = input.match(/^(\d+)\s*(second|seconds|minute|minutes|hour|hours)$/)
+  const match = input.match(/^(\d{1,9})\s*(ms|millisecond|milliseconds|s|second|seconds|m|minute|minutes|h|hour|hours|d|day|days)$/)
   if (!match) throw new ValidationError(`Invalid rate-limit time window: ${value}`)
 
   const countText = match[1]
   const unit = match[2]
   if (countText === undefined || unit === undefined) throw new ValidationError(`Invalid rate-limit time window: ${value}`)
   const count = Number.parseInt(countText, 10)
-  const result = unit.startsWith("second") ? count * 1000 : unit.startsWith("hour") ? count * 60 * 60 * 1000 : count * 60 * 1000
-  if (!Number.isFinite(result) || result <= 0) throw new ValidationError("Rate-limit time window must be positive.")
+  const unitMs = unit === "ms" || unit.startsWith("millisecond") ? 1 : unit === "s" || unit.startsWith("second") ? 1000 : unit === "m" || unit.startsWith("minute") ? 60_000 : unit === "h" || unit.startsWith("hour") ? 3_600_000 : 86_400_000
+  const result = count * unitMs
+  if (!Number.isSafeInteger(result) || result <= 0) throw new ValidationError("Rate-limit time window must be a positive safe integer of milliseconds.")
   return result
 }
 
@@ -96,6 +97,10 @@ export async function checkRateLimit(args: {
   const failureMode = args.failureMode ?? args.policy?.failureMode ?? "fail-closed"
   if (failureMode !== "fail-open" && failureMode !== "fail-closed") throw new ValidationError("Rate-limit failure mode is invalid.")
   if (args.failureMode !== undefined && args.policy?.failureMode !== undefined && args.failureMode !== args.policy.failureMode) throw new ValidationError("Rate-limit failure mode options conflict.")
+  // Fail-open is an availability trade-off that only makes sense for an
+  // approximate limiter. An atomic (security) limit always fails closed, so
+  // requesting both is a configuration error rather than a silent downgrade.
+  if (failureMode === "fail-open" && consistency === "atomic") throw new ValidationError("Rate-limit fail-open requires best-effort consistency; atomic limits always fail closed.")
   const nowMs = args.nowMs ?? Date.now
 
   try {

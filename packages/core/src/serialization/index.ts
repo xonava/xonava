@@ -21,3 +21,4 @@ export * from "./formatRegistry.js";
 export * from "./versionedCodec.js";
 export * from "./durableCodec"
 export * from "./version"
+export { hmacSha256, hmacSha256Hex } from "./hmac"

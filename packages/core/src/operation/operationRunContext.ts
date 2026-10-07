@@ -28,6 +28,8 @@ export interface OperationEnvironment<TPersistence extends PersistenceProvider =
    * onBusinessResult, best-effort effects). Use it for alerting: the operation
    * has committed and returns normally. Errors thrown here are ignored.
    */
+  /** Secret for keyed `hash` masking of authorized results (>= 16 bytes). */
+  readonly maskingKey?: Uint8Array
   readonly onCommittedEffectFailure?: import("./committedEffectFailure").CommittedEffectFailureHandler
 }
 

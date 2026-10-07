@@ -83,7 +83,7 @@ export async function runStandardOperation<TInput, TResult>(args: {
       await marker.commit?.(finalResult, operation.persistence)
     }
     assertExecutionActive(operation.signal, operation.deadline, operation.services.clock)
-    return { input, result: applyAuthorizationPlanToResult(plan, finalResult), operation }
+    return { input, result: applyAuthorizationPlanToResult(plan, finalResult, operation.maskingKey !== undefined ? { maskingKey: operation.maskingKey } : {}), operation }
   }
 
   const run = async (operation: InternalOperationRunContext): Promise<{ input: TInput; result: TResult; operation: InternalOperationRunContext }> => {

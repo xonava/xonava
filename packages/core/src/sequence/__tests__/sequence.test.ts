@@ -17,3 +17,35 @@ describe("sequence service", () => {
   it.each([{ name: "" }, { name: "ok", padding: -1 }, { name: "ok", padding: 33 }, { name: "ok", prefix: "\n" }, { name: "ok", reset: "week" }])("rejects invalid definitions %#", definition => { expect(() => validateSequenceDefinition(definition as never)).toThrow() })
   it("rejects invalid provider output", async () => { await expect(allocateSequence({ next: async () => 0 }, { scopeId: "tenant" as never, definition: { name: "case" } })).rejects.toThrow("invalid value") })
 })
+
+describe("sequence time zones and period formatting", () => {
+  const memory = () => { const counters = new Map<string, number>(); return { next: async (scope: string, name: string, period: string) => { const key = `${scope}|${name}|${period}`; const value = (counters.get(key) ?? 0) + 1; counters.set(key, value); return value } } }
+
+  it("resets at local midnight in the configured time zone", async () => {
+    // 2026-03-31T20:00Z is already April 1st in India (UTC+05:30).
+    const at = new Date("2026-03-31T20:00:00.000Z")
+    expect(sequencePeriod("month", at)).toBe("2026-03")
+    expect(sequencePeriod("month", at, "Asia/Kolkata")).toBe("2026-04")
+    expect(sequencePeriod("day", new Date("2026-01-01T03:00:00.000Z"), "America/New_York")).toBe("2025-12-31")
+    expect(sequencePeriod("year", new Date("2025-12-31T19:00:00.000Z"), "Asia/Tokyo")).toBe("2026")
+  })
+
+  it("embeds the period in the formatted number", async () => {
+    const store = memory()
+    const definition = { name: "invoice", prefix: "INV-", padding: 4, reset: "month" as const, timeZone: "Asia/Kolkata", periodFormat: "iso" as const }
+    await expect(allocateSequence(store, { scopeId: "s" as never, definition, at: new Date("2026-03-31T20:00:00.000Z") })).resolves.toMatchObject({ period: "2026-04", formatted: "INV-2026-04-0001" })
+    await expect(allocateSequence(store, { scopeId: "s" as never, definition: { ...definition, periodFormat: "compact", periodSeparator: "/" }, at: new Date("2026-03-31T20:00:00.000Z") })).resolves.toMatchObject({ formatted: "INV-202604/0002" })
+  })
+
+  it("uses the injected clock when no trusted instant is supplied", async () => {
+    const allocation = await allocateSequence(memory(), { scopeId: "s" as never, definition: { name: "n", reset: "year" } }, () => new Date("2030-06-01T00:00:00.000Z"))
+    expect(allocation.period).toBe("2030")
+  })
+
+  it("rejects invalid zones, separators, and period formats without a period", () => {
+    expect(() => validateSequenceDefinition({ name: "n", timeZone: "Mars/Olympus" })).toThrow("time zone")
+    expect(() => validateSequenceDefinition({ name: "n", reset: "month", periodFormat: "iso", periodSeparator: "<script>" })).toThrow("separator")
+    expect(() => validateSequenceDefinition({ name: "n", periodFormat: "iso" })).toThrow("no period")
+    expect(validateSequenceDefinition({ name: "n" })).toMatchObject({ timeZone: "UTC", periodFormat: "none", periodSeparator: "-" })
+  })
+})
