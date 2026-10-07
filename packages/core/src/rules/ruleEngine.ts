@@ -61,7 +61,7 @@ export function compileRuleSet<TAction extends RuleAction>(definition: RuleSetDe
     if (identities.has(identity)) throw new ConfigurationError(`Duplicate rule version: ${rule.key}@${rule.version}`)
     identities.add(identity)
   }
-  const compiled = snapshotRuleData(definition, "Rule set") as CompiledRuleSet<TAction>
+  const compiled = snapshotRuleData(definition, "Rule set")
   compiledRuleSets.add(compiled)
   return compiled
 }

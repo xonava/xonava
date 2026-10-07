@@ -8,7 +8,7 @@ import type { ExecutionScope } from "../domain/executionScope"
 import type { ListResult, QueryOptions } from "../query/queryPlan"
 import type { ScalarDescriptor } from "../entity/scalars/index"
 import type { DataClassification } from "../domain/dataClassification"
-import { TENANT_SCOPED_PROVIDER_BRAND, isCoreTenantScopedProvider } from "./tenantScopeBrand"
+import { type TENANT_SCOPED_PROVIDER_BRAND, isCoreTenantScopedProvider } from "./tenantScopeBrand"
 export type { ListResult, QueryOptions, SortSpec } from "../query/queryPlan"
 
 export interface FieldDescriptor {
@@ -220,7 +220,7 @@ export function createReadOnlyPersistenceProvider(provider: PersistenceProvider)
         (scoped) => work(createReadOnlyPersistenceProvider(scoped)),
         { ...options, accessMode: "read only" },
       ),
-    }) as ReadOnlyInteractiveTransactionProvider
+    })
   }
   return baseReadOnly
 }

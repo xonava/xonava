@@ -405,8 +405,7 @@ function startLeaseRenewal(args: {
       }
     })()
 
-    let tracked: Promise<void>
-    tracked = operation.then(
+    const tracked: Promise<void> = operation.then(
       () => {
         if (inFlight === tracked) inFlight = undefined
       },

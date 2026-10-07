@@ -19,5 +19,5 @@ export function defineEvent<const T extends readonly EventVersionDefinition[]>(d
     if (!Number.isSafeInteger(version.version) || version.version < 1 || seen.has(version.version)) throw new ConfigurationError(`Event ${definition.type} has an invalid or duplicate version`)
     seen.add(version.version)
   }
-  return cloneAndFreezeDefinition({ type: definition.type, versions: definition.versions }) as EventDefinition<T>
+  return cloneAndFreezeDefinition({ type: definition.type, versions: definition.versions })
 }

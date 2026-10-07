@@ -121,8 +121,7 @@ function startLeaseLifecycle(args: { store: WorkflowStore; fence: WorkflowFence;
         if (timeout !== undefined) args.clock.clearTimeout(timeout)
       }
     })()
-    let tracked: Promise<void>
-    tracked = operation.then(
+    const tracked: Promise<void> = operation.then(
       () => { if (inFlight === tracked) inFlight = undefined },
       (error: unknown) => { if (inFlight === tracked) inFlight = undefined; throw error },
     )

@@ -140,7 +140,7 @@ export function compileEntity<
     ...Object.fromEntries(Object.entries(definition.entity.fields as Record<string, { classification?: DataClassification }>).flatMap(([field, descriptor]) => descriptor.classification ? [[field, descriptor.classification]] : [])),
     ...definition.dataClassification,
   } as Record<string, DataClassification>
-  const auditFieldClassification = Object.fromEntries(Object.entries(dataClassification).map(([field, classification]) => [field, classification === "restricted" ? "omit" : classification === "confidential" ? "mask" : "include"])) as AuditFieldClassifications
+  const auditFieldClassification = Object.fromEntries(Object.entries(dataClassification).map(([field, classification]) => [field, classification === "restricted" ? "omit" : classification === "confidential" ? "mask" : "include"]))
   const compiledScope = compileEntityScope<TRow>(
     definition.entityScope.kind === "tenant"
       ? { kind: "tenant" as const, ...(definition.entity.tenantField ? { field: definition.entity.tenantField } : {}) }

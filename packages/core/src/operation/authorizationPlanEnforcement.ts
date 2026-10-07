@@ -64,7 +64,7 @@ function validateAuthorizationDecision(value: unknown, operationKey: string): Au
   if (("plan" in value && !plan) || ("reason" in value && !reason)) {
     throw new ConfigurationError(`Operation ${operationKey} authorization decision must use own data properties.`)
   }
-  return { allowed: allowed.value as boolean, ...(reason?.value !== undefined ? { reason: reason.value as string } : {}), ...(plan ? { plan: plan.value as AuthorizedExecutionPlan } : {}) }
+  return { allowed: allowed.value, ...(reason?.value !== undefined ? { reason: reason.value as string } : {}), ...(plan ? { plan: plan.value as AuthorizedExecutionPlan } : {}) }
 }
 
 function assertPlanMatchesOperation<TInput>(

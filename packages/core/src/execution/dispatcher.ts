@@ -331,8 +331,7 @@ async function executeJob(args: DispatcherConfig & { job: StoredJob; log: Dispat
       const renewed = await renewWithDeadline(store.renewLease({ jobId: job.id, workerId, claimToken, extendByMs: leaseDurationMs }), leaseDurationMs, clock)
       if (!renewed) throw new Error("Job lease was lost")
     })()
-    let tracked: Promise<void>
-    tracked = operation.then(
+    const tracked: Promise<void> = operation.then(
       () => { if (renewalInFlight === tracked) renewalInFlight = undefined },
       (error: unknown) => {
         if (renewalInFlight === tracked) renewalInFlight = undefined

@@ -94,7 +94,7 @@ function asArray(value: PredicateValue | undefined): readonly PredicatePrimitive
 
 function asRange(value: PredicateValue | undefined): PredicateRangeValue | undefined {
   if (!value || Array.isArray(value) || typeof value !== "object" || value instanceof Date) return undefined
-  return value as PredicateRangeValue
+  return value
 }
 
 function and(left: Truth, right: Truth): Truth {

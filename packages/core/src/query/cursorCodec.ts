@@ -23,7 +23,7 @@ export async function decodeCursor(cursor: string, integrity: CursorIntegrityPor
   if (bytes.byteLength > maxBytes || (await integrity.verify(bytes, signature)) !== true) throw new ValidationError("cursor integrity verification failed")
   let parsed: unknown; try { parsed = decodeCanonicalJson(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) } catch { throw new ValidationError("malformed or non-canonical cursor payload") }
   const payload = validate(parsed); if (canonicalJsonString(payload) !== new TextDecoder().decode(bytes)) throw new ValidationError("non-canonical cursor payload")
-  return Object.freeze({ ...payload, values: Object.freeze([...(payload.values as readonly CursorValue[])]) })
+  return Object.freeze({ ...payload, values: Object.freeze([...(payload.values)]) })
 }
 
 function assertByteLimit(value: number): void { if (!Number.isSafeInteger(value) || value < 1) throw new ValidationError("cursor byte limit must be a positive safe integer") }

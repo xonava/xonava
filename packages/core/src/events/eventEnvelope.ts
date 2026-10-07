@@ -62,5 +62,5 @@ export function createEventEnvelope<TPayload>(input: Omit<EventEnvelope<TPayload
     ...cloneAndFreezeDefinition({ ...input, payload: input.payload, provenance: input.provenance }, true),
     format: "framework.event", formatVersion: 1, scope: Object.freeze({ ...scope }), scopeId,
     producer: Object.freeze({ ...input.producer }),
-  }) as EventEnvelope<TPayload>
+  })
 }

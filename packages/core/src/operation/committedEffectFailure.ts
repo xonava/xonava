@@ -35,7 +35,7 @@ export function reportCommittedEffectFailure(operation: InternalOperationRunCont
   if (typeof handler !== "function") return
   try {
     const pending = handler(Object.freeze({ operationId: operation.operationId, ...(operation.correlationId !== undefined ? { correlationId: operation.correlationId } : {}), phase, effectName, errorType, error }))
-    if (pending && typeof (pending as Promise<void>).catch === "function") void (pending as Promise<void>).catch(() => undefined)
+    if (pending && typeof (pending).catch === "function") void (pending).catch(() => undefined)
   } catch {
     // A failing handler must not alter the committed result.
   }

@@ -38,10 +38,10 @@ function immutableSet<T>(values: ReadonlySet<T>): ReadonlySet<T> {
     get size() { return snapshot.length },
     has: (value) => snapshot.includes(value),
     forEach: (callbackfn) => { snapshot.forEach((value) => callbackfn(value, value, result)) },
-    keys: () => snapshot[Symbol.iterator]() as unknown as SetIterator<T>,
-    values: () => snapshot[Symbol.iterator]() as unknown as SetIterator<T>,
-    entries: () => (function* (): Generator<[T, T], undefined, unknown> { for (const value of snapshot) yield [value, value] as [T, T]; return undefined })() as unknown as SetIterator<[T, T]>,
-    [Symbol.iterator]: () => (function* (): Generator<T, undefined, unknown> { yield* snapshot; return undefined })() as unknown as SetIterator<T>,
+    keys: () => snapshot[Symbol.iterator](),
+    values: () => snapshot[Symbol.iterator](),
+    entries: () => (function* (): Generator<[T, T], undefined, unknown> { for (const value of snapshot) yield [value, value] as [T, T]; return undefined })(),
+    [Symbol.iterator]: () => (function* (): Generator<T, undefined, unknown> { yield* snapshot; return undefined })(),
   }
   return Object.freeze(result)
 }
