@@ -22,8 +22,11 @@ export function coercePolicyValue(args: {
 }): PredicatePrimitive {
   switch (args.type) {
     case "number": {
-      if (typeof args.value === "number") return args.value
-      const num = Number(args.value)
+      // Only finite numbers or numeric strings; never Number(null|""|true|[]).
+      if (args.value === null) return null
+      const num = typeof args.value === "number" ? args.value
+        : typeof args.value === "string" && args.value.trim() !== "" ? Number(args.value)
+          : Number.NaN
       if (!Number.isFinite(num)) {
         throw new PolicyValidationError(`Invalid number value: ${String(args.value)}`, { value: args.value })
       }
@@ -63,8 +66,9 @@ export function coercePolicyValue(args: {
     case "string":
     default: {
       if (args.value === null) return null
-      // eslint-disable-next-line @typescript-eslint/no-base-to-string -- intentional fallback to string coercion
-      return typeof args.value === "string" ? args.value : String(args.value)
+      if (typeof args.value === "string") return args.value
+      if ((typeof args.value === "number" && Number.isFinite(args.value)) || typeof args.value === "boolean") return String(args.value)
+      throw new PolicyValidationError(`Invalid ${args.type} value of type ${typeof args.value}`, { value: args.value })
     }
   }
 }

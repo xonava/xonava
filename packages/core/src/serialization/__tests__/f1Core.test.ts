@@ -298,6 +298,7 @@ describe("F1 envelopes and codecs mixed-version", () => {
       format: "framework.event-envelope",
       currentVersion: 2,
       readableVersions: [1, 2],
+      decodesEveryReadableVersion: true,
       encode: (v) => ({ x: v.x, v: 2 }),
       decode: (j) => j as { x: number },
     })
@@ -320,11 +321,11 @@ describe("F1 envelopes and codecs mixed-version", () => {
 
   it("models the complete readers-before-writers rollout and rollback window", () => {
     const releaseA = createVersionedCodec<Record<string, number>>({
-      format: "framework.event-envelope", currentVersion: 1, readableVersions: [1, 2],
+      format: "framework.event-envelope", currentVersion: 1, readableVersions: [1, 2], decodesEveryReadableVersion: true,
       encode: (value) => value, decode: (value) => value as Record<string, number>,
     })
     const releaseB = createVersionedCodec<Record<string, number>>({
-      format: "framework.event-envelope", currentVersion: 2, readableVersions: [1, 2],
+      format: "framework.event-envelope", currentVersion: 2, readableVersions: [1, 2], decodesEveryReadableVersion: true,
       encode: (value) => value, decode: (value) => value as Record<string, number>,
     })
     const oldReader = createVersionedCodec<Record<string, number>>({
@@ -384,5 +385,21 @@ describe("F1 fingerprints and scope ids", () => {
     const scopeId = `fscope:v1:${b64}`
     expect(scopeId.startsWith("fscope:v1:")).toBe(true)
     expect(decodeBase64UrlUnpadded(scopeId.slice("fscope:v1:".length))).toEqual(new TextEncoder().encode(jcs))
+  })
+})
+
+describe("versioned codec decodes by envelope version", () => {
+  it("passes the parsed version so older payloads can be migrated", () => {
+    const v1 = createVersionedCodec<{ name: string }>({ format: "framework.event-envelope", currentVersion: 1, readableVersions: [1], encode: (value) => ({ name: value.name }), decode: (payload) => payload as { name: string } })
+    const v2 = createVersionedCodec<{ fullName: string }>({
+      format: "framework.event-envelope", currentVersion: 2, readableVersions: [1, 2], decodesEveryReadableVersion: true,
+      encode: (value) => ({ fullName: value.fullName }),
+      decode: (payload, version) => version === 1 ? { fullName: (payload as { name: string }).name } : payload as { fullName: string },
+    })
+    expect(v2.decode(v1.encode({ name: "Alice" }))).toEqual({ fullName: "Alice" })
+  })
+
+  it("refuses a multi-version codec that has not declared version-aware decoding", () => {
+    expect(() => createVersionedCodec({ format: "framework.event-envelope", currentVersion: 2, readableVersions: [1, 2], encode: (value: unknown) => value as never, decode: (payload) => payload })).toThrow(/decodesEveryReadableVersion/)
   })
 })

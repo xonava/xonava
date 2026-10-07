@@ -105,7 +105,7 @@ class MemoryOutbox implements OutboxStore {
   constructor(private readonly clock: Clock) {}
   async append(record: OutboxDeliveryRecord) { const next = appendOutboxDelivery(this.rows.get(record.envelope.messageId) ?? null, record); this.rows.set(record.envelope.messageId, next); return next }
   async get(key: OutboxDeliveryKey) { return this.rows.get(key.messageId) ?? null }
-  async claim(key: OutboxDeliveryKey, owner: string, leaseMs: number) { const next = claimOutboxDelivery(this.rows.get(key.messageId)!, { owner, token: `t${++this.#token}`, leaseMs, now: this.clock.date() }); if (next) this.rows.set(key.messageId, next); return next }
+  async claim(key: OutboxDeliveryKey, owner: string, leaseMs: number, maxAttempts?: number) { const next = claimOutboxDelivery(this.rows.get(key.messageId)!, { owner, token: `t${++this.#token}`, leaseMs, now: this.clock.date(), ...(maxAttempts !== undefined ? { maxAttempts } : {}) }); if (next) this.rows.set(key.messageId, next); return next }
   async markPublished(key: OutboxDeliveryKey, token: string) { const next = markOutboxDeliveryPublished(this.rows.get(key.messageId)!, token, this.clock.date()); this.rows.set(key.messageId, next); return next }
   async recordFailure(key: OutboxDeliveryKey, token: string, code: string, delayMs: number, maxAttempts: number) { const next = recordOutboxDeliveryFailure(this.rows.get(key.messageId)!, { token, code, delayMs, maxAttempts, now: this.clock.date() }); this.rows.set(key.messageId, next); return next }
 }
@@ -161,7 +161,7 @@ class MemoryInbox implements InboxPort {
   #set(key: InboxKey, record: InboxRecord) { this.rows.set(this.#id(key), record); return record }
   async observe(record: InboxRecord) { return this.#set(record, observeInboxRecord(this.rows.get(this.#id(record)) ?? null, record, this.clock.date())) }
   async get(key: InboxKey) { return this.rows.get(this.#id(key)) ?? null }
-  async claim(key: InboxKey, owner: string, leaseMs: number) { const next = claimInboxRecord(this.rows.get(this.#id(key))!, { owner, token: `c${++this.#token}`, leaseMs, now: this.clock.date() }); return next ? this.#set(key, next) : null }
+  async claim(key: InboxKey, owner: string, leaseMs: number, maxAttempts?: number) { const next = claimInboxRecord(this.rows.get(this.#id(key))!, { owner, token: `c${++this.#token}`, leaseMs, now: this.clock.date(), ...(maxAttempts !== undefined ? { maxAttempts } : {}) }); return next ? this.#set(key, next) : null }
   async renew(key: InboxKey, token: string, leaseMs: number) { return this.#set(key, renewInboxClaim(this.rows.get(this.#id(key))!, { token, leaseMs, now: this.clock.date() })) }
   async acknowledge<T>(key: InboxKey, token: string, mutation: (transaction?: unknown) => Promise<T>) { const next = acknowledgeInboxRecord(this.rows.get(this.#id(key))!, token, this.clock.date()); const result = await mutation("tx"); this.committed.push(result); return { record: this.#set(key, next), result } }
   async scheduleRetry(key: InboxKey, token: string, code: string, delayMs: number, maxAttempts: number) { return this.#set(key, scheduleInboxRetry(this.rows.get(this.#id(key))!, { token, code, delayMs, maxAttempts, now: this.clock.date() })) }

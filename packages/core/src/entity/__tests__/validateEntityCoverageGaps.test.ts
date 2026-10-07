@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { ConfigurationError, ValidationError } from "../../domain"
+import { ConfigurationError } from "../../domain"
 import { validateEntity } from "../validateEntity"
 
 const schema = {} as never
@@ -66,7 +66,7 @@ describe("validateEntity uncovered configuration paths", () => {
   })
 
   it("requires the default sort column to be declared in sortableColumns", () => {
-    expect(() => validateEntity({ ...base(), sortableColumns: ["name"], listDefaults: { sortColumn: "createdBy" } } as never, routes)).toThrow(ValidationError)
+    expect(() => validateEntity({ ...base(), sortableColumns: ["name"], listDefaults: { sortColumn: "createdBy" } } as never, routes)).toThrow(ConfigurationError)
     expect(() => validateEntity({ ...base(), sortableColumns: ["name"], listDefaults: { sortColumn: "name" } } as never, routes)).not.toThrow()
   })
 

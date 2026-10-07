@@ -27,15 +27,15 @@ describe("field access masks and precedence", () => {
   it("lets highest priority win and deny win ties", () => {
     const allow = policy({ payload: { ...policy().payload, fieldAccess: { read: { email: "mask" } } }, priority: 10 })
     const tieDeny = policy({ effect: "deny", payload: { ...policy().payload, fieldAccess: { read: { email: "allow" } } }, priority: 10 })
-    expect(resolveFieldReadOverrides({ policies: [allow, tieDeny], moduleKey: "m", record: {} })).toEqual({ email: "omit" })
+    expect(resolveFieldReadOverrides({ policies: [allow, tieDeny], moduleKey: "m", record: {} })).toEqual({ "*": "omit", email: "omit" })
     expect(resolveFieldReadOverrides({ policies: [policy({ moduleKey: "other" })], moduleKey: "m", record: {} })).toEqual({})
   })
 
   it("resolves equal-priority allow conflicts to the more restrictive mode independent of order", () => {
     const mask = policy({ payload: { ...policy().payload, fieldAccess: { read: { email: "mask" } } }, priority: 5 })
     const bareAllow = policy({ payload: { ...policy().payload, fieldAccess: { read: { email: "allow" } } }, priority: 5 })
-    expect(resolveFieldReadOverrides({ policies: [mask, bareAllow], moduleKey: "m", record: {} })).toEqual({ email: "mask" })
-    expect(resolveFieldReadOverrides({ policies: [bareAllow, mask], moduleKey: "m", record: {} })).toEqual({ email: "mask" })
+    expect(resolveFieldReadOverrides({ policies: [mask, bareAllow], moduleKey: "m", record: {} })).toEqual({ "*": "omit", email: "mask" })
+    expect(resolveFieldReadOverrides({ policies: [bareAllow, mask], moduleKey: "m", record: {} })).toEqual({ "*": "omit", email: "mask" })
   })
 
   it("allows an explicit changed-field list and denies implicit fields", () => {

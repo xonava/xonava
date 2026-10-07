@@ -26,6 +26,9 @@ export function validateQuotaRequest(request: QuotaRequest): QuotaRequest {
 
 export function validateQuotaDecision(request:QuotaRequest,decision:QuotaDecision):QuotaDecision{
   if(!decision||typeof decision!=="object"||typeof decision.allowed!=="boolean"||!Number.isSafeInteger(decision.used)||decision.used<0||!Number.isSafeInteger(decision.remaining)||decision.remaining<0||!Number.isFinite(decision.resetAt))throw new ValidationError("Quota provider returned an invalid decision.")
-  if(decision.used+decision.remaining!==request.limit||decision.allowed!==(decision.used<=request.limit))throw new ValidationError("Quota provider returned an inconsistent decision.")
+  const consistent=decision.allowed
+    ?decision.used<=request.limit&&decision.used+decision.remaining===request.limit
+    :decision.used+request.amount>request.limit&&decision.remaining===Math.max(request.limit-decision.used,0)
+  if(!consistent)throw new ValidationError("Quota provider returned an inconsistent decision.")
   return Object.freeze({...decision})
 }

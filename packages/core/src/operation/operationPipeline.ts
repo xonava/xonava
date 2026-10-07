@@ -1,11 +1,12 @@
 import { createOperationRunContext, type OperationEnvironment, type PostCommitContext } from "./operationContext"
 import { OperationCommittedEffectError, runAtomicBatchOperation } from "./atomicBatchOperationPipeline"
-import { runStandardOperation } from "./standardOperationPipeline"
+import { runStandardOperation, type NestedInvokeFactory } from "./standardOperationPipeline"
 import type { AtomicBatchOperationDefinition, OperationDefinition } from "./operationDefinition"
 import type { InternalOperationRunContext } from "./operationRunContext"
 import { validateOperationDefinition } from "./validateOperationDefinition"
 import { emitTelemetry, explicitlySafeTelemetryAttributes } from "../telemetry/telemetry"
-import { FrameworkCoreError } from "../domain/errors"
+import { ConfigurationError, FrameworkCoreError } from "../domain/errors"
+import { assertExecutionActive } from "./deadline"
 
 export type { OperationDefinition, StandardAtomicity, StandardAtomicityMode, AtomicBatchAtomicity, OperationAtomicity, OperationKind, StandardOperationDefinition, StandardReadOperationDefinition, StandardMutationOperationDefinition, AtomicBatchOperationDefinition, OperationAuditConfig, OperationAuthorizationPort } from "./operationDefinition"
 export type { AuditGuarantee } from "./operationDefinition"
@@ -80,19 +81,69 @@ async function executeValidatedOperation<TInput, TResult, TCommand>(args: {
   definition: OperationDefinition<TInput, TResult, TCommand>
   input: TInput
   onBusinessResult?: (result: TResult, operation: PostCommitContext) => Promise<void>
+  nested?: { readonly parent: InternalOperationRunContext; readonly joinTransaction: boolean }
 }): Promise<{ result: TResult; operation: InternalOperationRunContext; committed: boolean }> {
   const committed = true
-  const operation = createOperationRunContext(args.operation)
+  const parent = args.nested?.parent
+  const operation = createOperationRunContext(args.operation, {
+    ...(parent?.correlationId !== undefined ? { correlationId: parent.correlationId } : {}),
+    // Post-commit failures of a child are failures of the whole operation.
+    ...(parent !== undefined ? { effectFailures: parent.effectFailures } : {}),
+  })
+  const joinedParent = args.nested?.joinTransaction === true ? parent : undefined
   const startedAt = safeNow(operation)
   try {
+    if (joinedParent && isAtomicBatchDefinition(args.definition)) throw new ConfigurationError(`Atomic-batch operation ${args.definition.key} cannot run inside another operation's transaction.`)
     const result = isAtomicBatchDefinition(args.definition)
       ? await runAtomicBatchOperation({ operation, definition: args.definition, input: args.input, ...(args.onBusinessResult ? { onBusinessResult: args.onBusinessResult } : {}) })
-      : await runStandardOperation({ operation, definition: args.definition, input: args.input, ...(args.onBusinessResult ? { onBusinessResult: args.onBusinessResult } : {}) })
+      : await runStandardOperation({ operation, definition: args.definition, input: args.input, createNestedInvoke, ...(joinedParent ? { joinedParent } : {}), ...(args.onBusinessResult ? { onBusinessResult: args.onBusinessResult } : {}) })
     emitCompleted(operation, args.definition, startedAt, operation.effectFailures.length > 0 ? "committed_with_effect_failures" : "success")
     return { result, operation, committed }
   } catch (error) {
     emitCompleted(operation, args.definition, startedAt, error instanceof OperationCommittedEffectError ? "committed_with_effect_failures" : "error", error)
     throw error
+  }
+}
+
+/**
+ * The child runs on the parent's unconstrained (transaction-scoped)
+ * persistence and authorizes itself: it acts with the request's identity, not
+ * with the parent's authorization plan. Commit markers stay with the parent.
+ */
+const createNestedInvoke: NestedInvokeFactory = (parent, options) => async (definition, input) => {
+  if (parent.isDisposed) throw new ConfigurationError("Nested operations cannot start after the parent operation has finished.")
+  const nestingDepth = parent.nestingDepth + 1
+  if (nestingDepth > parent.executionBudget.maxNestingDepth) throw new ConfigurationError(`Operation nesting depth exceeds ${parent.executionBudget.maxNestingDepth}`)
+  assertExecutionActive(parent.signal, parent.deadline, parent.services.clock)
+  const validated = validateOperationDefinition(definition)
+  if (options.readOnly && validated.kind !== "read") throw new ConfigurationError(`Read operation cannot invoke ${validated.kind ?? "unknown"} operation ${validated.key}.`)
+  const execution = await executeValidatedOperation({
+    operation: childEnvironment(parent, nestingDepth),
+    definition: validated,
+    input,
+    nested: { parent, joinTransaction: options.joinTransaction },
+  })
+  return execution.result
+}
+
+function childEnvironment(parent: InternalOperationRunContext, nestingDepth: number): OperationEnvironment {
+  return {
+    persistence: parent.persistence,
+    runtimeCapabilities: parent.runtimeCapabilities,
+    ...(parent.request !== undefined ? { request: parent.request } : {}),
+    services: parent.services,
+    signal: parent.signal,
+    deadline: parent.deadline,
+    executionBudget: parent.executionBudget,
+    nestingDepth,
+    ...(parent.auditSink !== undefined ? { auditSink: parent.auditSink } : {}),
+    ...(parent.auditSanitizer !== undefined ? { auditSanitizer: parent.auditSanitizer } : {}),
+    ...(parent.enforceAbac !== undefined ? { enforceAbac: parent.enforceAbac } : {}),
+    ...(parent.authorizationFactRevalidator !== undefined ? { authorizationFactRevalidator: parent.authorizationFactRevalidator } : {}),
+    ...(parent.auditSinkFactory !== undefined ? { auditSinkFactory: parent.auditSinkFactory } : {}),
+    ...(parent.outboxSinkFactory !== undefined ? { outboxSinkFactory: parent.outboxSinkFactory } : {}),
+    ...(parent.maskingKey !== undefined ? { maskingKey: parent.maskingKey } : {}),
+    ...(parent.onCommittedEffectFailure !== undefined ? { onCommittedEffectFailure: parent.onCommittedEffectFailure } : {}),
   }
 }
 

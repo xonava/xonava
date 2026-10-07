@@ -17,7 +17,12 @@ export interface OutboxDeliveryKey { readonly messageId: string; readonly scopeI
 export interface OutboxStore {
   append(record: OutboxDeliveryRecord): Promise<OutboxDeliveryRecord>
   get(key: OutboxDeliveryKey): Promise<OutboxDeliveryRecord | null>
-  claim(key: OutboxDeliveryKey, owner: string, leaseMs: number): Promise<OutboxDeliveryRecord | null>
+  /**
+   * Runs claimOutboxDelivery atomically. Stores MUST forward `maxAttempts`;
+   * the claim then dead-letters (and returns) a record whose attempts are
+   * exhausted instead of claiming it.
+   */
+  claim(key: OutboxDeliveryKey, owner: string, leaseMs: number, maxAttempts?: number): Promise<OutboxDeliveryRecord | null>
   markPublished(key: OutboxDeliveryKey, token: string): Promise<OutboxDeliveryRecord>
   recordFailure(key: OutboxDeliveryKey, token: string, code: string, delayMs: number, maxAttempts: number): Promise<OutboxDeliveryRecord>
 }

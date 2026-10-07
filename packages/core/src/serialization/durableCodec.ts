@@ -10,8 +10,8 @@ export type DurableCodecRegistry = Readonly<Record<string, DurableCodec>>
 export interface DurableValueEnvelope { readonly codec: string; readonly value: unknown }
 
 export function resolveDurableCodec(registry: DurableCodecRegistry, key: string): DurableCodec {
-  const codec = registry[key]
-  if (!codec) throw new ConfigurationError(`durable codec '${key}' is not registered`)
+  const codec = typeof key === "string" && Object.hasOwn(registry, key) ? registry[key] : undefined
+  if (!codec || typeof codec.encode !== "function" || typeof codec.decode !== "function") throw new ConfigurationError(`durable codec '${String(key)}' is not registered`)
   return codec
 }
 

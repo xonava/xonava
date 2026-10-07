@@ -1,4 +1,4 @@
-import type { AuthorizationOperationContext, PreparationOperationContext, ReadOperationContext, MutationOperationContext, PostCommitContext, RetryableOperationContext } from "./operationContext"
+import type { AuthorizationOperationContext, PreparationOperationContext, ReadOperationContext, ReadExecutionContext, MutationOperationContext, PostCommitContext, RetryableOperationContext } from "./operationContext"
 import type { AfterCommitHook, OperationHooks } from "./hooks"
 import type { RuntimeCapability } from "../bootstrap/runtimeCapabilities"
 import type { TransactionOptions } from "../persistence/provider"
@@ -87,7 +87,7 @@ export interface BaseOperationDefinition<TInput, TResult, TBeforeOperation = Pre
 export interface StandardReadOperationDefinition<TInput, TResult> extends BaseOperationDefinition<TInput, TResult, PreparationOperationContext> {
   kind: "read"
   atomicity?: StandardAtomicity
-  execute: (args: { operation: ReadOperationContext; input: TInput }) => MaybePromise<TResult>
+  execute: (args: { operation: ReadExecutionContext; input: TInput }) => MaybePromise<TResult>
 }
 
 export interface StandardMutationOperationDefinition<TInput, TResult> extends Omit<BaseOperationDefinition<TInput, TResult, PreparationOperationContext>, "execution"> {

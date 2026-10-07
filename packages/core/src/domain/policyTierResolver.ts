@@ -37,7 +37,8 @@ export function buildTieredPolicyOutcome<TPolicy, TExpression>(args: {
     )
     const tierDenyMatched = args.ops.or(
       tierPolicies
-        .filter((policy) => args.getEffect(policy) === "deny")
+        // Fail closed: any effect other than an explicit "allow" denies.
+        .filter((policy) => args.getEffect(policy) !== "allow")
         .map((policy) => args.getMatch(policy)),
     )
 

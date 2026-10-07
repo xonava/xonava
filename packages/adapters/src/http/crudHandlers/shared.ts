@@ -16,7 +16,7 @@ import {
   type RequestContext,
 } from "core/domain"
 import type { CrudRouteKey } from "core/entity"
-import { createReadOnlyPersistenceProvider, createTenantScopedPersistenceProvider, type PersistenceProvider } from "core/persistence"
+import { createReadOnlyPersistenceProvider, createTenantScopedPersistenceProvider, encodeTenantCacheTag, type PersistenceProvider } from "core/persistence"
 import { CacheBackedRateLimitStore } from "../../cache"
 import type {
   CrudMutationHookContext,
@@ -567,6 +567,19 @@ export function buildScopedCreateRecord<TRow extends SelectableRow>(
     ...(entity.versionField ? { [entity.versionField]: 1 } : {}),
   } as unknown as Partial<TRow>
 }
+/**
+ * Cache tags shared by reads and invalidations. Tenant tags use the tenant's
+ * length-prefixed namespace (unambiguous for any tenant id), which is also what
+ * a tenant-scoped atomic batch is allowed to advance. The bare global module
+ * tag is reserved for genuinely global (platform/public) shared data.
+ */
+export function buildScopeCacheTags(tag: string, context: RequestContext): string[] {
+  if (context.scope.kind === "tenant") {
+    return [encodeTenantCacheTag(context.scope.tenantId, tag), encodeTenantCacheTag(context.scope.tenantId, "scope")]
+  }
+  return [`${tag}:${context.scopeId}`, `scope:${context.scopeId}`, tag]
+}
+
 export function createShared<
   TRow extends SelectableRow,
   A,
@@ -586,19 +599,7 @@ export function createShared<
   | "resolveReadScopeForContext"
 > {
   const deps = options.adapterDeps
-  const buildTagScopeKey = (context: RequestContext) =>
-    context.scope.kind === "tenant" ? context.scope.tenantId : context.scopeId
-  const buildReadTags = (context: RequestContext) => {
-    // Tenant data is namespaced by tenant so one tenant's write cannot churn
-    // every tenant's cache. The bare global module tag is reserved for
-    // genuinely global (platform/public) shared data.
-    const globalTag = context.scope.kind === "tenant" ? [] : [options.cache.tag]
-    return [
-      `${options.cache.tag}:${buildTagScopeKey(context)}`,
-      `scope:${context.scopeId}`,
-      ...globalTag,
-    ]
-  }
+  const buildReadTags = (context: RequestContext) => buildScopeCacheTags(options.cache.tag, context)
   const enforceReadRateLimit = async (
     route: "list" | "detail",
     config:

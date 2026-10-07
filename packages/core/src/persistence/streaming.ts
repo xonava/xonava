@@ -1,3 +1,4 @@
+import { CancelledError, TimeoutError } from "../domain/errors"
 import type { QueryPlan } from "../query/queryPlan"
 
 export interface StreamingReadOptions {
@@ -25,8 +26,12 @@ export function assertStreamingReadOptions(options: StreamingReadOptions, now = 
   if (!Number.isSafeInteger(options.batchSize) || options.batchSize < 1) throw new TypeError("stream batchSize must be a positive safe integer")
   if (!(options.signal instanceof AbortSignal)) throw new TypeError("stream signal must be an AbortSignal")
   if (!(options.deadline instanceof Date) || !Number.isFinite(options.deadline.getTime())) throw new TypeError("stream deadline must be a valid Date")
-  if (options.signal.aborted) throw options.signal.reason ?? new DOMException("stream aborted", "AbortError")
-  if (options.deadline.getTime() <= now.getTime()) throw new DOMException("stream deadline exceeded", "TimeoutError")
+  if (options.signal.aborted) {
+    const reason: unknown = options.signal.reason
+    if (reason instanceof CancelledError || reason instanceof TimeoutError) throw reason
+    throw new CancelledError("stream was cancelled", reason)
+  }
+  if (options.deadline.getTime() <= now.getTime()) throw new TimeoutError("stream deadline exceeded")
 }
 
 
@@ -42,5 +47,7 @@ export async function* enforceBoundedStream<T>(source:AsyncIterable<StreamingRea
     total+=batch.items.length;if(total>options.maxItems) throw new TypeError("stream exceeded maxItems")
     expectedBatch++;yield Object.freeze({...batch,items:Object.freeze([...batch.items])})
   }
-  assertStreamingReadOptions(options,now())
+  // Every batch was validated before it was yielded; a source that has fully
+  // completed is not failed retroactively because the deadline passed after
+  // its final batch.
 }

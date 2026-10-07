@@ -1,4 +1,5 @@
-import { RuntimeCapabilityError, ValidationError } from "../domain/errors"
+import { RuntimeCapabilityError, TimeoutError, ValidationError } from "../domain/errors"
+import { abortSignalError } from "../operation/deadline"
 import { snapshotData } from "../kernel/snapshotData"
 
 export type ObjectBytes = Uint8Array | ReadableStream<Uint8Array>
@@ -20,8 +21,9 @@ export interface ObjectStore {
 }
 
 export function assertObjectRequestActive(options: ObjectRequestOptions, now = Date.now()): void {
-  if (options.signal?.aborted) throw options.signal.reason ?? new DOMException("Object request aborted", "AbortError")
-  if (options.deadline !== undefined && (!Number.isFinite(options.deadline)||now >= options.deadline)) throw new RuntimeCapabilityError("Object request deadline exceeded", { deadline: options.deadline })
+  if (options.signal?.aborted) throw abortSignalError(options.signal, "Object request was cancelled")
+  if (options.deadline !== undefined && !Number.isFinite(options.deadline)) throw new RuntimeCapabilityError("Object request deadline is invalid", { deadline: options.deadline })
+  if (options.deadline !== undefined && now >= options.deadline) throw new TimeoutError("Object request deadline exceeded", { deadline: options.deadline })
 }
 export function validateObjectKey(key: string): string { if (!key || key.length > 1024 || key.includes("\0")) throw new ValidationError("Object key must contain 1-1024 non-NUL characters"); return key }
 export function requireObjectStore(value: ObjectStore | undefined): ObjectStore { if (!value || typeof value !== "object" || ![value.put, value.get, value.head, value.delete].every(method => typeof method === "function")) throw new RuntimeCapabilityError("ObjectStore capability is not available", { capability:"objectStore" }); return value }

@@ -1,4 +1,4 @@
-import { ConfigurationError } from "./errors.js"
+import { ConfigurationError, ForbiddenError, UnauthorizedError } from "./errors.js"
 import { encodeExecutionScopeId, executionScopesEqual, isAuthorityNarrowing, type ExecutionScope, type ExecutionScopeId } from "./executionScope.js"
 import { assertPrincipal, isRfc3339UtcInstant, type ExecutionIdentity, type Principal } from "./principal.js"
 
@@ -126,6 +126,35 @@ export interface AuthorityValidationOptions {
   readonly action?: string
   /** Every concrete resource targeted by the action, when a delegation narrows resources. */
   readonly resourceIds?: readonly string[]
+  /**
+   * How far in the future an `issuedAt` may be, to absorb clock drift between
+   * the issuing host and this one. Expiry is never extended. Default 30 s,
+   * at most 5 min.
+   */
+  readonly clockSkewToleranceMs?: number
+}
+
+export const DEFAULT_AUTHORITY_CLOCK_SKEW_MS = 30_000
+export const MAX_AUTHORITY_CLOCK_SKEW_MS = 300_000
+
+/*
+ * Error contract: a structurally invalid authority (malformed fields, invalid
+ * instants, a validation call missing required inputs) is a server-side
+ * ConfigurationError. Authority that is well formed but no longer or not yet
+ * valid is UnauthorizedError (re-authenticate); authority that is valid but
+ * does not cover this request is ForbiddenError.
+ */
+function resolveSkew(options: AuthorityValidationOptions | undefined): number {
+  const skew = options?.clockSkewToleranceMs ?? DEFAULT_AUTHORITY_CLOCK_SKEW_MS
+  if (!Number.isSafeInteger(skew) || skew < 0 || skew > MAX_AUTHORITY_CLOCK_SKEW_MS) throw new ConfigurationError(`clockSkewToleranceMs must be an integer between 0 and ${MAX_AUTHORITY_CLOCK_SKEW_MS}`)
+  return skew
+}
+
+function assertValidityWindow(issuedAt: string, expiresAt: string | undefined, now: number, skew: number, field: "grant" | "delegation"): void {
+  if (!isRfc3339UtcInstant(issuedAt)) throw new ConfigurationError(`${field}.issuedAt must be an RFC 3339 UTC instant`)
+  if (expiresAt !== undefined && (!isRfc3339UtcInstant(expiresAt) || Date.parse(expiresAt) <= Date.parse(issuedAt))) throw new ConfigurationError(`${field} has an invalid expiry`)
+  if (Date.parse(issuedAt) > now + skew) throw new UnauthorizedError(`${field}.issuedAt is in the future`)
+  if (expiresAt !== undefined && Date.parse(expiresAt) <= now) throw new UnauthorizedError(field === "grant" ? "authority grant has expired" : "delegation has expired")
 }
 
 function assertDelegationRevocation(revocation: DelegationHop["revocation"]): void {
@@ -155,17 +184,17 @@ function assertDelegationRestrictions(hop: DelegationHop, options: AuthorityVali
 
   if (hop.permittedOperationKeys !== undefined) {
     if (options?.operationKey === undefined) throw new ConfigurationError("delegation operation restriction requires an operation key")
-    if (!hop.permittedOperationKeys.includes(options.operationKey)) throw new ConfigurationError("delegation does not permit this operation")
+    if (!hop.permittedOperationKeys.includes(options.operationKey)) throw new ForbiddenError("delegation does not permit this operation")
   }
   if (hop.permittedActions !== undefined) {
     if (options?.action === undefined) throw new ConfigurationError("delegation action restriction requires an action")
-    if (!hop.permittedActions.includes(options.action)) throw new ConfigurationError("delegation does not permit this action")
+    if (!hop.permittedActions.includes(options.action)) throw new ForbiddenError("delegation does not permit this action")
   }
   if (hop.permittedResourceIds !== undefined) {
     if (options?.resourceIds === undefined) throw new ConfigurationError("delegation resource restriction requires resource identities")
-    if (options.resourceIds.length === 0) throw new ConfigurationError("delegation resource restriction does not permit an unspecified resource collection")
+    if (options.resourceIds.length === 0) throw new ForbiddenError("delegation resource restriction does not permit an unspecified resource collection")
     if (options.resourceIds.some((resourceId) => typeof resourceId !== "string" || resourceId.trim().length === 0 || !hop.permittedResourceIds!.includes(resourceId))) {
-      throw new ConfigurationError("delegation does not permit one or more resources")
+      throw new ForbiddenError("delegation does not permit one or more resources")
     }
   }
 }
@@ -184,18 +213,21 @@ export function assertAuthorityProvenance(
   nonBlank(grant.grantId, "grant.grantId")
   nonBlank(grant.purpose, "grant.purpose")
   nonBlank(grant.reason, "grant.reason")
-  if (!isRfc3339UtcInstant(grant.issuedAt) || Date.parse(grant.issuedAt) > now.getTime()) throw new ConfigurationError("grant.issuedAt must be a valid time not in the future")
-  if (grant.expiresAt && (!isRfc3339UtcInstant(grant.expiresAt) || Date.parse(grant.expiresAt) <= now.getTime())) throw new ConfigurationError("authority grant has expired or has an invalid expiry")
+  const skew = resolveSkew(options)
+  const nowMs = now.getTime()
+  if (!Number.isFinite(nowMs)) throw new ConfigurationError("authority validation time is invalid")
+  assertValidityWindow(grant.issuedAt, grant.expiresAt, nowMs, skew, "grant")
   if (options?.routeKey !== undefined && grant.source.kind === "route" && grant.source.routeKey !== options.routeKey) {
-    throw new ConfigurationError("authority grant source route does not match request route")
+    throw new ForbiddenError("authority grant source route does not match request route")
   }
   assertPolicy(grant.policy)
   assertAuthorityOrigin(grant.source, "grant.source")
   assertTarget(grant.target, "grant.target")
   const requestTarget = { scope, scopeId }
-  if (!targetsEqual(grant.target, requestTarget) || scopeId !== encodeExecutionScopeId(scope)) throw new ConfigurationError("request and authority target scope identity mismatch")
-  if (grant.delegationChain.length > 1) throw new ConfigurationError("maximum delegation depth is one")
-  if (grant.delegationChain[0] && !originsEqual(grant.delegationChain[0].source, grant.source)) throw new ConfigurationError("first delegation source does not match grant source")
+  if (scopeId !== encodeExecutionScopeId(scope)) throw new ConfigurationError("request scope identity mismatch")
+  if (!targetsEqual(grant.target, requestTarget)) throw new ForbiddenError("request and authority target scope identity mismatch")
+  if (grant.delegationChain.length > 1) throw new ForbiddenError("maximum delegation depth is one")
+  if (grant.delegationChain[0] && !originsEqual(grant.delegationChain[0].source, grant.source)) throw new ForbiddenError("first delegation source does not match grant source")
   let preceding: ScopedAuthorityTarget | undefined
   for (const hop of grant.delegationChain) {
     nonBlank(hop.grantId, "delegation.grantId")
@@ -206,22 +238,21 @@ export function assertAuthorityProvenance(
     assertAuthorityOrigin(hop.source, "delegation.source")
     assertPolicy(hop.policy)
     assertDelegationRevocation(hop.revocation)
-    if (!isRfc3339UtcInstant(hop.issuedAt) || Date.parse(hop.issuedAt) > now.getTime()) throw new ConfigurationError("delegation.issuedAt must be a valid time not in the future")
-    if (hop.expiresAt && (!isRfc3339UtcInstant(hop.expiresAt) || Date.parse(hop.expiresAt) <= now.getTime())) throw new ConfigurationError("delegation has expired or has an invalid expiry")
-    if (hop.expiresAt && grant.expiresAt && Date.parse(hop.expiresAt) > Date.parse(grant.expiresAt)) throw new ConfigurationError("delegation expiry cannot exceed grant expiry")
+    assertValidityWindow(hop.issuedAt, hop.expiresAt, nowMs, skew, "delegation")
+    if (hop.expiresAt && grant.expiresAt && Date.parse(hop.expiresAt) > Date.parse(grant.expiresAt)) throw new ForbiddenError("delegation expiry cannot exceed grant expiry")
     assertDelegationRestrictions(hop, options)
-    if (preceding && (hop.source.kind !== "authority" || !targetsEqual(hop.source.target, preceding))) throw new ConfigurationError("delegation chain is discontinuous")
-    if (hop.source.kind === "authority" && !isAuthorityNarrowing(hop.source.target.scope, hop.target.scope)) throw new ConfigurationError("delegation cannot widen or rebind authority")
+    if (preceding && (hop.source.kind !== "authority" || !targetsEqual(hop.source.target, preceding))) throw new ForbiddenError("delegation chain is discontinuous")
+    if (hop.source.kind === "authority" && !isAuthorityNarrowing(hop.source.target.scope, hop.target.scope)) throw new ForbiddenError("delegation cannot widen or rebind authority")
     preceding = hop.target
   }
-  if (preceding && !targetsEqual(preceding, grant.target)) throw new ConfigurationError("delegation chain target does not match grant target")
+  if (preceding && !targetsEqual(preceding, grant.target)) throw new ForbiddenError("delegation chain target does not match grant target")
   const { actor, subject } = provenance.identity
   if (principalsEqual(actor, subject)) {
-    if (grant.impersonation.kind !== "none") throw new ConfigurationError("ordinary identity cannot contain impersonation evidence")
+    if (grant.impersonation.kind !== "none") throw new ForbiddenError("ordinary identity cannot contain impersonation evidence")
   } else {
-    if (grant.impersonation.kind !== "explicit") throw new ConfigurationError("actor and subject differ without explicit impersonation")
-    if (grant.impersonation.actorId !== actor.id || grant.impersonation.subjectId !== subject.id || grant.impersonation.grantId !== grant.grantId) throw new ConfigurationError("impersonation evidence does not match identity and grant")
-    if (grant.delegationChain.some((hop) => hop.source.kind === "authority" && hop.source.target.scope.kind === "tenant")) throw new ConfigurationError("nested impersonation is forbidden")
+    if (grant.impersonation.kind !== "explicit") throw new ForbiddenError("actor and subject differ without explicit impersonation")
+    if (grant.impersonation.actorId !== actor.id || grant.impersonation.subjectId !== subject.id || grant.impersonation.grantId !== grant.grantId) throw new ForbiddenError("impersonation evidence does not match identity and grant")
+    if (grant.delegationChain.some((hop) => hop.source.kind === "authority" && hop.source.target.scope.kind === "tenant")) throw new ForbiddenError("nested impersonation is forbidden")
   }
 }
 
@@ -242,6 +273,7 @@ export function assertDurableAuthorityProvenance(provenance: DurableAuthorityPro
   nonBlank(provenance.correlationId, "durable authority correlationId")
   if (!isRfc3339UtcInstant(provenance.issuedAt)) throw new ConfigurationError("durable authority issuedAt must be an RFC 3339 UTC instant")
   if (provenance.expiresAt && !isRfc3339UtcInstant(provenance.expiresAt)) throw new ConfigurationError("durable authority expiresAt must be an RFC 3339 UTC instant")
+  if (provenance.expiresAt && Date.parse(provenance.expiresAt) <= Date.parse(provenance.issuedAt)) throw new ConfigurationError("durable authority expiresAt must be after issuedAt")
   assertTarget(provenance.target, "durable authority target")
   assertAuthorityOrigin(provenance.source, "durable authority source")
   assertPolicy(provenance.policy)
@@ -264,6 +296,7 @@ export function assertDurableAuthorityProvenance(provenance: DurableAuthorityPro
     assertDelegationRestriction(hop.permittedResourceIds, "permittedResourceIds")
     if (!isRfc3339UtcInstant(hop.issuedAt)) throw new ConfigurationError("delegation.issuedAt must be an RFC 3339 UTC instant")
     if (hop.expiresAt && !isRfc3339UtcInstant(hop.expiresAt)) throw new ConfigurationError("delegation.expiresAt must be an RFC 3339 UTC instant")
+    if (hop.expiresAt && Date.parse(hop.expiresAt) <= Date.parse(hop.issuedAt)) throw new ConfigurationError("delegation.expiresAt must be after issuedAt")
     if (hop.expiresAt && provenance.expiresAt && Date.parse(hop.expiresAt) > Date.parse(provenance.expiresAt)) {
       throw new ConfigurationError("delegation expiry cannot exceed grant expiry")
     }
@@ -280,9 +313,11 @@ export function assertDurableAuthorityProvenance(provenance: DurableAuthorityPro
   }
 }
 
-function deepFreeze<T>(value: T): T {
-  if (typeof value !== "object" || value === null || Object.isFrozen(value)) return value
-  for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child)
+/** Freezes the whole graph, including children of an already-frozen parent. */
+function deepFreeze<T>(value: T, seen = new WeakSet<object>()): T {
+  if (typeof value !== "object" || value === null || seen.has(value)) return value
+  seen.add(value)
+  for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child, seen)
   return Object.freeze(value)
 }
 

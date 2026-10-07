@@ -67,12 +67,13 @@ function normalizeDayOfWeek(value: number): number {
 
 function dayMatches(local: LocalDateTime, cron: ParsedCron): boolean {
   if (!cron.months.has(local.month)) return false
-  const domWild = cron.daysOfMonthWildcard
-  const dowWild = cron.daysOfWeekWildcard
   const domMatch = cron.daysOfMonth.has(local.day)
   const dowMatch = cron.daysOfWeek.has(normalizeDayOfWeek(local.dayOfWeek))
-  if (!domWild && !dowWild) return domMatch || dowMatch
-  return domWild ? dowWild || dowMatch : domMatch
+  // Vixie cron: a day field starting with "*" (including "*/n") is star-flagged; star-flagged
+  // fields are still checked against their value set, and only when neither field is
+  // star-flagged does the day-of-month OR day-of-week rule apply.
+  if (cron.daysOfMonthWildcard || cron.daysOfWeekWildcard) return domMatch && dowMatch
+  return domMatch || dowMatch
 }
 
 function matchesLocalCron(local: LocalDateTime, cron: ParsedCron): boolean {
@@ -92,6 +93,8 @@ function localDateIsValid(local: LocalDateTime): boolean {
 }
 
 function hasPossibleCalendarDate(cron: ParsedCron): boolean {
+  // With OR semantics any restricted day-of-week occurs in every month.
+  if (!cron.daysOfMonthWildcard && !cron.daysOfWeekWildcard && cron.daysOfWeek.size > 0) return true
   for (let year = 2000; year < 2400; year++) {
     for (const month of cron.months) {
       const days = new Date(Date.UTC(year, month, 0)).getUTCDate()

@@ -82,14 +82,16 @@ describe("schedule dispatcher validation branches", () => {
     expect(emptyResult.errors).toHaveLength(1)
   })
 
-  it("rejects queue-all overflow and continues past an already materialized occurrence", async () => {
+  it("truncates queue-all overflow per tick and continues past an already materialized occurrence", async () => {
     const adapter = {
       toLocalDateTimeParts: (date: Date) => ({ year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate(), hour: date.getUTCHours(), minute: date.getUTCMinutes(), dayOfWeek: date.getUTCDay() }),
       localToUtc: (local: { year: number; month: number; day: number; hour: number; minute: number }) => new Date(Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute)),
     }
     const overflow = stores([claim({ misfirePolicy: { type: "queue_all" }, nextRunAt: new Date("2026-08-05T08:00:00Z") })])
     const overflowResult = await materializeDueSchedules({ ...overflow, workerId: "w", now: new Date("2026-08-05T11:00:00Z"), maxQueueAllOccurrences: 1, tzAdapter: adapter })
-    expect(overflowResult.errors[0]).toContain("more than 1 missed occurrences")
+    expect(overflowResult.errors).toEqual([])
+    expect(overflowResult.jobsEnqueued).toBe(1)
+    expect(overflowResult.backlogTruncated).toEqual(["s"])
 
     const existing = stores([claim({ misfirePolicy: { type: "queue_all" }, nextRunAt: new Date("2026-08-05T10:00:00Z") })])
     existing.jobStore.getByIdempotencyKey = vi.fn(async ({ key }: { key: string }) => key.endsWith("10:00:00.000Z") ? ({ id: "existing" } as StoredJob) : null)

@@ -46,7 +46,12 @@ describe("Q2 cursor contracts", () => {
   })
   it("rejects tampering, malformed input, and excessive size", async () => {
     const encoded = await encodeCursor(payload, integrity)
-    await expect(decodeCursor(`${encoded.slice(0, -1)}x`, integrity)).rejects.toThrow(/integrity/)
+    await expect(decodeCursor(`${encoded.slice(0, -1)}x`, integrity)).rejects.toThrow(/integrity|malformed/)
+    // Flipping only the unused low bits of the last character used to yield a second valid spelling.
+    const last = encoded.at(-1)!
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    const sibling = `${encoded.slice(0, -1)}${alphabet[alphabet.indexOf(last) ^ 1]}`
+    await expect(decodeCursor(sibling, integrity)).rejects.toThrow()
     await expect(decodeCursor("not-a-cursor", integrity)).rejects.toThrow(/malformed/)
     await expect(decodeCursor(encoded.replace(/^v1\./, "v2."), integrity)).rejects.toThrow(/malformed/)
     await expect(decodeCursor("x".repeat(17_000), integrity)).rejects.toThrow(/byte limit/)
@@ -85,5 +90,14 @@ describe("cursor expiry and key rotation", () => {
     const fresh = await encodeCursor(payload, rotating)
     await expect(decodeCursor(fresh, mac(5))).resolves.toMatchObject({ routeHash: "r" })
     await expect(decodeCursor(old, mac(5))).rejects.toThrow("integrity")
+  })
+})
+
+describe("predicate value byte limits", () => {
+  it("rejects oversized string literals and oversized value totals", async () => {
+    const { MAX_QUERY_VALUE_BYTES } = await import("../queryBudget")
+    expect(() => validateQueryPlan({ filter: Predicate.eq("name", "x".repeat(MAX_QUERY_VALUE_BYTES + 1)) })).toThrow(/UTF-8 bytes/)
+    expect(() => validateQueryPlan({ filter: Predicate.in("id", Array.from({ length: 10 }, () => "y".repeat(8000))) })).toThrow(/values exceed/)
+    expect(() => validateQueryPlan({ filter: Predicate.in("id", ["a", "b"]) })).not.toThrow()
   })
 })

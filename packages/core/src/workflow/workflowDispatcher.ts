@@ -1,6 +1,6 @@
 import { systemClock, type TimerClock } from "../kernel/clock"
 import type { WorkflowFence, WorkflowStore } from "../workflow/store"
-import { applyWorkflowStep, completeCompensation, createWorkflowFailure, failCompensation, failWorkflowStep, scheduleWorkflowRetry } from "./workflowStateMachine"
+import { applyWorkflowStep, completeCompensation, createWorkflowFailure, failCompensation, failWorkflowStep, isStalledWorkflowAttempt, markWorkflowAttemptStalled, scheduleWorkflowRetry } from "./workflowStateMachine"
 import { createWorkflowContext } from "./workflowContext"
 import { WorkflowDefinitionError, WorkflowLeaseLostError, WorkflowStateError, WorkflowVersionError } from "./workflowErrors"
 import type { WorkflowRegistry } from "./workflowRegistry"
@@ -23,7 +23,8 @@ export type WorkflowDispatcherClock = TimerClock
  * - retried: a retry was scheduled with backoff
  * - failed: a failure transition was committed, or the claim could not run
  * - deferred: this worker has no definition for the instance's version and handed it back
- * - stalled: a timed-out step ignored cancellation; nothing was committed and the lease lapses
+ * - stalled: a timed-out step ignored cancellation; the attempt was recorded as
+ *   stalled (TIMEOUT) and re-claimable only after one lease duration
  * - leaseLost: the claim was lost to another worker
  */
 export interface WorkflowDispatchResult { claimed: number; advanced: number; compensated: number; retried: number; deferred: number; stalled: number; leaseLost: number; failed: number }
@@ -269,6 +270,11 @@ async function runClaim(args: WorkflowDispatchOptions, instance: WorkflowInstanc
       // time, so a poison step terminates here instead of looping forever.
       return await failOrRetry(false, "ATTEMPTS_EXHAUSTED", `Attempt ${attempt} exceeds maxAttempts ${policy.maxAttempts}`)
     }
+    if (phase === "execute" && step.idempotent !== true && isStalledWorkflowAttempt(instance)) {
+      // A previous attempt timed out and may have performed its external
+      // effect: only idempotent steps are re-run after a timeout.
+      return await failOrRetry(false, "TIMEOUT", "Workflow step deadline exceeded")
+    }
     let signal: WorkflowSignal | undefined
     if (phase === "execute" && instance.waitingSignal !== null && typeof args.store.getSignal === "function") {
       const delivered = await bounded(args.store.getSignal(instance.id, instance.waitingSignal))
@@ -298,8 +304,14 @@ async function runClaim(args: WorkflowDispatchOptions, instance: WorkflowInstanc
       if (timedOut) {
         const settled = work === undefined || await waitForSettlement(work, () => workSettled, graceMs, clock)
         // Never record a failure (and start compensating) while the step may
-        // still be running. Its lease lapses; the next claim counts the attempt.
-        if (!settled) return "stalled"
+        // still be running. Record the stalled attempt and hold the instance
+        // for one lease duration; the next claim counts the attempt and fails
+        // a non-idempotent step with TIMEOUT instead of re-running it.
+        if (!settled) {
+          const at = validNow(now)
+          const failure = createWorkflowFailure({ code: "TIMEOUT", message: "Workflow step deadline exceeded and the step ignored cancellation", step: stepName, phase, attempt, at })
+          return await commit(markWorkflowAttemptStalled(instance, failure, new Date(at.getTime() + args.leaseDurationMs), at), "stalled")
+        }
         const retryable = step?.idempotent === true || phase === "compensate"
         return await failOrRetry(retryable, "TIMEOUT", "Workflow step deadline exceeded")
       }

@@ -1,4 +1,5 @@
 import { ConfigurationError, ConflictError, StaleClaimError } from "../../domain/errors"
+import { canonicalJsonString } from "../../serialization/canonicalJson"
 import type { DurableAuthorityProvenanceV1 } from "../../domain"
 import type { InboxClaim, InboxFailure, InboxRecord } from "./inbox"
 import type { OutboxDeliveryRecord } from "./outboxStore"
@@ -15,6 +16,10 @@ import type { OutboxDeliveryRecord } from "./outboxStore"
  *   outbox:  pending ──claim──▶ claimed ──published──▶ published
  *                 ▲                │
  *                 └─retry_scheduled◀┴─failure──▶ dead_lettered (attempt ≥ max)
+ *
+ *   A claim of a record whose attempts are exhausted (attempt ≥ maxAttempts,
+ *   e.g. the final attempt crashed or hung past its lease) dead-letters it
+ *   instead of starting another attempt.
  *
  *   inbox:   pending ──claim──▶ claimed ──acknowledge──▶ processed
  *                 ▲                │
@@ -90,18 +95,47 @@ function withoutRetryTime<T extends { readonly nextAttemptAt?: string }>(record:
   return rest
 }
 
+/** Claim arguments. `maxAttempts` (the delivery policy's limit) bounds attempts counted at claim time. */
+export interface DeliveryClaimArgs { readonly owner: string; readonly token: string; readonly leaseMs: number; readonly now: Date; readonly maxAttempts?: number }
+
+/**
+ * Whether a claimable record has used up its attempt budget. When it has, the
+ * claim dead-letters it: LEASE_EXPIRED when the last attempt's claim lapsed
+ * (crashed or hung worker), ATTEMPTS_EXHAUSTED otherwise. Without
+ * `maxAttempts` (legacy callers) the budget is not enforced at claim time.
+ */
+function exhaustedClaimCode(record: Claimable & { readonly attempt: number }, maxAttempts: number | undefined): string | null {
+  if (maxAttempts === undefined || record.attempt < attemptLimit(maxAttempts)) return null
+  return record.state === "claimed" ? "LEASE_EXPIRED" : "ATTEMPTS_EXHAUSTED"
+}
+
 // ---------------------------------------------------------------- outbox
 
-/** Idempotent append: an existing record with the same key wins; a different idempotency key is a conflict. */
+function payloadForm(record: OutboxDeliveryRecord): string {
+  const value = { scopeId: record.scopeId, eventType: record.envelope?.eventType, payloadVersion: record.envelope?.payloadVersion, payload: record.envelope?.payload }
+  // Normalise through JSON first so stores that drop undefined members or
+  // rebuild objects compare equal; fall back if canonicalisation is refused.
+  const plain: unknown = JSON.parse(JSON.stringify(value) ?? "null")
+  try { return canonicalJsonString(plain) } catch { return JSON.stringify(plain) }
+}
+
+/**
+ * Idempotent append: an existing record with the same key and payload wins; a
+ * different idempotency key or a different payload under the same message id
+ * is a conflict.
+ */
 export function appendOutboxDelivery(current: OutboxDeliveryRecord | null, record: OutboxDeliveryRecord): OutboxDeliveryRecord {
   if (record.state !== "pending" || record.attempt !== 0 || record.claim !== null) throw new ConfigurationError("New outbox deliveries must be pending, unclaimed, and unattempted")
   if (current === null) return record
   if (current.idempotencyKey !== record.idempotencyKey) throw new ConflictError("Outbox message id reused with a different idempotency key")
+  if (payloadForm(current) !== payloadForm(record)) throw new ConflictError("Outbox message id reused with a different payload")
   return current
 }
 
-export function claimOutboxDelivery(record: OutboxDeliveryRecord, args: { owner: string; token: string; leaseMs: number; now: Date }): OutboxDeliveryRecord | null {
+export function claimOutboxDelivery(record: OutboxDeliveryRecord, args: DeliveryClaimArgs): OutboxDeliveryRecord | null {
   if (!isDeliveryClaimable(record, args.now)) return null
+  const exhausted = exhaustedClaimCode(record, args.maxAttempts)
+  if (exhausted !== null) return { ...withoutRetryTime(record), state: "dead_lettered", claim: null, lastFailure: { code: exhausted, occurredAt: iso(args.now) } }
   return { ...withoutRetryTime(record), state: "claimed", attempt: record.attempt + 1, claim: newClaim(args) }
 }
 
@@ -129,8 +163,10 @@ export function observeInboxRecord(current: InboxRecord | null, record: InboxRec
   return current
 }
 
-export function claimInboxRecord(record: InboxRecord, args: { owner: string; token: string; leaseMs: number; now: Date }): InboxRecord | null {
+export function claimInboxRecord(record: InboxRecord, args: DeliveryClaimArgs): InboxRecord | null {
   if (!isDeliveryClaimable(record, args.now)) return null
+  const exhausted = exhaustedClaimCode(record, args.maxAttempts)
+  if (exhausted !== null) return deadLettered(record, exhausted, args.now)
   return { ...withoutRetryTime(record), state: "claimed", attempt: record.attempt + 1, claim: newClaim(args), lastObservedAt: iso(args.now) }
 }
 

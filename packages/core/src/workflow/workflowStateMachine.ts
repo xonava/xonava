@@ -92,17 +92,45 @@ export function failCompensation(instance: WorkflowInstance, failure: WorkflowFa
 }
 
 /**
+ * Records that the current attempt timed out and ignored cancellation, so it
+ * may still be running. The instance waits until `wakeAt` (giving the stalled
+ * attempt time to stop) and, for execution, records a TIMEOUT failure for the
+ * attempt; the dispatcher then fails a non-idempotent step on its next claim
+ * instead of re-running it (see isStalledWorkflowAttempt). Compensation keeps
+ * its original failure and is simply retried.
+ */
+export function markWorkflowAttemptStalled(instance: WorkflowInstance, failure: WorkflowFailure, wakeAt: Date, now: Date): WorkflowInstance {
+  const scheduled = scheduleWorkflowRetry(instance, wakeAt, now)
+  return instance.status === "compensating" ? scheduled : seal({ ...scheduled, failure })
+}
+
+/** Whether an earlier attempt of the instance's current execution step stalled past its deadline. */
+export function isStalledWorkflowAttempt(instance: WorkflowInstance): boolean {
+  const failure = instance.failure
+  return instance.status !== "compensating" && !!failure && failure.code === "TIMEOUT" && failure.phase === "execute" &&
+    failure.step === instance.currentStep && failure.attempt >= 1 && failure.attempt < instance.stepAttempt
+}
+
+/**
  * Resumes a waiting instance. The signal name stays recorded on the pending
  * instance so the dispatcher can hand the delivered signal to the step; the
- * step's next transition clears or replaces it.
+ * step's next transition clears or replaces it. An instance waiting on a retry
+ * timer (wakeAt set) is not waiting for a signal: it already received it, and a
+ * repeated delivery must not skip the backoff.
  */
 export function deliverWorkflowSignal(instance: WorkflowInstance, signal: WorkflowSignal, now: Date): WorkflowInstance {
-  if (instance.status !== "waiting" || instance.waitingSignal !== signal.name) throw new WorkflowStateError("Workflow is not waiting for this signal")
+  if (instance.status !== "waiting" || instance.wakeAt !== null || instance.waitingSignal !== signal.name) throw new WorkflowStateError("Workflow is not waiting for this signal")
   return seal({ ...instance, status: "pending", waitingSignal: signal.name, wakeAt: null, revision: instance.revision + 1, updatedAt: now })
 }
 
+/**
+ * Cancels a running instance, compensating completed steps first. Cancelling a
+ * terminal or already-compensating instance is a no-op: compensation is
+ * already undoing the work, and its original failure, retry budget, and
+ * outcome must be preserved.
+ */
 export function cancelWorkflow(instance: WorkflowInstance, now: Date): WorkflowInstance {
-  if (isWorkflowTerminal(instance)) return instance
+  if (isWorkflowTerminal(instance) || instance.status === "compensating") return instance
   const compensate = instance.compensationStack.length > 0
   const failure = createWorkflowFailure({ code: "CANCELLED", message: "Workflow was cancelled", step: instance.currentStep, phase: "execute", attempt: instance.stepAttempt, at: now })
   return seal({ ...instance, ...released, status: compensate ? "compensating" : "cancelled", outcome: compensate ? null : "cancelled", stepAttempt: 0, waitingSignal: null, wakeAt: null, failure, revision: instance.revision + 1, updatedAt: now })

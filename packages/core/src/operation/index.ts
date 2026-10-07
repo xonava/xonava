@@ -1,6 +1,8 @@
 export {
   createOperationContext,
   type ReadOperationContext,
+  type ReadExecutionContext,
+  type NestedOperationInvoke,
   type AuthorizationOperationContext,
   type PreparationOperationContext,
   type MutationOperationContext,

@@ -9,6 +9,21 @@ export type PredicateCompileResult =
   | { success: true; predicate: PredicateNode }
   | { success: false; error: string }
 
+/**
+ * A user attribute that resolves to undefined/null is never coerced into a
+ * literal ("undefined", 0). Its clause compiles to the fail-closed constant for
+ * the policy effect: always-false for allow (grants nothing), always-true for
+ * deny (the deny still applies). Conditions only combine with AND/OR, so the
+ * substitution is monotone in the safe direction.
+ */
+const UNRESOLVED = Symbol("unresolvedUserAttribute")
+
+type PolicyEffect = "allow" | "deny"
+
+function unresolvedPredicate(effect: PolicyEffect | undefined): PredicateNode {
+  return effect === "deny" ? Predicate.alwaysTrue() : Predicate.alwaysFalse()
+}
+
 function resolveUserAttr(context: AbacContext, userAttr: string): unknown {
   if (userAttr === "user.id") return context.userId
   if (userAttr === "user.roleId") return context.roleId
@@ -80,12 +95,16 @@ export function normalizeContextAttribute(input: unknown): string | undefined {
   return normalizeUserAttribute(input)
 }
 
+function resolvePresentUserAttr(context: AbacContext, userAttr: string): unknown {
+  return resolveUserAttr(context, userAttr) ?? UNRESOLVED
+}
+
 function resolveClauseValue(clause: PolicyFilterClause, context: AbacContext): unknown {
-  if (clause.userAttr) return resolveUserAttr(context, clause.userAttr)
+  if (clause.userAttr) return resolvePresentUserAttr(context, clause.userAttr)
 
   if (typeof clause.value === "string") {
     const userAttr = normalizeUserAttribute(clause.value)
-    if (userAttr) return resolveUserAttr(context, userAttr)
+    if (userAttr) return resolvePresentUserAttr(context, userAttr)
   }
 
   return clause.value
@@ -112,6 +131,8 @@ export function policyClauseToPredicate(args: {
   clause: PolicyFilterClause
   context: AbacContext
   fieldCatalog: Record<string, AbacFieldDefinition>
+  /** Selects the fail-closed constant for unresolved user attributes; defaults to allow semantics. */
+  effect?: PolicyEffect
 }): PredicateCompileResult {
   const field = args.clause.field
   if (!Object.hasOwn(args.fieldCatalog, args.clause.field)) {
@@ -133,13 +154,17 @@ export function policyClauseToPredicate(args: {
       : resolvedValue !== undefined
         ? [resolvedValue]
         : []
-    const normalized = rawValues.map((v) => {
+    const resolved = rawValues.map((v) => {
       if (typeof v === "string") {
         const userAttr = normalizeUserAttribute(v)
-        if (userAttr) return resolveUserAttr(args.context, userAttr)
+        if (userAttr) return resolvePresentUserAttr(args.context, userAttr)
       }
       return v
     })
+    // An unresolved list member grants nothing under allow; under deny the
+    // clause cannot be proven not to match, so the deny applies.
+    if (resolved.includes(UNRESOLVED) && args.effect === "deny") return { success: true, predicate: Predicate.alwaysTrue() }
+    const normalized = resolved.filter((v) => v !== UNRESOLVED)
     const fieldDef = Object.hasOwn(args.fieldCatalog, field) ? args.fieldCatalog[field] : undefined
     if (fieldDef?.type === "string-array") {
       const result = coercePolicyValueList({ type: fieldDef.type, values: normalized })
@@ -164,9 +189,7 @@ export function policyClauseToPredicate(args: {
     return { success: true, predicate: Predicate.alwaysFalse() }
   }
 
-  const coercedResult = coerceClauseValue(field, resolvedValue, args.fieldCatalog)
-  if (!coercedResult.success) return coercedResult
-  const coercedValue = coercedResult.value
+  if (resolvedValue === UNRESOLVED) return { success: true, predicate: unresolvedPredicate(args.effect) }
 
   if (operator === "between") {
     const raw = args.clause.value ?? args.clause.values
@@ -195,6 +218,10 @@ export function policyClauseToPredicate(args: {
     }
     return { success: false, error: `Invalid between value for field "${field}"` }
   }
+
+  const coercedResult = coerceClauseValue(field, resolvedValue, args.fieldCatalog)
+  if (!coercedResult.success) return coercedResult
+  const coercedValue = coercedResult.value
 
   const primitive = asPrimitive(coercedValue)
   if (primitive === undefined) return { success: true, predicate: Predicate.alwaysFalse() }
@@ -229,6 +256,7 @@ export function conditionGroupToPredicate(args: {
   group: PolicyConditionGroup
   context: AbacContext
   fieldCatalog: Record<string, AbacFieldDefinition>
+  effect?: PolicyEffect
 }): PredicateCompileResult {
   if (args.group.conditions.length === 0) {
     return {
@@ -239,9 +267,9 @@ export function conditionGroupToPredicate(args: {
 
   const results = args.group.conditions.map((condition) => {
     if (isConditionGroup(condition)) {
-      return conditionGroupToPredicate({ group: condition, context: args.context, fieldCatalog: args.fieldCatalog })
+      return conditionGroupToPredicate({ group: condition, context: args.context, fieldCatalog: args.fieldCatalog, ...(args.effect ? { effect: args.effect } : {}) })
     }
-    return policyClauseToPredicate({ clause: condition, context: args.context, fieldCatalog: args.fieldCatalog })
+    return policyClauseToPredicate({ clause: condition, context: args.context, fieldCatalog: args.fieldCatalog, ...(args.effect ? { effect: args.effect } : {}) })
   })
 
   const errors = results.filter((r): r is { success: false; error: string } => !r.success)
@@ -259,11 +287,13 @@ export function policyConditionsToPredicate(args: {
   conditions: PolicyConditions
   context: AbacContext
   fieldCatalog: Record<string, AbacFieldDefinition>
+  effect?: PolicyEffect
 }): PredicateCompileResult {
-  const systemResult = conditionGroupToPredicate({ group: args.conditions.systemScope, context: args.context, fieldCatalog: args.fieldCatalog })
+  const effect = args.effect ? { effect: args.effect } : {}
+  const systemResult = conditionGroupToPredicate({ group: args.conditions.systemScope, context: args.context, fieldCatalog: args.fieldCatalog, ...effect })
   if (!systemResult.success) return systemResult
 
-  const userResult = conditionGroupToPredicate({ group: args.conditions.userFilters, context: args.context, fieldCatalog: args.fieldCatalog })
+  const userResult = conditionGroupToPredicate({ group: args.conditions.userFilters, context: args.context, fieldCatalog: args.fieldCatalog, ...effect })
   if (!userResult.success) return userResult
 
   return { success: true, predicate: combineAnd([systemResult.predicate, userResult.predicate]) }

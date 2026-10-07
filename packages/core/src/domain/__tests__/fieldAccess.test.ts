@@ -177,7 +177,7 @@ describe("resolveFieldQueryAccess", () => {
     expect(result.sort).toContain("name")
   })
 
-  it("treats deny-effect read entries as query-denied unless granted", () => {
+  it("treats deny-effect read entries as query-denied even when the deny lists a grant", () => {
     const denied = resolveFieldQueryAccess({
       policies: [makeReadPolicy({ read: { ssn: "allow" } }, { effect: "deny", priority: 200 })],
       moduleKey: "test.module",
@@ -187,7 +187,8 @@ describe("resolveFieldQueryAccess", () => {
       policies: [makeReadPolicy({ read: { ssn: "allow" }, query: { search: ["ssn"] } }, { effect: "deny", priority: 200 })],
       moduleKey: "test.module",
     })
-    expect(granted.search).toContain("ssn")
+    // Deny-effect policies never grant query access to a field they omit.
+    expect(granted.search).not.toContain("ssn")
     expect(granted.filter).not.toContain("ssn")
   })
 

@@ -15,8 +15,8 @@ describe("circuit breaker state machine", () => {
     expect(trial).toMatchObject({ allowed: true, state: { status: "half_open", trialInFlight: true } })
     expect(admitCircuit(trial.state, breakerPolicy, 1_011).allowed).toBe(false)
     expect(recordCircuitFailure(trial.state, breakerPolicy, 1_020)).toMatchObject({ status: "open", openedAt: 1_020 })
-    expect(recordCircuitSuccess(trial.state)).toBe(CLOSED_CIRCUIT)
-    expect(recordCircuitSuccess({ ...state, consecutiveFailures: 1, status: "closed" })).toBe(CLOSED_CIRCUIT)
+    expect(recordCircuitSuccess(trial.state)).toMatchObject({ ...CLOSED_CIRCUIT, generation: trial.state.generation + 1 })
+    expect(recordCircuitSuccess({ ...state, consecutiveFailures: 1, status: "closed" })).toMatchObject({ status: "closed", consecutiveFailures: 0, openedAt: null, trialInFlight: false })
   })
 
   it("an in-process breaker fails fast while open", () => {
