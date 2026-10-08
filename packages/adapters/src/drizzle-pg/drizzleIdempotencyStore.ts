@@ -88,6 +88,11 @@ export class DrizzlePgIdempotencyStore<TResult>
     if (getAffectedRows(updated) !== 1) throw new Error("Idempotency lease renewal lost ownership")
   }
 
+  /** Releases an uncommitted reservation this caller still owns; committed receipts are never touched. */
+  async abandon(lease: { scope: string; key: string; fingerprint: string; token: string }): Promise<void> {
+    await this.db.delete(this.table).where(sql`scope = ${lease.scope} AND key = ${lease.key} AND fingerprint = ${lease.fingerprint} AND token = ${lease.token} AND status = 'in-progress'`)
+  }
+
   async markCommittedInTransaction(completion: IdempotencyCommitItem, persistence: PersistenceProvider): Promise<void> {
     const session = getDrizzleSession(persistence)
     // The committed marker stores only the receipt (identity + obligations),

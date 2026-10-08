@@ -81,6 +81,10 @@ function memoryIdempotencyPort() {
     complete: async (r: { scope: string; key: string; fingerprint: string; result: unknown }) => {
       store.set(`${r.scope}|${r.key}`, { fp: r.fingerprint, state: "done", result: r.result })
     },
+    abandon: async (r: { scope: string; key: string }) => {
+      const k = `${r.scope}|${r.key}`
+      if (store.get(k)?.state === "pending") store.delete(k)
+    },
   }
 }
 
@@ -186,6 +190,16 @@ describe("defect 2: idempotent replay runs before resource resolution", () => {
     const del = (id: string) => handlers.delete(new Request(`https://x/people/${id}`, { method: "DELETE", headers: { "Idempotency-Key": "k3", "if-match": '"1"' } }), { params: Promise.resolve({ id }) })
     expect((await del("r1")).status).toBe(200)
     expect((await del("missing")).status).toBe(409)
+  })
+})
+
+describe("idempotency reservations are released when the mutation fails before commit", () => {
+  it("lets an immediate retry run after a pre-commit 404 instead of reporting in-progress", async () => {
+    const { handlers, rows } = build({})
+    const del = () => handlers.delete(new Request("https://x/people/r9", { method: "DELETE", headers: { "Idempotency-Key": "k9", "if-match": '"1"' } }), { params: Promise.resolve({ id: "r9" }) })
+    expect((await del()).status).toBe(404)
+    rows.set("r9", { id: "r9", tenantId: "tenant-1", name: "a", version: 1 })
+    expect((await del()).status).toBe(200)
   })
 })
 

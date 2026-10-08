@@ -104,6 +104,15 @@ export class DrizzleD1IdempotencyStore<TResult>
     if (getAffectedRows(updated) !== 1) throw new Error("Idempotency lease renewal lost ownership")
   }
 
+  /** Releases an uncommitted reservation this caller still owns; committed receipts are never touched. */
+  async abandon(lease: { scope: string; key: string; fingerprint: string; token: string }): Promise<void> {
+    const columns = this.table as IdempotencyColumns
+    await this.db.delete(this.table).where(and(
+      eq(columns.scope, lease.scope), eq(columns.key, lease.key),
+      eq(columns.fingerprint, lease.fingerprint), eq(columns.token, lease.token), eq(columns.status, "in-progress"),
+    ))
+  }
+
   createCommitBatchItem(completion: IdempotencyCommitItem): import("core/persistence").AtomicBatchItem<unknown> {
     // The atomic item is a durable commit receipt: stable identity + durable
     // obligations only. The provider pairs it with a DB-enforced ownership
