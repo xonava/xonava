@@ -124,9 +124,12 @@ export interface CrudOptions<
   optimisticConcurrency?: OptimisticConcurrencyConfig<TRow>
 }
 
+/** Upper bound on the offset page number accepted from callers. */
+export const MAX_LIST_PAGE = 1_000_000
+
 export const defaultListQuerySchema = z.object({
-  page: z.coerce.number().min(1).optional(),
-  pageSize: z.coerce.number().min(1).max(100).optional(),
+  page: z.coerce.number().int().min(1).max(MAX_LIST_PAGE).optional(),
+  pageSize: z.coerce.number().int().min(1).max(100).optional(),
   sorting: z.string().max(64 * 1024).optional(),
   filters: z.string().max(64 * 1024).optional(),
   cursor: z.string().max(32 * 1024).optional(),

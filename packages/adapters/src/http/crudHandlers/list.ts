@@ -103,22 +103,18 @@ export function createListHandler<
             moduleKey: options.moduleKey,
           })
         : undefined
-      const entityFieldNames = Object.keys(entity.fields ?? {})
-      const effectiveFilterableColumns = queryDenials
-        ? (options.filterableColumns ?? entityFieldNames).filter(
-            (field) => !queryDenials.filter.includes(field)
-          )
-        : options.filterableColumns
-      const effectiveSearchableColumns = queryDenials
-        ? (options.searchableColumns ?? entityFieldNames).filter(
-            (field) => !queryDenials.search.includes(field)
-          )
-        : (options.searchableColumns ?? [])
-      const effectiveSortableColumns = queryDenials
-        ? (options.sortableColumns ?? entityFieldNames).filter(
-            (field) => !queryDenials.sort.includes(field)
-          )
-        : options.sortableColumns
+      const entityFields = entity.fields ?? {}
+      const isEntityField = (field: string) => Object.hasOwn(entityFields, field)
+      // An undeclared allowlist means NO caller-controlled field is allowed.
+      // Every allowlist is intersected with the entity's own declared fields
+      // (own-property check) so tenant/version/undeclared columns and
+      // prototype keys can never reach a predicate, sort, or column lookup.
+      const effectiveAllowlist = (declared: readonly string[] | undefined, denied: readonly string[] | undefined) =>
+        [...new Set(declared ?? [])].filter((field) => isEntityField(field) && !(denied ?? []).includes(field))
+      const effectiveFilterableColumns = effectiveAllowlist(options.filterableColumns, queryDenials?.filter)
+      const effectiveSearchableColumns = effectiveAllowlist(options.searchableColumns, queryDenials?.search)
+      const effectiveSortableColumns = effectiveAllowlist(options.sortableColumns, queryDenials?.sort)
+      const defaultSortFields = (shared.resolveDefaultSort() ?? []).map((item) => item.field)
       const rawQuery = parseUniqueQueryParameters(request)
       const listQuerySchema = options.validation?.listQuery ?? defaultListQuerySchema
       const parsed = listQuerySchema.parse(rawQuery) as Partial<ReadQuery>
@@ -176,7 +172,7 @@ export function createListHandler<
           }
           const sort =
             parseSortString(input.query.sorting, {
-              ...(effectiveSortableColumns ? { allowedFields: effectiveSortableColumns } : {}),
+              allowedFields: effectiveSortableColumns,
               ...(options.queryLimits?.maxSortJsonBytes !== undefined ? { maxBytes: options.queryLimits.maxSortJsonBytes } : {}),
             }) ?? shared.resolveDefaultSort()
           const cursorConfig = options.pagination?.strategy === "cursor" ? options.pagination : undefined
@@ -184,7 +180,7 @@ export function createListHandler<
           let cursorBindings: Pick<CursorPayloadV1, "routeHash" | "queryHash" | "scopeHash" | "sortHash"> | undefined
           if (cursorConfig) {
             if (!sort) throw new ValidationError("cursor pagination requires a configured stable sort")
-            if (sort.some(item => !entityFieldNames.includes(item.field) || (effectiveSortableColumns && !effectiveSortableColumns.includes(item.field)))) throw new ValidationError("cursor sort contains a non-queryable field")
+            if (sort.some(item => !isEntityField(item.field) || (!effectiveSortableColumns.includes(item.field) && !defaultSortFields.includes(item.field)))) throw new ValidationError("cursor sort contains a non-queryable field")
             assertStableCursorSort(sort, cursorConfig.uniqueFields, cursorConfig.nullableFields)
             cursorBindings = {
               routeHash: await fingerprintJson({ moduleKey: options.moduleKey, route: "list" }),
@@ -204,7 +200,7 @@ export function createListHandler<
             ...DEFAULT_QUERY_BUDGET,
             ...options.queryLimits,
           })
-          if (requestedProjection && requestedProjection.fields.some(field => !entityFieldNames.includes(field) || queryDenials?.filter.includes(field) || queryDenials?.search.includes(field) || queryDenials?.sort.includes(field))) throw new ValidationError("projection contains a forbidden, hidden, or non-queryable field")
+          if (requestedProjection && requestedProjection.fields.some(field => !isEntityField(field) || queryDenials?.filter.includes(field) || queryDenials?.search.includes(field) || queryDenials?.sort.includes(field))) throw new ValidationError("projection contains a forbidden, hidden, or non-queryable field")
           const repositoryProjection = requestedProjection && !abacBundle && typeof options.crud?.list?.projectResult !== "function"
             ? { fields: [...new Set([...requestedProjection.fields, ...(cursorConfig ? (sort ?? []).map(item => item.field) : [])])] }
             : undefined
@@ -248,7 +244,7 @@ export function createListHandler<
         },
         after: async ({ operation, input: _input, result }) => {
           const requestedProjection = parseProjection(_input.query.fields)
-          if (requestedProjection && requestedProjection.fields.some(field => !entityFieldNames.includes(field) || queryDenials?.filter.includes(field) || queryDenials?.search.includes(field) || queryDenials?.sort.includes(field))) {
+          if (requestedProjection && requestedProjection.fields.some(field => !isEntityField(field) || queryDenials?.filter.includes(field) || queryDenials?.search.includes(field) || queryDenials?.sort.includes(field))) {
             throw new ValidationError("projection contains a forbidden, hidden, or non-queryable field")
           }
           const primaryKey = entity.primaryKey ?? "id"

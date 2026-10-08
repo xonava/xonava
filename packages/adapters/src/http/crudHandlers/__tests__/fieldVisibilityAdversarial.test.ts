@@ -91,6 +91,8 @@ function makeShared(config: {
     moduleKey: "test.visibility",
     entity,
     policy: { skipCapabilityCheck: true },
+    // Query allowlists must be declared; an undeclared list allows nothing.
+    filterableColumns: ["id", "classification", "secretValue"],
     cache: { enabled: false, tag: "test", keyPrefix: "test" },
     getCacheAdapter: async () => null as never,
     createPersistence: () => persistence,

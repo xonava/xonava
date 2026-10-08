@@ -260,6 +260,41 @@ export async function resolveActionScopeForContext<
   return bundle ? createAbacAuthorizer(bundle).assertCollectionAction(action).scope : undefined
 }
 
+/**
+ * Re-enforces ABAC field/record write rules on the FINAL (post-transform)
+ * mutation record. Uses the request's enforcer when the operation context
+ * carries one; atomic-batch preparation contexts do not, so the verified
+ * bundle is resolved again for the session.
+ */
+export async function enforceFinalWrite<
+  TRow extends SelectableRow,
+  A = TRow,
+  B = Partial<TRow>,
+  L extends SelectableRow = TRow,
+  D extends SelectableRow = TRow,
+>(args: {
+  options: CrudOptions<TRow, A, B, L, D>
+  operation: object
+  context: RequestContext
+  action: "create" | "update"
+  record: Record<string, unknown>
+  changedFields: string[]
+}): Promise<void> {
+  const enforcer = "enforceAbac" in args.operation
+    ? (args.operation as { readonly enforceAbac?: import("core/security").AbacWriteEnforcer }).enforceAbac
+    : undefined
+  if (enforcer) {
+    enforcer.enforce(args.action, args.record, args.changedFields)
+    return
+  }
+  if (args.context.identity.actor.kind === "anonymous" || canUseOwnerBypass(args.options.adapterDeps, args.options.scope.scope, args.context))
+    return
+  const bundle = await args.options.adapterDeps.resolveAbacBundle({ moduleKey: args.options.moduleKey, context: args.context })
+  if (!bundle) throw new ForbiddenError("ABAC authorization bundle unavailable")
+  assertVerifiedAbacBundle(bundle)
+  createAbacAuthorizer(bundle).assertWrite({ action: args.action, record: args.record, changedFields: args.changedFields })
+}
+
 export async function readMutationResult<
   TRow extends SelectableRow,
   A = TRow,
