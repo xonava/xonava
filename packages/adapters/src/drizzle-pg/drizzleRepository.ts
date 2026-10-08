@@ -7,12 +7,12 @@ import type { InternalDynamicRepository } from "../repository/dynamicRepository"
 import { Predicate, type PredicateNode } from "core/domain"
 import type { DrizzleColumnMap, DrizzlePredicateCompiler } from "../drizzle-shared/predicateCompiler"
 import { DrizzlePredicateCompiler as DefaultDrizzlePredicateCompiler } from "../drizzle-shared/predicateCompiler"
-import { NotFoundError, ValidationError, ConfigurationError, OptimisticConcurrencyError } from "core/domain"
+import { ConflictError, NotFoundError, ValidationError, ConfigurationError, OptimisticConcurrencyError } from "core/domain"
 import { DEFAULT_MAX_PAGE_SIZE, resolvePagination } from "../drizzle-shared/pagination"
 import { assertVersionFieldIsFrameworkManaged, assertVersionedInsertValue, requireMappedVersionColumn, requireOptimisticConcurrencyVersion } from "../drizzle-shared/versioning"
 import { assertReadConsistencySupported, validateQueryPlan } from "core/query"
 import { compileCursorPredicate, executionSort, normalizeCursorWindow } from "../drizzle-shared/cursorPagination"
-import { rethrowNormalizedDrizzleError } from "../drizzle-shared/errors"
+import { normalizeDrizzleError, rethrowNormalizedDrizzleError, violatedConstraintName } from "../drizzle-shared/errors"
 
 export type SelectableRow = Record<string, unknown>
 
@@ -43,7 +43,9 @@ export interface DrizzleSessionLike {
   }
   insert: (table: AnyPgTable) => {
     values: (data: unknown) => Promise<unknown> & {
-      onConflictDoNothing: (config?: { target: AnyColumn[] }) => Promise<unknown>
+      onConflictDoNothing: (config?: { target: AnyColumn[] }) => Promise<unknown> & {
+        returning: <TReturning>(columns?: unknown) => Promise<TReturning[]>
+      }
       returning: <TReturning>(columns?: unknown) => Promise<TReturning[]>
     }
   }
@@ -110,9 +112,28 @@ function compileOrderBy(
   return sql.join(clauses, sql`, `)
 }
 
+/**
+ * Normalizes a write failure. When a unique violation names a constraint found
+ * in `constraintMap`, the resulting ConflictError carries the mapped field in
+ * its details; the constraint name and provider message are never exposed.
+ */
 function rethrowConstraintError(error: unknown, constraintMap: Record<string, string>): never {
-  void constraintMap
-  rethrowNormalizedDrizzleError(error,"postgresql")
+  const normalized = normalizeDrizzleError(error, "postgresql")
+  if (normalized instanceof ConflictError && !(error instanceof ConflictError)) {
+    const constraint = violatedConstraintName(error)
+    const field = constraint !== undefined && Object.prototype.hasOwnProperty.call(constraintMap, constraint) ? constraintMap[constraint] : undefined
+    if (field !== undefined) throw new ConflictError(normalized.message, { ...(normalized.details as Record<string, unknown>), field })
+  }
+  throw normalized
+}
+
+/** Runs a read and normalizes provider failures so SQL text and parameters never escape. */
+async function normalizedRead<R>(read: () => Promise<R>): Promise<R> {
+  try {
+    return await read()
+  } catch (error) {
+    rethrowNormalizedDrizzleError(error, "postgresql")
+  }
 }
 
 function guardEmptyPredicate(filter: PredicateNode | undefined, operation: string, entityName: string): void {
@@ -164,11 +185,11 @@ async function fetchFirstByWhere<T>(args: {
   table: AnyPgTable
   whereClause: SQL<unknown> | undefined
 }): Promise<T | null> {
-  const [row] = await args.db
+  const [row] = await normalizedRead(() => args.db
     .select()
     .from(args.table)
     .where(args.whereClause)
-    .limit(1)
+    .limit(1))
 
   return (row as T | undefined) ?? null
 }
@@ -179,11 +200,11 @@ async function fetchMatchingPrimaryKeys<T>(args: {
   whereClause: SQL<unknown>
   primaryKeyColumn: AnyColumn
 }): Promise<T[]> {
-  const rows = await args.db
+  const rows = await normalizedRead(() => args.db
     .select({ primaryKey: args.primaryKeyColumn })
     .from(args.table)
     .where(args.whereClause)
-    .limit(2)
+    .limit(2))
   return rows as T[]
 }
 
@@ -238,11 +259,11 @@ export function createDrizzleRepository<T extends SelectableRow, TId = string>(a
         ? (cursor.values ? (options?.filter ? Predicate.and(options.filter, compileCursorPredicate(sort!, { ...cursor, values: cursor.values })) : compileCursorPredicate(sort!, { ...cursor, values: cursor.values })) : options?.filter)
         : options?.filter
       const whereClause = filter ? predicateCompiler.compile(filter) : undefined
-      const [countResult] = await args.db
+      const [countResult] = await normalizedRead(() => args.db
         .select({ count: count() })
         .from(args.table)
         .where(whereClause)
-        .limit(1)
+        .limit(1))
 
       const rowCount = Number((countResult as { count?: number } | undefined)?.count ?? 0)
        const effectiveSort = cursor ? executionSort(sort!, cursor.direction) : sort
@@ -254,13 +275,13 @@ export function createDrizzleRepository<T extends SelectableRow, TId = string>(a
             return [field, column]
           }))
         : undefined
-      const fetched = await args.db
+      const fetched = await normalizedRead(() => args.db
         .select(...(selection ? [selection] : []))
         .from(args.table)
         .where(whereClause)
         .orderBy(orderBy)
         .limit(cursor ? pagination.pageSize + 1 : pagination.pageSize)
-        .offset(pagination.offset)
+        .offset(pagination.offset))
 
       const window = cursor ? normalizeCursorWindow(fetched as T[], pagination.pageSize, cursor.direction, cursor.values !== undefined) : undefined
 

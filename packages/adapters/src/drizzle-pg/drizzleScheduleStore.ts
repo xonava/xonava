@@ -82,7 +82,9 @@ export class DrizzleScheduleStore implements ScheduleStore {
     for (const row of eligible as Record<string, unknown>[]) {
       const claimToken = uuidv7()
       const result = await this.db.update(this.config.schedulesTable).set({ lastStatus: "running", leaseOwner: args.workerId, claimToken, leaseExpiresAt }).where(and(
-        eq(schedules.id!, row.id as string), eq(schedules.enabled!, true), lte(schedules.nextRunAt!, now),
+        // Lifecycle is re-checked here: a schedule paused or moved out of its
+        // effective window after the SELECT must not be claimed.
+        eq(schedules.id!, row.id as string), eq(schedules.enabled!, true), lte(schedules.nextRunAt!, now), ...lifecycleConditions,
         or(sql`(${schedules.lastStatus!} IS NULL OR ${schedules.lastStatus!} != 'running')`, and(eq(schedules.lastStatus!, "running"), lt(schedules.leaseExpiresAt!, sql`now()`))),
       ))
        if (getAffectedRows(result) > 0) claimedIds.push({ id: row.id as string, token: claimToken })

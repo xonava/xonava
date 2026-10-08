@@ -220,7 +220,7 @@ describe("D1 job-store idempotency lookup", () => {
     await expect(store.markSucceeded({ jobId: "job-1", workerId: "worker-1", claimToken: "claim-1", attempt: 1 })).resolves.toMatchObject({
       applied: false,
       reason: "HISTORY_FAILED",
-      historyError: "Execution history persistence failed: history unavailable",
+      historyError: "Execution history persistence failed (PERSISTENCE_ERROR)",
     })
     expect(update).not.toHaveBeenCalled()
   })

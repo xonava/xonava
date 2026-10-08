@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import { getTableName } from "drizzle-orm"
 import { integer, SQLiteSyncDialect, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
 import type { SQL } from "drizzle-orm/sql/sql"
-import { ConfigurationError, OptimisticConcurrencyError, Predicate } from "core/domain"
+import { ConfigurationError, OptimisticConcurrencyError, PersistenceError, Predicate } from "core/domain"
 import { createDrizzlePersistenceProvider, createDrizzleRepository, DrizzleEntityRegistry, DrizzleAuditSink, DrizzleOutboxSink, D1BatchLimitExceededError, D1_IDEMPOTENCY_ASSERTION_CAPABILITY, fingerprintOutboxRecord, type DrizzleD1Command } from "adapters/drizzle-d1"
 import type { AtomicBatchPlan, AtomicBatchResult, TenantScopedAtomicBatchPlan, TenantScopedWriteCommand } from "core/persistence"
 import type { AuditRecord, OutboxRecord } from "core/events"
@@ -680,7 +680,10 @@ describe("D1 persistence provider atomic batches", () => {
       executeAtomicBatch(batchPlan: AtomicBatchPlan<DrizzleD1Command>): Promise<AtomicBatchResult>
     }
     const executeAtomicBatch = atomicProvider.executeAtomicBatch.bind(atomicProvider)
-    await expect(executeAtomicBatch(plan)).rejects.toBe(failure)
+    // Provider failures are normalized: the raw D1 message never escapes.
+    const error = await executeAtomicBatch(plan).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(PersistenceError)
+    expect((error as Error).message).not.toContain("D1 batch failed")
   })
 
   it("uses the expected version predicate, increments the version, and rejects stale writes", async () => {

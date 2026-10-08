@@ -1,5 +1,6 @@
 import type { AnyPgTable, PgDatabase, PgTransaction } from "drizzle-orm/pg-core"
 import type { DrizzleSessionLike, DrizzleUpdateResult } from "./drizzleRepository"
+import { getAffectedRows } from "./pgUtils"
 
 /**
  * Wraps a real Drizzle node-postgres database into the DrizzleSessionLike interface
@@ -21,7 +22,9 @@ export function createPgSession(db: PgDatabaseLike): DrizzleSessionLike {
       return db.transaction(async (tx) => {
         const session = createPgSession(tx)
         const result = await session.update(args.updateTable).set(args.updateSet).where(args.updateWhere)
-        if (result.affectedRows === 0) return { applied: false, historyId: args.historyValues.id as string }
+        // node-postgres reports `rowCount`, not `affectedRows`; a fenced-out
+        // transition must never write history or report applied.
+        if (getAffectedRows(result) === 0) return { applied: false, historyId: args.historyValues.id as string }
         await session.insert(args.historyTable).values(args.historyValues)
         await session.update(args.updateTable).set({ claimToken: null }).where(args.historyWhere)
         return { applied: true, historyId: args.historyValues.id as string }
@@ -65,7 +68,7 @@ export function createPgSession(db: PgDatabaseLike): DrizzleSessionLike {
     insert(table: AnyPgTable) {
       const insertBuilder = db.insert(table) as {
         values(d: unknown): Promise<unknown> & {
-          onConflictDoNothing(config?: { target: unknown[] }): Promise<unknown>
+          onConflictDoNothing(config?: { target: unknown[] }): Promise<unknown> & { returning<R>(columns?: unknown): Promise<R[]> }
           returning<R>(columns?: unknown): Promise<R[]>
         }
       }

@@ -105,7 +105,8 @@ function createStore(options: { affectedRows?: number; historyRequired?: boolean
 describe("PostgreSQL job-store idempotency lookup", () => {
   it("rejects an existing job with no fingerprint", async () => {
     const db = {
-      insert: vi.fn(() => ({ values: async () => { throw Object.assign(new Error("unique constraint"), { code: "23505" }) } })),
+      // Replays use INSERT ... ON CONFLICT DO NOTHING RETURNING: a conflict returns no row.
+      insert: vi.fn(() => ({ values: () => ({ onConflictDoNothing: () => ({ returning: async () => [] }) }) })),
       select: vi.fn(() => ({
         from: vi.fn(() => ({
           where: vi.fn(() => ({ limit: async () => [{ fingerprint: null }] })),
@@ -231,7 +232,8 @@ describe("PostgreSQL job-store idempotency lookup", () => {
     await expect(store.markSucceeded({ jobId: "job-1", workerId: "worker-1", claimToken: "claim-1", attempt: 1 })).resolves.toMatchObject({
       applied: false,
       reason: "HISTORY_FAILED",
-      historyError: "Execution history persistence failed: history unavailable",
+      // Sanitized: only the framework error code, never the provider message.
+      historyError: "Execution history persistence failed (PERSISTENCE_ERROR)",
     })
     expect(update).not.toHaveBeenCalled()
   })
@@ -338,9 +340,10 @@ describe("PostgreSQL job-store column-rename conformance (P1-11)", () => {
       insert,
       update: vi.fn(() => ({
         set: () => ({
-          where: async (where: SQL<unknown> | undefined) => {
+          where: (where: SQL<unknown> | undefined) => {
             lastWhere = where
-            return { rowCount: options.affectedRows ?? 0, rowsAffected: options.affectedRows ?? 0 }
+            const result = { rowCount: options.affectedRows ?? 0, rowsAffected: options.affectedRows ?? 0 }
+            return Object.assign(Promise.resolve(result), { returning: async () => options.selectResult ?? [] })
           },
         }),
       })),
@@ -447,7 +450,7 @@ describe("PostgreSQL job-store column-rename conformance (P1-11)", () => {
       requester: { scope: "platform", actorId: "worker-1" },
     })
 
-    // The select's WHERE captures the due-condition clause.
+    // The claim is a single fenced UPDATE whose WHERE carries the due condition.
     const where = getWhere()
     expect(where).toBeDefined()
     const query = new PgDialect().sqlToQuery(where as SQL<unknown>)
@@ -490,9 +493,9 @@ describe("PostgreSQL job-store column-rename conformance (P1-11)", () => {
       insert: vi.fn(() => ({ values: vi.fn(async () => ({ rowCount: 1 })) })),
       update: vi.fn(() => ({
         set: () => ({
-          where: async (where: SQL<unknown> | undefined) => {
+          where: (where: SQL<unknown> | undefined) => {
             lastUpdateWhere = where
-            return { rowCount: 1, rowsAffected: 1 }
+            return Object.assign(Promise.resolve({ rowCount: 1, rowsAffected: 1 }), { returning: async () => [claimedJob] })
           },
         }),
       })),

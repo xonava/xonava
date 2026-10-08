@@ -11,14 +11,16 @@ import type { DrizzleSessionLike } from "./drizzleRepository"
 import { createDrizzleD1Adapter } from "./d1Session"
 import { createDrizzleRepository } from "./drizzleRepository"
 import type { DrizzleColumnMap } from "../drizzle-shared/predicateCompiler"
-import { ConfigurationError, ConflictError, ImmutableFieldViolationError, TenantScopeViolationError } from "core/domain"
+import { ConfigurationError, ConflictError, FrameworkCoreError, ImmutableFieldViolationError, TenantScopeViolationError } from "core/domain"
+import { assertOutboxScope } from "core/events"
+import { normalizeDrizzleError } from "../drizzle-shared/errors"
 import { Predicate } from "core/domain"
 import { compileDrizzlePredicate, type PredicateCompilerOptions } from "../drizzle-shared/predicateCompiler"
 
 const SQLITE_PREDICATES: PredicateCompilerOptions = Object.freeze({ dialect: "sqlite" })
 import { assertD1BatchLimits, estimateD1Statement } from "./d1BatchLimits"
 import { d1CurrentEpochMilliseconds, getAffectedRows } from "./d1Utils"
-import { assertOutboxFingerprintMatches, assertOutboxProtectedFields, fingerprintOutboxRecord } from "../drizzle-shared/outbox"
+import { assertOutboxFingerprintMatches, assertOutboxProtectedFields, fingerprintOutboxRecord, outboxProvenanceColumn } from "../drizzle-shared/outbox"
 import { validateD1AtomicOutboxColumns } from "./d1OutboxSchema"
 import { serializeInvalidations } from "../drizzle-shared/idempotency"
 
@@ -192,6 +194,17 @@ function validateD1ConfiguredLimit(name: D1ConfiguredLimit, value: number | unde
 type EncodedD1Command = { readonly kind: "statement"; readonly statement: RunnableQuery<unknown, "sqlite">; readonly expectedAffectedRows?: number }
 export type DrizzleD1Command = RunnableQuery<unknown, "sqlite"> | TenantScopedWriteCommand | EncodedD1Command
 
+/**
+ * A versioned update/delete that matches zero rows must abort the whole batch
+ * (audit, outbox, cache-generation and idempotency items included), so an
+ * expectedVersion on a versioned entity implies expectedAffectedRows = 1
+ * unless the caller says otherwise.
+ */
+function effectiveExpectedAffectedRows(command: Extract<TenantScopedWriteCommand, { kind: "update" | "delete" }>, mapping: EntityMapping): { expectedAffectedRows?: number } {
+  if (command.expectedAffectedRows !== undefined) return { expectedAffectedRows: command.expectedAffectedRows }
+  return mapping.entity.versionField && command.expectedVersion !== undefined ? { expectedAffectedRows: 1 } : {}
+}
+
 function isEncodedD1Command(command: unknown): command is EncodedD1Command {
   return typeof command === "object" && command !== null && (command as { kind?: unknown }).kind === "statement"
 }
@@ -276,7 +289,7 @@ function createTenantCommandEncoder(
           : filter
         return {
           kind: "statement",
-          ...(command.expectedAffectedRows !== undefined ? { expectedAffectedRows: command.expectedAffectedRows } : {}),
+          ...effectiveExpectedAffectedRows(command, mapping),
           statement: adapter.raw.update(mapping.table)
             .set(drizzleValues(command, mapping, values))
             .where(compileDrizzlePredicate(versionedFilter, mapping.columnMap, SQLITE_PREDICATES)) as RunnableQuery<unknown, "sqlite">
@@ -291,7 +304,7 @@ function createTenantCommandEncoder(
         : filter
       return {
         kind: "statement",
-        ...(command.expectedAffectedRows !== undefined ? { expectedAffectedRows: command.expectedAffectedRows } : {}),
+        ...effectiveExpectedAffectedRows(command, mapping),
         statement: adapter.raw.delete(mapping.table)
           .where(compileDrizzlePredicate(versionedFilter, mapping.columnMap, SQLITE_PREDICATES)) as RunnableQuery<unknown, "sqlite">
       }
@@ -330,7 +343,7 @@ function createUnscopedCommandEncoder(
         : command.filter
       return {
         kind: "statement",
-        ...(command.expectedAffectedRows !== undefined ? { expectedAffectedRows: command.expectedAffectedRows } : {}),
+        ...effectiveExpectedAffectedRows(command, mapping),
         statement: adapter.raw.update(mapping.table)
           .set(drizzleValues(command, mapping, values))
           .where(compileDrizzlePredicate(filter, mapping.columnMap, SQLITE_PREDICATES)) as RunnableQuery<unknown, "sqlite">
@@ -344,7 +357,7 @@ function createUnscopedCommandEncoder(
       : command.filter
     return {
       kind: "statement",
-      ...(command.expectedAffectedRows !== undefined ? { expectedAffectedRows: command.expectedAffectedRows } : {}),
+      ...effectiveExpectedAffectedRows(command, mapping),
       statement: adapter.raw.delete(mapping.table)
         .where(compileDrizzlePredicate(filter, mapping.columnMap, SQLITE_PREDICATES)) as RunnableQuery<unknown, "sqlite">
     }
@@ -451,7 +464,13 @@ export function createDrizzlePersistenceProvider(args: DrizzlePersistenceProvide
         if (!args.idempotencyTable) {
           return Promise.reject(new ConfigurationError("D1 atomic idempotency requires an idempotency table"))
         }
-        idempotencyFenceVerification = verifyD1IdempotencyOwnershipFence(adapter, args.idempotencyAssertionTable, args.idempotencyTable)
+        const verification = verifyD1IdempotencyOwnershipFence(adapter, args.idempotencyAssertionTable, args.idempotencyTable)
+        idempotencyFenceVerification = verification
+        // Only a successful verification is cached: a transient read failure
+        // or a fence installed later must not poison every future batch.
+        verification.catch(() => {
+          if (idempotencyFenceVerification === verification) idempotencyFenceVerification = undefined
+        })
       }
       return idempotencyFenceVerification
     }
@@ -477,6 +496,7 @@ export function createDrizzlePersistenceProvider(args: DrizzlePersistenceProvide
       const outboxColumns = hasOutbox ? validateD1AtomicOutboxColumns(args.outboxTable!) : undefined
       for (const item of plan.items) {
         if (item.kind !== "outbox") continue
+        assertOutboxScope(item.record)
         const scope = item.record.scopeId
         const key = `${scope}\u0000${item.record.idempotencyKey}`
         const fingerprint = await fingerprintOutboxRecord(item.record)
@@ -546,6 +566,7 @@ export function createDrizzlePersistenceProvider(args: DrizzlePersistenceProvide
          return plan.items.map((item) => ({ kind: item.kind, result: { replayed: true } }))
       }
        const statementEntries: { itemIndex: number; statement: RunnableQuery<unknown, "sqlite"> }[] = []
+       let hasMutationAssertion = false
        for (const [itemIndex, item] of plan.items.entries()) {
          if (item.kind === "command") {
            const encoded = isTenantWriteCommand(item.command)
@@ -559,6 +580,7 @@ export function createDrizzlePersistenceProvider(args: DrizzlePersistenceProvide
              const mutationAssertionTable = args.mutationAssertionTable
              if (!mutationAssertionTable) throw new ConfigurationError("D1 conditional atomic mutations require mutationAssertionTable")
              statementEntries.push({ itemIndex, statement: createMutationAssertion(adapter, mutationAssertionTable, encoded.expectedAffectedRows) })
+             hasMutationAssertion = true
            }
            continue
         }
@@ -671,6 +693,7 @@ export function createDrizzlePersistenceProvider(args: DrizzlePersistenceProvide
              idempotencyScope: scope,
              idempotencyKey: item.record.idempotencyKey,
              eventFingerprint: fingerprint,
+             ...outboxProvenanceColumn(outboxColumns, item.record),
            }),
          })
        }
@@ -686,7 +709,15 @@ export function createDrizzlePersistenceProvider(args: DrizzlePersistenceProvide
         maxStatementBytes: capabilities.maxStatementBytes ?? 100_000,
         maxBatchItems: capabilities.maxBatchItems ?? 100,
       })
-       const results: readonly unknown[] = await adapter.raw.batch(batchStatements)
+      let results: readonly unknown[]
+      try {
+        results = await adapter.raw.batch(batchStatements)
+      } catch (error) {
+        throw normalizeD1BatchError(error, {
+          hasIdempotencyFence: plan.items.some((item) => item.kind === "idempotency"),
+          mutationAssertionColumns: hasMutationAssertion ? mutationAssertionColumnNames(args.mutationAssertionTable) : [],
+        })
+      }
       // Align batch results back to plan items (an idempotency item expands to
       // an assertion + a receipt statement).
       const perItemResults: import("core/persistence").AtomicBatchItemResult[] = []
@@ -713,6 +744,46 @@ export function createDrizzlePersistenceProvider(args: DrizzlePersistenceProvide
 
   sessionByProvider.set(provider, repositoryDb)
   return provider
+}
+
+function providerMessages(error: unknown): string[] {
+  const messages: string[] = []
+  let current: unknown = error
+  for (let depth = 0; depth < 6 && current && typeof current === "object"; depth++) {
+    const message = (current as { message?: unknown }).message
+    if (typeof message === "string") messages.push(message)
+    current = (current as { cause?: unknown }).cause
+  }
+  return messages
+}
+
+function mutationAssertionColumnNames(table: AnySQLiteTable | undefined): string[] {
+  const columns = table as (AnySQLiteTable & { expectedAffectedRows?: AnyColumn; actualAffectedRows?: AnyColumn }) | undefined
+  return [columns?.expectedAffectedRows?.name, columns?.actualAffectedRows?.name].filter((name): name is string => typeof name === "string" && name.length > 0)
+}
+
+/**
+ * Maps a failed D1 batch to a framework error. Provider text (SQL, table and
+ * column names) is only inspected for classification and never copied.
+ * - The mutation-assertion CHECK (expected vs actual affected rows) means a
+ *   conditional/versioned write matched an unexpected number of rows: a stale
+ *   write, surfaced as ConflictError.
+ * - The idempotency ownership fence aborts via RAISE(ABORT), which D1 reports
+ *   as an unclassified SQLITE_CONSTRAINT failure: ownership was lost, surfaced
+ *   as ConflictError (matching the PostgreSQL adapter).
+ */
+function normalizeD1BatchError(error: unknown, context: { hasIdempotencyFence: boolean; mutationAssertionColumns: readonly string[] }): FrameworkCoreError {
+  if (error instanceof FrameworkCoreError) return error
+  const messages = providerMessages(error)
+  if (context.mutationAssertionColumns.length > 0 && messages.some((message) =>
+    message.includes("CHECK constraint failed") && context.mutationAssertionColumns.some((column) => message.includes(column)))) {
+    return new ConflictError("Optimistic concurrency conflict: a conditional write in the atomic batch affected an unexpected number of rows (stale write)", { dialect: "d1", reason: "mutation-assertion" })
+  }
+  const normalized = normalizeDrizzleError(error, "d1")
+  if (context.hasIdempotencyFence && normalized.code === "PERSISTENCE_ERROR" && messages.some((message) => message.includes("SQLITE_CONSTRAINT"))) {
+    return new ConflictError("Idempotency ownership was lost before the mutation committed", { dialect: "d1", reason: "idempotency-fence" })
+  }
+  return normalized
 }
 
 function createMutationAssertion(
