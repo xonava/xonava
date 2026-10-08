@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/require-await */
 import { uuidv7 } from "uuidv7"
-import type { OperationDefinition, MutationOperationContext, PreparationOperationContext, AuthorizationOperationContext } from "core/operation"
+import type { AtomicBatchPreparationContext, OperationDefinition, MutationOperationContext, PreparationOperationContext, AuthorizationOperationContext } from "core/operation"
 import { assertEntityVersion, type EntityVersion } from "core/serialization"
 import { internalRepositoryForDescriptor } from "../../repository/dynamicRepository"
 import {
@@ -8,6 +8,7 @@ import {
   assertAbacSecurityDigest,
   projectResponseRecord,
   resolveFieldReadOverrides,
+  type RequestContext,
 } from "core/domain"
 import { createFrameworkWriteHandler } from "../createFrameworkWriteHandler"
 import { frameworkJson } from "../handleFrameworkCoreError"
@@ -23,6 +24,7 @@ import {
   toCrudContext,
   toCrudPostCommitContext,
   canUseOwnerBypass,
+  enforceFinalWrite,
   withScopedPersistence,
 } from "./shared"
 
@@ -35,6 +37,24 @@ export function createCreateHandler<
 >(shared: CrudShared<TRow, A, B, L, D>) {
   const { options, entity } = shared
   const auditActive = auditEmit(options, "create")
+  // The authorization stage sees the request body; transformInput may then
+  // add or rename fields. The FINAL record must pass the same protected-field
+  // and ABAC create checks before it is written, on every execution path.
+  const enforceTransformedCreate = async (
+    operation: MutationOperationContext | AtomicBatchPreparationContext,
+    input: CreateOperationInput<A>,
+    session: RequestContext,
+  ): Promise<void> => {
+    assertProtectedCreateFields(entity, input.body as object)
+    await enforceFinalWrite({
+      options,
+      operation,
+      context: session,
+      action: "create",
+      record: toAuditObject(buildScopedCreateRecord(entity, input, toAuditObject(input.body as object), session)),
+      changedFields: Object.keys(input.body as object),
+    })
+  }
   const definition: OperationDefinition<CreateOperationInput<A>, MutationResult<TRow>> = {
     key: `${options.moduleKey}.create`,
     kind: "mutation",
@@ -56,6 +76,7 @@ export function createCreateHandler<
       : {}),
     execute: async ({ operation, input }: { operation: MutationOperationContext; input: CreateOperationInput<A> }) => {
       const session = resolveOperationRequestContext(operation)
+      await enforceTransformedCreate(operation, input, session)
        const record = await internalRepositoryForDescriptor(operation.persistence, entity).insert(
           buildScopedCreateRecord(
             entity,
@@ -67,7 +88,9 @@ export function createCreateHandler<
        return { record }
      },
     atomicBatch: {
-      prepare: async ({ operation, input }) => ({
+      prepare: async ({ operation, input }) => {
+        await enforceTransformedCreate(operation, input, resolveOperationRequestContext(operation))
+        return {
         commands: [{
           kind: "insert",
           entity: entity.name,
@@ -91,7 +114,8 @@ export function createCreateHandler<
             ...(entity.versionField ? { [entity.versionField]: 1 } : {}),
           } as unknown as TRow,
         },
-      }),
+        }
+      },
     },
     after: async ({ operation, input, result }) => {
       const session = resolveOperationRequestContext(operation)

@@ -261,16 +261,11 @@ export function createFrameworkWriteHandler<
          })
       }
 
-      const existing = args.resolveExistingRecord
-        ? await args.resolveExistingRecord({ request, validated, context: requestContext })
-        : undefined
-
       const authorizer = abacBundle ? createAbacAuthorizer(abacBundle) : null
       const enforceAbac: AbacWriteEnforcer | undefined = authorizer
          ? { enforce: (action: string, record: Record<string, unknown>, changedFields?: string[]) => authorizer.assertWrite({ action: action as "create" | "update" | "delete", record, ...(changedFields ? { changedFields } : {}) }) }
         : undefined
 
-       const input = await args.resolveInput({ request, validated, context: requestContext, ...(existing !== undefined ? { existing } : {}) })
        const basePersistence = args.createPersistence(requestContext)
         const operationPersistence = requestContext.scope.kind === "tenant"
           ? createTenantScopedPersistenceProvider(basePersistence, requestContext.scope.tenantId)
@@ -426,6 +421,34 @@ export function createFrameworkWriteHandler<
           idempotency = { port, request: idempotencyRequest, token: acquired.token }
         }
 
+        // Resource identity is resolved only AFTER the idempotency decision. A
+        // retry of a committed DELETE/UPDATE must replay the stored response
+        // even when the row is now gone, soft-deleted, or out of scope; the
+        // fingerprint above depends only on validated request material, the
+        // preconditions, and the ABAC digest, never on the current row.
+        // A failure before commit releases the reservation so an immediate
+        // retry is not blocked as "in progress" until the lease lapses. The
+        // port only deletes an uncommitted reservation it still owns.
+        const abandonIdempotency = async (): Promise<void> => {
+          if (!idempotency?.port.abandon) return
+          try {
+            await idempotency.port.abandon({ ...idempotency.request, token: idempotency.token })
+          } catch (error) {
+            if (deps.telemetry) emitTelemetry(deps.telemetry, { name: "idempotency.abandon.failure", severity: "warn", timestamp: new Date(), attributes: explicitlySafeTelemetryAttributes({ phase: "idempotency-abandon", errorType: error instanceof Error ? error.name : "unknown" }) })
+          }
+        }
+        let existing: Awaited<ReturnType<NonNullable<typeof args.resolveExistingRecord>>> | undefined
+        let input: TInput
+        try {
+          existing = args.resolveExistingRecord
+            ? await args.resolveExistingRecord({ request, validated, context: requestContext })
+            : undefined
+          input = await args.resolveInput({ request, validated, context: requestContext, ...(existing !== undefined ? { existing } : {}) })
+        } catch (error) {
+          await abandonIdempotency()
+          throw error
+        }
+
         // The durable receipt joins the business commit boundary: in-transaction
         // for transactional adapters, in-batch for atomic-batch adapters. The
         // receipt never carries a replayable response.
@@ -516,6 +539,7 @@ export function createFrameworkWriteHandler<
             })
           } catch (error) {
             if (!idempotency && error && typeof error === "object" && "committed" in error && (error as { committed?: unknown }).committed === true && businessResponse) return businessResponse
+            await abandonIdempotency()
             throw error
           } finally {
             if (heartbeat) clearInterval(heartbeat)

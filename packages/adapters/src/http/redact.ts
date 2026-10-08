@@ -16,19 +16,31 @@ export function redactPhi(value: string): string {
   return result
 }
 
-export function redactPhiDeep(obj: unknown): unknown {
+const MAX_REDACTION_DEPTH = 32
+
+/**
+ * Redacts PHI recursively. Keys are defined as own data properties, so a
+ * `__proto__` key is redacted like any other instead of changing the
+ * result's prototype; depth and cycles are bounded.
+ */
+export function redactPhiDeep(obj: unknown, depth = 0, seen: WeakSet<object> = new WeakSet()): unknown {
   if (typeof obj === "string") return redactPhi(obj)
-  if (Array.isArray(obj)) return obj.map(redactPhiDeep)
-  if (obj && typeof obj === "object") {
+  if (!obj || typeof obj !== "object") return obj
+  if (depth >= MAX_REDACTION_DEPTH || seen.has(obj)) return "[Redacted]"
+  seen.add(obj)
+  try {
+    if (Array.isArray(obj)) return obj.map((item) => redactPhiDeep(item, depth + 1, seen))
     const result: Record<string, unknown> = {}
     for (const [key, val] of Object.entries(obj as Record<string, unknown>)) {
-      result[key] = SENSITIVE_KEYS.test(key)
-        ? "[Redacted]"
-        : redactPhiDeep(val)
+      Object.defineProperty(result, key, {
+        value: SENSITIVE_KEYS.test(key) ? "[Redacted]" : redactPhiDeep(val, depth + 1, seen),
+        enumerable: true, writable: true, configurable: true,
+      })
     }
     return result
+  } finally {
+    seen.delete(obj)
   }
-  return obj
 }
 
 /** Shared sanitizer for audit values before either direct or outbox persistence. */

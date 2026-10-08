@@ -41,6 +41,22 @@ export function frameworkErrorHttpStatus(code: FrameworkCoreErrorCode): number {
   return HTTP_STATUS_BY_FRAMEWORK_CODE[code]
 }
 
+/** Default Retry-After (seconds) for 503 responses without an explicit hint. */
+export const DEFAULT_UNAVAILABLE_RETRY_AFTER_SECONDS = 1
+
+function retryAfterHeader(error: FrameworkCoreError, status: number): Record<string, string> | undefined {
+  const metadata = error.safeMetadata
+  const ms = metadata.retryAfterMs
+  const seconds = metadata.retryAfterSeconds
+  const hint = typeof ms === "number" && Number.isFinite(ms) && ms >= 0
+    ? Math.ceil(ms / 1000)
+    : typeof seconds === "number" && Number.isFinite(seconds) && seconds >= 0
+      ? Math.ceil(seconds)
+      : undefined
+  if (hint !== undefined) return { "Retry-After": String(hint) }
+  return status === 503 ? { "Retry-After": String(DEFAULT_UNAVAILABLE_RETRY_AFTER_SECONDS) } : undefined
+}
+
 export function createFrameworkErrorHandler(options: FrameworkErrorHandlerOptions = {}) {
   const { reportError = defaultReportError } = options
   return (error: unknown, metadata?: FrameworkResponseMetadata): Response => {
@@ -65,8 +81,7 @@ export function createFrameworkErrorHandler(options: FrameworkErrorHandlerOption
     if (error instanceof FrameworkCoreError) {
       const status = frameworkErrorHttpStatus(error.code)
       if (status >= 500 || status === 401 || status === 403) reportError(error)
-      const retryAfterMs=error.safeMetadata.retryAfterMs
-      const headers=status===429&&typeof retryAfterMs==="number"?{"Retry-After":String(Math.ceil(retryAfterMs/1000))}:undefined
+      const headers = status === 429 || status === 503 ? retryAfterHeader(error, status) : undefined
       return json({ error:error.safeMessage,code:error.publicCode }, { status,...(headers?{headers}:{}) })
     }
 

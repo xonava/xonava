@@ -1,5 +1,5 @@
 import { Predicate, ConfigurationError, ForbiddenError, assertFieldQueryAccess, assertVerifiedAbacBundle, resolveFieldQueryDenials, type PredicateNode } from "core/domain"
-import { projectResponseRecord, type AbacAuthorizer, type VerifiedAbacPolicyBundle } from "core/domain"
+import { FIELD_READ_DEFAULT_KEY, projectResponseRecord, type AbacAuthorizer, type FieldReadOverride, type VerifiedAbacPolicyBundle } from "core/domain"
 import { assertEntityVersion, type EntityVersion } from "core/serialization"
 import type { EntityDescriptor, VersionedRepository } from "core/persistence"
 import type { ListResult, SortSpec } from "core/query"
@@ -47,6 +47,17 @@ function collectPredicateFields(node: PredicateNode | undefined): string[] {
   }
 }
 
+/** True when a read plan leaves `field` fully readable (not masked or omitted). */
+function isFieldReadable(plan: Record<string, FieldReadOverride>, field: string): boolean {
+  if (Object.hasOwn(plan, field) && field !== FIELD_READ_DEFAULT_KEY) return plan[field] === "allow"
+  return !Object.hasOwn(plan, FIELD_READ_DEFAULT_KEY) || plan[FIELD_READ_DEFAULT_KEY] === "allow"
+}
+
+function assertFieldsReadable(plan: Record<string, FieldReadOverride>, fields: string[], mode: "filter" | "sort"): void {
+  const denied = [...new Set(fields.filter((field) => !isFieldReadable(plan, field)))]
+  assertFieldQueryAccess({ denied, fields, mode })
+}
+
 export function createAuthorizedRepository<TRow extends Record<string, unknown>, TId extends string | number = string>(args: {
   repository: VersionedRepository<TRow, TId>
   entity: EntityDescriptor<TRow>
@@ -92,23 +103,23 @@ export function createAuthorizedRepository<TRow extends Record<string, unknown>,
       // fields ABAC masks or omits from responses. The authorizer exposes the
       // read plan per row; query capability is a static property of the module
       // bundle, so it is resolved from the bundle when provided.
-      const queryDenials = args.bundle
-        ? resolveFieldQueryDenials({
-            policies: args.bundle.policies,
-            moduleKey: args.bundle.moduleKey,
-          })
-        : undefined
-      if (queryDenials) {
-        assertFieldQueryAccess({
-          denied: queryDenials.filter,
-          fields: collectPredicateFields(opts?.filter),
-          mode: "filter",
+      const filterFields = collectPredicateFields(opts?.filter)
+      const sortFields = (opts?.sort ?? []).map((spec) => spec.field)
+      if (args.bundle) {
+        const queryDenials = resolveFieldQueryDenials({
+          policies: args.bundle.policies,
+          moduleKey: args.bundle.moduleKey,
         })
-        assertFieldQueryAccess({
-          denied: queryDenials.sort,
-          fields: (opts?.sort ?? []).map((spec) => spec.field),
-          mode: "sort",
-        })
+        assertFieldQueryAccess({ denied: queryDenials.filter, fields: filterFields, mode: "filter" })
+        assertFieldQueryAccess({ denied: queryDenials.sort, fields: sortFields, mode: "sort" })
+      } else if (filterFields.length > 0 || sortFields.length > 0) {
+        // Without a bundle there are no static query grants, so fail closed on
+        // the authorizer's read plan: a field the plan masks or omits cannot be
+        // filtered or sorted on. The unconditional plan is checked up front;
+        // row-conditional plans are re-checked on every returned row below.
+        const basePlan = args.authorizer.fieldReadPlan({})
+        assertFieldsReadable(basePlan, filterFields, "filter")
+        assertFieldsReadable(basePlan, sortFields, "sort")
       }
       const filter = buildAccessFilter("read", opts?.filter, collectionScope)
        const result = await args.repository.findMany({
@@ -116,6 +127,13 @@ export function createAuthorizedRepository<TRow extends Record<string, unknown>,
          ...(opts?.pagination ? { pagination: opts.pagination } : {}),
          ...(opts?.sort ? { sort: opts.sort } : {}),
        })
+      if (!args.bundle && (filterFields.length > 0 || sortFields.length > 0)) {
+        for (const row of result.rows) {
+          const plan = args.authorizer.fieldReadPlan(row)
+          assertFieldsReadable(plan, filterFields, "filter")
+          assertFieldsReadable(plan, sortFields, "sort")
+        }
+      }
       return {
         ...result,
         rows: result.rows.map(redact),

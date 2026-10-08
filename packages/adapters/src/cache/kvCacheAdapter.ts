@@ -1,4 +1,5 @@
 import { CacheAdapterError, type CacheAdapter } from "core/cache"
+import { assertCacheTtl, decodeCacheValue, encodeCacheValue } from "./cacheValueCodec"
 
 declare class KVNamespace {
   get(key: string): Promise<string | null>
@@ -16,6 +17,25 @@ const TAG_PREFIX = "__tag__"
 const CACHE_NS_PREFIX = "__cache__:"
 const GENERATION_PREFIX = "__generation__:"
 const REVISION_PREFIX = "__revision__:"
+/** Cloudflare KV rejects an expirationTtl below 60 seconds. */
+export const KV_MIN_EXPIRATION_TTL_SECONDS = 60
+/** Upper bound on members kept per KV tag list; the oldest members are dropped first. */
+export const KV_MAX_TAG_MEMBERS = 1_000
+const ENVELOPE_MARKER = "$cacheEnvelope"
+
+/**
+ * Stored payload. `e` is the logical expiry (epoch ms) enforced on read, since
+ * KV's own expirationTtl has a 60s floor and only bounds storage lifetime.
+ */
+interface Envelope {
+  [ENVELOPE_MARKER]: 1
+  v: unknown
+  e?: number
+}
+
+function isEnvelope(value: unknown): value is Envelope {
+  return typeof value === "object" && value !== null && !Array.isArray(value) && (value as Record<string, unknown>)[ENVELOPE_MARKER] === 1
+}
 
 function cacheKey(raw: string): string {
   return `${CACHE_NS_PREFIX}${raw}`
@@ -49,20 +69,39 @@ export class KvCacheAdapter implements CacheAdapter {
     return new CacheAdapterError(`kv.${operation}`, { cause: error })
   }
 
+  /** Reads the stored payload, treating logically expired envelopes as misses. */
+  private async readLive(key: string): Promise<{ value: unknown } | undefined> {
+    const stored = await this.kv.get<unknown>(cacheKey(key), { type: "json" })
+    if (stored === null) return undefined
+    if (!isEnvelope(stored)) return { value: stored } // legacy plain-JSON entry
+    if (stored.e !== undefined && stored.e <= Date.now()) {
+      // Best effort: KV's own TTL removes the entry eventually anyway.
+      await this.kv.delete(cacheKey(key)).catch(() => undefined)
+      return undefined
+    }
+    return { value: decodeCacheValue(stored.v) }
+  }
+
   async get<T>(key: string): Promise<T | undefined> {
     try {
-      const value = await this.kv.get(cacheKey(key), { type: "json" })
-      return value === null ? undefined : (value as T)
+      const live = await this.readLive(key)
+      return live ? (live.value as T) : undefined
     } catch (error) {
       throw this.failure("get", error)
     }
   }
 
   async set<T>(key: string, data: T, ttlMs?: number): Promise<void> {
+    // Validation errors are caller configuration faults, not adapter failures.
+    assertCacheTtl(ttlMs)
+    const envelope: Envelope = { [ENVELOPE_MARKER]: 1, v: encodeCacheValue(data) }
+    if (ttlMs !== undefined) envelope.e = Date.now() + ttlMs
+    const options = ttlMs !== undefined
+      ? { expirationTtl: Math.max(KV_MIN_EXPIRATION_TTL_SECONDS, Math.ceil(ttlMs / 1000)) }
+      : undefined
     try {
-      const options = ttlMs ? { expirationTtl: Math.ceil(ttlMs / 1000) } : undefined
-      await this.kv.put(cacheKey(key), JSON.stringify(data), options)
-      await this.kv.put(revisionKey(key), JSON.stringify(`${Date.now()}:${crypto.randomUUID()}`))
+      await this.kv.put(cacheKey(key), JSON.stringify(envelope), options)
+      await this.kv.put(revisionKey(key), JSON.stringify(`${Date.now()}:${crypto.randomUUID()}`), options)
     } catch (error) {
       throw this.failure("set", error)
     }
@@ -81,19 +120,25 @@ export class KvCacheAdapter implements CacheAdapter {
 
   async has(key: string): Promise<boolean> {
     try {
-      const value = await this.kv.get(cacheKey(key))
-      return value !== null
+      return (await this.readLive(key)) !== undefined
     } catch (error) {
       throw this.failure("has", error)
     }
   }
 
+  /**
+   * Deletes cached values, revisions and tag lists. Tag generation keys are
+   * excluded: generations are the shared fence and must stay monotonic, so a
+   * resolver started before an invalidate+clear cannot later look fresh.
+   */
   async clear(): Promise<void> {
+    const generationKeyPrefix = cacheKey(GENERATION_PREFIX)
     try {
       let cursor: string | undefined
       do {
         const list = await this.kv.list(cursor ? { cursor, prefix: CACHE_NS_PREFIX } : { prefix: CACHE_NS_PREFIX })
         for (const k of list.keys) {
+          if (k.name.startsWith(generationKeyPrefix)) continue
           await this.kv.delete(k.name)
         }
         cursor = list.list_complete ? undefined : list.cursor
@@ -107,7 +152,9 @@ export class KvCacheAdapter implements CacheAdapter {
   // Correctness-critical invalidation is generation-fenced
   // (advanceTagGeneration), which the CacheService uses exclusively for
   // correctness-critical mode; the membership list below may be lossy under
-  // concurrent writers and must never be relied on for security.
+  // concurrent writers and must never be relied on for security. Lists are
+  // deduped per key (latest revision wins) and capped at KV_MAX_TAG_MEMBERS,
+  // dropping the oldest members, so deleteTag on a large tag is best-effort.
   async addToTag(tag: string, key: string): Promise<void> {
     try {
       const tagKey = cacheKey(`${TAG_PREFIX}:${tag}`)
@@ -115,10 +162,11 @@ export class KvCacheAdapter implements CacheAdapter {
       const revision = await this.kv.get<string>(revisionKey(key), { type: "json" })
       const canonicalKey = cacheKey(key)
       const members = (existing ?? []).map((member) => typeof member === "string" ? { key: cacheKey(member), revision: "" } : member)
-      if (!members.some((member) => member.key === canonicalKey && member.revision === (revision ?? ""))) {
-        members.push({ key: canonicalKey, revision: revision ?? "" })
-        await this.kv.put(tagKey, JSON.stringify(members))
-      }
+      const current = revision ?? ""
+      if (members.some((member) => member.key === canonicalKey && member.revision === current)) return
+      const next = members.filter((member) => member.key !== canonicalKey)
+      next.push({ key: canonicalKey, revision: current })
+      await this.kv.put(tagKey, JSON.stringify(next.slice(-KV_MAX_TAG_MEMBERS)))
     } catch (error) {
       throw this.failure("addToTag", error)
     }

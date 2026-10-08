@@ -1,5 +1,5 @@
-import { and, asc, desc, eq, gt, inArray, isNull, lte, lt, ne, or, sql, type AnyColumn } from "drizzle-orm"
-import { ConfigurationError } from "core/domain"
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lte, lt, ne, or, sql, type AnyColumn } from "drizzle-orm"
+import { ConfigurationError, ConflictError } from "core/domain"
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core"
 import type {
   JobStore,
@@ -24,7 +24,8 @@ import { decodePersistedJobFingerprint, decodePersistedJobScope, encodeJobScope 
 import { uuidv7 } from "uuidv7"
 import type { DrizzleColumnMap } from "../drizzle-shared/predicateCompiler"
 import type { DrizzleSessionLike } from "./drizzleRepository"
-import { d1CurrentEpochMilliseconds, d1EpochMillisecondsAfter, getAffectedRows } from "./d1Utils"
+import { d1ColumnInputValue, d1ColumnKey, d1CurrentEpochMilliseconds, d1EpochMillisecondsAfter, getAffectedRows } from "./d1Utils"
+import { isUniqueViolation, normalizeDrizzleError } from "../drizzle-shared/errors"
 
 export interface DrizzleJobStoreConfig {
   jobsTable: AnySQLiteTable
@@ -51,13 +52,13 @@ function buildIdempotencyScope(tenantId: string | null | undefined, scope: strin
   return tenantId ? `tenant:${tenantId}` : scope
 }
 
-function isUniqueConstraintError(err: unknown): boolean {
-  if (!err || typeof err !== "object") return false
-  const e = err as Record<string, unknown>
-  if (e.errno === 19 || e.code === "SQLITE_CONSTRAINT" || e.code === 2067) return true
-  if (typeof e.message === "string" && e.message.includes("UNIQUE constraint")) return true
-  return false
+/** Sanitized execution-history failure: a framework error code only, never provider text (SQL, table or column names). */
+function historyFailure(error: unknown): string {
+  return `Execution history persistence failed (${normalizeDrizzleError(error, "d1").code})`
 }
+
+/** Lease expired while the final attempt was running: no attempt is left to reclaim. */
+const LEASE_EXPIRED_FINAL_ATTEMPT = "LEASE_EXPIRED_AFTER_FINAL_ATTEMPT"
 
 function readJobScope(row: Record<string, unknown>): StoredJob["scope"] {
   const scope = row.scope
@@ -195,39 +196,40 @@ export class DrizzleJobStore implements JobStore {
     const idempotencyScope = buildIdempotencyScope(tenantId, scope)
     const fingerprint = await fingerprintJob(buildJobFingerprintInput(job, runAt))
     if (job.idempotencyKey) {
+      const id = uuidv7()
+      const insertion = this.db.insert(this.jobsTable).values({
+        id, jobType: job.jobType, jobVersion: job.jobVersion, tenantId, scope,
+        payload: JSON.stringify(job.payload), status: "pending", priority: job.priority ?? 0,
+        attempts: 0, maxAttempts: job.maxAttempts ?? 3, runAt, nextAttemptAt: runAt,
+        idempotencyKey: job.idempotencyKey, idempotencyScope, ...(this.jobs.fingerprint ? { fingerprint } : {}), correlationId: job.correlationId ?? null,
+        metadata: job.metadata ? JSON.stringify(job.metadata) : null, claimToken: null, partitionKey: job.partitionKey ?? null, createdAt: now,
+      })
+      // INSERT … ON CONFLICT DO NOTHING keeps the duplicate path free of
+      // provider errors; the row is then read back by (scope, key). Sessions
+      // without conflict-clause support fall back to unique-violation detection
+      // along the whole cause chain (D1 wraps errors in DrizzleQueryError).
       try {
-        const id = uuidv7()
-        await this.db.insert(this.jobsTable).values({
-           id, jobType: job.jobType, jobVersion: job.jobVersion, tenantId, scope,
-          payload: JSON.stringify(job.payload), status: "pending", priority: job.priority ?? 0,
-          attempts: 0, maxAttempts: job.maxAttempts ?? 3, runAt, nextAttemptAt: runAt,
-            idempotencyKey: job.idempotencyKey, idempotencyScope, ...(this.jobs.fingerprint ? { fingerprint } : {}), correlationId: job.correlationId ?? null,
-           metadata: job.metadata ? JSON.stringify(job.metadata) : null, claimToken: null, partitionKey: job.partitionKey ?? null, createdAt: now,
-        })
-         const rows = await this.db.select().from(this.jobsTable).where(eq(this.jobs.id!, id)).limit(1)
-        if (!rows[0]) throw new Error(`Failed to read back enqueued job ${id}`)
-        return toStoredJob(rows[0] as Record<string, unknown>)
+        const conflictAware = insertion as { onConflictDoNothing?: () => unknown }
+        await (typeof conflictAware.onConflictDoNothing === "function" ? conflictAware.onConflictDoNothing() : insertion)
       } catch (err) {
-        if (isUniqueConstraintError(err)) {
-            const idempotencyScope = buildIdempotencyScope(tenantId, scope)
-          const existing = await this.db.select().from(this.jobsTable).where(and(
-             eq(this.jobs.idempotencyScope!, idempotencyScope),
-             eq(this.jobs.idempotencyKey!, job.idempotencyKey),
-          )).limit(1)
-           if (existing[0]) {
-             const row = existing[0] as Record<string, unknown>
-              const existingFingerprint = row.fingerprint
-              if (typeof existingFingerprint !== "string" || existingFingerprint.length === 0) {
-                throw new Error("Stored job fingerprint is missing; migrate fingerprints before replaying jobs.")
-              }
-              if (existingFingerprint !== fingerprint) throw new JobIdempotencyConflictError(idempotencyScope, job.idempotencyKey)
-             return toStoredJob(row)
-           }
-        }
-        throw err
+        if (!isUniqueViolation(err, "d1")) throw normalizeDrizzleError(err, "d1")
       }
+      const existing = await this.db.select().from(this.jobsTable).where(and(
+        eq(this.jobs.idempotencyScope!, idempotencyScope),
+        eq(this.jobs.idempotencyKey!, job.idempotencyKey),
+      )).limit(1)
+      const row = existing[0] as Record<string, unknown> | undefined
+      if (!row) throw new ConflictError("Job could not be enqueued because it conflicts with an existing record")
+      if (row.id === id) return toStoredJob(row)
+      const existingFingerprint = row.fingerprint
+      if (typeof existingFingerprint !== "string" || existingFingerprint.length === 0) {
+        throw new Error("Stored job fingerprint is missing; migrate fingerprints before replaying jobs.")
+      }
+      if (existingFingerprint !== fingerprint) throw new JobIdempotencyConflictError(idempotencyScope, job.idempotencyKey)
+      return toStoredJob(row)
     }
     const id = uuidv7()
+    try {
     await this.db.insert(this.jobsTable).values({
       id, jobType: job.jobType, jobVersion: job.jobVersion, tenantId, scope,
       payload: JSON.stringify(job.payload), status: "pending", priority: job.priority ?? 0,
@@ -235,6 +237,7 @@ export class DrizzleJobStore implements JobStore {
       idempotencyKey: job.idempotencyKey ?? null, idempotencyScope, ...(this.jobs.fingerprint ? { fingerprint } : {}), correlationId: job.correlationId ?? null,
        metadata: job.metadata ? JSON.stringify(job.metadata) : null, claimToken: null, partitionKey: job.partitionKey ?? null, createdAt: now,
     })
+    } catch (err) { throw normalizeDrizzleError(err, "d1") }
      const rows = await this.db.select().from(this.jobsTable).where(eq(this.jobs.id!, id)).limit(1)
     if (!rows[0]) throw new Error(`Failed to read back enqueued job ${id}`)
     return toStoredJob(rows[0] as Record<string, unknown>)
@@ -282,6 +285,15 @@ export class DrizzleJobStore implements JobStore {
       )
      const requesterScope = this.requesterFilters(args.requester)
      const scope = requesterScope.length > 0 ? and(...requesterScope) : undefined
+    // A running job whose lease expired (D1 clock) on its final attempt can
+    // never be reclaimed; dead-letter it with a sanitized reason and clear the
+    // lease so it does not stay "running" forever.
+    await this.db.update(this.jobsTable).set({
+      status: "dead_letter", lastError: LEASE_EXPIRED_FINAL_ATTEMPT, completedAt: now, leaseOwner: null, leaseExpiresAt: null, claimToken: null,
+    }).where(and(
+      eq(this.jobs.status!, "running"), lt(this.jobs.leaseExpiresAt!, d1CurrentEpochMilliseconds()), gte(this.jobs.attempts!, this.jobs.maxAttempts!),
+      ...(scope ? [scope] : []),
+    ))
      const eligible = await this.db.select({ id: this.jobs.id! }).from(this.jobsTable).where(scope ? and(due, scope) : due)
        .orderBy(sql`${asc(this.jobs.priority!)}, ${asc(this.jobs.runAt!)}`).limit(args.limit).offset(0)
     const claimedIds: string[] = []
@@ -304,7 +316,9 @@ export class DrizzleJobStore implements JobStore {
     if (claimedIds.length === 0) return []
     const tokenReadback = [...claimTokens.entries()].map(([id, token]) => and(eq(this.jobs.id!, id), eq(this.jobs.claimToken!, token)))
     const claimed = await this.db.select().from(this.jobsTable).where(and(
-       or(...tokenReadback), eq(this.jobs.leaseOwner!, args.workerId), eq(this.jobs.status!, "running"), gt(this.jobs.leaseExpiresAt!, d1CurrentEpochMilliseconds()),
+       // Read back by the fresh claim token only: the attempt is already
+       // consumed, so a short lease that elapsed meanwhile must not hide it.
+       or(...tokenReadback), eq(this.jobs.leaseOwner!, args.workerId),
     )).limit(claimedIds.length)
     return claimed.map((row: unknown) => toStoredJob(row as Record<string, unknown>))
   }
@@ -370,16 +384,7 @@ export class DrizzleJobStore implements JobStore {
        if (this.executionHistory === "required") {
          const token = uuidv7()
          try {
-            const historyValues: Record<string, unknown> = {
-              [this.execId.name]: token,
-              [this.execJobId.name]: args.jobId,
-              [this.execAttempt.name]: sql`${this.jobs.attempts}`,
-              [this.execWorkerId.name]: "cancellation",
-              [this.execStatus.name]: "cancelled",
-              [this.execErrorMessage.name]: args.reason ?? null,
-              [this.execStartedAt.name]: now,
-              [this.execFinishedAt.name]: now,
-            }
+            const historyValues = this.historyValues({ id: token, jobId: args.jobId, attempt: sql`${this.jobs.attempts}`, workerId: "cancellation", status: "cancelled", errorMessage: args.reason ?? null, startedAt: now, finishedAt: now })
             const result = await this.db.atomicJobTransition!({
               updateTable: this.jobsTable,
               updateSet: { status: "cancelled", completedAt: now, lastError: args.reason ?? null, leaseOwner: null, claimToken: token, leaseExpiresAt: null },
@@ -390,7 +395,7 @@ export class DrizzleJobStore implements JobStore {
             })
            return result.applied ? { applied: true, transitionToken: token } : { applied: false, reason: "INVALID_STATE" }
          } catch (error) {
-           return { applied: false, reason: "HISTORY_FAILED", historyError: `Execution history persistence failed: ${error instanceof Error ? error.message : String(error)}` }
+           return { applied: false, reason: "HISTORY_FAILED", historyError: historyFailure(error) }
          }
        }
        const rows = await this.db.select().from(this.jobsTable).where(and(...conditions)).limit(1)
@@ -410,41 +415,41 @@ export class DrizzleJobStore implements JobStore {
     return rows.map((row: unknown) => toStoredJob(row as Record<string, unknown>))
   }
 
+  /**
+   * Execution-history values keyed by the executions table's TypeScript
+   * property keys (what Drizzle expects), never by physical column names.
+   * Dates are encoded as epoch milliseconds unless the column encodes them.
+   */
+  private historyValues(values: Record<"id" | "jobId" | "attempt" | "workerId" | "status" | "errorMessage" | "startedAt" | "finishedAt", unknown>): Record<string, unknown> {
+    const columns: Record<keyof typeof values, AnyColumn> = {
+      id: this.execId, jobId: this.execJobId, attempt: this.execAttempt, workerId: this.execWorkerId,
+      status: this.execStatus, errorMessage: this.execErrorMessage, startedAt: this.execStartedAt, finishedAt: this.execFinishedAt,
+    }
+    const result: Record<string, unknown> = {}
+    for (const field of Object.keys(columns) as (keyof typeof values)[]) {
+      const column = columns[field]
+      result[d1ColumnKey(this.executionsTable, column, field)] = d1ColumnInputValue(column, values[field])
+    }
+    return result
+  }
+
   private async recordExecution(jobId: string, status: string, attempt: number, workerId: string, error: string | undefined, now: Date): Promise<{ token: string; error?: string }> {
     const token = uuidv7()
     try {
-      await this.db.insert(this.executionsTable).values({
-        [this.execId.name]: token,
-        [this.execJobId.name]: jobId,
-        [this.execAttempt.name]: attempt,
-        [this.execWorkerId.name]: workerId,
-        [this.execStatus.name]: status,
-        [this.execErrorMessage.name]: error ?? null,
-        [this.execStartedAt.name]: now,
-        [this.execFinishedAt.name]: now,
-      })
+      await this.db.insert(this.executionsTable).values(this.historyValues({ id: token, jobId, attempt, workerId, status, errorMessage: error ?? null, startedAt: now, finishedAt: now }))
       return { token }
     } catch (historyError) {
-      if (this.executionHistory === "required") return { token, error: `Execution history persistence failed: ${historyError instanceof Error ? historyError.message : String(historyError)}` }
+      if (this.executionHistory === "required") return { token, error: historyFailure(historyError) }
       return { token }
     }
   }
 
   private async atomicTransition(args: { where: ReturnType<typeof and>; token: string; set: Record<string, unknown>; status: string; attempt: number; workerId: string; error?: string | undefined; jobId: string; now: Date }): Promise<JobTransitionResult> {
     try {
-      const historyValues: Record<string, unknown> = {
-        [this.execId.name]: args.token,
-        [this.execJobId.name]: args.jobId,
-        [this.execAttempt.name]: args.attempt,
-        [this.execWorkerId.name]: args.workerId,
-        [this.execStatus.name]: args.status,
-        [this.execErrorMessage.name]: args.error ?? null,
-        [this.execStartedAt.name]: args.now,
-        [this.execFinishedAt.name]: args.now,
-      }
+      const historyValues = this.historyValues({ id: args.token, jobId: args.jobId, attempt: args.attempt, workerId: args.workerId, status: args.status, errorMessage: args.error ?? null, startedAt: args.now, finishedAt: args.now })
       const result = await this.db.atomicJobTransition!({ updateTable: this.jobsTable, updateSet: args.set, updateWhere: args.where, historyTable: this.executionsTable, historyValues, historyWhere: eq(this.jobs.claimToken!, args.token) })
       return result.applied ? { applied: true, transitionToken: args.token } : { applied: false, reason: "LEASE_LOST" }
-    } catch (error) { return { applied: false, reason: "HISTORY_FAILED", historyError: `Execution history persistence failed: ${error instanceof Error ? error.message : String(error)}` } }
+    } catch (error) { return { applied: false, reason: "HISTORY_FAILED", historyError: historyFailure(error) } }
   }
 }
 

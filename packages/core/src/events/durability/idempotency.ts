@@ -127,6 +127,15 @@ export interface IdempotencyPort<TResult = unknown> {
   renew(lease: IdempotencyLease): Promise<void>
   /** Records the final replayable result after commit. */
   complete(completion: IdempotencyCompletion<TResult>): Promise<void>
+  /**
+   * Releases a reservation whose mutation failed before committing, so a
+   * retry can run immediately instead of waiting for the lease to lapse.
+   * Implementations MUST delete only a reservation that is still in progress,
+   * owned by `lease.token`, and has no business-commit receipt; anything else
+   * (including an unknown commit outcome that did commit) is left untouched.
+   * Optional: without it, the reservation simply expires with its lease.
+   */
+  abandon?(lease: IdempotencyLease): Promise<void>
 }
 
 /**

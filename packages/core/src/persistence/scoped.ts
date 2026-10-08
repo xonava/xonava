@@ -235,6 +235,14 @@ export function createTenantScopedIdempotencyPort<TResult, TPort extends Idempot
     },
   } as TPort & Partial<TransactionalIdempotencyPort<TResult> & AtomicBatchIdempotencyPort<TResult>>
 
+  if (typeof base.abandon === "function") {
+    const abandon = base.abandon.bind(base)
+    scoped.abandon = async (lease: Parameters<NonNullable<TPort["abandon"]>>[0]) => {
+      validateRequest(lease)
+      return abandon(lease)
+    }
+  }
+
   if (typeof (base as Partial<TransactionalIdempotencyPort<TResult>>).markCommittedInTransaction === "function") {
     scoped.markCommittedInTransaction = async (completion: IdempotencyCommitItem, persistence: PersistenceProvider) => {
       assertTenantIdempotencyScope(completion.scope, tenantId)

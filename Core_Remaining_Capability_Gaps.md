@@ -106,6 +106,31 @@ modules, and cross-cutting resource and error-contract hygiene.
 | Unvalidated schedule/dispatcher options | Validated before any claim |
 | Without `AbortSignal.any` the environment signal was dropped | Manual combination with listener cleanup on dispose |
 
+## Adapter review (resolved)
+
+A full review of `packages/adapters` against the core contracts, with fixes
+tested on real PostgreSQL 16, MySQL 8.4, and Miniflare D1.
+
+| Area | Gap | Resolution |
+|---|---|---|
+| PostgreSQL jobs | Lost-lease check read `affectedRows` (undefined in node-postgres), so stale workers' transitions reported success | Uses `rowCount` |
+| PG/D1 jobs | Execution history keyed by column names (written NULL / transition never applied on D1); PG `cancel` history SQL invalid | Property-keyed history values; valid cancel |
+| PG/D1 jobs | Duplicate idempotent enqueue threw a raw driver error with SQL | `ON CONFLICT DO NOTHING` + existing-row replay |
+| All engines | A job whose lease expired on its final attempt stayed `running` forever (MySQL also wedged its partition) | Claim dead-letters exhausted expired jobs |
+| PG/MySQL | Partition serialization crossed tenants; PG blocked siblings starved other jobs | Tenant-scoped sibling checks; single-statement `SKIP LOCKED` claim with per-partition candidates |
+| D1 | Constraint and busy errors never classified (D1 has no codes); batch errors leaked table/column names | Message-based SQLite classification; sanitized batch errors with conflict mapping |
+| D1 | A stale versioned write in an atomic batch matched 0 rows while audit/outbox/idempotency items committed | Versioned writes assert one affected row |
+| D1 | Atomic outbox rows lacked provenance; a transient fence-check failure was cached forever | Provenance and scope on atomic writes; cache cleared on failure |
+| MySQL | Conditional update not atomic; reads leaked raw errors; signals to missing instances "delivered"; lease reads used the app clock | Filter in the UPDATE; normalized errors; instance check; DB clock |
+| Errors | PG 57014/55P03 and MySQL 3024 surfaced as generic errors; repository reads leaked SQL | `TimeoutError`; normalized reads; sanitized history errors |
+| HTTP | CRUD list ignored declared sort/filter allowlists (any field queryable without a bundle) | Compiled, classification-filtered allowlists; undeclared means none |
+| HTTP | Retried idempotent DELETE/UPDATE returned 404 | Idempotency acquire precedes record lookup |
+| HTTP | Create checked ABAC before `transformInput` | Re-enforced on the transformed record in both pipelines |
+| Idempotency | A pre-commit failure held the key "in progress" until the lease lapsed | Optional `IdempotencyPort.abandon` releases only an uncommitted, owned reservation (PG, MySQL, D1; tenant wrapper forwards it) |
+| Cache | `clear()` reset tag generations; KV rejected TTLs under 60 s; unbounded in-memory/KV growth; KV vs in-memory value types differed | Monotonic generations; TTL envelope; bounded LRU and tag lists; shared tagged codec |
+| Rate limit | In-memory buckets never evicted | Bounded store that fails closed at capacity |
+| Server | `authorizedRepository` allowed queries on hidden fields without a bundle; persistence router checked only the scope kind | Hidden fields rejected; full scope compared |
+
 ## Remaining
 
 - A code formatter is still not configured; style is enforced only by lint.
@@ -113,5 +138,8 @@ modules, and cross-cutting resource and error-contract hygiene.
 - A failed nested operation fails its parent, but its writes are not individually rolled back (no savepoints): the parent's whole transaction rolls back instead.
 - Query grants from conditional allow policies are honoured without evaluating their conditions at query time; only deny-sourced grants are dropped.
 - Some dispatcher and schedule option checks (claim limit, lease, timeouts, `maxQueueAllOccurrences`) still raise `ValidationError` rather than `ConfigurationError`; these are worker configuration, never request input.
+- MySQL lacks PostgreSQL's schema/table options, enforced `transactionTimeouts`, `constraintMap`, and required execution-history mode.
+- Job dead-lettering on claim is a separate statement from the claim (safe and idempotent; not in one transaction) and writes no execution-history row.
+- Behaviour change: entities that declare no sortable/filterable/searchable columns now reject client sorting, filtering, and search.
 - Telemetry redaction is intentionally broad (`token` also matches keys such as `maxTokens`).
 - If an ABAC policy condition itself references a soft-delete field, plan-constrained soft deletes are refused, because the update would leave the policy's scope.

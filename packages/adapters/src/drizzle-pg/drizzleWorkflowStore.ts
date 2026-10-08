@@ -2,6 +2,7 @@ import type { StartWorkflowInput, WorkflowFence, WorkflowStore } from "core/work
 import type { WorkflowClaim, WorkflowInstance, WorkflowSignal } from "core/workflow"
 import { assertWorkflowDurableValue } from "core/workflow"
 import { pgSchemaName } from "./pgSchemaName"
+import { normalizeDrizzleError } from "../drizzle-shared/errors"
 import { decodeWorkflowFailure, encodeWorkflowFailure } from "../drizzle-shared/workflowFailureCodec"
 
 interface PgResult { rows: Record<string, unknown>[]; rowCount?: number | null }
@@ -22,7 +23,27 @@ export class DrizzlePgWorkflowStore implements WorkflowStore {
   async assertLease(fence: WorkflowFence): Promise<boolean> { const result=await this.pool.query(`SELECT 1 FROM ${this.schema}.workflows WHERE id=$1 AND lease_owner=$2 AND claim_token=$3 AND revision=$4 AND lease_expires_at>clock_timestamp()`,[fence.instanceId,fence.workerId,fence.claimToken,fence.revision]);return result.rowCount===1 }
   async renewLease(fence: WorkflowFence, extendByMs: number): Promise<boolean> { const result=await this.pool.query(`UPDATE ${this.schema}.workflows SET lease_expires_at=GREATEST(lease_expires_at,clock_timestamp()+($5*interval '1 millisecond')) WHERE id=$1 AND lease_owner=$2 AND claim_token=$3 AND revision=$4 AND lease_expires_at>clock_timestamp()`,[fence.instanceId,fence.workerId,fence.claimToken,fence.revision,extendByMs]);return result.rowCount===1 }
   async commit(fence: WorkflowFence, next: WorkflowInstance): Promise<boolean> { const result=await this.pool.query(`UPDATE ${this.schema}.workflows SET workflow_version=$1,status=$2,current_step=$3,variables=$4,step_attempt=$5,compensation_stack=$6,waiting_signal=$7,wake_at=$8,outcome=$9,failure=$14,revision=revision+1,lease_owner=NULL,claim_token=NULL,lease_expires_at=NULL,updated_at=clock_timestamp() WHERE id=$10 AND lease_owner=$11 AND claim_token=$12 AND revision=$13 AND lease_expires_at>clock_timestamp()`, [next.workflowVersion,next.status,next.currentStep,JSON.stringify(next.variables),next.stepAttempt,JSON.stringify(next.compensationStack),next.waitingSignal,next.wakeAt,next.outcome,fence.instanceId,fence.workerId,fence.claimToken,fence.revision,encodeWorkflowFailure(next.failure)]); return result.rowCount===1 }
-  async deliverSignal(signal: Omit<WorkflowSignal,"deliveredAt">): Promise<{delivered:boolean;duplicate:boolean}> { const client=await this.pool.connect(); try { await client.query("BEGIN"); const inserted=await client.query(`INSERT INTO ${this.schema}.workflow_signals (id,instance_id,name,payload) VALUES ($1,$2,$3,$4) ON CONFLICT (id) DO NOTHING RETURNING id`,[signal.id,signal.instanceId,signal.name,JSON.stringify(signal.payload)]); if (inserted.rowCount===1) await client.query(`UPDATE ${this.schema}.workflows SET status='pending',wake_at=NULL,revision=revision+1,updated_at=clock_timestamp() WHERE id=$1 AND status='waiting' AND wake_at IS NULL AND waiting_signal=$2`,[signal.instanceId,signal.name]); await client.query("COMMIT"); return { delivered: inserted.rowCount===1, duplicate: inserted.rowCount!==1 } } catch(error){ await client.query("ROLLBACK"); throw error } finally { client.release?.() } }
+  /**
+   * Records a signal and wakes a matching waiting instance. The instance row is
+   * share-locked first in the same transaction, so a missing (or concurrently
+   * deleted) instance yields `{ delivered: false, duplicate: false }` instead of
+   * a foreign-key failure. Other provider failures are normalized.
+   */
+  async deliverSignal(signal: Omit<WorkflowSignal,"deliveredAt">): Promise<{delivered:boolean;duplicate:boolean}> {
+    const client = await this.pool.connect()
+    try {
+      await client.query("BEGIN")
+      const instance = await client.query(`SELECT 1 FROM ${this.schema}.workflows WHERE id=$1 FOR SHARE`, [signal.instanceId])
+      if (instance.rowCount !== 1) { await client.query("ROLLBACK"); return { delivered: false, duplicate: false } }
+      const inserted = await client.query(`INSERT INTO ${this.schema}.workflow_signals (id,instance_id,name,payload) VALUES ($1,$2,$3,$4) ON CONFLICT (id) DO NOTHING RETURNING id`, [signal.id, signal.instanceId, signal.name, JSON.stringify(signal.payload)])
+      if (inserted.rowCount === 1) await client.query(`UPDATE ${this.schema}.workflows SET status='pending',wake_at=NULL,revision=revision+1,updated_at=clock_timestamp() WHERE id=$1 AND status='waiting' AND wake_at IS NULL AND waiting_signal=$2`, [signal.instanceId, signal.name])
+      await client.query("COMMIT")
+      return { delivered: inserted.rowCount === 1, duplicate: inserted.rowCount !== 1 }
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined)
+      throw normalizeDrizzleError(error, "postgresql")
+    } finally { client.release?.() }
+  }
   async cancel(id: string): Promise<boolean> { const result=await this.pool.query(`UPDATE ${this.schema}.workflows SET status=CASE WHEN jsonb_array_length(compensation_stack)>0 THEN 'compensating' ELSE 'cancelled' END,outcome=CASE WHEN jsonb_array_length(compensation_stack)>0 THEN NULL ELSE 'cancelled' END,failure=jsonb_build_object('code','CANCELLED','message','Workflow was cancelled','step',current_step,'phase','execute','attempt',step_attempt,'at',to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),step_attempt=0,waiting_signal=NULL,wake_at=NULL,revision=revision+1,lease_owner=NULL,claim_token=NULL,lease_expires_at=NULL,updated_at=clock_timestamp() WHERE id=$1 AND status NOT IN ('succeeded','failed','cancelled','compensation_failed','compensating')`,[id]); return result.rowCount===1 }
   async getSignal(instanceId: string, name: string): Promise<WorkflowSignal | null> { const result = await this.pool.query(`SELECT id,instance_id,name,payload,delivered_at FROM ${this.schema}.workflow_signals WHERE instance_id=$1 AND name=$2 ORDER BY delivered_at DESC, id DESC LIMIT 1`, [instanceId, name]); const row = result.rows[0]; if (!row) return null; const payload: unknown = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload; if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null; return { id: String(row.id), instanceId: String(row.instance_id), name: String(row.name), payload: payload as Record<string, unknown>, deliveredAt: new Date(String(row.delivered_at)) } }
 }

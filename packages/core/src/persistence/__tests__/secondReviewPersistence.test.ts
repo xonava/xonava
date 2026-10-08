@@ -77,3 +77,16 @@ describe("stream cancellation and deadline errors", () => {
     expect(() => assertStreamingReadOptions({ batchSize: 1, signal: new AbortController().signal, deadline: new Date(0) })).toThrow(TimeoutError)
   })
 })
+
+describe("tenant-scoped idempotency abandon", () => {
+  it("forwards abandon for the tenant's own scope and rejects foreign scopes", async () => {
+    const { createTenantScopedIdempotencyPort, encodeTenantIdempotencyScope } = await import("../scoped")
+    const abandon = vi.fn(async () => undefined)
+    const base = { acquire: vi.fn(), renew: vi.fn(), complete: vi.fn(), abandon }
+    const scoped = createTenantScopedIdempotencyPort(base as never, "t1") as { abandon?: (lease: unknown) => Promise<void> }
+    const own = { scope: `${encodeTenantIdempotencyScope("t1")}:create`, key: "k", fingerprint: "f", token: "tok" }
+    await scoped.abandon!(own)
+    expect(abandon).toHaveBeenCalledWith(own)
+    await expect(scoped.abandon!({ ...own, scope: `${encodeTenantIdempotencyScope("t2")}:create` })).rejects.toThrow(TenantScopeViolationError)
+  })
+})

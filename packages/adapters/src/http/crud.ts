@@ -76,10 +76,13 @@ export function CRUD<
      crud: compiled.crud,
      routes: compiled.routes,
      audit: compiled.audit === false ? { enabled: false, resource: compiled.entity.name } : { enabled: true, ...compiled.audit, fieldClassification: compiled.audit.fieldClassification ?? compiled.compiledAudit.fieldClassification },
-     searchableColumns: compiled.searchableColumns,
+     // Query allowlists come from the compiled query plan, which strips
+     // fields whose classification forbids search/filter/sort probing.
+     searchableColumns: [...compiled.compiledQuery.searchableFields],
      ...(compiled.queryLimits ? { queryLimits: compiled.queryLimits } : {}),
      ...(compiled.searchStrategy ? { searchStrategy: compiled.searchStrategy } : {}),
-     filterableColumns: compiled.filterableColumns,
+     filterableColumns: [...compiled.compiledQuery.filterableFields],
+     sortableColumns: [...compiled.compiledQuery.sortableFields],
       ...(compiled.filterFieldMeta ? { filterFieldMeta: compiled.filterFieldMeta } : {}),
       ...(compiled.listDefaults ? { listDefaults: compiled.listDefaults } : {}),
       ...(compiled.optimisticConcurrency ? { optimisticConcurrency: compiled.optimisticConcurrency } : {}),

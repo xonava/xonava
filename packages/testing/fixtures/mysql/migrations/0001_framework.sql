@@ -49,7 +49,8 @@ CREATE TABLE jobs (
  metadata JSON NULL, partition_key VARCHAR(255) NULL, created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
  started_at DATETIME(3) NULL, completed_at DATETIME(3) NULL,
  active_partition VARCHAR(255) GENERATED ALWAYS AS (CASE WHEN status='running' THEN partition_key ELSE NULL END) STORED,
- UNIQUE KEY jobs_idempotency_uq(idempotency_scope,idempotency_key), UNIQUE KEY jobs_active_partition_uq(active_partition), KEY jobs_due_idx(status,next_attempt_at,priority), KEY jobs_correlation_idx(correlation_id,run_at)
+ active_partition_tenant VARCHAR(100) GENERATED ALWAYS AS (CASE WHEN status='running' AND partition_key IS NOT NULL THEN COALESCE(tenant_id,'') ELSE NULL END) STORED,
+ UNIQUE KEY jobs_idempotency_uq(idempotency_scope,idempotency_key), UNIQUE KEY jobs_active_partition_uq(active_partition,scope,active_partition_tenant), KEY jobs_due_idx(status,next_attempt_at,priority), KEY jobs_correlation_idx(correlation_id,run_at)
 ) ENGINE=InnoDB;
 CREATE TABLE job_executions (id VARCHAR(100) PRIMARY KEY,job_id VARCHAR(100) NOT NULL,attempt INT NOT NULL,worker_id VARCHAR(100) NOT NULL,status VARCHAR(30) NOT NULL,error_message TEXT NULL,started_at DATETIME(3) NOT NULL,finished_at DATETIME(3) NOT NULL) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS job_progress (job_id VARCHAR(100) PRIMARY KEY, attempt INT NOT NULL, sequence BIGINT NOT NULL, percent DOUBLE NULL, checkpoint JSON NULL, updated_at DATETIME(3) NOT NULL) ENGINE=InnoDB;

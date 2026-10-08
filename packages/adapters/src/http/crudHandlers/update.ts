@@ -29,6 +29,7 @@ import {
   loadReadableMutationRecord,
   resolveActionScopeForContext,
   canUseOwnerBypass,
+  enforceFinalWrite,
   withScopedPersistence,
 } from "./shared"
 
@@ -168,6 +169,18 @@ export function createUpdateHandler<
     atomicBatch: {
       prepare: async ({ operation, input }) => {
         const session = resolveOperationRequestContext(operation)
+        // transformInput runs after the authorization stage; the FINAL patch
+        // must pass the same protected-field and ABAC update checks that the
+        // interactive execute path applies before the batch is prepared.
+        assertProtectedUpdateFields(entity, input.patch as object)
+        await enforceFinalWrite({
+          options,
+          operation,
+          context: session,
+          action: "update",
+          record: { ...toAuditObject(input.existing), ...toAuditObject(input.patch as object) },
+          changedFields: Object.keys(input.patch as object),
+        })
         const structural = buildStructuralScope(entity, session, options.entityScope)
         const actionScope = await resolveActionScopeForContext(options, session, "update")
         let patch = input.patch as Partial<TRow>

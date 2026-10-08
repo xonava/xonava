@@ -169,8 +169,10 @@ export function predicateFromFilterCondition(
   if (condition.operator !== undefined && typeof condition.operator !== "string") {
     throw new ValidationError(`Invalid filter operator for field "${condition.field}"`)
   }
-  const meta = fieldMetaMap?.[condition.field]
-  const field = meta?.columnName ?? condition.field
+  // Own-property lookup only: an inherited key (constructor, __proto__, ...)
+  // must never resolve to metadata or remap the queried column.
+  const meta = fieldMetaMap && Object.hasOwn(fieldMetaMap, condition.field) ? fieldMetaMap[condition.field] : undefined
+  const field = typeof meta?.columnName === "string" && meta.columnName.length > 0 ? meta.columnName : condition.field
   if (allowedFields && !allowedFields.includes(field)) {
     throw new ValidationError(`Filtering by field "${condition.field}" is not allowed`)
   }
