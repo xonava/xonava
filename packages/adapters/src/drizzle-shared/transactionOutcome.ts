@@ -37,8 +37,22 @@ export function classifyTransactionFailure(error: unknown, dialect: DrizzleDiale
   const code = machineCode(error)
   if (callbackCompleted && isDefiniteRollback(code, dialect)) return new TransactionRolledBackError("The transaction was rolled back at commit", { dialect, providerCode: String(code) })
   if (error instanceof FrameworkCoreError) return error
-  if (isStatementTimeout(code, dialect)) return new TimeoutError("The database statement exceeded its deadline", { dialect, providerCode: String(code) })
+  if (isStatementTimeout(code, dialect)) return transactionTimeoutError(dialect, code, !callbackCompleted)
   return normalizeDrizzleError(error, dialect)
+}
+
+/**
+ * TimeoutError for a transaction that exceeded its deadline. `rolledBack` is true only when the
+ * timeout struck before COMMIT was sent, so the database certainly rolled the transaction back;
+ * otherwise the commit outcome is unknown. A TimeoutError is never a RetryablePersistenceError, so
+ * neither case is re-run automatically.
+ */
+export function transactionTimeoutError(dialect: DrizzleDialect, providerCode: string | number | undefined, rolledBack: boolean): TimeoutError {
+  return new TimeoutError("The database transaction exceeded its deadline", {
+    dialect,
+    ...(providerCode !== undefined ? { providerCode: String(providerCode) } : {}),
+    transactionOutcome: rolledBack ? "rolled_back" : "unknown",
+  })
 }
 
 /** Largest statement timeout accepted, in milliseconds (PostgreSQL limit is INT_MAX). */

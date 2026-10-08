@@ -131,6 +131,15 @@ tested on real PostgreSQL 16, MySQL 8.4, and Miniflare D1.
 | Rate limit | In-memory buckets never evicted | Bounded store that fails closed at capacity |
 | Server | `authorizedRepository` allowed queries on hidden fields without a bundle; persistence router checked only the scope kind | Hidden fields rejected; full scope compared |
 
+## MySQL parity (resolved)
+
+| Feature | Implementation |
+|---|---|
+| Database/table configuration | Every MySQL store accepts `{ database?, tables? }`; identifiers are validated and backtick-quoted; defaults unchanged |
+| Transaction timeouts | Session `max_execution_time`/`innodb_lock_wait_timeout` lowered for the transaction and restored before release, plus a `KILL QUERY` watchdog at the deadline; timeouts surface as `TimeoutError` and never commit |
+| `constraintMap` | Duplicate-key index names mapped to `ConflictError` `details.field`; driver messages and values never copied |
+| Execution history | `executionHistory: "required" \| "best_effort"` (MySQL defaults to `required`); claim dead-letters write history |
+
 ## Remaining
 
 - A code formatter is still not configured; style is enforced only by lint.
@@ -138,7 +147,7 @@ tested on real PostgreSQL 16, MySQL 8.4, and Miniflare D1.
 - A failed nested operation fails its parent, but its writes are not individually rolled back (no savepoints): the parent's whole transaction rolls back instead.
 - Query grants from conditional allow policies are honoured without evaluating their conditions at query time; only deny-sourced grants are dropped.
 - Some dispatcher and schedule option checks (claim limit, lease, timeouts, `maxQueueAllOccurrences`) still raise `ValidationError` rather than `ConfigurationError`; these are worker configuration, never request input.
-- MySQL lacks PostgreSQL's schema/table options, enforced `transactionTimeouts`, `constraintMap`, and required execution-history mode.
+- MySQL transaction timeouts rely on `KILL QUERY` (same MySQL user or CONNECTION_ADMIN) and need a pooled client; a single-connection client gets session limits only and `transactionTimeouts: false`. COMMIT itself is not bounded.
 - Job dead-lettering on claim is a separate statement from the claim (safe and idempotent; not in one transaction) and writes no execution-history row.
 - Behaviour change: entities that declare no sortable/filterable/searchable columns now reject client sorting, filtering, and search.
 - Telemetry redaction is intentionally broad (`token` also matches keys such as `maxTokens`).

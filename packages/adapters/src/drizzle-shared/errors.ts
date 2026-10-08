@@ -70,3 +70,51 @@ export function isUniqueViolation(error:unknown,dialect:DrizzleDialect):boolean{
 }
 /** Name of the violated constraint reported by the driver (PostgreSQL `constraint`), searched along the cause chain. */
 export function violatedConstraintName(error:unknown):string|undefined{for(const current of causeChain(error))if(typeof current.constraint==="string"&&current.constraint.length>0)return current.constraint;return undefined}
+/** MySQL error codes (string `code` or numeric `errno`) the framework reasons about. */
+const MYSQL_CODE_ALIASES:Readonly<Record<string,readonly (string|number)[]>>={
+  ER_DUP_ENTRY:["ER_DUP_ENTRY",1062,"1062"],
+  ER_LOCK_WAIT_TIMEOUT:["ER_LOCK_WAIT_TIMEOUT",1205,"1205"],
+  ER_QUERY_INTERRUPTED:["ER_QUERY_INTERRUPTED",1317,"1317"],
+  ER_QUERY_TIMEOUT:["ER_QUERY_TIMEOUT",3024,"3024"],
+}
+/**
+ * True when the failure carries the given MySQL error, either as a raw driver error along the
+ * cause chain or as an already-normalized framework error whose details name the provider code.
+ */
+export function hasMySqlErrorCode(error:unknown,name:keyof typeof MYSQL_CODE_ALIASES):boolean{
+  const aliases=MYSQL_CODE_ALIASES[name]!
+  if(error instanceof FrameworkCoreError){const details=error.details as Record<string,unknown>|undefined;return details!==undefined&&details!==null&&typeof details==="object"&&details.dialect==="mysql"&&aliases.includes(details.providerCode as string)}
+  for(const current of causeChain(error)){const code=current.code??current.errno;if((typeof code==="string"||typeof code==="number")&&aliases.includes(code))return true}
+  return false
+}
+/**
+ * MySQL reports the violated unique index only inside the message:
+ * "Duplicate entry '<value>' for key '<table>.<index>'" (8.0.19+) or "... for key '<index>'".
+ * The key is always the trailing quoted token, so a value that itself contains "for key '...'"
+ * cannot spoof it. Identifiers are matched strictly; anything else yields undefined.
+ */
+const MYSQL_DUPLICATE_KEY=/^Duplicate entry '[\s\S]*' for key '((?:[A-Za-z0-9_$]{1,64}\.)?[A-Za-z0-9_$]{1,64})'$/
+/**
+ * Name of the unique index violated by a MySQL duplicate-key error (ER_DUP_ENTRY), read from the
+ * driver's `sqlMessage` along the cause chain. Used only for classification; never copied into errors.
+ */
+export function mysqlDuplicateKeyName(error:unknown):string|undefined{
+  for(const current of causeChain(error)){
+    const code=current.code??current.errno
+    if(code!=="ER_DUP_ENTRY"&&code!==1062)continue
+    const message=current.sqlMessage
+    if(typeof message!=="string"||message.length>4096)return undefined
+    return MYSQL_DUPLICATE_KEY.exec(message)?.[1]
+  }
+  return undefined
+}
+/**
+ * Resolves the mapped field for a MySQL duplicate-key violation. Both the reported "table.index"
+ * form and the bare "index" form are looked up (own properties only).
+ */
+export function mysqlConstraintField(error:unknown,constraintMap:Readonly<Record<string,string>>):string|undefined{
+  const key=mysqlDuplicateKeyName(error);if(key===undefined)return undefined
+  const dot=key.indexOf(".");const candidates=dot===-1?[key]:[key,key.slice(dot+1)]
+  for(const candidate of candidates)if(Object.prototype.hasOwnProperty.call(constraintMap,candidate)){const field=constraintMap[candidate];if(typeof field==="string"&&field.length>0)return field}
+  return undefined
+}
