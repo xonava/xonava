@@ -1,4 +1,5 @@
 import { ConfigurationError, ValidationError } from "../domain/errors.js"
+import { canonicalJsonString } from "./canonicalJson.js"
 
 export interface DurableCodec<TValue = unknown, TEncoded = unknown> {
   readonly key: string
@@ -15,10 +16,19 @@ export function resolveDurableCodec(registry: DurableCodecRegistry, key: string)
   return codec
 }
 
+/**
+ * Proves a value survives encode → decode unchanged. Values are compared by
+ * their canonical JSON form, so a lossy codec (or a value with no canonical
+ * representation) is rejected instead of silently persisting different data.
+ */
 export function assertDurableRoundTrip(codec: DurableCodec, value: unknown): void {
   let encoded: unknown
+  let decoded: unknown
   try { encoded = codec.encode(value) } catch { throw new ValidationError(`durable codec '${codec.key}' could not encode the value`) }
-  try { codec.decode(encoded) } catch { throw new ValidationError(`durable codec '${codec.key}' could not decode its encoded value`) }
+  try { decoded = codec.decode(encoded) } catch { throw new ValidationError(`durable codec '${codec.key}' could not decode its encoded value`) }
+  let same: boolean
+  try { same = canonicalJsonString(decoded) === canonicalJsonString(value) } catch { throw new ValidationError(`durable codec '${codec.key}' round trip is not canonically comparable`) }
+  if (!same) throw new ValidationError(`durable codec '${codec.key}' did not round-trip the value`)
 }
 
 export function encodeDurableValue(registry: DurableCodecRegistry, codecKey: string, value: unknown): DurableValueEnvelope {

@@ -14,6 +14,17 @@ export interface JobRegistry {
   decode(type: string, version: number, payload: unknown, targetVersion?: number): { readonly definition: JobDefinition; readonly payload: unknown }
 }
 
+/**
+ * The registry cannot produce a runnable definition for a stored job: its type
+ * is unknown, its version is newer than any registered one, or an upcaster on
+ * the path to the target version is missing. Another worker may still run it.
+ */
+export class JobDefinitionUnavailableError extends ValidationError {
+  constructor(message: string) {
+    super(message)
+  }
+}
+
 export interface JobPayloadUpcaster { readonly type: string; readonly from: number; readonly to: number; readonly upcast: (payload: unknown) => unknown }
 
 export function createJobRegistry(options?: { now?: () => Date; upcasters?: readonly JobPayloadUpcaster[] }): JobRegistry {
@@ -52,16 +63,16 @@ export function createJobRegistry(options?: { now?: () => Date; upcasters?: read
     decode(type, version, payload, targetVersion) {
       const available = Array.from(entries.values()).filter(entry => entry.definition.type === type).map(entry => entry.definition.version)
       const target = targetVersion ?? Math.max(...available)
-      if (!Number.isFinite(target)) throw new ValidationError(`Unknown job type: ${type}`)
+      if (!Number.isFinite(target)) throw new JobDefinitionUnavailableError(`Unknown job type: ${type}`)
       let current = version; let value = payload
       while (current < target) {
         const step = options?.upcasters?.find(candidate => candidate.type === type && candidate.from === current && candidate.to === current + 1)
-        if (!step) throw new ValidationError(`Missing job payload upcaster: ${type}@${current}->${current + 1}`)
+        if (!step) throw new JobDefinitionUnavailableError(`Missing job payload upcaster: ${type}@${current}->${current + 1}`)
         value = step.upcast(value); current += 1
       }
-      if (current !== target) throw new ValidationError(`Job payload cannot be downcast: ${type}@${version}->${target}`)
+      if (current !== target) throw new JobDefinitionUnavailableError(`Job payload cannot be downcast: ${type}@${version}->${target}`)
       const definition = entries.get(key(type, target))?.definition
-      if (!definition) throw new ValidationError(`Unknown job definition: ${type}@${target}`)
+      if (!definition) throw new JobDefinitionUnavailableError(`Unknown job definition: ${type}@${target}`)
       return { definition, payload: definition.decodePayload(value) }
     },
   }

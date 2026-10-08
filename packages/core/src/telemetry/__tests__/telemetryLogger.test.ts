@@ -34,3 +34,13 @@ describe("bounded telemetry logger", () => {
     expect(() => createTelemetryLogger(undefined, "x").info("no sink")).not.toThrow()
   })
 })
+
+describe("telemetry secret redaction", () => {
+  it.each(["auth", "authHeader", "x-auth", "jwt", "idJwt", "bearer", "bearerValue", "session", "session_key", "sessionToken", "signature", "requestSignature", "otp", "otp_code", "userOTP", "Authorization", "apiKey", "password"])("redacts %s", (key) => {
+    expect(boundedTelemetryAttributes("m", { [key]: "secret-value" })[key]).toBe("[REDACTED]")
+  })
+
+  it.each(["author", "authorName", "coauthor", "autopilot", "footprint", "hotpath", "jobId", "attempt"])("keeps operational attribute %s", (key) => {
+    expect(boundedTelemetryAttributes("m", { [key]: "visible" })[key]).toBe("visible")
+  })
+})

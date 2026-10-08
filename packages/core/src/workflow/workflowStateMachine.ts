@@ -57,8 +57,11 @@ export function applyWorkflowStep(instance: WorkflowInstance, result: WorkflowSt
   const base = { ...instance, ...released, variables, revision: instance.revision + 1, updatedAt: now }
   switch (result.kind) {
     case "next": return seal({ ...base, status: "pending", currentStep: result.step, stepAttempt: 0, compensationStack: result.compensation ? [...instance.compensationStack, result.compensation] : instance.compensationStack, waitingSignal: null, wakeAt: null })
-    case "wait": return seal({ ...base, status: "waiting", waitingSignal: result.signal, wakeAt: null })
-    case "sleep": return seal({ ...base, status: "waiting", waitingSignal: null, wakeAt: result.wakeAt })
+    // A durable wait or sleep is a successful step outcome, not a failed
+    // attempt: the resumed step starts a fresh attempt budget. Only retries
+    // (scheduleWorkflowRetry / `retry`) keep counting.
+    case "wait": return seal({ ...base, status: "waiting", stepAttempt: 0, waitingSignal: result.signal, wakeAt: null })
+    case "sleep": return seal({ ...base, status: "waiting", stepAttempt: 0, waitingSignal: null, wakeAt: result.wakeAt })
     case "complete": return seal({ ...base, status: "succeeded", outcome: "succeeded", waitingSignal: null, wakeAt: null })
     // An immediate re-run. The attempt counter is advanced by the store when it
     // claims the instance; dispatchers use scheduleWorkflowRetry for backoff.
@@ -120,7 +123,21 @@ export function isStalledWorkflowAttempt(instance: WorkflowInstance): boolean {
  */
 export function deliverWorkflowSignal(instance: WorkflowInstance, signal: WorkflowSignal, now: Date): WorkflowInstance {
   if (instance.status !== "waiting" || instance.wakeAt !== null || instance.waitingSignal !== signal.name) throw new WorkflowStateError("Workflow is not waiting for this signal")
-  return seal({ ...instance, status: "pending", waitingSignal: signal.name, wakeAt: null, revision: instance.revision + 1, updatedAt: now })
+  // A signal wait never carries a retry count (see applyWorkflowStep), so the
+  // resumed step starts from attempt 0 even for instances persisted earlier.
+  return seal({ ...instance, status: "pending", stepAttempt: 0, waitingSignal: signal.name, wakeAt: null, revision: instance.revision + 1, updatedAt: now })
+}
+
+/**
+ * Hands a live claim back without consuming its attempt: the attempt counted
+ * when the instance was claimed is returned and the lease is cleared, so the
+ * instance is immediately claimable in its current state. Used when a claim is
+ * never started or its step stopped cooperatively because the worker is
+ * shutting down.
+ */
+export function releaseWorkflowClaim(instance: WorkflowInstance, now: Date): WorkflowInstance {
+  if (isWorkflowTerminal(instance)) throw new WorkflowStateError("Terminal workflow cannot transition")
+  return seal({ ...instance, ...released, stepAttempt: Math.max(0, instance.stepAttempt - 1), revision: instance.revision + 1, updatedAt: now })
 }
 
 /**

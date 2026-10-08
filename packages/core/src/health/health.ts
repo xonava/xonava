@@ -4,7 +4,9 @@ import {snapshotData} from "../kernel/snapshotData"
 export type HealthStatus="healthy"|"degraded"|"unhealthy"
 export interface HealthComponent {readonly key:string;readonly status:HealthStatus;readonly critical:boolean;readonly checkedAt:Date;readonly message?:string}
 export interface HealthReport {readonly live:boolean;readonly ready:boolean;readonly status:HealthStatus;readonly checkedAt:Date;readonly components:readonly HealthComponent[]}
-export interface HealthPort {checkLiveness():Promise<readonly HealthComponent[]>;checkReadiness():Promise<readonly HealthComponent[]>}
+/** Cancellation and absolute deadline (epoch ms) for a health check; implementations should stop work and reject once either fires. */
+export interface HealthCheckOptions {readonly signal?:AbortSignal;readonly deadline?:number}
+export interface HealthPort {checkLiveness(options?:HealthCheckOptions):Promise<readonly HealthComponent[]>;checkReadiness(options?:HealthCheckOptions):Promise<readonly HealthComponent[]>}
 
 export function aggregateHealth(liveness:readonly HealthComponent[],readiness:readonly HealthComponent[],checkedAt=new Date()):HealthReport{
   if(!(checkedAt instanceof Date)||Number.isNaN(checkedAt.getTime())||!Array.isArray(liveness)||!Array.isArray(readiness)) throw new ValidationError("Health report time must be valid.")

@@ -32,6 +32,17 @@ const systemScheduleRenewalClock: ScheduleRenewalClock = {
 /** Upper bound on schedules claimed per materialization tick, matching the job dispatcher claim limit. */
 export const MAX_SCHEDULE_CLAIM_LIMIT = 100
 
+/**
+ * Backoff for a schedule whose materialization fails: the failing occurrence
+ * is kept, but the schedule is not claimed again until the delay elapses. The
+ * delay doubles with each consecutive failure up to maxDelayMs.
+ */
+export interface ScheduleFailureBackoff { initialDelayMs: number; maxDelayMs: number }
+export const DEFAULT_SCHEDULE_FAILURE_BACKOFF: Readonly<ScheduleFailureBackoff> = Object.freeze({ initialDelayMs: 5_000, maxDelayMs: 15 * 60_000 })
+
+/** Upper bound on the failure message recorded on a schedule. */
+const MAX_SCHEDULE_ERROR_LENGTH = 512
+
 /** Keep persisted schedule payloads within the same durable admission budget as jobs. */
 export const MAX_STORED_SCHEDULE_PAYLOAD_BYTES = 1024 * 1024
 
@@ -56,6 +67,8 @@ export async function materializeDueSchedules(args: {
   renewalClock?: ScheduleRenewalClock
   decodePayload?: (input: unknown) => Record<string, unknown>
   calendarExclusionProvider?: { isExcluded(key: string, instant: Date): Promise<boolean> }
+  /** See ScheduleFailureBackoff; defaults to DEFAULT_SCHEDULE_FAILURE_BACKOFF. */
+  failureBackoff?: ScheduleFailureBackoff
 }): Promise<MaterializeResult> {
   if (typeof args.workerId !== "string" || args.workerId.trim().length === 0) throw new ConfigurationError("Schedule workerId must be a non-empty string.")
   const limit = args.limit ?? 20
@@ -66,6 +79,10 @@ export async function materializeDueSchedules(args: {
   const leaseDurationMs = args.leaseDurationMs ?? 30_000
   if (!Number.isFinite(leaseDurationMs) || leaseDurationMs <= 0) throw new ValidationError("Schedule lease duration must be finite and positive.")
   assertTimerDelayWithinLimit("Schedule lease duration", leaseDurationMs)
+  const failureBackoff = args.failureBackoff ?? DEFAULT_SCHEDULE_FAILURE_BACKOFF
+  if (!Number.isSafeInteger(failureBackoff.initialDelayMs) || failureBackoff.initialDelayMs < 1 || !Number.isSafeInteger(failureBackoff.maxDelayMs) || failureBackoff.maxDelayMs < failureBackoff.initialDelayMs) {
+    throw new ConfigurationError("Schedule failureBackoff requires positive integer delays with maxDelayMs >= initialDelayMs.")
+  }
 
   const claims = await args.scheduleStore.claimDueSchedules({
     workerId: args.workerId,
@@ -145,7 +162,10 @@ export async function materializeDueSchedules(args: {
         continue
       }
 
-      const computedOccurrences = claim.misfirePolicy.type === "fire_now"
+      // Only queue_all replays missed occurrences. fire_now, and skip within its
+      // misfire window, fire a single run for the oldest due occurrence.
+      const singleRun = claim.misfirePolicy.type !== "queue_all"
+      const computedOccurrences = singleRun
         ? [claim.nextRunAt]
         : computeScheduleOccurrences({
             schedule: {
@@ -183,15 +203,18 @@ export async function materializeDueSchedules(args: {
         continue
       }
 
-      const lastOccurrence = occurrences.at(-1)
-      if (!lastOccurrence) {
-        throw new ValidationError(`Schedule ${claim.scheduleId} produced no occurrence`)
-      }
       // Overlap is evaluated per materialized occurrence: each occurrence is its
       // own identity, so the most recent prior job for THIS occurrence decides
-      // whether a queue/skip overlap policy admits it.
+      // whether a queue/skip overlap policy admits it. Every occurrence that has
+      // a job (enqueued now or by an earlier, interrupted attempt) consumes one
+      // of the schedule's remaining occurrences.
+      const remainingOccurrences = claim.lifecycle?.remainingOccurrences
+      let occurrencesFired = 0
+      let lastOccurrence: Date | undefined
       let lastJobStatus: PriorScheduleExecutionStatus | null = null
       for (const occurrence of occurrences) {
+        if (remainingOccurrences !== undefined && occurrencesFired >= remainingOccurrences) break
+        lastOccurrence = occurrence
         const idempotencyKey = `schedule:${claim.scheduleId}:${occurrence.toISOString()}`
 
         // P1-08 fencing: validate lease before any idempotency check or durable
@@ -210,27 +233,27 @@ export async function materializeDueSchedules(args: {
         // ignored before the durable enqueue.
         await renewal?.assertHeld()
 
-        if (claim.misfirePolicy.type === "queue_all") {
-          const occurrenceDecision = shouldFireSchedule({
-            schedule: {
-              cronExpression: claim.cronExpression,
-              timezone: scheduleTz,
-              enabled: true,
-              misfirePolicy: claim.misfirePolicy,
-              overlapPolicy: claim.overlapPolicy,
-              nextRunAt: claim.nextRunAt,
-              lastRunAt: claim.lastRunAt,
-              lastStatus: claim.lastStatus,
-            },
-            now,
-            priorExecutionStatus: lastJobStatus ?? groupPriorExecutionStatus,
-            ...(args.tzAdapter ? { tzAdapter: args.tzAdapter } : {}),
-          })
-          if (occurrenceDecision === "skip") continue
-        }
+        // Overlap applies to every misfire policy, not only queue_all.
+        const occurrenceDecision = shouldFireSchedule({
+          schedule: {
+            cronExpression: claim.cronExpression,
+            timezone: scheduleTz,
+            enabled: true,
+            misfirePolicy: claim.misfirePolicy,
+            overlapPolicy: claim.overlapPolicy,
+            nextRunAt: claim.nextRunAt,
+            lastRunAt: claim.lastRunAt,
+            lastStatus: claim.lastStatus,
+          },
+          now,
+          priorExecutionStatus: lastJobStatus ?? groupPriorExecutionStatus,
+          ...(args.tzAdapter ? { tzAdapter: args.tzAdapter } : {}),
+        })
+        if (occurrenceDecision === "skip") continue
 
         if (existingJob) {
           lastJobStatus = jobStatusToPriorExecutionStatus(existingJob.status)
+          occurrencesFired++
           continue
         }
 
@@ -239,7 +262,7 @@ export async function materializeDueSchedules(args: {
           jobType: claim.jobType,
           jobVersion: claim.jobVersion,
           payload: decodeSchedulePayload(claim.payload, args.decodePayload),
-           runAt: claim.misfirePolicy.type === "fire_now" ? now : occurrence,
+          runAt: singleRun ? now : occurrence,
           idempotencyKey,
           correlationId: scheduleCorrelationId(claim.scheduleId),
           // queue overlap serializes execution: at most one occurrence of this
@@ -257,7 +280,11 @@ export async function materializeDueSchedules(args: {
           job,
         })
         result.jobsEnqueued++
+        occurrencesFired++
         lastJobStatus = "queued"
+      }
+      if (!lastOccurrence) {
+        throw new ValidationError(`Schedule ${claim.scheduleId} produced no occurrence`)
       }
 
       // P1-08 fencing: re-validate lease before final durable advance; prevents
@@ -265,7 +292,7 @@ export async function materializeDueSchedules(args: {
       await renewal?.assertHeld()
       const nextRun = calculateNextRun(
         claim.cronExpression,
-        claim.misfirePolicy.type === "fire_now" ? now : lastOccurrence,
+        singleRun ? now : lastOccurrence,
         scheduleTz,
         args.tzAdapter,
       )
@@ -277,8 +304,9 @@ export async function materializeDueSchedules(args: {
         nextRunAt: nextRun,
         lastRunAt: now,
         lastStatus: "fired",
+        occurrencesFired,
       })
-      log.info("Schedule advanced", { scheduleId: claim.scheduleId, nextRunAt: nextRun.toISOString(), lastStatus: "fired", jobsEnqueuedForSchedule: occurrences.length })
+      log.info("Schedule advanced", { scheduleId: claim.scheduleId, nextRunAt: nextRun.toISOString(), lastStatus: "fired", occurrencesFired })
 
       result.schedulesProcessed++
     } catch (error) {
@@ -292,8 +320,12 @@ export async function materializeDueSchedules(args: {
         leaseLost: isLeaseLost,
       })
 
-      // P2-04 observability: release lease on failure - don't advance past failed occurrence
+      // P2-04 observability: release lease on failure - don't advance past
+      // failed occurrence, but back off so a persistently failing schedule
+      // (it sorts first by nextRunAt) cannot starve healthy schedules.
       if (!isLeaseLost) {
+        const retryAt = scheduleFailureRetryAt(claim, now, failureBackoff)
+        log.warn("Schedule failure backoff", { scheduleId: claim.scheduleId, retryAt: retryAt.toISOString() })
         await args.scheduleStore.advanceSchedule({
           scheduleId: claim.scheduleId,
           workerId: args.workerId,
@@ -301,6 +333,8 @@ export async function materializeDueSchedules(args: {
           nextRunAt: claim.nextRunAt,
           lastRunAt: now,
           lastStatus: "failed",
+          lastError: Array.from(msg).slice(0, MAX_SCHEDULE_ERROR_LENGTH).join(""),
+          retryAt,
         }).catch((bestEffortError) => {
           // P2-04: best-effort lease release failure must be observable
           log.error("Failed to mark schedule failed after processing error", {
@@ -327,6 +361,18 @@ export async function materializeDueSchedules(args: {
     errors: result.errors.length,
   })
   return result
+}
+
+/**
+ * The earliest time a failed schedule may be claimed again. Consecutive
+ * failures are recognised from the claim's prior state (lastStatus `failed`,
+ * lastRunAt = the previous failure), so the delay doubles without any extra
+ * persisted counter.
+ */
+function scheduleFailureRetryAt(claim: FencedScheduleClaim, now: Date, backoff: ScheduleFailureBackoff): Date {
+  const sincePreviousFailure = claim.lastStatus === "failed" && claim.lastRunAt ? Math.max(0, now.getTime() - claim.lastRunAt.getTime()) : 0
+  const delay = Math.min(backoff.maxDelayMs, Math.max(backoff.initialDelayMs, sincePreviousFailure * 2))
+  return new Date(now.getTime() + delay)
 }
 
 async function getPriorExecutionStatus(args: {

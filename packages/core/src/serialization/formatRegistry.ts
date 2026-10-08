@@ -147,11 +147,11 @@ export function assertEnvelopeSupported(envelope: {
   assertFormatSupported(envelope.format, envelope.version);
 }
 
-export const FORMAT_DEFAULT_MAX_BYTES_BY_FORMAT: Readonly<Record<string, number>> = {
+export const FORMAT_DEFAULT_MAX_BYTES_BY_FORMAT: Readonly<Record<string, number>> = Object.freeze({
   "framework.event-envelope": FORMAT_DEFAULT_MAX_CANONICAL_BYTES.eventOutboxEnvelope,
   "framework.authority-provenance": FORMAT_DEFAULT_MAX_CANONICAL_BYTES.authorityProvenance,
   "framework.execution-scope-id": FORMAT_DEFAULT_MAX_CANONICAL_BYTES.executionScopeIdentitySource,
-} as const;
+} as const);
 
 export function getFormatDefaultMaxBytes(formatId: string): number | undefined {
   return Object.hasOwn(FORMAT_DEFAULT_MAX_BYTES_BY_FORMAT, formatId) ? FORMAT_DEFAULT_MAX_BYTES_BY_FORMAT[formatId] : undefined;

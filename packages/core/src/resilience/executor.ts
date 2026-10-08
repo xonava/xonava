@@ -1,7 +1,7 @@
 import { CancelledError, ConfigurationError, FrameworkCoreError, TimeoutError, UnavailableError } from "../domain/errors"
 import { abortSignalError } from "./abortSignal"
 import { computeBackoffDelayMs, MAX_BACKOFF_DELAY_MS, type BackoffPolicy } from "./backoff"
-import { validateResiliencePolicy, type CircuitBreakerPolicy, type ExternalCallSemantics, type ResiliencePolicy } from "./resilience"
+import { DEFAULT_RETRY_BACKOFF_MS, validateResiliencePolicy, type CircuitBreakerPolicy, type ExternalCallSemantics, type ResiliencePolicy } from "./resilience"
 
 // ------------------------------------------------------- circuit breaker
 // Pure state machine (portable): closed -> open after `failureThreshold`
@@ -163,7 +163,8 @@ export interface ResilienceRuntime {
 function retryBackoff(policy: ResiliencePolicy): BackoffPolicy | undefined {
   const retry = policy.retry
   if (!retry || retry.maxAttempts <= 1) return undefined
-  const initialDelayMs = retry.backoffMs ?? 0
+  // Retrying without any delay would hammer a failing dependency.
+  const initialDelayMs = retry.backoffMs ?? DEFAULT_RETRY_BACKOFF_MS
   return { maxAttempts: retry.maxAttempts, initialDelayMs, backoffMultiplier: 2, maxDelayMs: Math.min(MAX_BACKOFF_DELAY_MS, initialDelayMs * 2 ** Math.min(retry.maxAttempts, 30)), jitter: "equal" }
 }
 
@@ -179,18 +180,25 @@ function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
 /**
  * Runs one attempt. The work's own signal carries the caller's raw abort
  * reason; the executor maps what it throws to the caller (see withResilience).
+ * The attempt settles on the per-attempt timeout or the caller's abort even
+ * when the work ignores its signal; the work itself keeps running until it
+ * settles (the bulkhead slot stays held for it).
  */
 async function attemptWithTimeout<T>(work: (signal: AbortSignal) => Promise<T>, timeoutMs: number | undefined, parent?: AbortSignal): Promise<T> {
   const controller = new AbortController()
-  const onParentAbort = (): void => controller.abort(parent?.reason ?? new CancelledError())
+  let interrupt: (error: unknown) => void = () => undefined
+  const interrupted = new Promise<never>((_resolve, reject) => { interrupt = reject })
+  const onParentAbort = (): void => {
+    controller.abort(parent?.reason ?? new CancelledError())
+    interrupt(parent ? abortSignalError(parent) : new CancelledError())
+  }
   parent?.addEventListener("abort", onParentAbort, { once: true })
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
-    if (timeoutMs === undefined) return await work(controller.signal)
-    const timeout = new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => { const error = new TimeoutError("External call timed out"); controller.abort(error); reject(error) }, timeoutMs)
-    })
-    return await Promise.race([work(controller.signal), timeout])
+    if (timeoutMs !== undefined) {
+      timer = setTimeout(() => { const error = new TimeoutError("External call timed out"); controller.abort(error); interrupt(error) }, timeoutMs)
+    }
+    return await Promise.race([work(controller.signal), interrupted])
   } finally {
     if (timer !== undefined) clearTimeout(timer)
     parent?.removeEventListener("abort", onParentAbort)
@@ -237,6 +245,9 @@ export async function withResilience<T>(policy: ResiliencePolicy, semantics: Ext
         const permanent = error instanceof FrameworkCoreError && !error.retryable
         if (permanent || attempt >= maxAttempts || !backoff) throw error
         await abortableDelay(computeBackoffDelayMs(backoff, attempt, runtime.random), runtime.signal)
+        // A timed-out attempt that ignored its signal still occupies the
+        // bulkhead slot; another attempt now would exceed maxConcurrent.
+        if (release && outstanding > 0) throw new UnavailableError("A timed-out attempt is still running; retrying would exceed the bulkhead", error)
       }
     }
   } finally {

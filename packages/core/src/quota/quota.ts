@@ -1,5 +1,8 @@
 import { encodeExecutionScopeId, validateExecutionScope, type ExecutionScope, type Principal } from "../domain"
 import { ValidationError } from "../domain/errors"
+import { PRINCIPAL_KINDS } from "../spec/authority"
+
+const principalKinds: ReadonlySet<string> = new Set(PRINCIPAL_KINDS)
 
 export interface QuotaSubject { readonly scope: ExecutionScope; readonly principal?: Pick<Principal,"id"|"kind">; readonly planKey?: string }
 export interface QuotaRequest { readonly quotaKey: string; readonly subject: QuotaSubject; readonly amount: number; readonly limit: number; readonly windowMs: number; readonly idempotencyKey?: string }
@@ -9,9 +12,9 @@ export interface QuotaPort { consume(request: QuotaRequest): Promise<QuotaDecisi
 export function encodeQuotaSubject(subject: QuotaSubject): string {
   if(!subject||typeof subject!=="object") throw new ValidationError("Quota subject must be valid.")
   const scope=validateExecutionScope(subject.scope)
-  if(subject.principal!==undefined && (subject.principal===null||typeof subject.principal!=="object"||typeof subject.principal.id!=="string"||!subject.principal.id.trim()||typeof subject.principal.kind!=="string"||!subject.principal.kind.trim())) throw new ValidationError("Quota principal must be valid.")
+  if(subject.principal!==undefined && (subject.principal===null||typeof subject.principal!=="object"||typeof subject.principal.id!=="string"||!subject.principal.id.trim()||typeof subject.principal.kind!=="string"||!principalKinds.has(subject.principal.kind))) throw new ValidationError("Quota principal must be valid.")
   if(subject.planKey!==undefined&&(typeof subject.planKey!=="string"||!subject.planKey.trim())) throw new ValidationError("Quota plan key must be non-empty.")
-  return [encodeExecutionScopeId(scope),subject.principal?`${subject.principal.kind}:${encodeURIComponent(subject.principal.id)}`:"all-principals",subject.planKey?`plan:${encodeURIComponent(subject.planKey)}`:"all-plans"].join(":")
+  return [encodeExecutionScopeId(scope),subject.principal?`${encodeURIComponent(subject.principal.kind)}:${encodeURIComponent(subject.principal.id)}`:"all-principals",subject.planKey?`plan:${encodeURIComponent(subject.planKey)}`:"all-plans"].join(":")
 }
 
 export function validateQuotaRequest(request: QuotaRequest): QuotaRequest {

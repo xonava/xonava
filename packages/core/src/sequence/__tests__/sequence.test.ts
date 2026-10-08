@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { ConfigurationError } from "../../domain"
 import { allocateSequence, sequencePeriod, validateSequenceDefinition } from "../index.js"
 
 describe("sequence service", () => {
@@ -47,5 +48,22 @@ describe("sequence time zones and period formatting", () => {
     expect(() => validateSequenceDefinition({ name: "n", reset: "month", periodFormat: "iso", periodSeparator: "<script>" })).toThrow("separator")
     expect(() => validateSequenceDefinition({ name: "n", periodFormat: "iso" })).toThrow("no period")
     expect(validateSequenceDefinition({ name: "n" })).toMatchObject({ timeZone: "UTC", periodFormat: "none", periodSeparator: "-" })
+  })
+
+  it("embeds the period by default when the counter resets so formatted values never repeat", async () => {
+    const store = memory()
+    const definition = { name: "invoice", prefix: "INV-", reset: "year" as const }
+    const first = await allocateSequence(store, { scopeId: "s" as never, definition, at: new Date("2026-06-01T00:00:00.000Z") })
+    const second = await allocateSequence(store, { scopeId: "s" as never, definition, at: new Date("2027-06-01T00:00:00.000Z") })
+    expect(first).toMatchObject({ value: 1, formatted: "INV-2026-1" })
+    expect(second).toMatchObject({ value: 1, formatted: "INV-2027-1" })
+    expect(validateSequenceDefinition({ name: "n", reset: "month" })).toMatchObject({ periodFormat: "compact" })
+    expect(validateSequenceDefinition({ name: "n", reset: "day", periodFormat: "iso" })).toMatchObject({ periodFormat: "iso" })
+  })
+
+  it("rejects an explicit period-free format on a resetting counter", () => {
+    expect(() => validateSequenceDefinition({ name: "n", reset: "month", periodFormat: "none" })).toThrow(ConfigurationError)
+    expect(() => validateSequenceDefinition({ name: "n", reset: "year", periodFormat: "none" })).toThrow("repeat")
+    expect(validateSequenceDefinition({ name: "n", reset: "never", periodFormat: "none" })).toMatchObject({ periodFormat: "none" })
   })
 })

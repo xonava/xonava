@@ -153,18 +153,18 @@ describe("S5c: query grants never re-open deny-omitted fields", () => {
   const payload = normalized({}).payload
   it("ignores grants on deny policies", () => {
     const deny = normalized({ effect: "deny", payload: { ...payload, fieldAccess: { read: { ssn: "omit" }, query: { filter: ["ssn"], sort: ["ssn"], search: ["ssn"] } } } })
-    const denials = resolveFieldQueryDenials({ policies: [deny], moduleKey: "m" })
+    const denials = resolveFieldQueryDenials({ policies: [deny], moduleKey: "m", fields: ["name", "ssn"] })
     expect(denials.filter).toContain("ssn")
     expect(denials.sort).toContain("ssn")
     expect(denials.search).toContain("ssn")
-    expect(resolveFieldQueryAccess({ policies: [deny], moduleKey: "m" }).filter).not.toContain("ssn")
+    expect(resolveFieldQueryAccess({ policies: [deny], moduleKey: "m", fields: ["name", "ssn"] }).filter).not.toContain("ssn")
   })
 
   it("allow grants do not subtract a deny's omission", () => {
     const deny = normalized({ effect: "deny", payload: { ...payload, fieldAccess: { read: { ssn: "omit" } } } })
     const allow = normalized({ compiledConditions: Predicate.eq("branchId", "b1"), payload: { ...payload, fieldAccess: { query: { filter: ["ssn"] } } } })
-    expect(resolveFieldQueryDenials({ policies: [deny, allow], moduleKey: "m" }).filter).toContain("ssn")
-    expect(resolveFieldQueryAccess({ policies: [deny, allow], moduleKey: "m" }).filter).not.toContain("ssn")
+    expect(resolveFieldQueryDenials({ policies: [deny, allow], moduleKey: "m", fields: ["name", "ssn"] }).filter).toContain("ssn")
+    expect(resolveFieldQueryAccess({ policies: [deny, allow], moduleKey: "m", fields: ["name", "ssn"] }).filter).not.toContain("ssn")
   })
 })
 

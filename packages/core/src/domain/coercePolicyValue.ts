@@ -1,4 +1,5 @@
 import type { PredicatePrimitive } from "./predicate"
+import { parseRfc3339Timestamp } from "./evaluatePredicate"
 
 export type AbacFieldType =
   | "string"
@@ -47,12 +48,13 @@ export function coercePolicyValue(args: {
         return new Date(args.value.getTime())
       }
       if (typeof args.value === "string") {
-        if (args.type === "date" && !/^\d{4}-\d{2}-\d{2}$/.test(args.value)) {
-          throw new PolicyValidationError(`Invalid date value: ${args.value}`)
-        }
-        const parsed = new Date(args.value)
-        if (isNaN(parsed.getTime())) throw new PolicyValidationError(`Invalid date value: ${args.value}`)
-        return new Date(parsed.toISOString())
+        // Strict RFC 3339 only: a date is a real calendar YYYY-MM-DD and a
+        // datetime must carry an offset, so no literal depends on host-local
+        // time or lenient host parsing.
+        const isDate = args.value.length === 10
+        const time = isDate === (args.type === "date") ? parseRfc3339Timestamp(args.value) : null
+        if (time === null) throw new PolicyValidationError(`Invalid ${args.type} value: ${args.value}`)
+        return new Date(time)
       }
       throw new PolicyValidationError(`Invalid date value: ${String(args.value)}`)
     }

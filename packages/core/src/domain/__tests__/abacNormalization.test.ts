@@ -197,8 +197,8 @@ describe("normalizeAbacPolicy", () => {
     expectRejected({ field: "name", operator: "contains", value: "x" })
     expectRejected({ field: "name", operator: "startsWith", value: "x" })
     expectRejected({ field: "name", operator: "endsWith", value: "x" })
-    expectRejected({ field: "createdAt", operator: "after", value: "2026-01-01" })
-    expectRejected({ field: "createdAt", operator: "before", value: "2026-02-01" })
+    expectRejected({ field: "createdAt", operator: "after", value: "2026-01-01T00:00:00Z" })
+    expectRejected({ field: "createdAt", operator: "before", value: "2026-02-01T00:00:00Z" })
 
     const isEmptyResult = normalizeAbacPolicy({
       policy: makePolicy({

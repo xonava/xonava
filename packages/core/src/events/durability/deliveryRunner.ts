@@ -19,9 +19,19 @@ import { MAX_DELIVERY_RETRY_DELAY_MS, normalizeDeliveryFailureCode } from "./del
 
 export type DeliveryOutcome = "published" | "processed" | "already_processed" | "retry_scheduled" | "dead_lettered" | "not_claimable" | "lease_lost" | "cancelled"
 
+/**
+ * Codes the public error table marks non-retryable for HTTP callers (the
+ * client must re-read before retrying) that are transient for a redelivered
+ * message: the runner re-executes the handler against fresh state. A generic
+ * CONFLICT (e.g. a unique-key violation) is deterministic and stays permanent;
+ * STALE_CLAIM is handled as a lost lease. Rolled-back transactions and other
+ * RetryablePersistenceErrors are already retryable.
+ */
+const TRANSIENT_DELIVERY_CODES: ReadonlySet<string> = new Set(["OPTIMISTIC_CONCURRENCY_FAILED"])
+
 /** Errors a framework marks non-retryable (validation, authorization, configuration...) are permanent. */
 function isPermanent(error: unknown): boolean {
-  return error instanceof FrameworkCoreError && !error.retryable
+  return error instanceof FrameworkCoreError && !error.retryable && !TRANSIENT_DELIVERY_CODES.has(error.code)
 }
 
 function failureCode(error: unknown): string {
@@ -140,8 +150,17 @@ export interface ConsumeInboxMessageArgs<T> {
 
 function consumerDelay(consumer: ConsumerDefinition, attempt: number, random?: () => number): number {
   if (consumer.backoff) return Math.min(MAX_DELIVERY_RETRY_DELAY_MS, computeBackoffDelayMs(consumer.backoff, attempt, random))
-  const delay = consumer.retry.delayMs(attempt)
-  return Number.isSafeInteger(delay) && delay >= 0 ? Math.min(delay, MAX_DELIVERY_RETRY_DELAY_MS) : 0
+  let delay: unknown
+  try {
+    delay = consumer.retry.delayMs(attempt)
+  } catch {
+    delay = undefined
+  }
+  // Fractional (jitter, 1.5 ** n) and unbounded delays are honoured as far as the store allows.
+  if (typeof delay === "number" && delay >= 0) return Number.isFinite(delay) ? Math.min(Math.ceil(delay), MAX_DELIVERY_RETRY_DELAY_MS) : MAX_DELIVERY_RETRY_DELAY_MS
+  // NaN, negative, non-numeric or throwing policies must not turn into an immediate retry
+  // storm nor abort the failure transition mid-delivery: use the framework default backoff.
+  return Math.min(MAX_DELIVERY_RETRY_DELAY_MS, computeBackoffDelayMs(DEFAULT_BACKOFF_POLICY, attempt, random))
 }
 
 export async function consumeInboxMessage<T>(args: ConsumeInboxMessageArgs<T>): Promise<{ readonly outcome: DeliveryOutcome; readonly record: InboxRecord | null; readonly result?: T }> {

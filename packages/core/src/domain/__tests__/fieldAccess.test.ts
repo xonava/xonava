@@ -146,11 +146,15 @@ function makeReadPolicy(fieldAccess: NonNullable<NormalizedAbacPolicy["payload"]
   })
 }
 
+/** Every field a caller could reference in the query tests below. */
+const QUERY_FIELDS = ["name", "salary", "ssn"]
+
 describe("resolveFieldQueryAccess", () => {
   it("query-denies a masked field by default across filter/search/sort", () => {
     const result = resolveFieldQueryAccess({
       policies: [makeReadPolicy({ read: { salary: "mask" } })],
       moduleKey: "test.module",
+      fields: QUERY_FIELDS,
     })
     expect(result.filter).not.toContain("salary")
     expect(result.search).not.toContain("salary")
@@ -161,6 +165,7 @@ describe("resolveFieldQueryAccess", () => {
     const result = resolveFieldQueryAccess({
       policies: [makeReadPolicy({ read: { salary: "mask" }, query: { filter: ["salary"] } })],
       moduleKey: "test.module",
+      fields: QUERY_FIELDS,
     })
     expect(result.filter).toContain("salary")
     expect(result.search).not.toContain("salary")
@@ -171,6 +176,7 @@ describe("resolveFieldQueryAccess", () => {
     const result = resolveFieldQueryAccess({
       policies: [makeReadPolicy({ read: { name: "allow" } })],
       moduleKey: "test.module",
+      fields: QUERY_FIELDS,
     })
     expect(result.filter).toContain("name")
     expect(result.search).toContain("name")
@@ -181,11 +187,13 @@ describe("resolveFieldQueryAccess", () => {
     const denied = resolveFieldQueryAccess({
       policies: [makeReadPolicy({ read: { ssn: "allow" } }, { effect: "deny", priority: 200 })],
       moduleKey: "test.module",
+      fields: QUERY_FIELDS,
     })
     expect(denied.filter).not.toContain("ssn")
     const granted = resolveFieldQueryAccess({
       policies: [makeReadPolicy({ read: { ssn: "allow" }, query: { search: ["ssn"] } }, { effect: "deny", priority: 200 })],
       moduleKey: "test.module",
+      fields: QUERY_FIELDS,
     })
     // Deny-effect policies never grant query access to a field they omit.
     expect(granted.search).not.toContain("ssn")
@@ -196,6 +204,7 @@ describe("resolveFieldQueryAccess", () => {
     const result = resolveFieldQueryAccess({
       policies: [makeReadPolicy({ read: { salary: "mask" } }, { moduleKey: "other.module" })],
       moduleKey: "test.module",
+      fields: QUERY_FIELDS,
     })
     expect(result.filter).toEqual([])
     expect(result.search).toEqual([])
@@ -208,6 +217,7 @@ describe("resolveFieldQueryDenials", () => {
     const denials = resolveFieldQueryDenials({
       policies: [makeReadPolicy({ read: { salary: "mask" }, query: { filter: ["salary"] } })],
       moduleKey: "test.module",
+      fields: QUERY_FIELDS,
     })
     expect(denials.filter).not.toContain("salary")
     expect(denials.search).toContain("salary")
@@ -218,6 +228,7 @@ describe("resolveFieldQueryDenials", () => {
     const denials = resolveFieldQueryDenials({
       policies: [makeReadPolicy({ read: { name: "allow", salary: "mask" } })],
       moduleKey: "test.module",
+      fields: QUERY_FIELDS,
     })
     expect(denials.filter).not.toContain("name")
     expect(denials.filter).toContain("salary")

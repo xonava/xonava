@@ -24,7 +24,8 @@ export interface AbacAuthorizer {
 
   buildActionScope(action: string): AbacReadScope
 
-  assertWrite(params: { action: "create" | "update" | "delete"; record: Record<string, unknown>; changedFields?: string[] }): void
+  /** `existing` is the durable pre-image of an update; both images must permit the write. */
+  assertWrite(params: { action: "create" | "update" | "delete"; record: Record<string, unknown>; existing?: Record<string, unknown>; changedFields?: string[] }): void
   fieldReadPlan(record: Record<string, unknown>): Record<string, FieldReadOverride>
 }
 
@@ -86,8 +87,14 @@ export function createAbacAuthorizer(bundle: VerifiedAbacPolicyBundle): AbacAuth
       return buildActionScope({ bundle, action })
     },
 
-    assertWrite({ action, record, changedFields }) {
-      enforceAbacWrite({ bundle, action, record, ...(changedFields !== undefined ? { changedFields } : {}) })
+    assertWrite({ action, record, existing, changedFields }) {
+      enforceAbacWrite({
+        bundle,
+        action,
+        record,
+        ...(existing !== undefined ? { existing } : {}),
+        ...(changedFields !== undefined ? { changedFields } : {}),
+      })
     },
 
     fieldReadPlan(record) {

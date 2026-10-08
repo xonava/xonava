@@ -36,7 +36,7 @@ export class DrizzlePgWorkflowStore implements WorkflowStore {
       const instance = await client.query(`SELECT 1 FROM ${this.schema}.workflows WHERE id=$1 FOR SHARE`, [signal.instanceId])
       if (instance.rowCount !== 1) { await client.query("ROLLBACK"); return { delivered: false, duplicate: false } }
       const inserted = await client.query(`INSERT INTO ${this.schema}.workflow_signals (id,instance_id,name,payload) VALUES ($1,$2,$3,$4) ON CONFLICT (id) DO NOTHING RETURNING id`, [signal.id, signal.instanceId, signal.name, JSON.stringify(signal.payload)])
-      if (inserted.rowCount === 1) await client.query(`UPDATE ${this.schema}.workflows SET status='pending',wake_at=NULL,revision=revision+1,updated_at=clock_timestamp() WHERE id=$1 AND status='waiting' AND wake_at IS NULL AND waiting_signal=$2`, [signal.instanceId, signal.name])
+      if (inserted.rowCount === 1) await client.query(`UPDATE ${this.schema}.workflows SET status='pending',wake_at=NULL,step_attempt=0,revision=revision+1,updated_at=clock_timestamp() WHERE id=$1 AND status='waiting' AND wake_at IS NULL AND waiting_signal=$2`, [signal.instanceId, signal.name])
       await client.query("COMMIT")
       return { delivered: inserted.rowCount === 1, duplicate: inserted.rowCount !== 1 }
     } catch (error) {

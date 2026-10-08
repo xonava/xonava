@@ -1,4 +1,4 @@
-import type { JobRegistry } from "./jobRegistry"
+import { JobDefinitionUnavailableError, type JobRegistry } from "./jobRegistry"
 import { shouldRetry, computeNextAttemptAt, validateRetryPolicy } from "./retryPolicy"
 import type {
   CompleteJobArgs,
@@ -20,6 +20,13 @@ import { ConfigurationError, ValidationError } from "../domain"
 import { createTelemetryLogger, type TelemetryLogger, type TelemetryPort } from "../telemetry/telemetry"
 
 export const MAX_STORED_JOB_PAYLOAD_BYTES = 1024 * 1024
+
+/**
+ * How long a job that no registered definition can run is handed back for
+ * another worker (rolling deploys) before it is dead-lettered with
+ * UNKNOWN_JOB_DEFINITION. Measured from when the job first became due.
+ */
+export const DEFAULT_UNKNOWN_DEFINITION_MAX_DEFERRAL_MS = 24 * 60 * 60 * 1000
 
 export interface DispatchResult {
   claimed: number
@@ -54,6 +61,8 @@ export interface DispatcherConfig {
   telemetry?: TelemetryPort
   timeoutPolicy?: JobTimeoutPolicy
   idGenerator?: () => string
+  /** See DEFAULT_UNKNOWN_DEFINITION_MAX_DEFERRAL_MS. */
+  unknownDefinitionMaxDeferralMs?: number
 }
 
 export interface JobTimeoutPolicy {
@@ -257,39 +266,9 @@ async function executeJob(args: DispatcherConfig & { job: StoredJob; log: Dispat
     return { kind: "lease_lost", error: errorMessage(error) }
   }
 
-  const def = registry.get(job.jobType, job.jobVersion)
-  if (!def) {
-    // This worker does not know the job's type/version — typically a rolling
-    // deploy where a newer worker enqueued it. Hand it back for another worker
-    // instead of failing it permanently; dead-letter only once the store's
-    // attempt budget is exhausted.
-    const error = `Unknown job definition: ${job.jobType}@${job.jobVersion}`
-    const attempt = job.attemptsCompleted + 1
-    const nextAttemptAt = new Date(clock.now().getTime() + leaseDurationMs)
-    if (typeof store.release === "function") {
-      try {
-        const released = await store.release({ jobId: job.id, workerId, claimToken, nextAttemptAt, reason: error })
-        if (released.applied) {
-          log.warn("Job released: unknown definition", { jobId: job.id, jobType: job.jobType, jobVersion: job.jobVersion })
-          return { kind: "retried", error }
-        }
-        return { kind: "lease_lost", error: "Job lease was lost" }
-      } catch (releaseError) {
-        log.warn("Job release failed", { jobId: job.id, error: errorMessage(releaseError) })
-      }
-    }
-    try {
-      const deferred = await store.markRetrying({ jobId: job.id, workerId, claimToken, nextAttemptAt, error, attempt })
-      if (deferred.applied) {
-        log.warn("Job deferred: unknown definition", { jobId: job.id, jobType: job.jobType, jobVersion: job.jobVersion, attempt })
-        return { kind: "retried", error }
-      }
-    } catch (deferError) {
-      log.warn("Job deferral failed", { jobId: job.id, error: errorMessage(deferError) })
-    }
-    const status = await markFailedState({ jobId: job.id, workerId, claimToken, error, status: "dead_letter", attempt }, store)
-    return status.applied ? { kind: "dead_letter", error } : { kind: "lease_lost", error: status.error ?? error }
-  }
+  const resolved = resolveJobDefinition(registry, job)
+  if (!resolved) return deferUnrunnableJob(args, claimToken, `Unknown job definition: ${job.jobType}@${job.jobVersion}`)
+  const def = resolved.definition
 
   try {
     assertJobScopeMatches(job.executionScope, def.scope)
@@ -320,9 +299,21 @@ async function executeJob(args: DispatcherConfig & { job: StoredJob; log: Dispat
   }
 
   let payload: Record<string, unknown>
+  let unavailable: JobDefinitionUnavailableError | undefined
   try {
-    payload = decodeJobPayload<Record<string, unknown>>(job.payload, (input) => def.decodePayload(input))
+    payload = decodeJobPayload<Record<string, unknown>>(job.payload, (input) => {
+      if (!resolved.upcast) return def.decodePayload(input)
+      try {
+        return registry.decode(job.jobType, job.jobVersion, input, def.version).payload as Record<string, unknown>
+      } catch (error) {
+        if (error instanceof JobDefinitionUnavailableError) unavailable = error
+        throw error
+      }
+    })
   } catch (error) {
+    // No upcaster path from the stored version on this worker: another worker
+    // may still hold the stored version's definition.
+    if (unavailable) return deferUnrunnableJob(args, claimToken, unavailable.message)
     const message = errorMessage(error)
     const status = await markFailedState({ jobId: job.id, workerId, claimToken: job.claimToken, error: message, status: "dead_letter", attempt: job.currentAttempt }, store)
     return status.applied ? { kind: "dead_letter", error: message } : { kind: "lease_lost", error: status.error ?? message }
@@ -345,6 +336,10 @@ async function executeJob(args: DispatcherConfig & { job: StoredJob; log: Dispat
   }
   const renewCurrentLease = (): Promise<void> => {
     if (leaseLost) return Promise.reject(new Error("Job lease was lost"))
+    // Once the dispatcher has finished with this claim (including a stalled,
+    // abandoned execution), late job code must neither pass the fence nor
+    // keep the lease alive.
+    if (stopped) return Promise.reject(new Error("Job lease was lost: the claim is no longer active"))
     if (renewalInFlight) return renewalInFlight
     const operation = (async (): Promise<void> => {
       const renewed = await renewWithDeadline(store.renewLease({ jobId: job.id, workerId, claimToken, extendByMs: leaseDurationMs }), leaseDurationMs, clock)
@@ -407,6 +402,14 @@ async function executeJob(args: DispatcherConfig & { job: StoredJob; log: Dispat
     }
   }
 
+  // Idempotent: ends the heartbeat and closes the claim's fence.
+  const stopHeartbeat = async (): Promise<void> => {
+    stopped = true
+    heartbeatAbort.abort()
+    resolveHeartbeatStop?.()
+    await heartbeatPromise
+  }
+
   let timedOut = false
   let executionPromise: Promise<JobResult> | undefined
   let timeoutId: unknown
@@ -434,7 +437,9 @@ async function executeJob(args: DispatcherConfig & { job: StoredJob; log: Dispat
     }
     if (!executionResult.success) {
       const error = resultError(executionResult)
-      return handleJobError({ job, store, def, retryPolicy, workerId, claimToken: job.claimToken, execution, error: errorMessage(error), failureKind: classifyFailure(error), now: () => clock.now(), log })
+      // Awaited inside the try so the heartbeat keeps the lease alive until the
+      // retry/dead-letter transition has committed.
+      return await handleJobError({ job, store, def, retryPolicy, workerId, claimToken: job.claimToken, execution, error: errorMessage(error), failureKind: classifyFailure(error), now: () => clock.now(), log, onTransitionSettled: stopHeartbeat })
     }
     const completeArgs: CompleteJobArgs = { jobId: job.id, workerId, claimToken, attempt: job.currentAttempt }
     if (executionResult.data) completeArgs.result = executionResult.data
@@ -454,24 +459,85 @@ async function executeJob(args: DispatcherConfig & { job: StoredJob; log: Dispat
   } catch (error) {
     if (timedOut && executionPromise) {
       const settled = await waitForExecutionSettlement(executionPromise, cancellationGraceMs, clock)
-      if (!settled) return { kind: "stalled", error: `Job ${job.id} did not stop within the ${cancellationGraceMs}ms cancellation grace period.` }
+      if (!settled) {
+        // Abandon the claim: the still-running execution is fenced off (see
+        // renewCurrentLease) and its lease lapses instead of being renewed.
+        stopped = true
+        return { kind: "stalled", error: `Job ${job.id} did not stop within the ${cancellationGraceMs}ms cancellation grace period.` }
+      }
     }
     if (leaseLost) {
       if (executionPromise !== undefined) await waitForExecutionSettlement(executionPromise, cancellationGraceMs, clock)
       return { kind: "lease_lost", error: "Job lease was lost" }
     }
     const message = timedOut ? `Job ${job.id} timed out after ${timeoutMs}ms` : errorMessage(error)
-    return handleJobError({ job, store, def, retryPolicy, workerId, claimToken: job.claimToken, execution, error: message, failureKind: timedOut ? "retryable" : classifyFailure(error), now: () => clock.now(), log })
+    return await handleJobError({ job, store, def, retryPolicy, workerId, claimToken: job.claimToken, execution, error: message, failureKind: timedOut ? "retryable" : classifyFailure(error), now: () => clock.now(), log, onTransitionSettled: stopHeartbeat })
   } finally {
-    stopped = true
-    heartbeatAbort.abort()
-    resolveHeartbeatStop?.()
-    await heartbeatPromise
+    await stopHeartbeat()
     if (timeoutId !== undefined) {
       if (clock.clearTimeout) clock.clearTimeout(timeoutId)
       else clearTimeout(timeoutId as ReturnType<typeof setTimeout>)
     }
   }
+}
+
+/**
+ * The definition that runs a stored job: its exact version, or the latest
+ * registered version of its type when that is newer (the payload is then
+ * upcast through the registry). Undefined when this worker cannot run it.
+ */
+function resolveJobDefinition(registry: JobRegistry, job: StoredJob): { definition: JobDefinition; upcast: boolean } | undefined {
+  const exact = registry.get(job.jobType, job.jobVersion)
+  if (exact) return { definition: exact, upcast: false }
+  let latest: JobDefinition | undefined
+  for (const entry of registry.list()) {
+    if (entry.definition.type === job.jobType && (!latest || entry.definition.version > latest.version)) latest = entry.definition
+  }
+  return latest && latest.version > job.jobVersion ? { definition: latest, upcast: true } : undefined
+}
+
+/**
+ * Hands back a job this worker cannot run (typically a rolling deploy where a
+ * newer worker enqueued it) without consuming its attempt. Hand-backs are
+ * bounded: once the job has been due for longer than the deferral window it
+ * is dead-lettered with UNKNOWN_JOB_DEFINITION instead of circulating forever.
+ */
+async function deferUnrunnableJob(args: DispatcherConfig & { job: StoredJob; log: DispatcherLogger; clock: DispatcherClock }, claimToken: string, error: string): Promise<JobOutcome> {
+  const { job, store, workerId, leaseDurationMs, log, clock } = args
+  const attempt = job.currentAttempt
+  const at = clock.now()
+  const dueSince = Math.max(job.createdAt.getTime(), job.runAt.getTime())
+  const maxDeferralMs = args.unknownDefinitionMaxDeferralMs ?? DEFAULT_UNKNOWN_DEFINITION_MAX_DEFERRAL_MS
+  if (at.getTime() - dueSince > maxDeferralMs) {
+    const deadLetterError = `UNKNOWN_JOB_DEFINITION: ${error}; no worker could run the job within ${maxDeferralMs}ms`
+    log.error("Job dead-lettered: no runnable definition", { jobId: job.id, jobType: job.jobType, jobVersion: job.jobVersion, maxDeferralMs })
+    const status = await markFailedState({ jobId: job.id, workerId, claimToken, error: deadLetterError, status: "dead_letter", attempt }, store)
+    return status.applied ? { kind: "dead_letter", error: deadLetterError } : { kind: "lease_lost", error: status.error ?? deadLetterError }
+  }
+  const nextAttemptAt = new Date(at.getTime() + leaseDurationMs)
+  if (typeof store.release === "function") {
+    try {
+      const released = await store.release({ jobId: job.id, workerId, claimToken, nextAttemptAt, reason: error })
+      if (released.applied) {
+        log.warn("Job released: unknown definition", { jobId: job.id, jobType: job.jobType, jobVersion: job.jobVersion })
+        return { kind: "retried", error }
+      }
+      return { kind: "lease_lost", error: "Job lease was lost" }
+    } catch (releaseError) {
+      log.warn("Job release failed", { jobId: job.id, error: errorMessage(releaseError) })
+    }
+  }
+  try {
+    const deferred = await store.markRetrying({ jobId: job.id, workerId, claimToken, nextAttemptAt, error, attempt })
+    if (deferred.applied) {
+      log.warn("Job deferred: unknown definition", { jobId: job.id, jobType: job.jobType, jobVersion: job.jobVersion, attempt })
+      return { kind: "retried", error }
+    }
+  } catch (deferError) {
+    log.warn("Job deferral failed", { jobId: job.id, error: errorMessage(deferError) })
+  }
+  const status = await markFailedState({ jobId: job.id, workerId, claimToken, error, status: "dead_letter", attempt }, store)
+  return status.applied ? { kind: "dead_letter", error } : { kind: "lease_lost", error: status.error ?? error }
 }
 
 function validateDispatcherConfig(config: DispatcherConfig): void {
@@ -492,6 +558,9 @@ function validateDispatcherConfig(config: DispatcherConfig): void {
     }
     if (config.timeoutPolicy.timeoutMs !== undefined) assertTimerDelayWithinLimit("timeoutMs", config.timeoutPolicy.timeoutMs)
   }
+  if (config.unknownDefinitionMaxDeferralMs !== undefined && (!Number.isFinite(config.unknownDefinitionMaxDeferralMs) || config.unknownDefinitionMaxDeferralMs < 0)) {
+    throw new ValidationError("unknownDefinitionMaxDeferralMs must be finite and non-negative")
+  }
 }
 
 async function handleJobError(args: {
@@ -506,10 +575,14 @@ async function handleJobError(args: {
   failureKind: FailureKind
   now: () => Date
   log: DispatcherLogger
+  /** Called once the durable transition has settled, before any lifecycle hook runs. */
+  onTransitionSettled?: () => Promise<void>
 }): Promise<JobOutcome> {
   const { job, store, def, retryPolicy, workerId, claimToken, execution, error, failureKind, now, log } = args
+  const settled = async (): Promise<void> => { await args.onTransitionSettled?.() }
   if (failureKind === "cancelled") {
     const status = await markFailedState({ jobId: job.id, workerId, claimToken, error, status: "cancelled", attempt: job.attemptsCompleted + 1 }, store)
+    await settled()
     if (!status.applied) log.warn?.("Job cancelled transition not applied", { jobId: job.id, error: status.error ?? error, claimToken })
     return status.applied ? { kind: "failed", error } : { kind: "lease_lost", error: status.error ?? error }
   }
@@ -524,6 +597,8 @@ async function handleJobError(args: {
       } catch (statusError) {
         log.error("Job markRetrying threw", { jobId: job.id, error: errorMessage(statusError), claimToken })
         return { kind: "lease_lost", error: errorMessage(statusError) }
+      } finally {
+        await settled()
       }
        if (!status.applied) {
          log.warn?.("Job markRetrying not applied; lease lost", { jobId: job.id, claimToken, reason: status.reason })
@@ -548,6 +623,8 @@ async function handleJobError(args: {
   } catch (statusError) {
     log.error("Job markFailed threw", { jobId: job.id, error: errorMessage(statusError), claimToken })
     return { kind: "lease_lost", error: errorMessage(statusError) }
+  } finally {
+    await settled()
   }
   if (!status.applied) {
     log.warn?.("Job markFailed not applied; lease lost", { jobId: job.id, claimToken, reason: status.reason })

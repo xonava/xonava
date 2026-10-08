@@ -51,7 +51,7 @@ export function createCreateHandler<
       operation,
       context: session,
       action: "create",
-      record: toAuditObject(buildScopedCreateRecord(entity, input, toAuditObject(input.body as object), session)),
+      record: toAuditObject(buildScopedCreateRecord(entity, input, toAuditObject(input.body as object), session, options.entityScope)),
       changedFields: Object.keys(input.body as object),
     })
   }
@@ -82,37 +82,26 @@ export function createCreateHandler<
             entity,
             input,
             toAuditObject(input.body as object),
-            session
+            session,
+            options.entityScope
            ),
          )
        return { record }
      },
     atomicBatch: {
       prepare: async ({ operation, input }) => {
-        await enforceTransformedCreate(operation, input, resolveOperationRequestContext(operation))
+        const session = resolveOperationRequestContext(operation)
+        await enforceTransformedCreate(operation, input, session)
+        const values = buildScopedCreateRecord(entity, input, toAuditObject(input.body as object), session, options.entityScope)
         return {
         commands: [{
           kind: "insert",
           entity: entity.name,
           ...(entity.namespace ? { namespace: entity.namespace } : {}),
-          values: {
-            ...(input.body as object),
-            id: input.id,
-            ...(entity.tenantField && operation.request?.scope.kind === "tenant"
-              ? { [entity.tenantField]: operation.request.scope.tenantId }
-              : {}),
-            ...(entity.versionField ? { [entity.versionField]: 1 } : {}),
-          },
+          values: { ...values },
         }],
         result: {
-          record: {
-            ...(input.body as object),
-            id: input.id,
-            ...(entity.tenantField && operation.request?.scope.kind === "tenant"
-              ? { [entity.tenantField]: operation.request.scope.tenantId }
-              : {}),
-            ...(entity.versionField ? { [entity.versionField]: 1 } : {}),
-          } as unknown as TRow,
+          record: { ...values } as unknown as TRow,
         },
         }
       },
@@ -185,7 +174,8 @@ export function createCreateHandler<
                 entity,
                 input,
                 toAuditObject(input.body as object),
-                context
+                context,
+                options.entityScope
               )
             ),
             Object.keys(input.body as object)

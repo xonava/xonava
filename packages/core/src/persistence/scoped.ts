@@ -1,5 +1,6 @@
 import { Predicate, type PredicateNode } from "../domain/predicate"
 import { isAlwaysTrue, simplifyPredicate } from "../domain/predicateSimplifier"
+import { encodeExecutionScopeId } from "../domain/executionScope"
 import { ConfigurationError, UnsupportedCapabilityError, NotFoundError, TenantScopeViolationError, ImmutableFieldViolationError } from "../domain/errors"
 import type { EntityDescriptor } from "./provider"
 import { isTenantScopedPersistenceProvider, supportsInteractiveTransactions } from "./provider"
@@ -154,6 +155,47 @@ function normalizeTenantRecord<T extends { tenantId?: string | null }>(
     )
   }
   return { ...record, tenantId }
+}
+
+/**
+ * The relay rebuilds the published envelope from `record.scope`, so a tenant
+ * batch may only stage events in that tenant's own execution scope, with a
+ * consistent scope identity and (when present) provenance targeting it.
+ */
+function normalizeTenantOutboxRecord(record: OutboxRecord, tenantId: string): OutboxRecord & { tenantId: string } {
+  const scope: unknown = record.scope
+  if (!scope || typeof scope !== "object" || (scope as { kind?: unknown }).kind !== "tenant" || (scope as { tenantId?: unknown }).tenantId !== tenantId) {
+    throw new TenantScopeViolationError(`Cannot include an outbox record outside tenant "${tenantId}" in a batch for that tenant.`)
+  }
+  const expectedScopeId = encodeExecutionScopeId({ kind: "tenant", tenantId })
+  if (record.scopeId !== expectedScopeId) {
+    throw new TenantScopeViolationError(`Outbox record scope identity does not match tenant "${tenantId}".`)
+  }
+  if (record.provenance !== undefined) {
+    const target: unknown = (record.provenance as { target?: unknown } | null)?.target
+    const targetScope = target && typeof target === "object" ? (target as { scope?: unknown }).scope : undefined
+    let targetScopeId: string | undefined
+    try {
+      targetScopeId = targetScope ? encodeExecutionScopeId(targetScope as OutboxRecord["scope"]) : undefined
+    } catch {
+      targetScopeId = undefined
+    }
+    if (targetScopeId !== expectedScopeId || (target as { scopeId?: unknown }).scopeId !== expectedScopeId) {
+      throw new TenantScopeViolationError(`Outbox record provenance does not target tenant "${tenantId}".`)
+    }
+  }
+  return normalizeTenantRecord<OutboxRecord>(record, tenantId, "outbox record")
+}
+
+/**
+ * Tenant verification needs the tenant field on every returned row. When a
+ * projection omits it, request it from the adapter and strip it afterwards so
+ * the caller still receives exactly the fields it asked for.
+ */
+function withTenantProjection(options: QueryOptions | undefined, tenantField: string): { options: QueryOptions | undefined; stripTenantField: boolean } {
+  const projection = options?.projection
+  if (!projection || projection.fields.includes(tenantField)) return { options, stripTenantField: false }
+  return { options: { ...options, projection: { ...projection, fields: [...projection.fields, tenantField] } }, stripTenantField: true }
 }
 
 /** Encodes a tenant namespace so tenant IDs containing delimiters cannot collide. */
@@ -311,12 +353,20 @@ export function createTenantScopedPersistenceProvider<TTenantId extends string>(
           return assertReturnedTenantRecord(result.rows[0] ?? null, tenantField, tenantId, entity.name)
         },
         async findMany(options?: QueryOptions): Promise<ListResult<T>> {
+          const projected = withTenantProjection(options, tenantField)
           const result = await repo.findMany({
-            ...options,
+            ...projected.options,
             filter: withTenantScope(options?.filter, tenantField, tenantId),
           })
           for (const row of result.rows) assertReturnedTenantRecord(row, tenantField, tenantId, entity.name)
-          return result
+          if (!projected.stripTenantField) return result
+          return {
+            ...result,
+            rows: result.rows.map((row) => {
+              const { [tenantField]: _tenant, ...rest } = row as Record<string, unknown>
+              return rest as T
+            }),
+          }
         },
         async insert(data: Partial<T>): Promise<T> {
           assertScopedTenantInsert(data, tenantField, tenantId, entity.name)
@@ -468,7 +518,7 @@ export function createTenantScopedPersistenceProvider<TTenantId extends string>(
             return { kind: "audit", record: normalizeTenantRecord<AuditRecord>(item.record, tenantId, "audit record") }
           }
           if (item.kind === "outbox") {
-            return { kind: "outbox", record: normalizeTenantRecord<OutboxRecord>(item.record, tenantId, "outbox record") }
+            return { kind: "outbox", record: normalizeTenantOutboxRecord(item.record, tenantId) }
           }
           if (item.kind === "cache-generation") {
             assertTenantCacheTag(item.tag, tenantId)

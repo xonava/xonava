@@ -32,8 +32,8 @@ export const GUARANTEE_CERTIFICATION_SCHEMA = "framework.guarantee-certification
 
 export const GUARANTEE_CERTIFICATION_SCHEMA_VERSION = 1
 
-export const V1_REQUIRED_GUARANTEES = {
-  postgresql: [
+export const V1_REQUIRED_GUARANTEES = Object.freeze({
+  postgresql: Object.freeze([
     "transaction.interactive",
     "persistence.conditionalVersionedMutation",
     "persistence.conditionalAuthorizedMutation",
@@ -41,8 +41,8 @@ export const V1_REQUIRED_GUARANTEES = {
     "audit.atomic",
     "outbox.atomic",
     "cacheGeneration.atomic",
-  ],
-  d1: [
+  ] as const),
+  d1: Object.freeze([
     "transaction.atomicBatch",
     "persistence.conditionalVersionedMutation",
     "persistence.conditionalAuthorizedMutation",
@@ -50,8 +50,8 @@ export const V1_REQUIRED_GUARANTEES = {
     "audit.atomic",
     "outbox.atomic",
     "cacheGeneration.atomic",
-  ],
-} as const satisfies Readonly<Record<string, readonly GuaranteeId[]>>
+  ] as const),
+} as const) satisfies Readonly<Record<string, readonly GuaranteeId[]>>
 
 export type V1AdapterKey = keyof typeof V1_REQUIRED_GUARANTEES
 

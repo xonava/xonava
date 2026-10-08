@@ -311,6 +311,15 @@ function normalizeCapabilityPolicy(config: CapabilityCheckConfig): CapabilityChe
   return resolved.enabled ? { customCapabilityKey: resolved.key! } : { skipCapabilityCheck: true }
 }
 
+/**
+ * Entity names are only unique within a module (and persistence namespace), so
+ * default cache partitions are qualified by both. Neither the module key nor
+ * the entity name may contain ":", so the segments cannot be confused.
+ */
+function defaultCacheNamespace(moduleKey: string, entity: { readonly name: string; readonly namespace?: string }): string {
+  return `${moduleKey}:${entity.namespace ?? ""}:${entity.name}`
+}
+
 export function defineEntity<
   TRow,
   TCreateBody = TRow,
@@ -360,8 +369,8 @@ export function defineEntity<
       ...(input.audit?.fieldClassification ? { fieldClassification: { ...input.audit.fieldClassification } } : {}),
     },
     cache: input.cache === false || input.cache === undefined ? false : {
-      tag: input.cache?.tag ?? input.entity.name,
-      keyPrefix: input.cache?.keyPrefix ?? input.entity.name,
+      tag: input.cache?.tag ?? defaultCacheNamespace(input.moduleKey, input.entity),
+      keyPrefix: input.cache?.keyPrefix ?? defaultCacheNamespace(input.moduleKey, input.entity),
     },
     idempotency: input.idempotency === false ? false : cloneAndFreezeDefinition(input.idempotency ?? {}),
     rateLimit: input.rateLimit ? cloneAndFreezeDefinition(input.rateLimit) : {},

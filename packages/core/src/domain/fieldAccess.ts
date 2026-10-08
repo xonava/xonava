@@ -1,4 +1,4 @@
-import { evaluatePredicate } from "./evaluatePredicate"
+import { evaluatePredicateTruth } from "./evaluatePredicate"
 import { ForbiddenError } from "./errors"
 import type { NormalizedAbacPolicy } from "./abacTypes"
 import type { FieldDescriptor, FieldFormat } from "../persistence/provider"
@@ -25,7 +25,8 @@ const RESTRICTIVENESS: Record<FieldReadMode, number> = { allow: 0, mask: 1, omit
  * record passed here must be the durable authorized row, never hook-controlled
  * or enriched data, so a representation hook cannot rewrite the attributes that
  * decided visibility. Equal-priority conflicts resolve to the more restrictive
- * mode so the outcome is independent of policy ordering.
+ * mode, and equal-priority allowlists intersect, so the outcome is independent
+ * of policy ordering.
  */
 export function resolveFieldReadOverrides(args: {
   policies: NormalizedAbacPolicy[]
@@ -35,31 +36,42 @@ export function resolveFieldReadOverrides(args: {
   const matches = args.policies
     .filter((policy) => policy.moduleKey === args.moduleKey && policy.payload.actions.includes("read"))
     .filter((policy) => policy.payload.fieldAccess?.read)
-    .filter((policy) => evaluatePredicate(args.record, policy.compiledConditions))
+    // A deny whose condition is UNKNOWN (NULL attribute) still hides its
+    // fields, matching the three-valued query scope; an UNKNOWN allow grants
+    // nothing.
+    .filter((policy) => {
+      const truth = evaluatePredicateTruth(args.record, policy.compiledConditions)
+      return truth === true || (truth === null && policy.effect !== "allow")
+    })
     .sort((left, right) => right.priority - left.priority)
 
   const overrides: Record<string, FieldReadOverride> = {}
   const priorities = new Map<string, number>()
-  let allowlistPriority: number | undefined
-  let allowlist: Record<string, FieldReadMode> | undefined
+  // The highest-priority allow read maps act as allowlists. Several at that
+  // priority intersect: a field stays visible only if every one lists it, so
+  // the result never depends on policy order.
+  const allowlistPriority = matches.find((policy) => policy.effect === "allow")?.priority
+  const allowlists = matches
+    .filter((policy) => policy.effect === "allow" && policy.priority === allowlistPriority)
+    .map((policy) => policy.payload.fieldAccess?.read ?? {})
+  const outsideAllowlist = (field: string) => allowlists.some((read) => !Object.hasOwn(read, field))
 
-  for (const policy of matches) {
-    const read = policy.payload.fieldAccess?.read
-    if (policy.effect === "allow" && read && (allowlistPriority === undefined || policy.priority > allowlistPriority)) {
-      allowlistPriority = policy.priority
-      allowlist = read
-      overrides[FIELD_READ_DEFAULT_KEY] = "omit"
-      for (const field of Object.keys(args.record)) {
-        if (!Object.hasOwn(read, field)) {
-          overrides[field] = "omit"
-          priorities.set(field, policy.priority)
-        }
+  if (allowlistPriority !== undefined) {
+    overrides[FIELD_READ_DEFAULT_KEY] = "omit"
+    for (const field of Object.keys(args.record)) {
+      if (outsideAllowlist(field)) {
+        overrides[field] = "omit"
+        priorities.set(field, allowlistPriority)
       }
     }
+  }
+
+  for (const policy of matches) {
     for (const [field, mode] of Object.entries(policy.payload.fieldAccess?.read ?? {})) {
       // A field outside the allowlist is implicitly omitted at the allowlist's
       // priority even when it is not a key of the trusted record.
-      const implicitlyOmitted = !priorities.has(field) && allowlist !== undefined && allowlistPriority !== undefined && !Object.hasOwn(allowlist, field)
+      const implicitlyOmitted = !priorities.has(field) && allowlistPriority !== undefined &&
+        policy.priority <= allowlistPriority && outsideAllowlist(field)
       const previousPriority = implicitlyOmitted ? allowlistPriority : priorities.get(field)
       if (previousPriority !== undefined && previousPriority > policy.priority) continue
       const incoming: FieldReadMode = policy.effect === "deny" ? "omit" : mode
@@ -162,31 +174,37 @@ export function hasRecordDependentFieldWrite(
   )
 }
 
-export function assertPolicyWritableFields(args: {
-  policies: NormalizedAbacPolicy[]
-  moduleKey: string
-  action: string
-  record: Record<string, unknown>
-  changedFields?: string[]
-}): void {
-  const relevant = args.policies
-    .filter((p) => p.moduleKey === args.moduleKey && p.payload.actions.includes(args.action))
-    .filter((p) => evaluatePredicate(args.record, p.compiledConditions))
+function collectDeniedWriteFields(
+  policies: NormalizedAbacPolicy[],
+  moduleKey: string,
+  action: string,
+  record: Record<string, unknown>,
+  fields: string[],
+): string[] {
+  // Three-valued: an UNKNOWN policy still claims its tier (as in the query
+  // scope), an UNKNOWN deny applies, and an UNKNOWN allow grants nothing.
+  const truths = new Map<NormalizedAbacPolicy, boolean | null>()
+  for (const p of policies) {
+    if (p.moduleKey !== moduleKey || !p.payload.actions.includes(action)) continue
+    const truth = evaluatePredicateTruth(record, p.compiledConditions)
+    if (truth !== false) truths.set(p, truth)
+  }
+  const relevant = Array.from(truths.keys())
 
-  if (relevant.length === 0) return
+  if (relevant.length === 0) return []
 
   // Only the highest matching priority tier is evaluated
   const priorities = Array.from(new Set(relevant.map((p) => p.priority))).sort((a, b) => b - a)
   const topPriority = priorities[0]
   const topTier = relevant.filter((p) => p.priority === topPriority)
 
-  const denyPolicies = topTier.filter((p) => p.effect === "deny")
-  const allowPolicies = topTier.filter((p) => p.effect === "allow")
+  const denyPolicies = topTier.filter((p) => p.effect !== "allow")
+  const allowPolicies = topTier.filter((p) => p.effect === "allow" && truths.get(p) === true)
+  const tierHasAllow = topTier.some((p) => p.effect === "allow")
 
   const denyAll = denyPolicies.some((p) => !p.payload.fieldAccess?.write?.length)
   const allowAll = allowPolicies.some((p) => !p.payload.fieldAccess?.write?.length)
 
-  const fields = args.changedFields ?? Object.keys(args.record)
   const denied: string[] = []
 
   for (const field of fields) {
@@ -209,8 +227,35 @@ export function assertPolicyWritableFields(args: {
     if (fieldAllowed) continue
 
     // Not mentioned by any allow policy with lists → implicitly denied
-    if (allowPolicies.length > 0) {
+    if (tierHasAllow) {
       denied.push(field)
+    }
+  }
+
+  return denied
+}
+
+/**
+ * Assert the field-write tier permits every changed field. For updates pass
+ * the durable pre-image as `existing`: the tier is resolved against both the
+ * pre-image and the post-image `record`, and each changed field must be
+ * permitted by both, so a patch cannot flip the attributes a restricting
+ * policy's condition reads and fall through to a broader lower tier.
+ */
+export function assertPolicyWritableFields(args: {
+  policies: NormalizedAbacPolicy[]
+  moduleKey: string
+  action: string
+  record: Record<string, unknown>
+  existing?: Record<string, unknown>
+  changedFields?: string[]
+}): void {
+  const fields = args.changedFields ?? Object.keys(args.record)
+  const images = args.existing !== undefined ? [args.existing, args.record] : [args.record]
+  const denied: string[] = []
+  for (const image of images) {
+    for (const field of collectDeniedWriteFields(args.policies, args.moduleKey, args.action, image, fields)) {
+      if (!denied.includes(field)) denied.push(field)
     }
   }
 
@@ -238,9 +283,17 @@ function emptyFieldQueryAccess(): FieldQueryAccess {
  * Fields hidden by any module policy's read map. Conditions cannot be evaluated
  * here (there is no record yet), so the decision is conservative: any read
  * restriction declared on a field denies query access to it until an explicit
- * query grant re-allows the specific mode.
+ * query grant re-allows the specific mode. A read allow policy's map is an
+ * allowlist (see resolveFieldReadOverrides), so every known field it does not
+ * list is denied too: whichever allowlist wins at read time, a field outside
+ * any of them may be omitted from the response.
  */
-function collectDeniedQueryFields(policies: NormalizedAbacPolicy[], moduleKey: string, onlyDenyEffect = false): string[] {
+function collectDeniedQueryFields(
+  policies: NormalizedAbacPolicy[],
+  moduleKey: string,
+  onlyDenyEffect = false,
+  knownFields: readonly string[] = [],
+): string[] {
   const denied: string[] = []
   for (const policy of policies) {
     if (policy.moduleKey !== moduleKey) continue
@@ -252,6 +305,11 @@ function collectDeniedQueryFields(policies: NormalizedAbacPolicy[], moduleKey: s
       // resolveFieldReadOverrides. Allow-effect policies hide omit/mask fields.
       if (policy.effect !== "allow" || mode === "omit" || mode === "mask") {
         if (!denied.includes(field)) denied.push(field)
+      }
+    }
+    if (policy.effect === "allow" && policy.payload.actions.includes("read")) {
+      for (const field of knownFields) {
+        if (!Object.hasOwn(read, field) && !denied.includes(field)) denied.push(field)
       }
     }
   }
@@ -291,8 +349,10 @@ function collectQueryGrants(policies: NormalizedAbacPolicy[], moduleKey: string)
 export function resolveFieldQueryAccess(args: {
   policies: NormalizedAbacPolicy[]
   moduleKey: string
+  /** Every field a caller could reference; see resolveFieldQueryDenials. */
+  fields: readonly string[]
 }): FieldQueryAccess {
-  const deniedFields = collectDeniedQueryFields(args.policies, args.moduleKey)
+  const deniedFields = collectDeniedQueryFields(args.policies, args.moduleKey, false, args.fields)
   const allowed = emptyFieldQueryAccess()
   const grants = collectQueryGrants(args.policies, args.moduleKey)
   for (const mode of FIELD_QUERY_MODES) {
@@ -326,8 +386,14 @@ export function resolveFieldQueryAccess(args: {
 export function resolveFieldQueryDenials(args: {
   policies: NormalizedAbacPolicy[]
   moduleKey: string
+  /**
+   * Every field a caller could reference (the bundle's `fieldCatalog` keys and
+   * the entity's declared fields). Required so no caller can skip it: fields
+   * outside a read allowlist are denied only when they appear here.
+   */
+  fields: readonly string[]
 }): FieldQueryAccess {
-  const deniedFields = collectDeniedQueryFields(args.policies, args.moduleKey)
+  const deniedFields = collectDeniedQueryFields(args.policies, args.moduleKey, false, args.fields)
   const grants = collectQueryGrants(args.policies, args.moduleKey)
   return {
     filter: deniedFields.filter((field) => !grants.filter.includes(field)),

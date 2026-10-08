@@ -167,12 +167,18 @@ export async function runAtomicBatchOperation<TInput, TResult, TCommand>(args: {
     const postCommitContext = createPostCommitOperationContext(restrictedOperation)
     // Same post-commit contract as the standard pipeline: best-effort work is
     // reported, never thrown, because the mutation has already committed.
+    // The prepared effects were admitted (capability and budget) when they
+    // were registered; re-queueing them never re-checks either.
+    try {
+      restrictedOperation.effects.restoreDeferredEffects(pendingEffects.bestEffortEffects)
+    } catch (error) {
+      reportCommittedEffectFailure(restrictedOperation, "bestEffort", "restore", error)
+    }
     try {
       await args.onBusinessResult?.(finalResult, postCommitContext)
     } catch (error) {
       reportCommittedEffectFailure(operation, "onBusinessResult", "business-result", error)
     }
-    for (const effect of pendingEffects.bestEffortEffects) restrictedOperation.addBestEffortEffect(effect.name, effect.execute)
     for (const hook of asArray(args.definition.afterCommit)) {
       try {
         await runAfterCommitHooks({ operation: postCommitContext, input, result: finalResult, hooks: hook })

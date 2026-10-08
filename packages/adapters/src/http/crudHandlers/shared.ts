@@ -181,11 +181,28 @@ export function auditEmit<
   if (options.audit?.enabled === false) return false
   return options.audit?.emitOn ? options.audit.emitOn.includes(action) : true
 }
+/**
+ * An application-scoped entity is partitioned by the trusted application key.
+ * Outside an application execution scope there is no key to partition by, so
+ * the request must fail closed instead of reading or writing every partition.
+ */
+function assertEntityScopeContext(
+  entityScope: CrudOptions<SelectableRow>["entityScope"],
+  context: RequestContext,
+): void {
+  if (entityScope?.kind === "application" && context.scope.kind !== "application")
+    throw new ForbiddenError("This operation requires an application scope")
+  // A tenant entity reached outside a tenant scope would get no structural filter and span every tenant.
+  if (entityScope?.kind === "tenant" && context.scope.kind !== "tenant")
+    throw new ForbiddenError("This operation requires a tenant scope")
+}
+
 export function buildStructuralScope<TRow extends SelectableRow>(
   entity: CrudOptions<TRow>["entity"],
   context: RequestContext,
   entityScope: CrudOptions<TRow>["entityScope"]
 ): PredicateNode | undefined {
+  assertEntityScopeContext(entityScope, context)
   let scope: PredicateNode | undefined =
     entityScope?.kind === "tenant" && context.scope.kind === "tenant" && (entityScope.field ?? entity.tenantField)
       ? Predicate.eq((entityScope.field ?? entity.tenantField)!, context.scope.tenantId)
@@ -589,13 +606,20 @@ export function buildScopedCreateRecord<TRow extends SelectableRow>(
   entity: CrudOptions<TRow>["entity"],
   input: { id: string },
   body: AuditObject,
-  context: RequestContext
+  context: RequestContext,
+  entityScope?: CrudOptions<TRow>["entityScope"]
 ): Partial<TRow> {
+  assertEntityScopeContext(entityScope, context)
   return {
     ...body,
     id: input.id,
+    // Structural scope columns always come from the trusted execution scope,
+    // never from the client body (which is also rejected upstream).
     ...(context.scope.kind === "tenant" && entity.tenantField
       ? { [entity.tenantField]: context.scope.tenantId }
+      : {}),
+    ...(entityScope?.kind === "application" && context.scope.kind === "application"
+      ? { [entityScope.field]: context.scope.applicationKey }
       : {}),
     // Create is the first versioned state. Set it explicitly so the durable
     // idempotency receipt does not depend on a dialect/schema default.

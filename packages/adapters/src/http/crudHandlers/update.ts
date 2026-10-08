@@ -15,6 +15,7 @@ import { createFrameworkWriteHandler } from "../createFrameworkWriteHandler"
 import { frameworkJson } from "../handleFrameworkCoreError"
 import type { CrudShared, MutationResult, SelectableRow, UpdateOperationInput } from "./types"
 import { assertEntityVersion, type EntityVersion } from "core/serialization"
+import type { AbacWriteEnforcer } from "core/security"
 import { internalRepositoryForDescriptor } from "../../repository/dynamicRepository"
 import {
   auditEmit,
@@ -59,6 +60,19 @@ export function parseIfMatchVersion(raw: string | null | undefined): number | un
   const n = Number(value)
   if (!Number.isSafeInteger(n) || n < 0) return undefined
   return n
+}
+
+/**
+ * Enforce update ABAC against the durable pre-image and the post-image. The
+ * field-write tier and record decision must permit the patch under BOTH, so a
+ * patch cannot flip the attributes a restricting policy's condition reads and
+ * fall through to a broader lower-priority tier. Checking each image is
+ * equivalent to the combined two-image check (it is a conjunction).
+ */
+function enforceUpdateImages(enforcer: AbacWriteEnforcer, existing: object, patch: object): void {
+  const changedFields = Object.keys(patch)
+  enforcer.enforce("update", toAuditObject(existing), changedFields)
+  enforcer.enforce("update", { ...toAuditObject(existing), ...toAuditObject(patch) }, changedFields)
 }
 
 export function createUpdateHandler<
@@ -123,10 +137,7 @@ export function createUpdateHandler<
         ? await repo.findOneWhere(filter)
         : (await repo.findMany({ filter, pagination: { kind: "offset", page: 1, pageSize: 1 } })).rows[0] ?? null
       if (!current) throw new NotFoundError(`${entity.name} not found`)
-      operation.enforceAbac?.enforce("update", {
-        ...toAuditObject(current),
-        ...toAuditObject(input.patch as object),
-      }, Object.keys(input.patch as object))
+      if (operation.enforceAbac) enforceUpdateImages(operation.enforceAbac, current, input.patch as object)
       const config = concurrency()
       if (config) {
         const existingVersion = current[config.versionField]
@@ -173,14 +184,21 @@ export function createUpdateHandler<
         // must pass the same protected-field and ABAC update checks that the
         // interactive execute path applies before the batch is prepared.
         assertProtectedUpdateFields(entity, input.patch as object)
-        await enforceFinalWrite({
-          options,
-          operation,
-          context: session,
-          action: "update",
-          record: { ...toAuditObject(input.existing), ...toAuditObject(input.patch as object) },
-          changedFields: Object.keys(input.patch as object),
-        })
+        // Pre-image and post-image must both permit the patch (see
+        // enforceUpdateImages).
+        for (const record of [
+          toAuditObject(input.existing),
+          { ...toAuditObject(input.existing), ...toAuditObject(input.patch as object) },
+        ]) {
+          await enforceFinalWrite({
+            options,
+            operation,
+            context: session,
+            action: "update",
+            record,
+            changedFields: Object.keys(input.patch as object),
+          })
+        }
         const structural = buildStructuralScope(entity, session, options.entityScope)
         const actionScope = await resolveActionScopeForContext(options, session, "update")
         let patch = input.patch as Partial<TRow>
@@ -301,14 +319,7 @@ export function createUpdateHandler<
         // The execute-stage check uses the transaction-current row. This check
         // also covers the D1 atomic fallback before its conditional write.
         if (operation.enforceAbac) {
-          operation.enforceAbac.enforce(
-            "update",
-            {
-              ...toAuditObject(input.existing),
-              ...toAuditObject(input.patch as object),
-            },
-            Object.keys(input.patch as object)
-          )
+          enforceUpdateImages(operation.enforceAbac, input.existing, input.patch as object)
           const session = resolveOperationRequestContext(operation)
           if (session.identity.actor.kind !== "anonymous" && !canUseOwnerBypass(options.adapterDeps, options.scope.scope, session)) {
             const bundle = await options.adapterDeps.resolveAbacBundle({

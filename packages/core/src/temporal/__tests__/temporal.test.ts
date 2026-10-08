@@ -29,3 +29,14 @@ describe("temporal snapshot identity (final pass)",()=>{
     expect(()=>validateTemporalSnapshot({...resource,revision:0,occurredAt:new Date("2026-01-01T00:00:00Z"),state:{ghost:true}})).toThrow("revision-0")
   })
 })
+
+describe("temporal replay limit defaults",()=>{
+  it("accepts a revision limit below the default page size",async()=>{
+    const s=store([rev(1,"2026-01-01",{n:1}),rev(2,"2026-01-02",{n:2})])
+    await expect(reconstructAsOf(s,resource,new Date("2026-02-01"),{maxRevisions:100})).resolves.toMatchObject({revision:2,state:{n:2}})
+    expect(s.revisions).toHaveBeenCalledWith(resource,expect.objectContaining({limit:100}))
+  })
+  it("still rejects an explicit page size above the revision limit",async()=>{
+    await expect(reconstructAsOf(store([]),resource,new Date(),{maxRevisions:10,pageSize:11})).rejects.toThrow(/replay limits/)
+  })
+})

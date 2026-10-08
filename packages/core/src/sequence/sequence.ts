@@ -36,9 +36,11 @@ export function validateSequenceDefinition(value: SequenceDefinition): Validated
   const timeZone = value.timeZone ?? "UTC"
   if (typeof timeZone !== "string" || timeZone.length > 64) throw new ConfigurationError("Sequence time zone is invalid")
   zonedFormatter(timeZone)
-  const periodFormat = value.periodFormat ?? "none"
+  // A resetting counter restarts at 1 each period, so its formatted value must carry the period to stay unique.
+  const periodFormat = value.periodFormat ?? (reset === "never" ? "none" : "compact")
   if (!["none", "compact", "iso"].includes(periodFormat)) throw new ConfigurationError("Sequence period format is invalid")
   if (periodFormat !== "none" && reset === "never") throw new ConfigurationError("A sequence without a reset period has no period to embed")
+  if (periodFormat === "none" && reset !== "never") throw new ConfigurationError("A resetting sequence must embed its period; formatted values would repeat every period")
   const periodSeparator = value.periodSeparator ?? "-"
   if (typeof periodSeparator !== "string" || !SEPARATOR.test(periodSeparator)) throw new ConfigurationError("Sequence period separator is invalid")
   return Object.freeze({ name: value.name, padding, reset, timeZone, periodFormat, periodSeparator, ...(value.prefix === undefined ? {} : { prefix: value.prefix }) })

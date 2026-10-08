@@ -1601,6 +1601,7 @@ describe("atomic-batch operations", () => {
   })
 
   it("dispatches tenant-scoped atomic operations through the safe batch contract", async () => {
+    expect(encodeExecutionScopeId({ kind: "tenant", tenantId: "tenant-a" })).toBe("fscope:v1:eyJraW5kIjoidGVuYW50IiwidGVuYW50SWQiOiJ0ZW5hbnQtYSJ9")
     let capturedItems: readonly AtomicBatchItem<string>[] = []
     const atomicBase = createAtomicProvider((items) => { capturedItems = items })
     const scoped = createTenantScopedPersistenceProvider(
@@ -1624,8 +1625,8 @@ describe("atomic-batch operations", () => {
             occurredAt: new Date("2026-01-01T00:00:00.000Z"),
             type: "row.created",
             version: 1,
-            scope: { kind: "platform", platformKey: "test" },
-            scopeId: "fscope:v1:eyJraW5kIjoicGxhdGZvcm0iLCJwbGF0Zm9ybUtleSI6InRlc3QifQ" as never,
+            scope: { kind: "tenant", tenantId: "tenant-a" },
+            scopeId: "fscope:v1:eyJraW5kIjoidGVuYW50IiwidGVuYW50SWQiOiJ0ZW5hbnQtYSJ9" as never,
             aggregateType: "row",
             aggregateId: "row-1",
             payload: {},

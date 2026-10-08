@@ -1,6 +1,6 @@
 import { CANONICALIZATION_VERSION, DIGEST_ALGORITHM_VERSION } from "./versions"
 
-export const CANONICAL_JSON_LIMITS_V1 = {
+export const CANONICAL_JSON_LIMITS_V1 = Object.freeze({
   maxUtf8Bytes: 16 * 1024 * 1024,
   maxDepth: 64,
   maxTotalNodes: 250_000,
@@ -8,7 +8,7 @@ export const CANONICAL_JSON_LIMITS_V1 = {
   maxArrayItems: 100_000,
   maxStringUtf8Bytes: 8 * 1024 * 1024,
   maxPropertyNameUtf8Bytes: 1_024,
-} as const
+} as const)
 
 export type CanonicalJsonLimits = typeof CANONICAL_JSON_LIMITS_V1
 
@@ -38,7 +38,7 @@ export const DURABLE_FORMAT_REGISTRY_V1: readonly DurableFormatRegistration[] = 
   },
 ]
 
-export const FORMAT_DEFAULT_MAX_CANONICAL_BYTES = {
+export const FORMAT_DEFAULT_MAX_CANONICAL_BYTES = Object.freeze({
   executionScopeIdentitySource: 4 * 1024,
   authorityProvenance: 64 * 1024,
   cursorEnvelopeBeforeEncodingOrSigning: 16 * 1024,
@@ -48,7 +48,7 @@ export const FORMAT_DEFAULT_MAX_CANONICAL_BYTES = {
   jobDurableEnvelope: 1024 * 1024,
   workflowSignalCheckpoint: 1024 * 1024,
   auditRecord: 1024 * 1024,
-} as const
+} as const)
 
 export const DURABLE_FORMAT_RULES = {
   canonicalizationVersion: CANONICALIZATION_VERSION,

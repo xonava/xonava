@@ -110,6 +110,20 @@ function parseQueryBudget(budget: QueryBudget): QueryBudget {
 
 export function assertQueryBudget(budget: QueryBudget): void { parseQueryBudget(budget) }
 
+/**
+ * Builds a strict, frozen query budget from a wider limits object (for example
+ * entity query limits, which also carry pagination/count/search limits that are
+ * enforced elsewhere). Only budget keys are read; absent keys take defaults.
+ */
+export function compileQueryBudget(limits?: object): QueryBudget {
+  const budget: Record<string, unknown> = { ...DEFAULT_QUERY_BUDGET }
+  const declared = (limits ?? {}) as Readonly<Record<string, unknown>>
+  for (const key of budgetKeys) {
+    if (Object.hasOwn(declared, key) && declared[key] !== undefined) budget[key] = declared[key]
+  }
+  return Object.freeze(parseQueryBudget(budget as unknown as QueryBudget))
+}
+
 export function validateQueryPlan(plan: QueryPlan, budget: QueryBudget = DEFAULT_QUERY_BUDGET): void {
   const limits = parseQueryBudget(budget)
   const active = new Set<object>()

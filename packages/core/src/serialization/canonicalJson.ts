@@ -242,19 +242,21 @@ export function canonicalizeValue(value: unknown): unknown {
         throw new CanonicalJsonError("Canonical JSON does not accept symbol keys");
       }
       const keys = Object.keys(obj);
+      // Like arrays, objects must not carry hidden state: a non-enumerable own
+      // property would otherwise be silently dropped from the canonical form.
+      if (Object.getOwnPropertyNames(obj).length !== keys.length) {
+        throw new CanonicalJsonError("Canonical JSON does not accept non-enumerable object properties");
+      }
       if (keys.length > CANONICAL_JSON_LIMITS_V1.maxObjectMembers) {
         throwLimit(
           `object members ${keys.length} exceeds maxObjectMembers ${CANONICAL_JSON_LIMITS_V1.maxObjectMembers}`,
         );
       }
-      if (
-        Object.hasOwn(obj, "__proto__") ||
-        Object.hasOwn(obj, "constructor") ||
-        Object.hasOwn(obj, "prototype")
-      ) {
-        throw new CanonicalJsonError(
-          "Canonical JSON does not accept objects with __proto__, constructor, or prototype as own keys",
-        );
+      // Canonical output objects are null-prototype, so "constructor" and
+      // "prototype" are ordinary data keys. "__proto__" stays forbidden because
+      // copying it into a normal object would rewrite that object's prototype.
+      if (Object.hasOwn(obj, "__proto__")) {
+        throw new CanonicalJsonError("Canonical JSON does not accept objects with __proto__ as an own key");
       }
       keys.sort(compareByte);
       const out = Object.create(null) as Record<string, unknown>;
@@ -575,7 +577,7 @@ export function decodeCanonicalJson(json: string | Uint8Array): unknown {
           `object members ${memberCount} exceeds maxObjectMembers ${CANONICAL_JSON_LIMITS_V1.maxObjectMembers}`,
         );
       }
-      if (key === "__proto__" || key === "constructor" || key === "prototype") {
+      if (key === "__proto__") {
         throw new CanonicalJsonError(`object key ${JSON.stringify(key)} is not allowed`);
       }
       skipWs();

@@ -19,7 +19,7 @@ import type {
   JobTransitionResult,
 } from "core/execution"
 import { assertRequesterCanEnqueueScope, assertJobScopeCanEnqueue, assertDurableJob, assertDurableIdentifier, requesterJobScope, requesterTenantId, scheduleCorrelationId, CorruptJobMetadataError, JobIdempotencyConflictError } from "core/execution"
-import { buildJobFingerprintInput, fingerprintJob } from "core/execution"
+import { buildJobFingerprintInput, decodeStoredJobMaxAttempts, encodeStoredJobMaxAttempts, fingerprintJob } from "core/execution"
 import { decodePersistedJobFingerprint, decodePersistedJobScope, encodeJobScope } from "../drizzle-shared/jobScope"
 import { uuidv7 } from "uuidv7"
 import type { DrizzleColumnMap } from "../drizzle-shared/predicateCompiler"
@@ -83,7 +83,7 @@ function toStoredJob(row: Record<string, unknown>): StoredJob {
     priority: row.priority as number,
     currentAttempt: row.attempts as number,
     attemptsCompleted: Math.max(0, (row.attempts as number) - 1),
-    maxAttempts: row.maxAttempts as number,
+    maxAttempts: decodeStoredJobMaxAttempts(row.maxAttempts),
     runAt: new Date(row.runAt as number),
     nextAttemptAt: row.nextAttemptAt ? new Date(row.nextAttemptAt as number) : null,
     leaseOwner: (row.leaseOwner as string) ?? null,
@@ -200,7 +200,7 @@ export class DrizzleJobStore implements JobStore {
       const insertion = this.db.insert(this.jobsTable).values({
         id, jobType: job.jobType, jobVersion: job.jobVersion, tenantId, scope,
         payload: JSON.stringify(job.payload), status: "pending", priority: job.priority ?? 0,
-        attempts: 0, maxAttempts: job.maxAttempts ?? 3, runAt, nextAttemptAt: runAt,
+        attempts: 0, maxAttempts: encodeStoredJobMaxAttempts(job.maxAttempts), runAt, nextAttemptAt: runAt,
         idempotencyKey: job.idempotencyKey, idempotencyScope, ...(this.jobs.fingerprint ? { fingerprint } : {}), correlationId: job.correlationId ?? null,
         metadata: job.metadata ? JSON.stringify(job.metadata) : null, claimToken: null, partitionKey: job.partitionKey ?? null, createdAt: now,
       })
@@ -233,7 +233,7 @@ export class DrizzleJobStore implements JobStore {
     await this.db.insert(this.jobsTable).values({
       id, jobType: job.jobType, jobVersion: job.jobVersion, tenantId, scope,
       payload: JSON.stringify(job.payload), status: "pending", priority: job.priority ?? 0,
-      attempts: 0, maxAttempts: job.maxAttempts ?? 3, runAt, nextAttemptAt: runAt,
+      attempts: 0, maxAttempts: encodeStoredJobMaxAttempts(job.maxAttempts), runAt, nextAttemptAt: runAt,
       idempotencyKey: job.idempotencyKey ?? null, idempotencyScope, ...(this.jobs.fingerprint ? { fingerprint } : {}), correlationId: job.correlationId ?? null,
        metadata: job.metadata ? JSON.stringify(job.metadata) : null, claimToken: null, partitionKey: job.partitionKey ?? null, createdAt: now,
     })

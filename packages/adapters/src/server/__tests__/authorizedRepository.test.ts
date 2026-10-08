@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return, @typescript-eslint/unbound-method */
 import { describe, it, expect, vi } from "vitest"
-import { Predicate, evaluatePredicate, bindAbacSecurityDigest, type VerifiedAbacPolicyBundle } from "core/domain"
+import { Predicate, evaluatePredicate, bindAbacSecurityDigest, createAbacAuthorizer, type VerifiedAbacPolicyBundle } from "core/domain"
 import { createAuthorizedRepository } from "../authorizedRepository"
 import type { AbacAuthorizer, AbacCollectionDecision, NormalizedAbacPolicy } from "core/domain"
 import type { VersionedEntityDescriptor, VersionedRepository } from "core/persistence"
@@ -326,7 +326,9 @@ describe("createAuthorizedRepository", () => {
           systemScope: { logic: "AND", conditions: [] },
           userFilters: { logic: "AND", conditions: [] },
         },
-        fieldAccess: { read: { status: "mask" } },
+        // The read map is an allowlist: name must be listed to stay readable
+        // (and therefore queryable).
+        fieldAccess: { read: { status: "mask", name: "allow" } },
       },
       compiledConditions: Predicate.alwaysTrue(),
     }
@@ -402,5 +404,73 @@ describe("createAuthorizedRepository", () => {
         Predicate.eq("status", "active"),
       ),
     })).rejects.toThrow("not permitted")
+  })
+})
+
+describe("createAuthorizedRepository ABAC hardening", () => {
+  const MODULE = "test.module"
+  const salaryEntity: VersionedEntityDescriptor<TestRow> = {
+    ...testEntity,
+    fields: { ...testEntity.fields, salary: { type: "number" }, locked: { type: "boolean" }, price: { type: "number" } },
+  }
+
+  function abacPolicy(id: string, overrides: Partial<NormalizedAbacPolicy>, fieldAccess?: NormalizedAbacPolicy["payload"]["fieldAccess"]): NormalizedAbacPolicy {
+    return {
+      source: { policyId: id, scopeType: "tenant_default" },
+      moduleKey: MODULE,
+      effect: "allow",
+      priority: 10,
+      payload: {
+        actions: ["read", "update"],
+        capabilities: [],
+        conditions: { version: 2, systemScope: { logic: "AND", conditions: [] }, userFilters: { logic: "AND", conditions: [] } },
+        ...(fieldAccess ? { fieldAccess } : {}),
+      },
+      compiledConditions: Predicate.alwaysTrue(),
+      ...overrides,
+    }
+  }
+
+  async function verifiedBundle(policies: NormalizedAbacPolicy[]): Promise<VerifiedAbacPolicyBundle> {
+    return bindAbacSecurityDigest({
+      mode: "tenant",
+      moduleKey: MODULE,
+      policies,
+      context: { tenantId: "tenant-1" },
+      defaultEffect: "deny",
+      fieldCatalog: { id: { key: "id", type: "string", operators: ["equals"] } },
+    })
+  }
+
+  it("rejects filter and sort on an entity field outside a read allowlist", async () => {
+    const bundle = await verifiedBundle([abacPolicy("allowlist", {}, { read: { id: "allow", name: "allow" } })])
+    const authorized = createAuthorizedRepository({
+      repository: createMockRepo([{ id: "1", tenantId: "tenant-1", name: "A", status: "active", version: 1, salary: 10 }]),
+      entity: salaryEntity,
+      authorizer: createAbacAuthorizer(bundle),
+      structuralScope: Predicate.eq("tenantId", "tenant-1"),
+      bundle,
+    })
+    await expect(authorized.findMany({ filter: Predicate.gt("salary", 5) })).rejects.toThrow("not permitted by policy")
+    await expect(authorized.findMany({ sort: [{ field: "salary", direction: "asc" }] })).rejects.toThrow("not permitted by policy")
+    await expect(authorized.findMany({ filter: Predicate.eq("name", "A") })).resolves.toBeDefined()
+  })
+
+  it("decides field writes against the pre-image as well as the post-image", async () => {
+    const bundle = await verifiedBundle([
+      abacPolicy("locked", { priority: 100, compiledConditions: Predicate.isTrue("locked") }, { write: ["name"] }),
+      abacPolicy("all", { priority: 10 }),
+    ])
+    const repo = createMockRepo([{ id: "1", tenantId: "tenant-1", name: "A", status: "active", version: 1, locked: true, price: 10 }])
+    const authorized = createAuthorizedRepository({
+      repository: repo,
+      entity: salaryEntity,
+      authorizer: createAbacAuthorizer(bundle),
+      structuralScope: Predicate.eq("tenantId", "tenant-1"),
+      bundle,
+    })
+    await expect(authorized.update("1", { locked: false, price: 0 }, { expectedVersion: 1 })).rejects.toThrow("permission to update one or more fields")
+    expect(repo.updateOneWhereReturning).not.toHaveBeenCalled()
+    await expect(authorized.update("1", { name: "B" }, { expectedVersion: 1 })).resolves.toMatchObject({ applied: true })
   })
 })

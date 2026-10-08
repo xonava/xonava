@@ -1,8 +1,14 @@
 import { ConfigurationError } from "../domain/errors"
-import { MAX_BACKOFF_DELAY_MS } from "./backoff"
+import { MAX_BACKOFF_ATTEMPTS, MAX_BACKOFF_DELAY_MS } from "./backoff"
 
 export type ExternalCallSemantics = {readonly kind:"read"}|{readonly kind:"idempotent-mutation";readonly idempotencyKey:string}|{readonly kind:"non-idempotent-mutation"}
+/**
+ * Total attempts (at most MAX_BACKOFF_ATTEMPTS) and the initial jittered,
+ * exponential backoff. Without `backoffMs`, DEFAULT_RETRY_BACKOFF_MS applies.
+ */
 export interface RetryPolicy { readonly maxAttempts: number; readonly backoffMs?: number }
+/** Initial retry backoff when a retry policy sets no `backoffMs`. */
+export const DEFAULT_RETRY_BACKOFF_MS = 100
 export interface CircuitBreakerPolicy { readonly failureThreshold: number; readonly resetAfterMs: number }
 export interface BulkheadPolicy { readonly maxConcurrent: number; readonly maxQueue?: number }
 export interface ResiliencePolicy { readonly timeoutMs?: number; readonly retry?: RetryPolicy; readonly circuitBreaker?: CircuitBreakerPolicy; readonly bulkhead?: BulkheadPolicy }
@@ -18,6 +24,7 @@ export function validateResiliencePolicy(policy: ResiliencePolicy, semantics: Ex
   const positive=(value:number|undefined,name:string)=>{if(value!==undefined&&(!Number.isSafeInteger(value)||value<=0)) throw new ConfigurationError(`${name} must be a positive safe integer`)}
   positive(policy.timeoutMs,"timeoutMs");positive(policy.retry?.maxAttempts,"retry.maxAttempts");positive(policy.retry?.backoffMs,"retry.backoffMs");positive(policy.circuitBreaker?.failureThreshold,"circuitBreaker.failureThreshold");positive(policy.circuitBreaker?.resetAfterMs,"circuitBreaker.resetAfterMs");positive(policy.bulkhead?.maxConcurrent,"bulkhead.maxConcurrent")
   // Timers above 2^31-1 ms fire immediately; one shared cap (7 days) bounds every resilience delay.
+  if(policy.retry!==undefined&&policy.retry.maxAttempts>MAX_BACKOFF_ATTEMPTS) throw new ConfigurationError(`retry.maxAttempts must not exceed ${MAX_BACKOFF_ATTEMPTS}`)
   if(policy.timeoutMs!==undefined&&policy.timeoutMs>MAX_BACKOFF_DELAY_MS) throw new ConfigurationError(`timeoutMs must not exceed ${MAX_BACKOFF_DELAY_MS}`)
   if(policy.bulkhead?.maxQueue!==undefined&&(!Number.isSafeInteger(policy.bulkhead.maxQueue)||policy.bulkhead.maxQueue<0)) throw new ConfigurationError("bulkhead.maxQueue must be a non-negative safe integer")
   if(semantics.kind==="idempotent-mutation"&&(typeof semantics.idempotencyKey!=="string"||!semantics.idempotencyKey.trim())) throw new ConfigurationError("idempotent mutation requires a non-empty idempotency key")

@@ -23,7 +23,7 @@ import {
   createFrameworkErrorHandler,
 } from "../handleFrameworkCoreError"
 import { defaultListQuerySchema, type CrudShared, type ReadQuery, type SelectableRow } from "./types"
-import { assertCursorBinding, assertStableCursorSort, decodeCursor, encodeCursor, DEFAULT_QUERY_BUDGET, validateQueryPlan, type CursorPageInfo, type CursorPayloadV1, type ProjectionSpec } from "core/query"
+import { assertCursorBinding, assertStableCursorSort, compileQueryBudget, decodeCursor, encodeCursor, validateQueryPlan, type CursorPageInfo, type CursorPayloadV1, type ProjectionSpec } from "core/query"
 import {
   buildStructuralScope,
   deriveSecurityCachePartition,
@@ -70,6 +70,10 @@ export function createListHandler<
   D extends SelectableRow,
 >(shared: CrudShared<TRow, A, B, L, D>) {
   const { options, entity } = shared
+  // Query limits also carry pagination, count, search-fanout and JSON byte
+  // limits, which are enforced separately below; the strict plan budget is
+  // compiled once from the budget keys only.
+  const queryBudget = compileQueryBudget(options.queryLimits)
   return async (request: Request): Promise<Response> => {
     let requestMetadata: ReturnType<typeof resolveRequestMetadata> | undefined
     try {
@@ -97,13 +101,16 @@ export function createListHandler<
       // probed via query predicates, search substrings, sort order, and
       // row-count inference. The effective allowlists are the entity-declared
       // lists minus the ABAC query denials.
+      const entityFields = entity.fields ?? {}
       const queryDenials = abacBundle
         ? resolveFieldQueryDenials({
             policies: abacBundle.policies,
             moduleKey: options.moduleKey,
+            // Every field a caller could reference: fields outside a read
+            // allowlist are only denied when they are listed here.
+            fields: [...new Set([...Object.keys(abacBundle.fieldCatalog ?? {}), ...Object.keys(entityFields)])],
           })
         : undefined
-      const entityFields = entity.fields ?? {}
       const isEntityField = (field: string) => Object.hasOwn(entityFields, field)
       // An undeclared allowlist means NO caller-controlled field is allowed.
       // Every allowlist is intersected with the entity's own declared fields
@@ -196,10 +203,7 @@ export function createListHandler<
             }
           }
           const requestedProjection = parseProjection(input.query.fields)
-          validateQueryPlan({ ...(filter ? { filter } : {}), ...(sort ? { sort } : {}), ...(requestedProjection ? { projection: requestedProjection } : {}), ...(input.query.consistency ? { consistency: input.query.consistency } : {}) }, {
-            ...DEFAULT_QUERY_BUDGET,
-            ...options.queryLimits,
-          })
+          validateQueryPlan({ ...(filter ? { filter } : {}), ...(sort ? { sort } : {}), ...(requestedProjection ? { projection: requestedProjection } : {}), ...(input.query.consistency ? { consistency: input.query.consistency } : {}) }, queryBudget)
           if (requestedProjection && requestedProjection.fields.some(field => !isEntityField(field) || queryDenials?.filter.includes(field) || queryDenials?.search.includes(field) || queryDenials?.sort.includes(field))) throw new ValidationError("projection contains a forbidden, hidden, or non-queryable field")
           const repositoryProjection = requestedProjection && !abacBundle && typeof options.crud?.list?.projectResult !== "function"
             ? { fields: [...new Set([...requestedProjection.fields, ...(cursorConfig ? (sort ?? []).map(item => item.field) : [])])] }

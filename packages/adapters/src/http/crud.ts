@@ -75,7 +75,9 @@ export function CRUD<
      rateLimit: compiled.rateLimit,
      crud: compiled.crud,
      routes: compiled.routes,
-     audit: compiled.audit === false ? { enabled: false, resource: compiled.entity.name } : { enabled: true, ...compiled.audit, fieldClassification: compiled.audit.fieldClassification ?? compiled.compiledAudit.fieldClassification },
+     // Only the compiled map is used: it merges explicit audit entries with
+     // classification-derived redaction, and the stricter treatment wins.
+     audit: compiled.audit === false ? { enabled: false, resource: compiled.entity.name } : { enabled: true, ...compiled.audit, fieldClassification: compiled.compiledAudit.fieldClassification },
      // Query allowlists come from the compiled query plan, which strips
      // fields whose classification forbids search/filter/sort probing.
      searchableColumns: [...compiled.compiledQuery.searchableFields],
