@@ -1,6 +1,7 @@
 export * from "./drizzleRepository"
 export * from "./drizzlePersistenceProvider"
 export * from "./mysqlUtils"
+export * from "./mysqlIdentifiers"
 export * from "./mysqlAtomicBackends"
 export * from "./drizzleWorkflowStore"
 export * from "./drizzleIdempotencyStore"
