@@ -119,12 +119,12 @@ describe("F1 canonical serialization frozen contract", () => {
     expect(() => canonicalJsonString(new Date())).toThrow(/RFC3339/)
   })
 
-  it("rejects __proto__ constructor prototype keys", () => {
+  it("rejects __proto__ keys and treats constructor/prototype as null-prototype data", () => {
     const o1 = Object.create(null) as Record<string, unknown>
     Object.defineProperty(o1, "__proto__", { value: 1, enumerable: true, configurable: true, writable: true })
     expect(() => canonicalizeValue(o1)).toThrow(CanonicalJsonError)
     expect(() => decodeCanonicalJson('{"__proto__":1}')).toThrow(CanonicalJsonError)
-    expect(() => decodeCanonicalJson('{"constructor":1}')).toThrow(CanonicalJsonError)
+    expect(decodeCanonicalJson('{"constructor":1}')).toEqual(Object.assign(Object.create(null) as object, { constructor: 1 }))
   })
 
   it("produces deterministic UTF-8 bytes and SHA-256 digests", () => {

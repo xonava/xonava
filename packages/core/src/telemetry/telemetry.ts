@@ -37,16 +37,31 @@ export const TELEMETRY_REDACTED = "[REDACTED]"
  * case-insensitively with `_`, `-`, `.` and spaces removed, and a key matches
  * when it contains any fragment: password, passwd, secret, token (claimToken,
  * accessToken, refresh_token...), authorization, cookie, apikey (apiKey,
- * api_key), credential, privatekey, sessionid. Matching values are replaced by
- * TELEMETRY_REDACTED whatever their type. The match is deliberately broad:
- * over-redacting an operational attribute is preferable to leaking a secret.
+ * api_key), credential, privatekey, sessionid, session, jwt, bearer,
+ * signature. Matching values are replaced by TELEMETRY_REDACTED whatever their
+ * type. The match is deliberately broad: over-redacting an operational
+ * attribute is preferable to leaking a secret.
  */
-export const SENSITIVE_TELEMETRY_KEY_PATTERNS: readonly string[] = Object.freeze(["password", "passwd", "secret", "token", "authorization", "cookie", "apikey", "credential", "privatekey", "sessionid"])
+export const SENSITIVE_TELEMETRY_KEY_PATTERNS: readonly string[] = Object.freeze(["password", "passwd", "secret", "token", "authorization", "cookie", "apikey", "credential", "privatekey", "sessionid", "session", "jwt", "bearer", "signature"])
 
-/** Whether a telemetry attribute key names a secret (see SENSITIVE_TELEMETRY_KEY_PATTERNS). */
+/**
+ * Short secret words matched only as whole key segments (camelCase, snake_case,
+ * kebab-case, dotted or spaced words), because as substrings they occur inside
+ * ordinary words: `auth` (authHeader, x-auth, but not author) and `otp`
+ * (otp_code, userOTP, but not footprint).
+ */
+export const SENSITIVE_TELEMETRY_KEY_SEGMENTS: readonly string[] = Object.freeze(["auth", "otp"])
+
+function telemetryKeySegments(key: string): string[] {
+  return key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2").toLowerCase().split(/[\s_.-]+/)
+}
+
+/** Whether a telemetry attribute key names a secret (see SENSITIVE_TELEMETRY_KEY_PATTERNS and SENSITIVE_TELEMETRY_KEY_SEGMENTS). */
 export function isSensitiveTelemetryKey(key: string): boolean {
-  const normalized = String(key).toLowerCase().replace(/[\s_.-]/g, "")
-  return SENSITIVE_TELEMETRY_KEY_PATTERNS.some((pattern) => normalized.includes(pattern))
+  const text = String(key)
+  const normalized = text.toLowerCase().replace(/[\s_.-]/g, "")
+  if (SENSITIVE_TELEMETRY_KEY_PATTERNS.some((pattern) => normalized.includes(pattern))) return true
+  return telemetryKeySegments(text).some((segment) => SENSITIVE_TELEMETRY_KEY_SEGMENTS.includes(segment))
 }
 
 function boundedTelemetryString(value: string): string {

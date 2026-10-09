@@ -3,7 +3,7 @@ import type { AnyPgTable } from "drizzle-orm/pg-core"
 import { ConfigurationError, ValidationError } from "core/domain"
 import type { FencedScheduleClaim, ScheduleStore, FencedAdvanceScheduleArgs, FencedReleaseScheduleArgs, RenewScheduleLeaseArgs } from "core/execution"
 import type { ClaimDueSchedulesArgs, ScheduleClaim, ScheduleScope, OverlapPolicy, MisfirePolicy } from "core/execution"
-import { assertDurableIdentifier } from "core/execution"
+import { assertDurableIdentifier, scheduleOccurrencesConsumed } from "core/execution"
 import type { DrizzleColumnMap } from "../drizzle-shared/predicateCompiler"
 import type { DrizzleSessionLike } from "./drizzleRepository"
 import { getAffectedRows } from "./pgUtils"
@@ -67,6 +67,8 @@ export class DrizzleScheduleStore implements ScheduleStore {
       ...(schedules.effectiveFrom ? [or(isNull(schedules.effectiveFrom), lte(schedules.effectiveFrom, now))!] : []),
       ...(schedules.effectiveUntil ? [or(isNull(schedules.effectiveUntil), gt(schedules.effectiveUntil, now))!] : []),
       ...(schedules.remainingOccurrences ? [or(isNull(schedules.remainingOccurrences), gt(schedules.remainingOccurrences, 0))!] : []),
+      // A failed schedule backs off: its lease expiry holds the earliest retry time.
+      or(sql`COALESCE(${schedules.lastStatus!}, '') <> 'failed'`, isNull(schedules.leaseExpiresAt!), lte(schedules.leaseExpiresAt!, now))!,
     ]
     const selection: Record<string, unknown> = {
        id: schedules.id!, scope: schedules.scope!, jobType: schedules.jobType!, jobVersion: schedules.jobVersion!, tenantId: schedules.tenantId!,
@@ -117,7 +119,10 @@ export class DrizzleScheduleStore implements ScheduleStore {
     const schedules = this.config.columnMap.schedules
     if (!args.claimToken) return false
     const values: Record<string, unknown> = { nextRunAt: args.nextRunAt, lastRunAt: args.lastRunAt, lastStatus: args.lastStatus, lastError: args.lastError ?? null, leaseOwner: null, claimToken: null, leaseExpiresAt: null }
-    if (schedules.remainingOccurrences && args.lastStatus === "fired") values.remainingOccurrences = sql`CASE WHEN ${schedules.remainingOccurrences} IS NULL THEN NULL ELSE GREATEST(${schedules.remainingOccurrences} - 1, 0) END`
+    const consumed = scheduleOccurrencesConsumed(args)
+    if (schedules.remainingOccurrences && consumed > 0) values.remainingOccurrences = sql`CASE WHEN ${schedules.remainingOccurrences} IS NULL THEN NULL ELSE GREATEST(${schedules.remainingOccurrences} - ${consumed}::integer, 0) END`
+    // Failure backoff: no owner or token, so the row is unleased, but it is not claimable before retryAt.
+    if (args.lastStatus === "failed" && args.retryAt) values.leaseExpiresAt = args.retryAt
     const result = await this.db.update(this.config.schedulesTable).set(values).where(and(eq(schedules.id!, args.scheduleId), eq(schedules.leaseOwner!, args.workerId), eq(schedules.claimToken!, args.claimToken), eq(schedules.lastStatus!, "running"), gt(schedules.leaseExpiresAt!, sql`now()`)))
     return getAffectedRows(result) > 0
   }

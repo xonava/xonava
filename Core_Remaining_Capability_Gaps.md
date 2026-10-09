@@ -140,6 +140,23 @@ tested on real PostgreSQL 16, MySQL 8.4, and Miniflare D1.
 | `constraintMap` | Duplicate-key index names mapped to `ConflictError` `details.field`; driver messages and values never copied |
 | Execution history | `executionHistory: "required" \| "best_effort"` (MySQL defaults to `required`); claim dead-letters write history |
 
+## Fresh audit (resolved)
+
+A fresh, file-by-file audit of every core module found 12 high, 19 medium and
+about 14 low findings, each proven by a failing test. All are fixed; each fix
+has a regression test that failed first.
+
+| Area | Fixed |
+|---|---|
+| Authorization (ABAC) | Fields hidden by a read allowlist are no longer filterable/sortable/searchable (`fields` is now required); field writes are checked against the pre-image and the post-image; conditional denies block global capability checks; a deny or higher-tier policy whose condition is UNKNOWN (null) now matches on update/delete record paths, agreeing with the query scope (on create, UNKNOWN caused by a field the request omits is ignored, since the database supplies it; an explicit null still fails closed); equal-priority read allowlists intersect, independent of order; bundle/module mismatch is refused; policy date/datetime literals are strict RFC 3339 |
+| Operations | Nested post-commit work never throws after commit (with `deferredExecution: false`); a failing parent cancels and awaits running children before the transaction ends, and a joined child's persistence fails closed once the parent's `execute` ends (infrastructure sinks keep the raw transaction provider); the deferred-effect budget is counted once; `createOperationContext` no longer fixes a deadline at creation; `createOperationInvoker` works in request-bound environments; run contexts are disposed on every path |
+| Resilience | A retry never starts while a timed-out attempt still holds the bulkhead slot (`UNAVAILABLE`); caller aborts are prompt; `retry.maxAttempts` is capped at 100 with a 100 ms default backoff |
+| Jobs and schedules | Registry upcasters are honoured; unrunnable jobs are deferred without spending attempts and dead-lettered (`UNKNOWN_JOB_DEFINITION`) after 24 h; stalled jobs are fenced; the lease is held until the retry/dead-letter write commits; the definition's `maxAttempts` applies when the enqueue omits it; misfire `skip` fires once and overlap applies to every policy; `remainingOccurrences` bounds catch-up (`occurrencesFired`); failing schedules back off (5 s doubling to 15 min) instead of starving others |
+| Workflows | `wait`/`sleep` no longer consume step attempts; upcast variables are persisted with the new `workflowVersion`; shutdown hands back unstarted claims, commits steps that finish within the grace period, and fences abandoned code |
+| Persistence and events | Tenant-scoped batches reject outbox records scoped to another tenant or to platform/system; tenant-brand registration is no longer public; projected tenant reads work; consumers retry optimistic-concurrency conflicts; non-integer/invalid retry delays are normalised instead of becoming 0 ms |
+| Entities, queries, serialization | Application scope columns are protected and injected from the trusted scope; tenant and application entities refuse other request scopes; `queryLimits` compile into a valid query budget and unknown keys are rejected; explicit audit maps merge with classification redaction (stricter wins); cache prefixes/tags default to `module:namespace:name`; `custom` fields with durable codecs fail closed until codecs are applied by persistence; idempotency fingerprints the raw request; default sorts respect classification; spec constants are frozen |
+| Cache and infrastructure | `delete`/`set` fence in-flight lookups; correctness-critical `delete`/`has` surface backend errors; the 10,000-rule limit is reachable and errors are `ConfigurationError`; default rule conflict groups cannot collide; temporal page size follows `maxRevisions`; quota keys encode principal kind; telemetry redacts `jwt`, `bearer`, `session`, `signature`, and `auth`/`otp` segments; health checks accept a signal and deadline; resetting sequences must declare `periodFormat` (no silent default that could repeat identifiers or change an existing series' format) |
+
 ## Remaining
 
 - A code formatter is still not configured; style is enforced only by lint.
@@ -152,3 +169,12 @@ tested on real PostgreSQL 16, MySQL 8.4, and Miniflare D1.
 - Behaviour change: entities that declare no sortable/filterable/searchable columns now reject client sorting, filtering, and search.
 - Telemetry redaction is intentionally broad (`token` also matches keys such as `maxTokens`).
 - If an ABAC policy condition itself references a soft-delete field, plan-constrained soft deletes are refused, because the update would leave the policy's scope.
+- `custom` entity fields with durable codecs are rejected until the persistence mapping applies codecs on write and read.
+- Two entities that set the same explicit cache prefix are not detected (defaults are namespaced by module).
+- During a rolling deploy, workers on older code read the "use the definition's maxAttempts" sentinel as a very large budget for jobs enqueued without `maxAttempts`.
+- Behaviour change: tenant entities now refuse non-tenant request scopes; platform tooling that needs cross-tenant access must use a platform-scoped entity or an explicit operation.
+- Behaviour change: resetting sequences without an explicit `periodFormat` now fail validation (`ConfigurationError`) instead of formatting without the period.
+- Behaviour change: policy `datetime` literals must be RFC 3339 with an offset and `date` literals real `YYYY-MM-DD` dates; stored policies with looser literals stop loading.
+- Behaviour change: idempotency fingerprints cover the raw request (body, path, query), so a retry that differs only in fields the schema would strip is a conflict.
+- Unknown job definitions are held for at most 24 hours from their first deferral before being dead-lettered (`unknownDefinitionMaxDeferralMs`).
+- Drizzle adapters report any non-framework error escaping a transaction as `PersistenceError` (sanitising driver detail); business code should throw framework errors (for example `BusinessRuleError`) to surface its own failures.

@@ -8,12 +8,12 @@ import type {
   EntityDefinitionInput,
 } from "./defineEntity"
 import { ENTITY_DEFINITION_BRAND, isEntityDefinition, registerEntityDefinition } from "./brands"
-import { validateEntity } from "./validateEntity"
+import { assertEntityQueryLimits, validateEntity } from "./validateEntity"
 import { compileEntityLifecycle, type CompiledEntityLifecycle } from "./lifecycle"
 import { compileEntityScope, type CompiledEntityScope } from "./entityScope"
-import { DEFAULT_QUERY_BUDGET, type QueryBudget } from "../query/queryBudget"
-import { fieldsAllowedForPurpose, type DataClassification } from "../domain/dataClassification"
-import type { AuditFieldClassifications } from "../events/durability/audit"
+import { compileQueryBudget, type QueryBudget } from "../query/queryBudget"
+import { entityFieldClassifications, queryableFieldFilter } from "./queryableFields"
+import type { AuditFieldClassification, AuditFieldClassifications } from "../events/durability/audit"
 import type { SearchPort } from "../query/search"
 
 export const COMPILED_ENTITY_DEFINITION_BRAND: unique symbol = Symbol("core.compiledEntityDefinition")
@@ -60,7 +60,7 @@ export type CompiledEntityDefinition<
   readonly requiredRuntimeRequirements: EntityRuntimeRequirements
   readonly compiledScope: CompiledEntityScope
   readonly compiledPersistence: { readonly source: string; readonly access: "read-write" }
-  readonly compiledQuery: { readonly budget: QueryBudget; readonly filterableFields: readonly string[]; readonly sortableFields: readonly string[]; readonly searchableFields: readonly string[] }
+  readonly compiledQuery: { readonly budget: QueryBudget; readonly filterableFields: readonly string[]; readonly sortableFields: readonly string[]; readonly searchableFields: readonly string[]; readonly maxCount?: number; readonly maxSearchableColumns?: number }
   readonly compiledPagination: { readonly strategy: "offset" | "cursor"; readonly maxOffset?: number }
   readonly compiledAudit: { readonly enabled: boolean; readonly guarantee: "atomic" | "durable" | "best-effort"; readonly fieldClassification: AuditFieldClassifications }
   readonly compiledCache: { readonly enabled: boolean; readonly guarantee: "generation-qualified" | "none" }
@@ -113,6 +113,18 @@ function assertDependencies(name: string, requirements: EntityRuntimeRequirement
   if (missing.length > 0) throw new ConfigurationError(`Entity "${name}" is missing runtime dependencies: ${missing.join(", ")}.`)
 }
 
+const AUDIT_CLASSIFICATION_RANK: Readonly<Record<AuditFieldClassification, number>> = Object.freeze({ include: 0, mask: 1, omit: 2 })
+
+function mergeAuditClassifications(derived: AuditFieldClassifications, explicit: AuditFieldClassifications | undefined): AuditFieldClassifications {
+  const merged: AuditFieldClassifications = { ...derived }
+  for (const [field, classification] of Object.entries(explicit ?? {})) {
+    const current = merged[field]
+    // Unknown values are kept so validateEntity rejects them instead of hiding them.
+    if (current === undefined || !Object.hasOwn(AUDIT_CLASSIFICATION_RANK, classification) || AUDIT_CLASSIFICATION_RANK[classification] > AUDIT_CLASSIFICATION_RANK[current]) merged[field] = classification
+  }
+  return merged
+}
+
 export function compileEntity<
   TRow,
   TCreateBody = TRow,
@@ -136,26 +148,32 @@ export function compileEntity<
   const requirements = requiredRuntimeRequirements(definition as unknown as EntityDefinitionInput<never>)
   assertDependencies(definition.entity.name, requirements, options?.dependencies)
   const lifecycle = compileEntityLifecycle(definition.lifecycle)
-  const dataClassification = {
-    ...Object.fromEntries(Object.entries(definition.entity.fields as Record<string, { classification?: DataClassification }>).flatMap(([field, descriptor]) => descriptor.classification ? [[field, descriptor.classification]] : [])),
-    ...definition.dataClassification,
-  } as Record<string, DataClassification>
-  const auditFieldClassification = Object.fromEntries(Object.entries(dataClassification).map(([field, classification]) => [field, classification === "restricted" ? "omit" : classification === "confidential" ? "mask" : "include"]))
-  // Filter/sort are as revealing as search (oracle by predicate or ordering),
-  // so all three use the search classification ceiling.
-  const searchAllowed = fieldsAllowedForPurpose(dataClassification, "search")
-  const queryable = (field: string) => dataClassification[field] === undefined || searchAllowed.includes(field)
+  assertEntityQueryLimits(definition.entity.name, definition.queryLimits)
+  const dataClassification = entityFieldClassifications(definition.entity.fields, definition.dataClassification)
+  const derivedAuditClassification: AuditFieldClassifications = Object.fromEntries(Object.entries(dataClassification).map(([field, classification]) => [field, classification === "restricted" ? "omit" : classification === "confidential" ? "mask" : "include"]))
+  // An explicit audit map may tighten, but never weaken, classification-derived
+  // redaction: the stricter treatment wins per field (omit > mask > include).
+  const auditFieldClassification = mergeAuditClassifications(derivedAuditClassification, definition.audit === false ? undefined : definition.audit.fieldClassification)
+  const queryable = queryableFieldFilter(dataClassification)
   const compiledScope = compileEntityScope<TRow>(
     definition.entityScope.kind === "tenant"
       ? { kind: "tenant" as const, ...(definition.entity.tenantField ? { field: definition.entity.tenantField } : {}) }
       : definition.entityScope as import("./entityScope").EntityScopeDefinition<TRow>,
     definition.entity.tenantField,
   )
+  // The application partition column is structural scope, exactly like the
+  // tenant column: clients must never choose or move it.
+  const protectedFields = [...new Set([
+    ...(definition.entity.immutableFields ?? []),
+    ...lifecycle.protectedFields,
+    ...(compiledScope.kind === "application" && compiledScope.field ? [compiledScope.field] : []),
+  ])]
   const candidate = {
     ...definition,
+    ...(definition.audit === false || Object.keys(auditFieldClassification).length === 0 ? {} : { audit: { ...definition.audit, fieldClassification: auditFieldClassification } }),
     entity: {
       ...definition.entity,
-      immutableFields: [...new Set([...(definition.entity.immutableFields ?? []), ...lifecycle.protectedFields])] as (keyof TRow & string)[],
+      immutableFields: protectedFields as (keyof TRow & string)[],
       ...(lifecycle.activeRowFilter ? { activeRowFilter: lifecycle.activeRowFilter } : {}),
       deleteStrategy: lifecycle.deleteStrategy,
       ...(lifecycle.deletedAtField ? { deletedAtField: lifecycle.deletedAtField as keyof TRow & string } : {}),
@@ -167,13 +185,20 @@ export function compileEntity<
     requiredRuntimeRequirements: requirements,
     compiledScope,
     compiledPersistence: { source: definition.persistenceSource, access: "read-write" as const },
-    compiledQuery: { budget: { ...DEFAULT_QUERY_BUDGET, ...definition.queryLimits }, filterableFields: definition.filterableColumns.filter(queryable), sortableFields: definition.sortableColumns.filter(queryable), searchableFields: definition.searchableColumns.filter(queryable) },
+    compiledQuery: {
+      budget: compileQueryBudget(definition.queryLimits),
+      filterableFields: definition.filterableColumns.filter(queryable),
+      sortableFields: definition.sortableColumns.filter(queryable),
+      searchableFields: definition.searchableColumns.filter(queryable),
+      ...(definition.queryLimits?.maxCount !== undefined ? { maxCount: definition.queryLimits.maxCount } : {}),
+      ...(definition.queryLimits?.maxSearchableColumns !== undefined ? { maxSearchableColumns: definition.queryLimits.maxSearchableColumns } : {}),
+    },
     compiledPagination: { strategy: "offset" as const, ...(definition.queryLimits?.maxOffset !== undefined ? { maxOffset: definition.queryLimits.maxOffset } : {}) },
     compiledAudit: { enabled: definition.audit !== false, guarantee: definition.audit === false ? "best-effort" : definition.audit.auditGuarantee ?? "best-effort", fieldClassification: auditFieldClassification },
     compiledCache: { enabled: definition.cache !== false, guarantee: definition.cache !== false ? "generation-qualified" as const : "none" as const },
     compiledIdempotency: { required: definition.idempotency !== false, namespace: definition.idempotency === false ? `${definition.moduleKey}:${definition.entity.name}` : definition.idempotency.namespace ?? `${definition.moduleKey}:${definition.entity.name}` },
     compiledRateQuota: { routes: Object.keys(definition.rateLimit).sort() },
-    compiledFieldProtections: { immutable: [...new Set([...(definition.entity.immutableFields ?? []), ...lifecycle.protectedFields])], classified: dataClassification },
+    compiledFieldProtections: { immutable: protectedFields, classified: dataClassification },
     compiledLifecycle: lifecycle,
     requiredCapabilityManifest: requirements,
   }

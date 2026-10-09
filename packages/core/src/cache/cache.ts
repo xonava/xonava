@@ -261,6 +261,15 @@ export interface CacheTelemetry {
   onError?: (event: { operation: string; key?: string; error: unknown }) => void
 }
 
+/**
+ * A joinable single-flight lookup. `invalidated` lives on the entry itself, so
+ * fencing a key retains no state once its resolver settles.
+ */
+interface InFlightLookup {
+  readonly work: Promise<unknown>
+  readonly fence: { invalidated: boolean }
+}
+
 export class CacheService {
   private adapter: CacheAdapter
   private defaultTtlMs: number
@@ -272,7 +281,9 @@ export class CacheService {
    * will each independently resolve the same key. This is an optimization
    * boundary, never a correctness mechanism. A miss simply recomputes the value.
    */
-  private readonly inFlight = new Map<string, Promise<unknown>>()
+  private readonly inFlight = new Map<string, InFlightLookup>()
+  /** Unsettled resolver calls, including ones detached from `inFlight` by delete, set or clear. */
+  private activeResolvers = 0
   /** One process-local fence shared by every tag; cardinality does not depend on caller input. */
   private localFallbackEpoch = 0n
   /** Fences every resolver write and single-flight group started before a clear. */
@@ -325,9 +336,11 @@ export class CacheService {
 
     const inFlightKey = `${clearEpoch}:${storageKey}`
     const pending = this.inFlight.get(inFlightKey)
-    if (pending) return pending as Promise<T>
-    if (this.inFlight.size >= this.maxInFlight) throw new CacheOverloadError(this.maxInFlight)
+    if (pending) return pending.work as Promise<T>
+    if (this.activeResolvers >= this.maxInFlight) throw new CacheOverloadError(this.maxInFlight)
 
+    const fence = { invalidated: false }
+    const stale = () => fence.invalidated || this.localClearEpoch !== clearEpoch
     // Defer resolver invocation until after `work` is installed below. This
     // makes the bound and same-key coalescing hold even for re-entrant resolvers.
     const work = Promise.resolve().then(async () => {
@@ -336,10 +349,18 @@ export class CacheService {
         const currentGeneration = await this.getTagGeneration(tags)
         if (currentGeneration !== generation) return value
       }
-      if (this.localClearEpoch !== clearEpoch) return value
+      // A delete, set or clear after the resolver started means `value` may
+      // predate the change; never write it back.
+      if (stale()) return value
       // A resolver may have started before a write invalidated its tags. Its
       // generation-qualified key is intentionally no longer readable.
       await this.write(storageKey, value, effectiveTtlMs)
+      if (stale()) {
+        // The invalidation raced the backend write and may have landed first.
+        // Evicting is always safe; leaving the older value behind is not.
+        await this.remove(storageKey)
+        return value
+      }
 
       for (const tag of tags) {
         try {
@@ -352,11 +373,14 @@ export class CacheService {
       return value
     })
 
-    this.inFlight.set(inFlightKey, work)
+    const lookup: InFlightLookup = { work, fence }
+    this.inFlight.set(inFlightKey, lookup)
+    this.activeResolvers++
     try {
       return await work
     } finally {
-      if (this.inFlight.get(inFlightKey) === work) this.inFlight.delete(inFlightKey)
+      this.activeResolvers--
+      if (this.inFlight.get(inFlightKey) === lookup) this.inFlight.delete(inFlightKey)
     }
   }
 
@@ -379,6 +403,7 @@ export class CacheService {
     assertCacheKey(key)
     const effectiveTtlMs = ttlMs ?? this.defaultTtlMs
     assertPositiveSafeInteger(effectiveTtlMs, "Cache TTL", ValidationError)
+    this.detachInFlight(key)
     return this.write(key, value, effectiveTtlMs)
   }
 
@@ -394,10 +419,18 @@ export class CacheService {
 
   async delete(key: string): Promise<boolean> {
     assertCacheKey(key)
+    // Fence before awaiting the adapter, as clear() does, so a lookup that
+    // started before this delete can neither repopulate the key nor be joined.
+    this.detachInFlight(key)
+    return this.remove(key)
+  }
+
+  private async remove(key: string): Promise<boolean> {
     try {
       return await this.adapter.delete(key)
     } catch (error) {
       this.reportError("delete", key, error)
+      if (this.correctnessCritical) throw error
       return false
     }
   }
@@ -408,8 +441,23 @@ export class CacheService {
       return await this.adapter.has(key)
     } catch (error) {
       this.reportError("has", key, error)
+      if (this.correctnessCritical) throw error
       return false
     }
+  }
+
+  /**
+   * Marks the current single-flight lookup for `key` stale and removes it from
+   * the join map. Its waiters still settle with the resolver's result, its
+   * write is skipped, and new callers start a fresh lookup. Lookups from an
+   * earlier clear epoch are already fenced by `localClearEpoch`.
+   */
+  private detachInFlight(key: string): void {
+    const inFlightKey = `${this.localClearEpoch}:${key}`
+    const lookup = this.inFlight.get(inFlightKey)
+    if (!lookup) return
+    lookup.fence.invalidated = true
+    this.inFlight.delete(inFlightKey)
   }
 
   async clear(): Promise<void> {

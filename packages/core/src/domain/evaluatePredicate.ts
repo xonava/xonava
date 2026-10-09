@@ -44,7 +44,12 @@ function toComparable(value: unknown): Comparable | null {
 /** RFC 3339 full-date or date-time; host date parsers are too lenient to be portable. */
 const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2})))?$/
 
-function parseInstant(value: string): Comparable | null {
+/**
+ * Parse a strict RFC 3339 full-date (UTC midnight) or offset-bearing date-time
+ * to epoch milliseconds. Out-of-calendar dates and out-of-range clock fields
+ * are rejected instead of rolling over; returns null when invalid.
+ */
+export function parseRfc3339Timestamp(value: string): number | null {
   const match = RFC3339.exec(value)
   if (!match) return null
   const [, year, month, day, hour = "0", minute = "0", second = "0", offsetHour = "0", offsetMinute = "0"] = match
@@ -52,7 +57,12 @@ function parseInstant(value: string): Comparable | null {
   if (date.getUTCFullYear() !== Number(year) || date.getUTCMonth() !== Number(month) - 1 || date.getUTCDate() !== Number(day)) return null
   if (Number(hour) > 23 || Number(minute) > 59 || Number(second) > 59 || Number(offsetHour) > 23 || Number(offsetMinute) > 59) return null
   const time = Date.parse(value.length === 10 ? `${value}T00:00:00Z` : value)
-  return Number.isNaN(time) ? null : { kind: "instant", value: time }
+  return Number.isNaN(time) ? null : time
+}
+
+function parseInstant(value: string): Comparable | null {
+  const time = parseRfc3339Timestamp(value)
+  return time === null ? null : { kind: "instant", value: time }
 }
 
 /** Unicode code-point order, identical to UTF-8 byte order and portable across languages. */

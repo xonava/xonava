@@ -3,6 +3,31 @@ import type { CrudRouteKey, EntityDefinitionInput, EntityRouteConfig } from "./d
 import type { RateLimitConfig, RateLimitPolicy } from "../rate-limit/rateLimit"
 import { isRuntimeCapability } from "../bootstrap/runtimeCapabilities"
 import { assertCapabilityConfigValid, resolveCapabilityKey } from "./capabilityCheck"
+import { entityFieldClassifications, queryableFieldFilter } from "./queryableFields"
+import { DEFAULT_QUERY_BUDGET } from "../query/queryBudget"
+
+/** Every key an entity may declare in `queryLimits`; anything else is a configuration error. */
+const ENTITY_QUERY_LIMIT_KEYS: ReadonlySet<string> = new Set([
+  ...Object.keys(DEFAULT_QUERY_BUDGET),
+  "maxSearchableColumns",
+  "maxOffset",
+  "maxCount",
+])
+
+export function assertEntityQueryLimits(entityName: string, limits: unknown): void {
+  if (limits === undefined) return
+  if (!limits || typeof limits !== "object" || Array.isArray(limits)) {
+    throw new ConfigurationError(`Entity "${entityName}" has invalid query limits.`)
+  }
+  for (const [name, value] of Object.entries(limits)) {
+    if (!ENTITY_QUERY_LIMIT_KEYS.has(name)) {
+      throw new ConfigurationError(`Entity "${entityName}" declares unknown query limit ${name}.`)
+    }
+    if (!Number.isSafeInteger(value) || (value as number) <= 0) {
+      throw new ConfigurationError(`Entity "${entityName}" has an invalid query limit for ${name}.`)
+    }
+  }
+}
 
 function routeRequires(route: CrudRouteKey, routes: EntityRouteConfig) {
   return routes[route] !== false
@@ -79,7 +104,15 @@ export function validateEntity<
     if (desc.type === "integer" && desc.format !== undefined) throw new ConfigurationError(`Entity "${entityName}" integer field "${fieldName}" cannot declare a string format.`)
     if (desc.type === "decimal" && (!Number.isSafeInteger(desc.precision) || !Number.isSafeInteger(desc.scale) || Number(desc.precision) < 1 || Number(desc.scale) < 0 || Number(desc.scale) > Number(desc.precision))) throw new ConfigurationError(`Entity "${entityName}" has invalid decimal precision/scale for "${fieldName}".`)
     if (desc.type === "enum" && (!Array.isArray(desc.enumValues) || desc.enumValues.length === 0 || new Set(desc.enumValues).size !== desc.enumValues.length || desc.enumValues.some(value => typeof value !== "string" || value.length === 0))) throw new ConfigurationError(`Entity "${entityName}" has invalid enum values for "${fieldName}".`)
-    if (desc.type === "custom" && (typeof desc.durableCodec !== "string" || !(input.durableCodecs && Object.hasOwn(input.durableCodecs, desc.durableCodec) && input.durableCodecs[desc.durableCodec]))) throw new ConfigurationError(`Entity "${entityName}" custom field "${fieldName}" requires a registered durable codec.`)
+    if (desc.type === "custom") {
+      const codec = typeof desc.durableCodec === "string" && input.durableCodecs && Object.hasOwn(input.durableCodecs, desc.durableCodec)
+        ? input.durableCodecs[desc.durableCodec] as { encode?: unknown; decode?: unknown } | undefined
+        : undefined
+      if (!codec || typeof codec.encode !== "function" || typeof codec.decode !== "function") throw new ConfigurationError(`Entity "${entityName}" custom field "${fieldName}" requires a registered durable codec.`)
+      // Fail closed: no persistence mapping applies durable codecs on write or
+      // read yet, so a custom field would silently persist unencoded values.
+      throw new ConfigurationError(`Entity "${entityName}" custom field "${fieldName}" is not yet supported: durable codecs are not applied by the persistence mapping.`)
+    }
     if (desc.classification !== undefined && !["public", "internal", "confidential", "restricted"].includes(String(desc.classification))) throw new ConfigurationError(`Entity "${entityName}" has invalid data classification for "${fieldName}".`)
   }
 
@@ -91,6 +124,7 @@ export function validateEntity<
       throw new ConfigurationError(`Entity "${entityName}" requires version field "${String(input.entity.versionField)}" to have type "number".`)
     }
   }
+  if (input.entityScope.kind === "application") requireField(input.entityScope.field, "application scope field")
   validateFieldList(input.entity.immutableFields, "immutable fields")
   validateFieldList(input.searchableColumns, "searchable")
   validateFieldList(input.filterableColumns, "filterable")
@@ -134,9 +168,13 @@ export function validateEntity<
   if (input.listDefaults) {
     if (input.listDefaults.sortColumn !== undefined) {
       requireField(input.listDefaults.sortColumn, "default sort")
-      if (input.sortableColumns && !input.sortableColumns.includes(input.listDefaults.sortColumn)) {
+      // The default sort is applied without the caller asking, so it must obey
+      // the same classification ceiling as caller-chosen sorts; otherwise
+      // ordering and cursor values leak hidden fields.
+      const queryable = queryableFieldFilter(entityFieldClassifications(fields, input.dataClassification))
+      if ((input.sortableColumns && !input.sortableColumns.includes(input.listDefaults.sortColumn)) || !queryable(input.listDefaults.sortColumn)) {
         throw new ConfigurationError(
-          `Entity "${entityName}" default sort column "${input.listDefaults.sortColumn}" must be declared in sortableColumns.`,
+          `Entity "${entityName}" default sort column "${input.listDefaults.sortColumn}" must be declared in sortableColumns and be queryable under its data classification.`,
         )
       }
     }
@@ -175,7 +213,6 @@ export function validateEntity<
       `Entity "${input.entity.name}" requests tenant scoping but declares no tenantField.`,
     )
   }
-  if (input.entityScope.kind === "application") requireField(input.entityScope.field, "application scope field")
 
   // Mandatory OCC for mutating routes (P1-03): update/delete routes run
   // read-then-write authorization; without a concrete numeric version field
@@ -209,11 +246,7 @@ export function validateEntity<
       throw new ConfigurationError(`Entity "${entityName}" has an invalid audit classification for "${field}".`)
     }
   }
-  for (const [name, value] of Object.entries(input.queryLimits ?? {})) {
-    if (!Number.isSafeInteger(value) || value <= 0) {
-      throw new ConfigurationError(`Entity "${entityName}" has an invalid query limit for ${name}.`)
-    }
-  }
+  assertEntityQueryLimits(entityName, input.queryLimits)
   if (input.searchStrategy && !["contains", "prefix", "fullText"].includes(input.searchStrategy.kind)) {
     throw new ConfigurationError(`Entity "${entityName}" has an invalid search strategy.`)
   }

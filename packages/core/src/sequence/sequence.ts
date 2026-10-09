@@ -36,6 +36,11 @@ export function validateSequenceDefinition(value: SequenceDefinition): Validated
   const timeZone = value.timeZone ?? "UTC"
   if (typeof timeZone !== "string" || timeZone.length > 64) throw new ConfigurationError("Sequence time zone is invalid")
   zonedFormatter(timeZone)
+  // A resetting counter restarts at 1 each period, so its formatted values repeat unless they carry the period.
+  // The format is never defaulted for such a counter: a silent default would either repeat identifiers or change
+  // an existing series' format on upgrade. `"none"` is an explicit choice (the period is shown elsewhere).
+  if (reset !== "never" && value.periodFormat === undefined)
+    throw new ConfigurationError("A resetting sequence must declare periodFormat; use \"compact\" or \"iso\" to keep formatted values unique, or \"none\" if the period is carried elsewhere")
   const periodFormat = value.periodFormat ?? "none"
   if (!["none", "compact", "iso"].includes(periodFormat)) throw new ConfigurationError("Sequence period format is invalid")
   if (periodFormat !== "none" && reset === "never") throw new ConfigurationError("A sequence without a reset period has no period to embed")

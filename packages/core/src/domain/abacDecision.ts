@@ -1,6 +1,6 @@
 import { type PredicateNode } from "./predicate"
 import { resolveTieredDecision } from "./abacTierDecision"
-import { evaluatePredicate } from "./evaluatePredicate"
+import { evaluatePredicateTruth } from "./evaluatePredicate"
 import { buildActionScope } from "./abacReadScope"
 import { simplifyPredicate, isAlwaysFalse, isAlwaysTrue } from "./predicateSimplifier"
 import type { NormalizedAbacPolicy, AbacPolicyBundle } from "./abacTypes"
@@ -26,8 +26,19 @@ export interface AbacDecision {
   }>
 }
 
-function policyMatchesRecord(policy: NormalizedAbacPolicy, record: Record<string, unknown>): boolean {
-  return evaluatePredicate(record, policy.compiledConditions)
+/** Three-valued match (`null` is UNKNOWN) so record decisions agree with the query scope. */
+function policyMatchesRecord(policy: NormalizedAbacPolicy, record: Record<string, unknown>): boolean | null {
+  return evaluatePredicateTruth(record, policy.compiledConditions)
+}
+
+/**
+ * Record-less match: only an unconditional allow can grant, while any deny
+ * that is not statically false is assumed to match (fail closed), because some
+ * record or context the global grant covers may satisfy it.
+ */
+function policyMatchesGlobally(policy: NormalizedAbacPolicy): boolean {
+  const simplified = simplifyPredicate(policy.compiledConditions)
+  return policy.effect === "allow" ? isAlwaysTrue(simplified) : !isAlwaysFalse(simplified)
 }
 
 export function toEvidence(policy: NormalizedAbacPolicy): AbacDecision["evidence"][number] {
@@ -74,10 +85,7 @@ export function evaluateGlobalAbacCapability(args: {
   bundle: AbacPolicyBundle
   capability: string
 }): AbacDecision {
-  const unconditional = args.bundle.policies.filter(
-    (p) => isAlwaysTrue(simplifyPredicate(p.compiledConditions)),
-  )
-  const relevant = unconditional.filter(
+  const relevant = args.bundle.policies.filter(
     (p) => p.moduleKey === args.bundle.moduleKey && p.payload.capabilities.includes(args.capability),
   )
 
@@ -85,7 +93,7 @@ export function evaluateGlobalAbacCapability(args: {
     policies: relevant,
     getPriority: (p) => p.priority,
     getEffect: (p) => p.effect,
-    matches: () => true,
+    matches: policyMatchesGlobally,
     defaultEffect: "deny",
   })
 

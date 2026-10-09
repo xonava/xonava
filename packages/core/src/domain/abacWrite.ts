@@ -1,4 +1,4 @@
-import { evaluatePredicate } from "./evaluatePredicate"
+import { evaluateWriteConditionTruth } from "./abacWriteMatch"
 import { ForbiddenError } from "./errors"
 import { resolveTieredDecision } from "./abacTierDecision"
 import { assertPolicyWritableFields } from "./fieldAccess"
@@ -24,8 +24,12 @@ function policyAppliesToAction(policy: NormalizedAbacPolicy, action: string): bo
   return policy.payload.actions.includes(action)
 }
 
-function policyMatchesRecord(policy: NormalizedAbacPolicy, record: Record<string, unknown>): boolean {
-  return evaluatePredicate(record, policy.compiledConditions)
+/**
+ * Three-valued match (`null` is UNKNOWN) so write decisions agree with the
+ * query scope; see evaluateWriteConditionTruth for the create exception.
+ */
+function policyMatchesRecord(policy: NormalizedAbacPolicy, record: Record<string, unknown>, action: string): boolean | null {
+  return evaluateWriteConditionTruth(record, policy.compiledConditions, action)
 }
 
 export function evaluateWriteAccessForRecordDetailed(args: {
@@ -42,7 +46,7 @@ export function evaluateWriteAccessForRecordDetailed(args: {
     policies: relevant,
     getPriority: (p) => p.priority,
     getEffect: (p) => p.effect,
-    matches: (p) => policyMatchesRecord(p, args.record),
+    matches: (p) => policyMatchesRecord(p, args.record, args.action),
     defaultEffect: "deny",
   })
 
@@ -90,10 +94,18 @@ export function evaluateWriteAccessForRecordDetailed(args: {
   }
 }
 
+/**
+ * Enforce a write against the post-image `record`. For updates, callers pass
+ * the durable pre-image as `existing`: the field-write tier and the record
+ * decision are then required to permit the write under BOTH images, so a patch
+ * cannot escape a restricting policy by changing the attributes its condition
+ * reads.
+ */
 export function enforceAbacWrite(args: {
   bundle: AbacPolicyBundle
   action: string
   record: Record<string, unknown>
+  existing?: Record<string, unknown>
   changedFields?: string[]
 }): void {
   assertVerifiedAbacBundle(args.bundle)
@@ -103,24 +115,28 @@ export function enforceAbacWrite(args: {
       moduleKey: args.bundle.moduleKey,
       action: args.action,
       record: args.record,
+      ...(args.existing !== undefined ? { existing: args.existing } : {}),
       ...(args.changedFields !== undefined ? { changedFields: args.changedFields } : {}),
     })
   }
 
-  const evaluation = evaluateWriteAccessForRecordDetailed({
-    policies: args.bundle.policies,
-    moduleKey: args.bundle.moduleKey,
-    action: args.action,
-    record: args.record,
-  })
+  const images = args.existing !== undefined ? [args.existing, args.record] : [args.record]
+  for (const image of images) {
+    const evaluation = evaluateWriteAccessForRecordDetailed({
+      policies: args.bundle.policies,
+      moduleKey: args.bundle.moduleKey,
+      action: args.action,
+      record: image,
+    })
 
-  if (evaluation.allowed) return
+    if (evaluation.allowed) continue
 
-  throw new ForbiddenError(evaluation.message, {
-    reasonCode: evaluation.reasonCode,
-    moduleKey: args.bundle.moduleKey,
-    action: args.action,
-    policy: evaluation.policyMeta,
-    evidence: evaluation.evidence,
-  })
+    throw new ForbiddenError(evaluation.message, {
+      reasonCode: evaluation.reasonCode,
+      moduleKey: args.bundle.moduleKey,
+      action: args.action,
+      policy: evaluation.policyMeta,
+      evidence: evaluation.evidence,
+    })
+  }
 }

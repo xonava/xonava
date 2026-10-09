@@ -1,26 +1,16 @@
 import { evaluateGlobalAbacCapability, evaluateAbacRecordCapability } from "./abacDecision"
-import { isAlwaysTrue, simplifyPredicate } from "./predicateSimplifier"
 import type { AbacPolicyBundle } from "./abacTypes"
 
 /**
  * Check a capability as a GLOBAL grant.
- * Only policies with unrestricted conditions can grant global capabilities.
- * A conditioned capability policy cannot grant a global capability.
+ * Only policies with unrestricted conditions can grant global capabilities,
+ * while any relevant deny, conditional or not, blocks the grant in its tier.
  */
 export function hasGlobalAbacCapability(args: {
   bundle: AbacPolicyBundle
   capabilityKey: string
 }): boolean {
-  const unconditional = args.bundle.policies.filter((p) => {
-    return isAlwaysTrue(simplifyPredicate(p.compiledConditions))
-  })
-
-  const scopedBundle: AbacPolicyBundle = {
-    ...args.bundle,
-    policies: unconditional,
-  }
-
-  return evaluateGlobalAbacCapability({ bundle: scopedBundle, capability: args.capabilityKey }).allowed
+  return evaluateGlobalAbacCapability({ bundle: args.bundle, capability: args.capabilityKey }).allowed
 }
 
 /**

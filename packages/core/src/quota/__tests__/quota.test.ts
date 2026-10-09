@@ -44,3 +44,15 @@ describe("quota validation", () => {
     expect(Object.isFrozen(decision)).toBe(true)
   })
 })
+
+describe("quota subject principal kinds", () => {
+  it("rejects principal kinds outside the declared principal kinds so keys cannot collide", () => {
+    const forged = { scope: subject.scope, principal: { id: "b", kind: "human:a" } }
+    const genuine = { scope: subject.scope, principal: { id: "a:b", kind: "human" as const } }
+    expect(() => encodeQuotaSubject(forged as never)).toThrow(ValidationError)
+    expect(encodeQuotaSubject(genuine)).toContain("human:a%3Ab")
+    for (const kind of ["human", "service", "system", "anonymous"] as const) {
+      expect(encodeQuotaSubject({ scope: subject.scope, principal: { id: "p", kind } })).toContain(`${kind}:p:`)
+    }
+  })
+})

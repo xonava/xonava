@@ -1,5 +1,6 @@
 import type { ValidationSchema } from "core/kernel"
 import { createOperationContext } from "core/operation"
+import { CanonicalJsonError } from "core/serialization"
 import { enforceRateLimit, type RateLimitConfig, type RateLimitStore } from "core/rate-limit"
 import { isAtomicBatchIdempotencyPort, isDurableIdempotencyPort, isTransactionalIdempotencyPort, type IdempotencyCommitItem, type IdempotencyResourceIdentity } from "core/events"
 import type { AbacWriteEnforcer } from "core/security"
@@ -62,23 +63,57 @@ function getCookieValue(name: string, request: Request): string | null {
   return null
 }
 
+/**
+ * The client-sent material behind a validated request. Idempotency identity is
+ * derived from this JSON-shaped input, never from schema output, which may hold
+ * Dates, undefined members, or other values with no canonical JSON form.
+ */
+type RawClientMutation = {
+  params?: unknown
+  query?: unknown
+  body?: unknown
+}
+
 async function enrichValidatedContext(args: {
   request: Request
   context?: { params?: Promise<unknown> }
   validation?: ScopedFrameworkValidation
-}): Promise<ScopedFrameworkValidatedContext> {
+}): Promise<{ validated: ScopedFrameworkValidatedContext; raw: RawClientMutation }> {
+  const raw: RawClientMutation = {}
+  const rawParams = args.context?.params ? await args.context.params : undefined
   const validatedParams = args.validation?.params
-    ? args.validation.params.parse(args.context?.params ? await args.context.params : undefined)
+    ? args.validation.params.parse(rawParams)
     : undefined
+  if (args.validation?.params && rawParams !== undefined) raw.params = rawParams
 
   const queryObject = parseUniqueQueryParameters(args.request)
   const validatedQuery = args.validation?.query
     ? args.validation.query.parse(queryObject)
     : undefined
+  if (args.validation?.query) raw.query = queryObject
 
-  const validatedBody = await parseJsonBodySafely(args.request, args.validation?.body, args.validation?.bodyMaxBytes)
+  // Wrap the body schema to observe the parsed JSON before validation.
+  const bodySchema = args.validation?.body
+  const capturingSchema: ValidationSchema | undefined = bodySchema
+    ? {
+        parse: (value: unknown) => { raw.body = value; return bodySchema.parse(value) },
+        parseAsync: (value: unknown) => { raw.body = value; return bodySchema.parseAsync(value) },
+      }
+    : undefined
+  const validatedBody = await parseJsonBodySafely(args.request, capturingSchema, args.validation?.bodyMaxBytes)
 
-  return { validatedParams, validatedQuery, validatedBody }
+  return { validated: { validatedParams, validatedQuery, validatedBody }, raw }
+}
+
+async function fingerprintClientMutation(value: unknown): Promise<string> {
+  try {
+    return await fingerprintJson(value)
+  } catch (error) {
+    // The client controls this material; anything without a canonical JSON
+    // form (e.g. a "__proto__" member or an unsafe integer) is a bad request.
+    if (error instanceof CanonicalJsonError) throw new ValidationError("Request cannot be used with an Idempotency-Key")
+    throw error
+  }
 }
 
 function resolveSessionRequired(scope: CrudScopeConfig): boolean {
@@ -187,7 +222,7 @@ export function createFrameworkWriteHandler<
         )
       }
 
-      const validated = await enrichValidatedContext({ request, ...(context ? { context } : {}), ...(args.validation ? { validation: args.validation } : {}) })
+      const { validated, raw: rawClientMutation } = await enrichValidatedContext({ request, ...(context ? { context } : {}), ...(args.validation ? { validation: args.validation } : {}) })
       const validatedParams = validated.validatedParams && typeof validated.validatedParams === "object"
         ? Object.fromEntries(Object.entries(validated.validatedParams as Record<string, unknown>).filter((entry): entry is [string, string] => typeof entry[1] === "string"))
         : undefined
@@ -333,14 +368,16 @@ export function createFrameworkWriteHandler<
            const idempotencyRequest = {
              scope,
              key: idempotencyKey,
-            fingerprint: await fingerprintJson({
+            fingerprint: await fingerprintClientMutation({
               moduleKey: args.moduleKey,
               action: args.action,
               securityContext,
+              // What the client sent (raw JSON body, path params, query). Raw
+              // equality implies validated equality for a deterministic schema.
               clientMutation: {
-                ...(validated.validatedParams !== undefined ? { params: validated.validatedParams } : {}),
-                ...(validated.validatedQuery !== undefined ? { query: validated.validatedQuery } : {}),
-                ...(validated.validatedBody !== undefined ? { body: validated.validatedBody } : {}),
+                ...(rawClientMutation.params !== undefined ? { params: rawClientMutation.params } : {}),
+                ...(rawClientMutation.query !== undefined ? { query: rawClientMutation.query } : {}),
+                ...(rawClientMutation.body !== undefined ? { body: rawClientMutation.body } : {}),
               },
               // Semantic concurrency preconditions must be part of the identity.
               preconditions: {

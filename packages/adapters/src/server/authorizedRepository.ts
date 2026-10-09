@@ -106,9 +106,12 @@ export function createAuthorizedRepository<TRow extends Record<string, unknown>,
       const filterFields = collectPredicateFields(opts?.filter)
       const sortFields = (opts?.sort ?? []).map((spec) => spec.field)
       if (args.bundle) {
+        // Every referenceable field is passed so fields outside a read
+        // allowlist (omitted from responses) are query-denied too.
         const queryDenials = resolveFieldQueryDenials({
           policies: args.bundle.policies,
           moduleKey: args.bundle.moduleKey,
+          fields: [...new Set([...Object.keys(args.bundle.fieldCatalog), ...Object.keys(args.entity.fields ?? {})])],
         })
         assertFieldQueryAccess({ denied: queryDenials.filter, fields: filterFields, mode: "filter" })
         assertFieldQueryAccess({ denied: queryDenials.sort, fields: sortFields, mode: "sort" })
@@ -243,9 +246,12 @@ export function createAuthorizedRepository<TRow extends Record<string, unknown>,
       assertEntityVersion(currentVersion)
 
       const candidate = { ...existing.rows[0], ...safePatch } as Record<string, unknown>
+      // Both images must permit the write so a patch cannot flip the
+      // attributes a restricting policy's condition reads.
       args.authorizer.assertWrite({
         action: "update",
         record: candidate,
+        existing: existing.rows[0],
         changedFields: Object.keys(safePatch),
       })
 

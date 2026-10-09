@@ -75,6 +75,10 @@ export function assertFrameworkAuthorization(input: FrameworkAuthorizationInput)
   }
 
   assertVerifiedAbacBundle(input.bundle)
+  // A verified bundle for another module must never authorize this one.
+  if (input.bundle.moduleKey !== input.moduleKey) {
+    throw new ForbiddenError("The ABAC policy bundle does not belong to this module")
+  }
   const authorizer = createAbacAuthorizer(input.bundle)
   if (input.evaluateAbacAction !== false) authorizer.assertCollectionAction(input.action)
   if (input.capabilityKey) authorizer.assertGlobalCapability(input.capabilityKey)

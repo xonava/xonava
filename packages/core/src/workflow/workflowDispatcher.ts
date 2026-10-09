@@ -1,6 +1,6 @@
 import { systemClock, type TimerClock } from "../kernel/clock"
 import type { WorkflowFence, WorkflowStore } from "../workflow/store"
-import { applyWorkflowStep, completeCompensation, createWorkflowFailure, failCompensation, failWorkflowStep, isStalledWorkflowAttempt, markWorkflowAttemptStalled, scheduleWorkflowRetry } from "./workflowStateMachine"
+import { applyWorkflowStep, completeCompensation, createWorkflowFailure, failCompensation, failWorkflowStep, isStalledWorkflowAttempt, markWorkflowAttemptStalled, releaseWorkflowClaim, scheduleWorkflowRetry } from "./workflowStateMachine"
 import { createWorkflowContext } from "./workflowContext"
 import { WorkflowDefinitionError, WorkflowLeaseLostError, WorkflowStateError, WorkflowVersionError } from "./workflowErrors"
 import type { WorkflowRegistry } from "./workflowRegistry"
@@ -23,7 +23,9 @@ export type WorkflowDispatcherClock = TimerClock
  * - advanced / compensated: a step or compensation step committed its transition
  * - retried: a retry was scheduled with backoff
  * - failed: a failure transition was committed, or the claim could not run
- * - deferred: this worker has no definition for the instance's version and handed it back
+ * - deferred: the claim was handed back without consuming an attempt: this
+ *   worker has no definition for the instance's version, or the dispatch was
+ *   aborted before the step ran (or the step stopped cooperatively)
  * - stalled: a timed-out step ignored cancellation; the attempt was recorded as
  *   stalled (TIMEOUT) and re-claimable only after one lease duration
  * - leaseLost: the claim was lost to another worker
@@ -105,6 +107,10 @@ function startLeaseLifecycle(args: { store: WorkflowStore; fence: WorkflowFence;
   }
   const assertHeld = (): Promise<void> => {
     if (leaseLost) return Promise.reject(new WorkflowLeaseLostError())
+    // Once the claim is finished (committed, abandoned, or the dispatcher
+    // returned), step code that is still running must not pass the fence or
+    // keep the lease alive.
+    if (stopped) return Promise.reject(new WorkflowLeaseLostError("Workflow claim is no longer active"))
     if (inFlight) return inFlight
     const operation = (async (): Promise<void> => {
       let timeout: unknown
@@ -202,11 +208,24 @@ function waitForSettlement(work: Promise<unknown>, isSettled: () => boolean, ms:
   })
 }
 
+/**
+ * Hands back a claim whose step never started because the dispatch is shutting
+ * down, returning the attempt counted at claim time. Best effort: if the write
+ * fails the lease simply lapses.
+ */
+async function releaseUnstartedClaim(store: WorkflowStore, instance: WorkflowInstance, fence: WorkflowFence, now: () => Date): Promise<ClaimOutcome> {
+  try {
+    return await store.commit(fence, releaseWorkflowClaim(instance, validNow(now))) ? "deferred" : "lease-lost"
+  } catch {
+    return "failed"
+  }
+}
+
 async function runClaim(args: WorkflowDispatchOptions, instance: WorkflowInstance, fence: WorkflowFence, clock: WorkflowDispatcherClock, now: () => Date): Promise<ClaimOutcome> {
   const controller = new AbortController()
   const parent = args.signal
   const onParentAbort = (): void => controller.abort(parent?.reason)
-  if (parent?.aborted) return "failed"
+  if (parent?.aborted) return releaseUnstartedClaim(args.store, instance, fence, now)
   parent?.addEventListener("abort", onParentAbort, { once: true })
   const timeoutMs = args.stepTimeoutMs ?? DEFAULT_WORKFLOW_STEP_TIMEOUT_MS
   const graceMs = args.cancellationGraceMs ?? DEFAULT_WORKFLOW_CANCELLATION_GRACE_MS
@@ -238,6 +257,10 @@ async function runClaim(args: WorkflowDispatchOptions, instance: WorkflowInstanc
   let step: WorkflowStepDefinition | undefined
   let work: Promise<unknown> | undefined
   let workSettled = false
+  let workOutcome: { readonly ok: true; readonly value: unknown } | { readonly ok: false } | undefined
+  // The instance the step's transition is applied to: carries the decoded
+  // (upcast) variables and the definition version they belong to.
+  let current: WorkflowInstance = instance
 
   const failOrRetry = async (retryable: boolean, code: string, message: unknown): Promise<ClaimOutcome> => {
     const at = validNow(now)
@@ -247,6 +270,17 @@ async function runClaim(args: WorkflowDispatchOptions, instance: WorkflowInstanc
     }
     const failure = createWorkflowFailure({ code: retryable ? "RETRY_EXHAUSTED" : code, message: retryable ? `${code}: ${typeof message === "string" ? message : message instanceof Error ? message.message : "retry exhausted"}` : message, step: stepName, phase, attempt, at })
     return commit(phase === "compensate" ? failCompensation(instance, failure, at) : failWorkflowStep(instance, failure, at), "failed")
+  }
+
+  const finish = async (result: unknown): Promise<ClaimOutcome> => {
+    if (phase === "compensate") return await commit(completeCompensation(instance, validNow(now)), "compensated")
+    if (!isStepResult(result)) return await failOrRetry(false, "INVALID_STEP_RESULT", "Workflow step returned an invalid result")
+    if (result.kind === "retry") return await failOrRetry(true, "STEP_RETRY", result.error)
+    if (result.kind === "fail") return await failOrRetry(false, "STEP_FAILED", result.error)
+    // Step output was produced against the decoded variables of the running
+    // definition; persist them together with that definition's version so a
+    // later claim never re-upcasts a mix of old and new shapes.
+    return await commit(applyWorkflowStep(current, result, validNow(now)), "advanced")
   }
 
   try {
@@ -265,6 +299,7 @@ async function runClaim(args: WorkflowDispatchOptions, instance: WorkflowInstanc
       }
       return await failOrRetry(false, "DECODE_FAILED", error)
     }
+    current = { ...instance, workflowVersion: definition.version, variables }
     step = definition.steps[stepName]
     if (!step || (phase === "compensate" && typeof step.compensate !== "function")) {
       return await failOrRetry(false, "STEP_NOT_DEFINED", `Workflow ${phase === "compensate" ? "compensation " : ""}step is not defined: ${stepName}`)
@@ -290,21 +325,15 @@ async function runClaim(args: WorkflowDispatchOptions, instance: WorkflowInstanc
       ...(signal !== undefined ? { signal } : {}),
       datasource: step.datasource, executionSignal: controller.signal, deadline: validNow(now).getTime() + timeoutMs, assertLease: lifecycle.assertHeld,
     })
-    const current = step
+    const running = step
     work = phase === "compensate"
-      ? Promise.resolve().then(() => current.compensate!(context))
-      : Promise.resolve().then(() => current.execute(context))
-    work.then(() => { workSettled = true }, () => { workSettled = true })
-    const result = await bounded(work)
-    if (phase === "compensate") return await commit(completeCompensation(instance, validNow(now)), "compensated")
-    if (!isStepResult(result)) return await failOrRetry(false, "INVALID_STEP_RESULT", "Workflow step returned an invalid result")
-    if (result.kind === "retry") return await failOrRetry(true, "STEP_RETRY", result.error)
-    if (result.kind === "fail") return await failOrRetry(false, "STEP_FAILED", result.error)
-    return await commit(applyWorkflowStep(instance, result, validNow(now)), "advanced")
+      ? Promise.resolve().then(() => running.compensate!(context))
+      : Promise.resolve().then(() => running.execute(context))
+    work.then((value) => { workSettled = true; workOutcome = { ok: true, value } }, () => { workSettled = true; workOutcome = { ok: false } })
+    return await finish(await bounded(work))
   } catch (error) {
     if (error instanceof WorkflowLeaseLostError) return "lease-lost"
     if (commitAttempted) return "failed"
-    if (parent?.aborted) return "failed"
     try {
       if (timedOut) {
         const settled = work === undefined || await waitForSettlement(work, () => workSettled, graceMs, clock)
@@ -319,6 +348,16 @@ async function runClaim(args: WorkflowDispatchOptions, instance: WorkflowInstanc
         }
         const retryable = step?.idempotent === true || phase === "compensate"
         return await failOrRetry(retryable, "TIMEOUT", "Workflow step deadline exceeded")
+      }
+      if (parent?.aborted) {
+        // Shutdown never records a failure for work it interrupted. A step that
+        // never started, or that stopped cooperatively, gives its attempt back;
+        // a step that finishes within the grace period commits its result; a
+        // step still running after the grace period keeps its lease until it
+        // lapses (the stopped lifecycle fences any further effects).
+        if (work === undefined) return await commit(releaseWorkflowClaim(instance, validNow(now)), "deferred")
+        if (!await waitForSettlement(work, () => workSettled, graceMs, clock)) return "failed"
+        return workOutcome?.ok === true ? await finish(workOutcome.value) : await commit(releaseWorkflowClaim(instance, validNow(now)), "deferred")
       }
       if (controller.signal.aborted) return "failed"
       // Compensation is must-complete work: every compensation error is retried
@@ -344,11 +383,11 @@ export async function dispatchWorkflows(args: WorkflowDispatchOptions): Promise<
   if (!Array.isArray(claims) || claims.length > args.claimLimit) throw new WorkflowStateError("Workflow store returned an invalid claim batch")
   result.claimed = claims.length
   let next = 0
-  let started = 0
   const worker = async (): Promise<void> => {
-    while (next < claims.length && !args.signal?.aborted) {
+    // Every claim is processed: once the batch is aborted, the remaining claims
+    // are handed back (attempt returned) instead of left to lease expiry.
+    while (next < claims.length) {
       const claim = claims[next++]!
-      started++
       const instance = claim.instance
       const fence = { instanceId: instance.id, workerId: claim.workerId, claimToken: claim.claimToken, revision: instance.revision }
       let outcome: ClaimOutcome
@@ -364,7 +403,5 @@ export async function dispatchWorkflows(args: WorkflowDispatchOptions): Promise<
   }
   const concurrency = Math.min(args.concurrency ?? 1, Math.max(1, claims.length))
   await Promise.all(Array.from({ length: concurrency }, () => worker()))
-  // Claims never started because the batch was aborted: their leases lapse.
-  result.failed += claims.length - started
   return result
 }

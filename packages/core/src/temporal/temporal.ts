@@ -28,7 +28,7 @@ export function validateTemporalSnapshot<TState extends Readonly<Record<string, 
 
 export async function reconstructAsOf<TState extends Readonly<Record<string, unknown>>>(store: TemporalHistoryStore<TState>, target: TemporalResource, asOf: Date, options: { maxRevisions?: number; pageSize?: number } = {}): Promise<TemporalReconstruction<TState>> {
   resource(target); if (!validDate(asOf)) throw new ConfigurationError("Temporal as-of timestamp is invalid")
-  const max = options.maxRevisions ?? 10_000, pageSize = options.pageSize ?? 250
+  const max = options.maxRevisions ?? 10_000, pageSize = options.pageSize ?? Math.min(250, max)
   if (!Number.isSafeInteger(max) || max < 1 || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > max) throw new ConfigurationError("Temporal replay limits are invalid")
   const base = await store.latestSnapshot(target, asOf)
   let currentRevision = 0, currentState: TState | null = null, replayed = 0, cursor = 0

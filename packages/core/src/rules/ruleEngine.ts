@@ -1,9 +1,25 @@
-import { ConfigurationError, compareCodePoints, evaluatePredicate, type PredicateNode } from "../domain"
+import { ConfigurationError, ValidationError, compareCodePoints, evaluatePredicate, type PredicateNode } from "../domain"
 import { snapshotRuleData } from "./snapshot"
 import type { CompiledRuleSet, RuleAction, RuleDefinition, RuleEvaluationResult, RuleEvaluationTraceEntry, RuleMatch, RuleSetDefinition } from "./types"
 
 const compiledRuleSets = new WeakSet<object>()
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
+/** Maximum rules (all versions) in one rule set. */
+export const MAX_RULE_SET_RULES = 10_000
+/** Maximum distinct data nodes (objects and arrays) in one rule definition, including its predicate and actions. */
+export const MAX_RULE_NODES = 10_000
+/** Default conflict groups live in a namespace a validated conflict key can never enter. */
+const IMPLICIT_CONFLICT_GROUP = "\u0000rule:"
+
+/**
+ * Snapshot budget for a rule set or its evaluation result, derived from the
+ * declared limits: each rule contributes at most MAX_RULE_NODES plus one match
+ * and one trace entry, and the containers add a constant overhead.
+ */
+function ruleSetNodeBudget(ruleCount: number): number {
+  return 4 + ruleCount * (MAX_RULE_NODES + 2)
+}
+
 const OPS = new Set(["eq", "neq", "contains", "startsWith", "endsWith", "isEmpty", "isNotEmpty", "gt", "lt", "gte", "lte", "isTrue", "isFalse", "isNull", "isNotNull", "in", "includesAny", "includesAll", "between"])
 
 function instant(value: string | undefined, label: string): number | undefined {
@@ -45,13 +61,13 @@ function validateRule<TAction extends RuleAction>(rule: RuleDefinition<TAction>)
   const until = instant(rule.effectiveUntil, `Rule "${rule.key}" effectiveUntil`)
   if (from !== undefined && until !== undefined && from >= until) throw new ConfigurationError(`Rule "${rule.key}" effective window must be increasing`)
   validatePredicate(rule.when)
-  snapshotRuleData(rule.actions, `Rule "${rule.key}" actions`)
+  snapshotRuleData(rule, `Rule "${rule.key}"`, { maxNodes: MAX_RULE_NODES })
 }
 
 export function compileRuleSet<TAction extends RuleAction>(definition: RuleSetDefinition<TAction>): CompiledRuleSet<TAction> {
   if (!definition || typeof definition !== "object" || !KEY.test(definition.key)) throw new ConfigurationError("Rule-set key is invalid")
   if (!Number.isSafeInteger(definition.version) || definition.version < 1) throw new ConfigurationError("Rule-set version must be a positive safe integer")
-  if (!Array.isArray(definition.rules) || definition.rules.length > 10_000) throw new ConfigurationError("Rule-set rules are invalid")
+  if (!Array.isArray(definition.rules) || definition.rules.length > MAX_RULE_SET_RULES) throw new ConfigurationError("Rule-set rules are invalid")
   if (!definition.conflictResolution || !["all-matches", "highest-priority", "highest-priority-per-key"].includes(definition.conflictResolution.kind)) throw new ConfigurationError("Rule-set conflict resolution is invalid")
   if (definition.conflictResolution.kind !== "all-matches" && !["rule-key", "error"].includes(definition.conflictResolution.onPriorityTie)) throw new ConfigurationError("Rule-set priority tie behavior is invalid")
   const identities = new Set<string>()
@@ -61,7 +77,7 @@ export function compileRuleSet<TAction extends RuleAction>(definition: RuleSetDe
     if (identities.has(identity)) throw new ConfigurationError(`Duplicate rule version: ${rule.key}@${rule.version}`)
     identities.add(identity)
   }
-  const compiled = snapshotRuleData(definition, "Rule set")
+  const compiled = snapshotRuleData(definition, "Rule set", { maxNodes: ruleSetNodeBudget(definition.rules.length) })
   compiledRuleSets.add(compiled)
   return compiled
 }
@@ -87,7 +103,7 @@ function selectWinner<TAction extends RuleAction>(rules: readonly RuleDefinition
 export function evaluateRuleSet<TAction extends RuleAction>(compiled: CompiledRuleSet<TAction>, facts: Readonly<Record<string, unknown>>, evaluatedAt: Date): RuleEvaluationResult<TAction> {
   if (!isCompiledRuleSet(compiled)) throw new ConfigurationError("evaluateRuleSet requires a compiled rule set")
   if (!(evaluatedAt instanceof Date) || Number.isNaN(evaluatedAt.getTime())) throw new ConfigurationError("Rule evaluation requires a valid trusted timestamp")
-  const data = snapshotRuleData(facts, "Rule facts")
+  const data = snapshotRuleData(facts, "Rule facts", { errorType: ValidationError })
   const now = evaluatedAt.getTime()
   const trace = new Map<RuleDefinition<TAction>, RuleEvaluationTraceEntry>()
   const activeRules = compiled.rules.filter(rule => {
@@ -114,14 +130,14 @@ export function evaluateRuleSet<TAction extends RuleAction>(compiled: CompiledRu
   else {
     const groups = new Map<string, RuleDefinition<TAction>[]>()
     for (const rule of matching) {
-      const key = rule.conflictKey ?? `rule:${rule.key}`
+      const key = rule.conflictKey ?? `${IMPLICIT_CONFLICT_GROUP}${rule.key}`
       const group = groups.get(key) ?? []
       group.push(rule); groups.set(key, group)
     }
-    selected = [...groups.entries()].map(([key, rules]) => selectWinner(rules, resolution.onPriorityTie, `conflict key "${key}"`)).sort(compareRules)
+    selected = [...groups.entries()].map(([key, rules]) => selectWinner(rules, resolution.onPriorityTie, key.startsWith(IMPLICIT_CONFLICT_GROUP) ? `rule "${rules[0]!.key}"` : `conflict key "${key}"`)).sort(compareRules)
   }
   const selectedSet = new Set(selected)
   for (const rule of matching) trace.set(rule, { key: rule.key, version: rule.version, priority: rule.priority, disposition: selectedSet.has(rule) ? "selected" : "conflict-discarded", ...(rule.conflictKey ? { conflictKey: rule.conflictKey } : {}) })
   const matches: RuleMatch<TAction>[] = selected.map(rule => ({ key: rule.key, version: rule.version, priority: rule.priority, ...(rule.conflictKey ? { conflictKey: rule.conflictKey } : {}), actions: rule.actions }))
-  return snapshotRuleData({ ruleSetKey: compiled.key, ruleSetVersion: compiled.version, evaluatedAt: new Date(evaluatedAt), matches, actions: matches.flatMap(match => match.actions), trace: compiled.rules.map(rule => trace.get(rule)!) }, "Rule evaluation result")
+  return snapshotRuleData({ ruleSetKey: compiled.key, ruleSetVersion: compiled.version, evaluatedAt: new Date(evaluatedAt), matches, actions: matches.flatMap(match => match.actions), trace: compiled.rules.map(rule => trace.get(rule)!) }, "Rule evaluation result", { maxNodes: ruleSetNodeBudget(compiled.rules.length) })
 }

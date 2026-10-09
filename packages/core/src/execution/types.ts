@@ -36,6 +36,27 @@ export interface NewJob {
   partitionKey?: string
 }
 
+/**
+ * Value persisted in a job's max-attempts column when `NewJob.maxAttempts` is
+ * omitted. Such a job has no per-job override: its attempt budget is the
+ * JobDefinition's `maxAttempts`, resolved by the dispatcher (and the stored job
+ * reports `maxAttempts: undefined`). It is the largest signed 32-bit integer,
+ * so every store's `attempts < max_attempts` claim guard keeps working without
+ * a schema change while the dispatcher enforces the definition's budget.
+ */
+export const JOB_MAX_ATTEMPTS_FROM_DEFINITION = 2_147_483_647
+
+/** Durable max-attempts column value for a new job (see JOB_MAX_ATTEMPTS_FROM_DEFINITION). */
+export function encodeStoredJobMaxAttempts(maxAttempts: number | undefined): number {
+  return maxAttempts ?? JOB_MAX_ATTEMPTS_FROM_DEFINITION
+}
+
+/** Decodes a persisted max-attempts column: undefined means "use the job definition". */
+export function decodeStoredJobMaxAttempts(value: unknown): number | undefined {
+  const parsed = Number(value)
+  return value === null || value === undefined || parsed === JOB_MAX_ATTEMPTS_FROM_DEFINITION ? undefined : parsed
+}
+
 export interface StoredJob {
   id: string
   jobType: string
@@ -50,7 +71,8 @@ export interface StoredJob {
   priority: number
   attemptsCompleted: number
   currentAttempt: number
-  maxAttempts?: number
+  /** Per-job attempt budget; undefined when the job uses its definition's maxAttempts. */
+  maxAttempts?: number | undefined
   runAt: Date
   nextAttemptAt: Date | null
   leaseOwner: string | null
@@ -598,6 +620,27 @@ export interface AdvanceScheduleArgs {
   lastRunAt: Date
   lastStatus: string
   lastError?: string
+  /**
+   * Occurrences consumed by this advance; stores subtract it from
+   * remainingOccurrences (never below zero). When omitted, a `fired` advance
+   * consumes one occurrence and any other status consumes none.
+   */
+  occurrencesFired?: number
+  /**
+   * With lastStatus `failed`: the schedule keeps nextRunAt (the occurrence
+   * that failed) but must not be claimed again before this instant, so a
+   * persistently failing schedule backs off instead of starving others.
+   */
+  retryAt?: Date
+}
+
+/** remainingOccurrences decrement for an advance (see AdvanceScheduleArgs.occurrencesFired). */
+export function scheduleOccurrencesConsumed(args: Pick<AdvanceScheduleArgs, "lastStatus" | "occurrencesFired">): number {
+  if (args.occurrencesFired !== undefined) {
+    if (!Number.isSafeInteger(args.occurrencesFired) || args.occurrencesFired < 0) throw new ConfigurationError("occurrencesFired must be a non-negative integer")
+    return args.occurrencesFired
+  }
+  return args.lastStatus === "fired" ? 1 : 0
 }
 
 export interface ReleaseScheduleArgs {

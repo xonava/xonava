@@ -11,7 +11,13 @@ export interface SequenceDefinition {
    * invoice counter for an Indian business resets at local midnight, not 05:30.
    */
   readonly timeZone?: string
-  /** Embed the period in the formatted number: "compact" (202603) or "iso" (2026-03). Default "none". */
+  /**
+   * Embed the period in the formatted number: "compact" (202603) or "iso" (2026-03).
+   * Required when `reset` is not "never": a resetting counter restarts at 1, so a
+   * period-free formatted value repeats; choose "none" only when the period is carried
+   * elsewhere. Omitting it on a resetting counter is a ConfigurationError; it defaults
+   * to "none" otherwise.
+   */
   readonly periodFormat?: "none" | "compact" | "iso"
   /** Separator between an embedded period and the number (default "-", at most 4 characters). */
   readonly periodSeparator?: string

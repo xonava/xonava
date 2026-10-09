@@ -108,8 +108,10 @@ describe("nested operations join the parent transaction", () => {
 
   it("refuses to commit while a child is still running", async () => {
     const { root } = recordingProvider()
-    let release!: () => void
-    const slow = read<null, string>({ key: "slow", kind: "read", execute: () => new Promise<string>((resolve) => { release = () => resolve("late") }) })
+    // The parent cancels the still-running child and waits for it before its
+    // transaction ends, so the child must observe its signal to settle.
+    let aborted = false
+    const slow = read<null, string>({ key: "slow", kind: "read", execute: ({ operation }) => new Promise<string>((resolve) => { operation.signal.addEventListener("abort", () => { aborted = true; resolve("late") }, { once: true }) }) })
     await expect(runOperation({
       operation: createOperationContext({ persistence: root, runtimeCapabilities }),
       definition: mutation({
@@ -118,7 +120,7 @@ describe("nested operations join the parent transaction", () => {
       }),
       input: {},
     })).rejects.toThrow("before its nested operations completed")
-    release()
+    expect(aborted).toBe(true)
   })
 
   it("enforces the nesting-depth budget through execute contexts", async () => {

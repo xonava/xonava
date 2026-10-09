@@ -33,8 +33,8 @@ export const CANONICAL_SERIALIZATION_RULES = {
 
 export const ENTITY_VERSION_MIN = 0
 
-export const FINGERPRINT_DOMAIN_SEPARATORS = {
+export const FINGERPRINT_DOMAIN_SEPARATORS = Object.freeze({
   idempotency: "framework:idempotency:v1:",
   outbox: "framework:outbox:v1:",
   cursorQuery: "framework:cursor-query:v1:",
-} as const
+} as const)

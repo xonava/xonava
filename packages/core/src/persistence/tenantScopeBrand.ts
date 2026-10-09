@@ -9,6 +9,11 @@ export const TENANT_SCOPED_PROVIDER_BRAND: unique symbol = Symbol("framework.ten
 // neither enumerate it nor add an arbitrary object to it.
 const coreTenantScopedProviders = new WeakSet<object>()
 
+/**
+ * Framework-internal. Deliberately not re-exported from the persistence barrel:
+ * only core attenuation code (scoped persistence, authorization constraints)
+ * may mint the brand, by importing this module directly.
+ */
 export function registerTenantScopedProvider(provider: object): void {
   coreTenantScopedProviders.add(provider)
 }

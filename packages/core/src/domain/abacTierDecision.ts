@@ -10,11 +10,18 @@ export interface TierDecision<TPolicy> {
   decidingPolicies: TPolicy[]
 }
 
+/**
+ * Resolve the highest tier that a record (possibly) matches. `matches` may
+ * return `null` for UNKNOWN (three-valued predicate truth); the decision then
+ * agrees with the compiled query scope (`buildTieredPolicyOutcome`):
+ * an UNKNOWN policy shadows lower tiers, an UNKNOWN deny matches (fail
+ * closed), and an UNKNOWN allow never grants.
+ */
 export function resolveTieredDecision<TPolicy>(args: {
   policies: TPolicy[]
   getPriority(policy: TPolicy): number
   getEffect(policy: TPolicy): "allow" | "deny"
-  matches(policy: TPolicy): boolean
+  matches(policy: TPolicy): boolean | null
   defaultEffect?: "allow" | "deny"
 }): TierDecision<TPolicy> {
   if (args.policies.length === 0) {
@@ -30,7 +37,8 @@ export function resolveTieredDecision<TPolicy>(args: {
 
   for (const priority of priorities) {
     const tier = args.policies.filter((p) => args.getPriority(p) === priority)
-    const matched = tier.filter((p) => args.matches(p))
+    const truths = new Map(tier.map((p) => [p, args.matches(p)] as const))
+    const matched = tier.filter((p) => truths.get(p) !== false)
 
     if (matched.length === 0) continue
 
@@ -47,12 +55,24 @@ export function resolveTieredDecision<TPolicy>(args: {
       }
     }
 
+    const allows = matched.filter((p) => truths.get(p) === true)
+    if (allows.length === 0) {
+      // Only UNKNOWN allows: the tier still shadows lower tiers but grants nothing.
+      return {
+        allowed: false,
+        reason: "NO_POLICY_MATCHED",
+        priority,
+        matchedPolicies: [],
+        decidingPolicies: [],
+      }
+    }
+
     return {
       allowed: true,
       reason: "ALLOW_POLICY_MATCHED",
       priority,
-      matchedPolicies: matched,
-      decidingPolicies: matched,
+      matchedPolicies: allows,
+      decidingPolicies: allows,
     }
   }
 

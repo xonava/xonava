@@ -35,6 +35,7 @@ export class OperationEffectCollector {
   private readonly effectsState: OperationEffectStateWithCommitMarkers
   private deferredEffectCount: number
   private lifecycle: EffectCollectorState = "pre-commit"
+  private readonly disposers: (() => void)[] = []
 
   constructor(initial?: Partial<OperationEffectStateWithCommitMarkers>) {
     this.effectsState = {
@@ -82,6 +83,11 @@ export class OperationEffectCollector {
     this.registerDeferred(() => this.effectsState.bestEffortEffects.push({ name, execute }))
   }
 
+  /**
+   * Closes durable registration. The returned best-effort effects no longer
+   * count against the deferred budget, so handing them back through
+   * `restoreDeferredEffects` after commit cannot exceed it.
+   */
   takePreCommitEffects(): OperationEffectState {
     if (this.lifecycle !== "pre-commit") {
       throw new EffectCollectorDisposedError("Pre-commit effects have already been taken.")
@@ -90,8 +96,31 @@ export class OperationEffectCollector {
       outboxRecords: this.effectsState.outboxRecords.splice(0),
       bestEffortEffects: this.effectsState.bestEffortEffects.splice(0),
     }
+    this.deferredEffectCount -= drained.bestEffortEffects.length
     this.lifecycle = "post-commit"
     return drained
+  }
+
+  /**
+   * Re-queues effects taken by `takePreCommitEffects` once the business commit
+   * has happened. They were admitted (capability and budget) when first
+   * registered, so this never throws for budget reasons: post-commit code must
+   * not turn a committed operation into an error.
+   */
+  restoreDeferredEffects(effects: readonly BestEffortEffectEntry[]): void {
+    if (this.lifecycle === "disposed") {
+      throw new EffectCollectorDisposedError("Operation run has been disposed; late effect registration is not allowed.")
+    }
+    if (effects.length === 0) return
+    if (this.lifecycle === "deferred-taken") this.lifecycle = "post-commit"
+    this.deferredEffectCount += effects.length
+    this.effectsState.bestEffortEffects.unshift(...effects)
+  }
+
+  /** Runs `disposer` when the run is disposed (immediately if it already is). */
+  onDispose(disposer: () => void): void {
+    if (this.lifecycle === "disposed") { disposer(); return }
+    this.disposers.push(disposer)
   }
 
   takeDeferredEffects(): OperationEffectState {
@@ -114,6 +143,7 @@ export class OperationEffectCollector {
     this.effectsState.outboxRecords.length = 0
     this.effectsState.bestEffortEffects.length = 0
     this.lifecycle = "disposed"
+    for (const disposer of this.disposers.splice(0)) disposer()
   }
 
   private register(add: () => void): void {

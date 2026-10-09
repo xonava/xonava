@@ -144,7 +144,9 @@ export function createOperationContext<TPersistence extends PersistenceProvider>
     ...(args.request !== undefined ? { request: args.request } : {}),
     services,
     signal: args.signal ?? new AbortController().signal,
-    deadline: args.deadline ?? createExecutionDeadline(new Date(services.clock.now().getTime() + executionBudget.maxDurationMs)),
+    // The environment is reusable: without an explicit deadline every run gets
+    // its own `executionBudget.maxDurationMs` from when it starts.
+    ...(args.deadline !== undefined ? { deadline: args.deadline } : {}),
     executionBudget,
     nestingDepth: 0,
     ...(args.auditSink !== undefined ? { auditSink: args.auditSink } : {}),

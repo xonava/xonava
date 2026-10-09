@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it, vi } from "vitest"
 import { Predicate } from "../../domain"
 import { ConfigurationError, ImmutableFieldViolationError, NotFoundError, TenantScopeViolationError, UnsupportedCapabilityError } from "../../domain/errors"
 import { createTenantScopedPersistenceProvider } from "../scoped"
+import * as persistenceBarrel from "../index"
 import { assertMatchingPersistenceScope, isTenantScopedPersistenceProvider, type EntityDescriptor, type PersistenceProvider, type UnversionedEntityDescriptor, type UnversionedRepository, type VersionedEntityDescriptor, type VersionedRepository } from "../provider"
 import { testRepositoryForDescriptor as repositoryForDynamicDescriptor, type TestProviderFactory as PersistenceProviderFactory, type TestRepository as Repository } from "./persistenceTestSupport"
 
@@ -59,6 +60,10 @@ describe("scoped persistence fallback and failure paths", () => {
     const forged = { ...base, tenantId: "tenant-a", ...(reflectedSymbols[0] ? { [reflectedSymbols[0]]: true } : {}) }
 
     expect(reflectedSymbols).toEqual([])
+    // Registration is the only way to mint the brand, so it must stay module-private.
+    expect(persistenceBarrel).not.toHaveProperty("registerTenantScopedProvider")
+    expect(persistenceBarrel.isCoreTenantScopedProvider(scoped)).toBe(true)
+    expect(persistenceBarrel.isCoreTenantScopedProvider(forged)).toBe(false)
     expect(isTenantScopedPersistenceProvider(forged)).toBe(false)
     expect(() => assertMatchingPersistenceScope(scoped, forged)).toThrow(TenantScopeViolationError)
     expect(Object.isFrozen(scoped)).toBe(true)
