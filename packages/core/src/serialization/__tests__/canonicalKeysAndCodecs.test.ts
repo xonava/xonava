@@ -33,6 +33,18 @@ describe("durable codec round trip", () => {
     expect(() => assertDurableRoundTrip(lossy, 2)).not.toThrow()
   })
 
+  it("accepts lossless codecs for values without a canonical JSON form", () => {
+    const date: DurableCodec<Date, string> = { key: "date", encode: value => value.toISOString(), decode: value => new Date(value) }
+    expect(() => assertDurableRoundTrip(date, new Date("2026-01-02T03:04:05.678Z"))).not.toThrow()
+    const big: DurableCodec<bigint, string> = { key: "bigint", encode: value => value.toString(), decode: value => BigInt(value) }
+    expect(() => assertDurableRoundTrip(big, 2n ** 70n)).not.toThrow()
+  })
+
+  it("rejects a lossy codec for values without a canonical JSON form", () => {
+    const unstable: DurableCodec<bigint, string> = { key: "unstable", encode: value => value.toString(), decode: value => BigInt(value) + 1n }
+    expect(() => assertDurableRoundTrip(unstable, 5n)).toThrow(ValidationError)
+  })
+
   it("compares structured values canonically", () => {
     const codec: DurableCodec<Record<string, unknown>, string> = { key: "json", encode: value => JSON.stringify(value), decode: value => JSON.parse(value) as Record<string, unknown> }
     expect(() => assertDurableRoundTrip(codec, { b: 1, a: [1, "x"] })).not.toThrow()

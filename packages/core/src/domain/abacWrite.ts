@@ -1,4 +1,4 @@
-import { evaluatePredicateTruth } from "./evaluatePredicate"
+import { evaluateWriteConditionTruth } from "./abacWriteMatch"
 import { ForbiddenError } from "./errors"
 import { resolveTieredDecision } from "./abacTierDecision"
 import { assertPolicyWritableFields } from "./fieldAccess"
@@ -24,9 +24,12 @@ function policyAppliesToAction(policy: NormalizedAbacPolicy, action: string): bo
   return policy.payload.actions.includes(action)
 }
 
-/** Three-valued match (`null` is UNKNOWN) so write decisions agree with the query scope. */
-function policyMatchesRecord(policy: NormalizedAbacPolicy, record: Record<string, unknown>): boolean | null {
-  return evaluatePredicateTruth(record, policy.compiledConditions)
+/**
+ * Three-valued match (`null` is UNKNOWN) so write decisions agree with the
+ * query scope; see evaluateWriteConditionTruth for the create exception.
+ */
+function policyMatchesRecord(policy: NormalizedAbacPolicy, record: Record<string, unknown>, action: string): boolean | null {
+  return evaluateWriteConditionTruth(record, policy.compiledConditions, action)
 }
 
 export function evaluateWriteAccessForRecordDetailed(args: {
@@ -43,7 +46,7 @@ export function evaluateWriteAccessForRecordDetailed(args: {
     policies: relevant,
     getPriority: (p) => p.priority,
     getEffect: (p) => p.effect,
-    matches: (p) => policyMatchesRecord(p, args.record),
+    matches: (p) => policyMatchesRecord(p, args.record, args.action),
     defaultEffect: "deny",
   })
 

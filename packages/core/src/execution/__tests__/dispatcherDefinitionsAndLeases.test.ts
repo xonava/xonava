@@ -59,15 +59,40 @@ describe("job dispatcher resolves definitions through registry upcasters", () =>
     }
   })
 
-  it("dead-letters a job no worker could run within the deferral window instead of releasing it forever", async () => {
+  it("measures the deferral window from the first deferral, not from when the job became due", async () => {
     const registry = createJobRegistry()
     registry.register(definition({ type: "other" }))
-    const store = memoryStore(storedJob({ jobType: "retired", maxAttempts: undefined }))
-    const later = new Date(now.getTime() + 60_001)
-    const result = await dispatchDueJobs(config(store, registry, { clock: fixedClock(later), unknownDefinitionMaxDeferralMs: 60_000 }))
+    // Due for two days (backlog / long retry chain), first touched by a worker lacking its definition.
+    const longDue = new Date(now.getTime() - 48 * 3_600_000)
+    const store = memoryStore(storedJob({ jobType: "retired", runAt: longDue, createdAt: longDue, lastError: "earlier failure" }))
+    await expect(dispatchDueJobs(config(store, registry))).resolves.toMatchObject({ retried: 1, deadLettered: 0 })
+    expect(store.markFailed).not.toHaveBeenCalled()
+    expect(store.release).toHaveBeenCalledWith(expect.objectContaining({ reason: `Unknown job definition: retired@1 (unrunnable since ${now.toISOString()})` }))
+  })
+
+  it("keeps the first-deferral marker across releases and dead-letters once the window has passed", async () => {
+    const registry = createJobRegistry()
+    registry.register(definition({ type: "other" }))
+    const firstDeferral = new Date(now.getTime() - 3_600_000)
+    const marker = `Unknown job definition: retired@1 (unrunnable since ${firstDeferral.toISOString()})`
+    const within = memoryStore(storedJob({ jobType: "retired", lastError: marker }))
+    await expect(dispatchDueJobs(config(within, registry))).resolves.toMatchObject({ retried: 1 })
+    expect(within.release).toHaveBeenCalledWith(expect.objectContaining({ reason: marker }))
+
+    const expired = memoryStore(storedJob({ jobType: "retired", maxAttempts: undefined, lastError: marker }))
+    const result = await dispatchDueJobs(config(expired, registry, { unknownDefinitionMaxDeferralMs: 3_599_999 }))
     expect(result).toMatchObject({ deadLettered: 1, retried: 0 })
-    expect(store.release).not.toHaveBeenCalled()
-    expect(store.markFailed).toHaveBeenCalledWith(expect.objectContaining({ status: "dead_letter", attempt: 1, error: expect.stringContaining("UNKNOWN_JOB_DEFINITION") }))
+    expect(expired.release).not.toHaveBeenCalled()
+    expect(expired.markFailed).toHaveBeenCalledWith(expect.objectContaining({ status: "dead_letter", attempt: 1, error: expect.stringContaining("UNKNOWN_JOB_DEFINITION") }))
+  })
+
+  it("ignores a malformed or future first-deferral marker", async () => {
+    const registry = createJobRegistry()
+    registry.register(definition({ type: "other" }))
+    for (const lastError of ["x (unrunnable since not-a-date)", `x (unrunnable since ${new Date(now.getTime() + 86_400_000).toISOString()})`]) {
+      const store = memoryStore(storedJob({ jobType: "retired", lastError }))
+      await expect(dispatchDueJobs(config(store, registry, { unknownDefinitionMaxDeferralMs: 0 }))).resolves.toMatchObject({ retried: 1 })
+    }
   })
 
   it("dead-letters invalid upcast payloads rather than releasing them", async () => {

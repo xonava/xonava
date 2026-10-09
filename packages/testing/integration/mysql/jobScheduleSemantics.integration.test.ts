@@ -2,7 +2,7 @@ import { describe, it } from "vitest"
 import type { RowDataPacket } from "mysql2/promise"
 import { DrizzleMySqlJobStore, DrizzleMySqlScheduleStore } from "adapters/drizzle-mysql"
 import { openMySqlFixture } from "./database.js"
-import { assertDefinitionMaxAttempts, assertScheduleOccurrencesAndBackoff } from "../shared/jobScheduleSemantics.js"
+import { assertDefinitionMaxAttempts, assertScheduleOccurrencesAndBackoff, assertUnknownDefinitionDeferral } from "../shared/jobScheduleSemantics.js"
 
 describe("MySQL job and schedule semantics", () => {
   it("applies the job definition's maxAttempts when a job has no explicit budget", async () => {
@@ -12,6 +12,15 @@ describe("MySQL job and schedule semantics", () => {
         const [rows] = await pool.query<RowDataPacket[]>("SELECT max_attempts FROM jobs WHERE id=?", [id])
         return Number(rows[0]!.max_attempts)
       })
+    } finally {
+      await pool.end()
+    }
+  })
+
+  it("measures the unknown-definition deferral window from the first deferral", async () => {
+    const { pool } = await openMySqlFixture()
+    try {
+      await assertUnknownDefinitionDeferral(new DrizzleMySqlJobStore(pool))
     } finally {
       await pool.end()
     }

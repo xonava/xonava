@@ -2,7 +2,7 @@
 
 `core/sequence` defines tenant-scoped, named counters. A counter is further scoped by a UTC reset bucket (`never`, year, month, or day). Formatting adds an optional prefix and zero padding after allocation; it never changes the stored numeric value.
 
-A resetting counter restarts its numbers every period, so its formatted value must embed the period or identifiers would repeat. `periodFormat` therefore defaults to `compact` (for example `INV-2026-1`) when `reset` is not `never`, and an explicit `periodFormat: "none"` on a resetting counter is a `ConfigurationError`. A counter that never resets has no period to embed and rejects any format other than `none`.
+A resetting counter restarts its numbers every period, so its formatted values repeat unless they embed the period. A resetting counter MUST therefore declare `periodFormat` explicitly (`compact`, for example `INV-2026-1`, or `iso`; or `none` when the period is carried elsewhere, such as on the document itself); an omitted format is a `ConfigurationError` rather than a silent default, so neither repeated identifiers nor a changed format of an existing series can happen implicitly. A counter that never resets has no period to embed and rejects any format other than `none`.
 
 `SequenceStore.next` must run on the same database transaction as the business record that consumes the number. Providers serialize allocation for one `(scope, name, period)` key. A committed allocation is strictly increasing and unique. A rolled-back transaction restores the counter, so it does not create a gap. Applications that allocate and commit separately explicitly forfeit the gapless guarantee.
 

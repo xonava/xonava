@@ -5,7 +5,7 @@ import { drizzle } from "drizzle-orm/node-postgres"
 import { boolean, integer, pgSchema, text, timestamp } from "drizzle-orm/pg-core"
 import { createDrizzleJobStore, createDrizzleScheduleStore, createPgSession } from "adapters/drizzle-pg"
 import { pgCertificationUrl } from "./database.js"
-import { assertDefinitionMaxAttempts, assertScheduleOccurrencesAndBackoff } from "../shared/jobScheduleSemantics.js"
+import { assertDefinitionMaxAttempts, assertScheduleOccurrencesAndBackoff, assertUnknownDefinitionDeferral } from "../shared/jobScheduleSemantics.js"
 
 const SCHEMA = "job_schedule_semantics_it"
 const s = pgSchema(SCHEMA)
@@ -47,6 +47,10 @@ describe("PostgreSQL job and schedule semantics", () => {
 
   it("applies the job definition's maxAttempts when a job has no explicit budget", async () => {
     await assertDefinitionMaxAttempts(jobStore, async (id) => Number((await q(`SELECT max_attempts FROM ${SCHEMA}.jobs WHERE id=$1`, [id]))[0]!.max_attempts))
+  })
+
+  it("measures the unknown-definition deferral window from the first deferral", async () => {
+    await assertUnknownDefinitionDeferral(jobStore)
   })
 
   it("caps catch-up by remainingOccurrences and backs off failing schedules", async () => {

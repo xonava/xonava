@@ -1,5 +1,5 @@
 import { expect } from "vitest"
-import { createJobRegistry, dispatchDueJobs, JOB_MAX_ATTEMPTS_FROM_DEFINITION, materializeDueSchedules, type JobRequester, type JobStore, type ScheduleStore } from "core/execution"
+import { createJobRegistry, dispatchDueJobs, JOB_MAX_ATTEMPTS_FROM_DEFINITION, materializeDueSchedules, type DispatcherClock, type JobRequester, type JobStore, type ScheduleStore } from "core/execution"
 
 const system = { kind: "system", systemKey: "framework" } as const
 const requester: JobRequester = { scope: "system" }
@@ -24,6 +24,33 @@ export async function assertDefinitionMaxAttempts(store: JobStore, readStoredMax
   const result = await dispatchDueJobs({ store, registry, workerId: "budget-worker", leaseDurationMs: 30_000, claimLimit: 10, requester })
   expect(result).toMatchObject({ claimed: 1, deadLettered: 1, retried: 0 })
   expect((await store.getById({ id: implicit.id, requester }))?.status).toBe("dead_letter")
+}
+
+/**
+ * A job no worker can run is handed back for a newer worker and dead-lettered
+ * only after the deferral window, measured from its FIRST deferral: a job that
+ * has merely been due for a long time is not dead-lettered on first touch.
+ */
+export async function assertUnknownDefinitionDeferral(store: JobStore): Promise<void> {
+  const longDue = new Date(Date.now() - 48 * 3_600_000)
+  const job = await store.enqueue({ requester, job: { executionScope: system, jobType: "retired.job", jobVersion: 1, payload: {}, runAt: longDue } })
+  const registry = createJobRegistry()
+  registry.register({ type: "other.job", version: 1, scope: "system", maxAttempts: 3, retryDelayMs: 0, retryBackoffMultiplier: 1, decodePayload: (input) => input as Record<string, unknown>, execute: async () => ({ success: true }) })
+  const at = (offsetMs: number): DispatcherClock => ({ now: () => new Date(Date.now() + offsetMs), sleep: (_ms, signal) => new Promise<void>((resolve) => signal?.addEventListener("abort", () => resolve(), { once: true })) })
+  const dispatch = (offsetMs: number) => dispatchDueJobs({ store, registry, workerId: "old-worker", leaseDurationMs: 30_000, claimLimit: 10, requester, clock: at(offsetMs) })
+
+  await expect(dispatch(0)).resolves.toMatchObject({ claimed: 1, retried: 1, deadLettered: 0 })
+  const released = await store.getById({ id: job.id, requester })
+  expect(released).toMatchObject({ status: "retrying", currentAttempt: 0 })
+  expect(released!.lastError).toMatch(/^Unknown job definition: retired\.job@1 \(unrunnable since \S+Z\)$/)
+  // Within the window a later touch keeps the original marker.
+  await expect(dispatch(3_600_000)).resolves.toMatchObject({ claimed: 1, retried: 1 })
+  expect((await store.getById({ id: job.id, requester }))!.lastError).toBe(released!.lastError)
+  // Past the window (24h after the first deferral) it is dead-lettered.
+  await expect(dispatch(25 * 3_600_000)).resolves.toMatchObject({ claimed: 1, deadLettered: 1 })
+  const dead = await store.getById({ id: job.id, requester })
+  expect(dead!.status).toBe("dead_letter")
+  expect(dead!.lastError).toContain("UNKNOWN_JOB_DEFINITION")
 }
 
 export interface ScheduleRowInput {

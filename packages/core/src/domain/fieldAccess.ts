@@ -1,4 +1,5 @@
 import { evaluatePredicateTruth } from "./evaluatePredicate"
+import { evaluateWriteConditionTruth } from "./abacWriteMatch"
 import { ForbiddenError } from "./errors"
 import type { NormalizedAbacPolicy } from "./abacTypes"
 import type { FieldDescriptor, FieldFormat } from "../persistence/provider"
@@ -183,10 +184,11 @@ function collectDeniedWriteFields(
 ): string[] {
   // Three-valued: an UNKNOWN policy still claims its tier (as in the query
   // scope), an UNKNOWN deny applies, and an UNKNOWN allow grants nothing.
+  // Creates ignore UNKNOWN from absent fields (evaluateWriteConditionTruth).
   const truths = new Map<NormalizedAbacPolicy, boolean | null>()
   for (const p of policies) {
     if (p.moduleKey !== moduleKey || !p.payload.actions.includes(action)) continue
-    const truth = evaluatePredicateTruth(record, p.compiledConditions)
+    const truth = evaluateWriteConditionTruth(record, p.compiledConditions, action)
     if (truth !== false) truths.set(p, truth)
   }
   const relevant = Array.from(truths.keys())

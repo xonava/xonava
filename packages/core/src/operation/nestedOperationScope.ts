@@ -10,14 +10,13 @@ const MAX_TIMER_DELAY_MS = 2_147_483_647
 /**
  * The part of one parent run that nested operations may use. It closes when
  * the parent's `execute` finishes (or fails); after that no child may start,
- * and a joined child's handle on the parent's transaction fails closed.
+ * and the persistence a joined child exposes to user code fails closed.
  */
 export interface NestedOperationScope {
   /** Aborts when the parent run's signal aborts or the parent fails while children run. */
   readonly signal: AbortSignal
+  /** Throws once this scope, or any scope enclosing it, has closed. */
   assertOpen(): void
-  /** Wraps the parent's transaction-scoped persistence so it fails closed once the scope ends. */
-  guardPersistence<T extends PersistenceProvider>(persistence: T): T
 }
 
 export type NestedInvokeFactory = (parent: InternalOperationRunContext, options: { readonly joinTransaction: boolean; readonly readOnly: boolean; readonly scope: NestedOperationScope }) => NestedOperationInvoke
@@ -45,6 +44,8 @@ export function trackNestedInvocations(
   parent: InternalOperationRunContext,
   factory: NestedInvokeFactory | undefined,
   options: { readonly joinTransaction: boolean; readonly readOnly: boolean },
+  /** The enclosing scopes' assertion when this run itself joined a parent's transaction. */
+  enclosingScope?: () => void,
 ): NestedInvocationTracker {
   if (!factory) return { invoke: undefined, assertSettled: () => undefined, abandon: () => Promise.resolve(), close: () => undefined }
   let open = true
@@ -71,8 +72,8 @@ export function trackNestedInvocations(
     get signal() { return linkedController().signal },
     assertOpen: () => {
       if (!open) throw new OperationContextInactiveError("The parent operation has finished; its nested operation scope is closed.")
+      enclosingScope?.()
     },
-    guardPersistence: (persistence) => guardPersistence(persistence, scope.assertOpen),
   }
   const invoke = factory(parent, { ...options, scope })
   return {
@@ -119,12 +120,15 @@ export function trackNestedInvocations(
 }
 
 /**
- * Every property read and method call on the provider, and on objects its
- * methods return synchronously (repositories), first asserts the scope is
- * open. Methods run against the real provider, so private state still works.
- * The proxy target is a plain shell so frozen providers can still be wrapped.
+ * The persistence a joined child exposes to user code (authorization, hooks,
+ * execute). Every property read and method call on the provider, and on
+ * objects its methods return synchronously (repositories), first runs
+ * `assertOpen`. Methods run against the real provider, so private state still
+ * works; the proxy target is a plain shell so frozen providers can be wrapped.
+ * Infrastructure sinks must keep the raw provider: adapters resolve their
+ * session from it by identity.
  */
-function guardPersistence<T extends PersistenceProvider>(persistence: T, assertOpen: () => void): T {
+export function guardPersistence<T extends PersistenceProvider>(persistence: T, assertOpen: () => void): T {
   const guarded = guardObject(persistence, assertOpen, true)
   if (isTenantScopedPersistenceProvider(persistence)) registerTenantScopedProvider(guarded)
   return guarded

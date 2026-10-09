@@ -24,7 +24,8 @@ export const MAX_STORED_JOB_PAYLOAD_BYTES = 1024 * 1024
 /**
  * How long a job that no registered definition can run is handed back for
  * another worker (rolling deploys) before it is dead-lettered with
- * UNKNOWN_JOB_DEFINITION. Measured from when the job first became due.
+ * UNKNOWN_JOB_DEFINITION. Measured from the job's first consecutive deferral
+ * (see unrunnableSince), never from when it became due.
  */
 export const DEFAULT_UNKNOWN_DEFINITION_MAX_DEFERRAL_MS = 24 * 60 * 60 * 1000
 
@@ -496,20 +497,39 @@ function resolveJobDefinition(registry: JobRegistry, job: StoredJob): { definiti
   return latest && latest.version > job.jobVersion ? { definition: latest, upcast: true } : undefined
 }
 
+const UNRUNNABLE_SINCE = / \(unrunnable since (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)\)$/
+
+/**
+ * When consecutive deferrals of an unrunnable job began. The marker lives in
+ * the job's last error, written by the previous deferral's release: any other
+ * transition (a retry or failure on a worker that can run the job) overwrites
+ * it, so the window restarts. A missing, malformed, or future marker means
+ * this is the first deferral.
+ */
+function unrunnableSince(lastError: string | null, now: Date): Date {
+  const marked = lastError === null ? null : UNRUNNABLE_SINCE.exec(lastError)
+  const since = marked ? Date.parse(marked[1]!) : Number.NaN
+  return Number.isFinite(since) && since <= now.getTime() ? new Date(since) : now
+}
+
 /**
  * Hands back a job this worker cannot run (typically a rolling deploy where a
  * newer worker enqueued it) without consuming its attempt. Hand-backs are
- * bounded: once the job has been due for longer than the deferral window it
- * is dead-lettered with UNKNOWN_JOB_DEFINITION instead of circulating forever.
+ * bounded: once no worker has run the job for longer than the deferral window
+ * since its first deferral, it is dead-lettered with UNKNOWN_JOB_DEFINITION
+ * instead of circulating forever.
  */
-async function deferUnrunnableJob(args: DispatcherConfig & { job: StoredJob; log: DispatcherLogger; clock: DispatcherClock }, claimToken: string, error: string): Promise<JobOutcome> {
+async function deferUnrunnableJob(args: DispatcherConfig & { job: StoredJob; log: DispatcherLogger; clock: DispatcherClock }, claimToken: string, message: string): Promise<JobOutcome> {
   const { job, store, workerId, leaseDurationMs, log, clock } = args
   const attempt = job.currentAttempt
   const at = clock.now()
-  const dueSince = Math.max(job.createdAt.getTime(), job.runAt.getTime())
+  const since = unrunnableSince(job.lastError, at)
+  // The reason becomes the job's last error and carries the first-deferral
+  // marker forward to the next worker that cannot run it.
+  const error = `${message} (unrunnable since ${since.toISOString()})`
   const maxDeferralMs = args.unknownDefinitionMaxDeferralMs ?? DEFAULT_UNKNOWN_DEFINITION_MAX_DEFERRAL_MS
-  if (at.getTime() - dueSince > maxDeferralMs) {
-    const deadLetterError = `UNKNOWN_JOB_DEFINITION: ${error}; no worker could run the job within ${maxDeferralMs}ms`
+  if (at.getTime() - since.getTime() > maxDeferralMs) {
+    const deadLetterError = `UNKNOWN_JOB_DEFINITION: ${message}; no worker could run the job within ${maxDeferralMs}ms of ${since.toISOString()}`
     log.error("Job dead-lettered: no runnable definition", { jobId: job.id, jobType: job.jobType, jobVersion: job.jobVersion, maxDeferralMs })
     const status = await markFailedState({ jobId: job.id, workerId, claimToken, error: deadLetterError, status: "dead_letter", attempt }, store)
     return status.applied ? { kind: "dead_letter", error: deadLetterError } : { kind: "lease_lost", error: status.error ?? deadLetterError }

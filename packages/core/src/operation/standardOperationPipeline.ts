@@ -13,7 +13,7 @@ import { abortSignalError, assertExecutionActive } from "./deadline"
 import { applyAuthorizationPlanToResult, authorizeOperation, createPlanConstrainedPersistenceProvider, revalidateAuthorizationFacts } from "./authorizationPlanEnforcement"
 import { emitTelemetry, explicitlySafeTelemetryAttributes } from "../telemetry/telemetry"
 import { reportCommittedEffectFailure } from "./committedEffectFailure"
-import { trackNestedInvocations, type NestedInvocationTracker, type NestedInvokeFactory } from "./nestedOperationScope"
+import { guardPersistence, trackNestedInvocations, type NestedInvocationTracker, type NestedInvokeFactory } from "./nestedOperationScope"
 
 type ExecutableStandardOperationDefinition<TInput, TResult> = StandardOperationDefinition<TInput, TResult> | RetryableMutationOperationDefinition<TInput, TResult>
 
@@ -27,6 +27,8 @@ export async function runStandardOperation<TInput, TResult>(args: {
   onBusinessResult?: (result: TResult, operation: PostCommitContext) => Promise<void>
   /** The parent run whose open transaction this nested run joins. */
   joinedParent?: InternalOperationRunContext
+  /** Throws once the joined parent's nested scope (or one enclosing it) has closed. */
+  joinedScope?: () => void
   createNestedInvoke?: NestedInvokeFactory
   /** Invoked by another operation: the request's route is bound to the root operation, not to this one. */
   nested?: boolean
@@ -62,13 +64,17 @@ export async function runStandardOperation<TInput, TResult>(args: {
   const auditMode = resolveAuditDelivery(args.definition, supportsTransactions)
   const execute = async (operation: InternalOperationRunContext, nested: NestedInvocationTracker): Promise<{ input: TInput; result: TResult; operation: InternalOperationRunContext }> => {
     assertExecutionActive(operation.signal, operation.deadline, operation.services.clock)
-    const plan = await authorizeOperation({ operation: createAuthorizationOperationContext(operation), definition: args.definition, input: args.input })
+    // A joined child's user code sees the parent's transaction only while the
+    // parent's execute is running; afterwards every call fails closed.
+    const joinedScope = args.joinedScope
+    const userOperation = joinedScope ? operation.withPersistence(guardPersistence(operation.persistence, joinedScope)) : operation
+    const plan = await authorizeOperation({ operation: createAuthorizationOperationContext(userOperation), definition: args.definition, input: args.input })
     assertExecutionActive(operation.signal, operation.deadline, operation.services.clock)
     // Only lifecycle callbacks receive the plan-constrained persistence view.
     // Infrastructure sinks retain the concrete transaction provider below.
     const executionOperation = plan
-      ? operation.withPersistence(createPlanConstrainedPersistenceProvider(operation.persistence, plan))
-      : operation
+      ? userOperation.withPersistence(createPlanConstrainedPersistenceProvider(userOperation.persistence, plan))
+      : userOperation
     preflight({ operation, definition: args.definition, mode, auditMode })
     if (plan?.operationKind === "mutation" && plan.dynamicFacts.some(fact => fact.revalidation?.kind !== "mutation-predicate") && !operation.authorizationFactRevalidator) throw new ConfigurationError("Authorization plan requires a dynamic-fact revalidator.")
     const input = await runBeforeHooks({ operation: createPreparationOperationContext(executionOperation), input: args.input, ...(args.definition.before !== undefined ? { hooks: args.definition.before } : {}) })
@@ -102,7 +108,7 @@ export async function runStandardOperation<TInput, TResult>(args: {
   }
 
   const run = async (operation: InternalOperationRunContext): Promise<{ input: TInput; result: TResult; operation: InternalOperationRunContext }> => {
-    const nested = trackNestedInvocations(operation, args.createNestedInvoke, { joinTransaction: inTransaction, readOnly: args.definition.kind === "read" })
+    const nested = trackNestedInvocations(operation, args.createNestedInvoke, { joinTransaction: inTransaction, readOnly: args.definition.kind === "read" }, args.joinedScope)
     try {
       return await execute(operation, nested)
     } catch (error) {

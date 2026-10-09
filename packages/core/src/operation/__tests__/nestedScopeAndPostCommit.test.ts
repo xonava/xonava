@@ -109,6 +109,29 @@ describe("joined siblings after the parent fails", () => {
     expect(committed).toEqual([])
   })
 
+  it("fails a grandchild's persistence closed once the root parent fails", async () => {
+    const { root, log, committed } = recordingProvider()
+    const outcomes: string[] = []
+    const grandchild = mutation<null, string>({
+      key: "grandchild", kind: "mutation", authorization: allow, atomicity: { kind: "standard", mode: "required" },
+      execute: async ({ operation }) => {
+        await new Promise((resolve) => { operation.signal.addEventListener("abort", resolve, { once: true }) })
+        try { write(operation.persistence, "grandchild") } catch (error) { outcomes.push((error as Error).name) }
+        return "grandchild"
+      },
+    })
+    const middle = mutation<null, string>({ key: "middle", kind: "mutation", authorization: allow, atomicity: { kind: "standard", mode: "required" }, execute: ({ operation }) => operation.invoke(grandchild, null) })
+    const failing = mutation<null, string>({ key: "failing", kind: "mutation", authorization: allow, atomicity: { kind: "standard", mode: "required" }, execute: async () => { await Promise.resolve(); throw new Error("sibling failed") } })
+    await expect(runOperation({
+      operation: createOperationContext({ persistence: root, runtimeCapabilities: deferred }),
+      definition: mutation({ key: "parent", kind: "mutation", authorization: allow, atomicity: { kind: "standard", mode: "required" }, execute: async ({ operation }) => Promise.all([operation.invoke(middle, null), operation.invoke(failing, null)]) }),
+      input: {},
+    })).rejects.toThrow("sibling failed")
+    expect(outcomes).toEqual([OperationContextInactiveError.name])
+    expect(log).toEqual(["tx1 begin", "tx1 rollback"])
+    expect(committed).toEqual([])
+  })
+
   it("bounds the wait for a sibling that ignores cancellation by the run deadline", async () => {
     const { root, log } = recordingProvider()
     const hung = read<null, string>({ key: "hung", kind: "read", execute: () => new Promise<string>(() => undefined) })
@@ -124,6 +147,52 @@ describe("joined siblings after the parent fails", () => {
     })).rejects.toThrow("sibling failed")
     expect(Date.now() - startedAt).toBeLessThan(2_000)
     expect(log).toEqual(["tx1 begin", "tx1 rollback"])
+  })
+})
+
+describe("joined child infrastructure sinks", () => {
+  it("hands adapter sink factories the raw transaction provider they registered", async () => {
+    // Adapters resolve their database session from a WeakMap keyed by the
+    // transaction-scoped provider object, so sinks must receive that object.
+    const sessions = new WeakMap<object, string[]>()
+    const { root, committed } = recordingProvider()
+    const runInTransaction = root.runInTransaction.bind(root)
+    root.runInTransaction = (work, options) => runInTransaction((scoped) => { sessions.set(scoped, []); return work(scoped) }, options)
+    const session = (persistence: object): string[] => {
+      const found = sessions.get(persistence)
+      if (!found) throw new Error("No session found for this persistence provider")
+      return found
+    }
+    const appended: string[] = []
+    const audited: string[] = []
+    const human = { id: "u1", kind: "human", authentication: { kind: "authenticated", method: "session", authenticatedAt: "2026-09-10T00:00:00.000Z" } }
+    const request = { requestId: "r1", correlationId: "c1", identity: { actor: human, subject: human }, scope: { kind: "platform", platformKey: "test" }, scopeId: "fscope:v1:eyJraW5kIjoicGxhdGZvcm0iLCJwbGF0Zm9ybUtleSI6InRlc3QifQ" } as never
+    const environment = {
+      ...createOperationContext({
+        persistence: root,
+        runtimeCapabilities: deferred,
+        outboxSinkFactory: { create: (persistence) => { session(persistence); return { append: async (record) => { appended.push(record.type) } } } },
+        auditSinkFactory: { create: (persistence) => { session(persistence); return { write: async (record) => { audited.push(record.action) } } } },
+      }),
+      request,
+    }
+    const durableChild = mutation<string, string>({
+      key: "durable-child", kind: "mutation", authorization: allow, atomicity: { kind: "standard", mode: "required" },
+      audit: { action: "child.write", resourceType: "row", auditGuarantee: "atomic", resolveResourceId: () => "row-1" },
+      execute: ({ operation, input }) => {
+        write(operation.persistence, `child:${input}`)
+        operation.addDurableEffect({ name: "notify", outbox: { type: "child.written", version: 1, tenantId: null, scope: { kind: "platform", platformKey: "test" }, scopeId: "fscope:v1:eyJraW5kIjoicGxhdGZvcm0iLCJwbGF0Zm9ybUtleSI6InRlc3QifQ" as never, aggregateType: "row", aggregateId: "row-1", payload: {}, idempotencyKey: "child-1" } })
+        return `child-${input}`
+      },
+    })
+    await expect(runOperation({
+      operation: environment,
+      definition: mutation({ key: "parent", kind: "mutation", authorization: allow, atomicity: { kind: "standard", mode: "required" }, execute: ({ operation }) => operation.invoke(durableChild, "a") }),
+      input: {},
+    })).resolves.toBe("child-a")
+    expect(committed).toEqual(["child:a"])
+    expect(appended).toEqual(["child.written"])
+    expect(audited).toEqual(["child.write"])
   })
 })
 

@@ -198,6 +198,36 @@ describe("record decisions agree with the three-valued query scope", () => {
   })
 })
 
+describe("creates ignore UNKNOWN caused by absent fields", () => {
+  const denyLocked = policy({ id: "deny", effect: "deny", priority: 10, actions: ["create", "update"], when: Predicate.eq("status", "locked") })
+  const allowAll = policy({ id: "allow", priority: 1, actions: ["create", "update"] })
+
+  it("allows a create whose body omits the field a deny condition reads", async () => {
+    const verified = await bundle([denyLocked, allowAll])
+    expect(() => enforceAbacWrite({ bundle: verified, action: "create", record: { id: "1", name: "n" } })).not.toThrow()
+    expect(() => enforceAbacWrite({ bundle: verified, action: "create", record: { id: "1", status: "locked" } })).toThrow(ForbiddenError)
+    // Updates keep the three-valued rule: the stored row has no status.
+    expect(() => enforceAbacWrite({ bundle: verified, action: "update", record: { id: "1", name: "n" } })).toThrow(ForbiddenError)
+  })
+
+  it("does not let a higher-tier conditional allow on an omitted field shadow the create", async () => {
+    const restricted = policy({ id: "r", priority: 10, actions: ["create"], when: Predicate.eq("kind", "special"), fieldAccess: { write: ["kind"] } })
+    const open = policy({ id: "o", priority: 1, actions: ["create"] })
+    const verified = await bundle([restricted, open])
+    expect(() => enforceAbacWrite({ bundle: verified, action: "create", record: { id: "1", name: "n" }, changedFields: ["id", "name"] })).not.toThrow()
+    expect(() => enforceAbacWrite({ bundle: verified, action: "create", record: { kind: "special", name: "n" }, changedFields: ["kind", "name"] })).toThrow(ForbiddenError)
+  })
+
+  it("still denies a create with an explicit null the deny condition reads", async () => {
+    const denyForeign = policy({ id: "deny", effect: "deny", priority: 100, actions: ["create"], when: Predicate.neq("ownerId", "u1"), fieldAccess: { write: ["salary"] } })
+    const allowCreate = policy({ id: "allow", priority: 100, actions: ["create"] })
+    const verified = await bundle([denyForeign, allowCreate])
+    expect(() => enforceAbacWrite({ bundle: verified, action: "create", record: { ownerId: null } })).toThrow(ForbiddenError)
+    expect(() => assertPolicyWritableFields({ policies: verified.policies, moduleKey: MODULE, action: "create", record: { ownerId: null, salary: 1 }, changedFields: ["salary"] })).toThrow(ForbiddenError)
+    expect(() => assertPolicyWritableFields({ policies: verified.policies, moduleKey: MODULE, action: "create", record: { salary: 1 }, changedFields: ["salary"] })).not.toThrow()
+  })
+})
+
 describe("framework authorization binds the bundle to the module", () => {
   it("rejects a verified bundle for another module", async () => {
     const other = await bundle([{ ...policy({ id: "a" }), moduleKey: "other.module" }], "other.module")

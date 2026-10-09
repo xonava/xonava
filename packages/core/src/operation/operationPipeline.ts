@@ -97,7 +97,7 @@ async function executeValidatedOperation<TInput, TResult, TCommand>(args: {
   definition: OperationDefinition<TInput, TResult, TCommand>
   input: TInput
   onBusinessResult?: (result: TResult, operation: PostCommitContext) => Promise<void>
-  nested?: { readonly parent: InternalOperationRunContext; readonly joinTransaction: boolean }
+  nested?: { readonly parent: InternalOperationRunContext; readonly joinTransaction: boolean; readonly scope: NestedOperationScope }
   /** Explicit composition (createOperationInvoker): not bound to the request's route. */
   composed?: boolean
 }): Promise<{ result: TResult; operation: InternalOperationRunContext; committed: boolean }> {
@@ -116,7 +116,7 @@ async function executeValidatedOperation<TInput, TResult, TCommand>(args: {
     if (joinedParent && isAtomicBatchDefinition(args.definition)) throw new ConfigurationError(`Atomic-batch operation ${args.definition.key} cannot run inside another operation's transaction.`)
     const result = isAtomicBatchDefinition(args.definition)
       ? await runAtomicBatchOperation({ operation, definition: args.definition, input: args.input, ...(notRouteBound ? { nested: true } : {}), ...(args.onBusinessResult ? { onBusinessResult: args.onBusinessResult } : {}) })
-      : await runStandardOperation({ operation, definition: args.definition, input: args.input, createNestedInvoke, ...(notRouteBound ? { nested: true } : {}), ...(joinedParent ? { joinedParent } : {}), ...(args.onBusinessResult ? { onBusinessResult: args.onBusinessResult } : {}) })
+      : await runStandardOperation({ operation, definition: args.definition, input: args.input, createNestedInvoke, ...(notRouteBound ? { nested: true } : {}), ...(joinedParent && args.nested ? { joinedParent, joinedScope: args.nested.scope.assertOpen } : {}), ...(args.onBusinessResult ? { onBusinessResult: args.onBusinessResult } : {}) })
     joinedPendingParent = joinedParent !== undefined
     emitCompleted(operation, args.definition, startedAt, operation.effectFailures.length > 0 ? "committed_with_effect_failures" : "success")
     return { result, operation, committed }
@@ -146,19 +146,19 @@ const createNestedInvoke: NestedInvokeFactory = (parent, options) => async (defi
   const validated = validateOperationDefinition(definition)
   if (options.readOnly && validated.kind !== "read") throw new ConfigurationError(`Read operation cannot invoke ${validated.kind ?? "unknown"} operation ${validated.key}.`)
   const execution = await executeValidatedOperation({
-    operation: childEnvironment(parent, nestingDepth, options.scope, options.joinTransaction),
+    operation: childEnvironment(parent, nestingDepth, options.scope),
     definition: validated,
     input,
-    nested: { parent, joinTransaction: options.joinTransaction },
+    nested: { parent, joinTransaction: options.joinTransaction, scope: options.scope },
   })
   return execution.result
 }
 
-function childEnvironment(parent: InternalOperationRunContext, nestingDepth: number, scope: NestedOperationScope, joinTransaction: boolean): OperationEnvironment {
+function childEnvironment(parent: InternalOperationRunContext, nestingDepth: number, scope: NestedOperationScope): OperationEnvironment {
   return {
-    // A joined child's handle on the parent's transaction fails closed once
-    // the parent's execute has finished or failed.
-    persistence: joinTransaction ? scope.guardPersistence(parent.persistence) : parent.persistence,
+    // The raw (transaction-scoped) provider: infrastructure sinks resolve
+    // their session from it. The joined child guards what user code sees.
+    persistence: parent.persistence,
     runtimeCapabilities: parent.runtimeCapabilities,
     ...(parent.request !== undefined ? { request: parent.request } : {}),
     services: parent.services,

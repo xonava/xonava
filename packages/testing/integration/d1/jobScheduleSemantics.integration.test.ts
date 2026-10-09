@@ -4,7 +4,7 @@ import { getTableColumns } from "drizzle-orm"
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
 import { createDrizzleD1Adapter, createDrizzleJobStore, createDrizzleScheduleStore } from "adapters/drizzle-d1"
 import { openD1Fixture, type D1Fixture } from "./database.js"
-import { assertDefinitionMaxAttempts, assertScheduleOccurrencesAndBackoff } from "../shared/jobScheduleSemantics.js"
+import { assertDefinitionMaxAttempts, assertScheduleOccurrencesAndBackoff, assertUnknownDefinitionDeferral } from "../shared/jobScheduleSemantics.js"
 
 const ts = (name: string) => integer(name, { mode: "timestamp_ms" })
 const jobs = sqliteTable("js_jobs", {
@@ -45,6 +45,11 @@ describe("D1 job and schedule semantics", () => {
   it("applies the job definition's maxAttempts when a job has no explicit budget", async () => {
     const { d1, jobStore } = await setup()
     await assertDefinitionMaxAttempts(jobStore, async (id) => Number((await d1.prepare("SELECT max_attempts FROM js_jobs WHERE id=?").bind(id).first<{ max_attempts: number }>())!.max_attempts))
+  })
+
+  it("measures the unknown-definition deferral window from the first deferral", async () => {
+    const { jobStore } = await setup()
+    await assertUnknownDefinitionDeferral(jobStore)
   })
 
   it("caps catch-up by remainingOccurrences and backs off failing schedules", async () => {

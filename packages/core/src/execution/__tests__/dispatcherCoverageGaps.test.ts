@@ -40,7 +40,7 @@ describe("dispatcher focused validation and result branches", () => {
     ;(unknown.store.markRetrying as ReturnType<typeof vi.fn>).mockResolvedValue({ applied: true })
     const unknownResult = await dispatchDueJobs({ store: unknown.store, registry: unknown.registry, workerId: "w", leaseDurationMs: 1, claimLimit: 1, requester: { scope: "system" } })
     expect(unknownResult).toMatchObject({ retried: 1, failed: 0, deadLettered: 0 })
-    expect(unknown.store.markRetrying).toHaveBeenCalledWith(expect.objectContaining({ error: "Unknown job definition: missing@1" }))
+    expect(unknown.store.markRetrying).toHaveBeenCalledWith(expect.objectContaining({ error: expect.stringMatching(/^Unknown job definition: missing@1 \(unrunnable since \S+Z\)$/) as string }))
 
     // Once the store refuses another attempt, the job is dead-lettered (not silently failed).
     ;(unknown.store.markRetrying as ReturnType<typeof vi.fn>).mockResolvedValue({ applied: false })
