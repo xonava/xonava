@@ -27,6 +27,10 @@ A comparison operator (`eq`, `neq`, `gt`, `lt`, `gte`, `lte`, `between`, `in`, `
 
 Any other pair is not comparable: in particular the string `"100"` and the number `100` are different values (this prevents identifier type confusion), and structured values, arrays, and NaN are never comparable. Incomparable values MUST NOT compare as equal. Adapters MUST hydrate typed columns (for example SQL DECIMAL/NUMERIC, which many drivers return as strings) into the value kind the entity declares before in-memory evaluation.
 
+### Temporal columns
+
+Entities hydrate `date` fields as `YYYY-MM-DD` strings or as `Date` values at UTC midnight, and `datetime` fields as `Date` values. A SQL temporal column (date, timestamp/datetime, time) compares natively as a temporal value whenever the literal is a strict RFC 3339 `full-date` or `date-time`, or a `Date`. That matches the in-memory rule for those representations, and the column's index stays usable. Implementations MUST bind such literals in a time-zone-free form, never through a driver's local-time serialization. The engine's own text form of the column's type (what a string-mode column hydrates, and so what cursor values carry) also compares natively. Any other string compares with the column's text form when rows hydrate as strings, and is not comparable (UNKNOWN) when rows hydrate as `Date`. A `date` field compares as a calendar date: portable predicates compare it with `full-date` literals. A `date-time` literal against a date column is cast by the engine and is not portable. Engine-native enums (PostgreSQL) compare and sort in declaration order. A literal that is not a member equals no row, and ordering against it is UNKNOWN.
+
 ### Null tests
 
 `isNull`, `isNotNull`, `isEmpty`, `isNotEmpty`, `eq(field, null)` and `neq(field, null)` are two-valued, like SQL `IS NULL` / `IS NOT NULL`. `isEmpty` is TRUE for NULL and the empty string.

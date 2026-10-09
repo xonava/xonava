@@ -4,7 +4,8 @@ import { createAbacAuthorizer } from "../abacAuthorizer"
 import { evaluateAbacRecordCapability } from "../abacDecision"
 import { assertPolicyWritableFields, hasRecordDependentFieldWrite, projectResponseRecord, resolveFieldQueryDenials, resolveFieldReadOverrides } from "../fieldAccess"
 import { parseFieldAccessStrict } from "../abacPolicySchema"
-import { ForbiddenError } from "../errors"
+import { ForbiddenError, ValidationError } from "../errors"
+import { enforceAbacWrite } from "../abacWrite"
 import { Predicate, type PredicateNode } from "../predicate"
 import type { NormalizedAbacPolicy, VerifiedAbacPolicyBundle } from "../abacTypes"
 import type { ParsedPolicyPayload, PolicyFilterClause } from "../abacPolicySchema"
@@ -161,5 +162,52 @@ describe("date-field policy values supplied as Date instances", () => {
     const midnight = compile(new Date("2026-01-01T00:00:00.000Z"))
     expect(midnight.success && JSON.stringify(midnight.predicate)).toContain("\"2026-01-01\"")
     expect(compile(new Date("2026-01-01T12:00:00.000Z")).success).toBe(false)
+  })
+})
+
+describe("regression: a non-canonical spelling of a forbidden date passed a date-equality deny on write", () => {
+  // The deny literal is the calendar date "2024-01-01"; an ISO date-time
+  // string compares as a different string (FALSE), yet PostgreSQL casts it to
+  // the forbidden date. Writes therefore accept only YYYY-MM-DD or a UTC-midnight Date.
+  const deny = policy({ id: "deny", effect: "deny", priority: 10, actions: ["create", "update"], when: Predicate.eq("dueOn", "2024-01-01") })
+  const allow = policy({ id: "allow", priority: 1, actions: ["create", "update"] })
+  async function dated(): Promise<VerifiedAbacPolicyBundle> {
+    return bindAbacSecurityDigest({
+      mode: "tenant", moduleKey: MODULE, policies: [deny, allow], context: { tenantId: "t1" }, defaultEffect: "deny",
+      fieldCatalog: { dueOn: { key: "dueOn", type: "date", operators: [] }, name: { key: "name", type: "string", operators: [] } },
+    })
+  }
+
+  it.each(["2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00Z", "2024-01-01T05:30:00+05:30", " 2024-01-01", "2024-01-01 ", "20240101", "2024-1-1", "2024-02-30"])("rejects %j for a date field", async (spelling) => {
+    const verified = await dated()
+    for (const action of ["create", "update"] as const) {
+      expect(() => enforceAbacWrite({ bundle: verified, action, record: { dueOn: spelling }, changedFields: ["dueOn"] })).toThrow(ValidationError)
+    }
+  })
+
+  it("still applies the deny to canonical spellings and accepts Date values", async () => {
+    const verified = await dated()
+    for (const value of ["2024-01-01", new Date("2024-01-01T00:00:00.000Z")]) {
+      expect(() => enforceAbacWrite({ bundle: verified, action: "update", record: { dueOn: value }, changedFields: ["dueOn"] })).toThrow(ForbiddenError)
+    }
+    for (const value of ["2024-01-02", new Date("2024-01-02T00:00:00.000Z")]) {
+      expect(() => enforceAbacWrite({ bundle: verified, action: "update", record: { dueOn: value, name: "2024-01-01T00:00:00Z" }, changedFields: ["dueOn", "name"] })).not.toThrow()
+    }
+    expect(() => createAbacAuthorizer(verified).assertWrite({ action: "create", record: { dueOn: "2024-01-01T00:00:00.000Z" } })).toThrow(ValidationError)
+  })
+})
+
+describe("regression: hasRecordDependentFieldWrite over-flagged a single conditional allow", () => {
+  it("is false when the only allow is conditional, whatever the deny write lists", () => {
+    const denyStatus = policy({ id: "d", effect: "deny", priority: 10, actions: ["update"], fieldAccess: { write: ["status"] } })
+    const own = policy({ id: "own", priority: 5, actions: ["update"], when: Predicate.eq("ownerId", "u1") })
+    expect(hasRecordDependentFieldWrite([denyStatus, own], MODULE, "update")).toBe(false)
+  })
+
+  it("is true when a conditional allow and a restricting allow can decide different permitted rows", () => {
+    const restricted = policy({ id: "r", priority: 1, actions: ["update"], fieldAccess: { write: ["name"] } })
+    const own = policy({ id: "own", priority: 5, actions: ["update"], when: Predicate.eq("ownerId", "u1") })
+    expect(hasRecordDependentFieldWrite([restricted, own], MODULE, "update")).toBe(true)
+    expect(hasRecordDependentFieldWrite([own, { ...own, source: { ...own.source, policyId: "own2" } }], MODULE, "update")).toBe(false)
   })
 })

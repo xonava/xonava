@@ -127,6 +127,10 @@ function coerceClauseValue(
     // UTC midnight), and only the full-date form equals both. Normalization
     // would otherwise serialize the Date as "...T00:00:00.000Z", which no
     // string-hydrated date ever equals (a date-equality deny would fail open).
+    // Writes must spell date fields as YYYY-MM-DD (enforceAbacWrite), and
+    // storage must hydrate them as YYYY-MM-DD strings or Dates: a row whose
+    // date hydrates as a full date-time string would not equal this literal in
+    // record-level checks (the SQL scope, evaluated on the column, is unaffected).
     if (fieldDef!.type === "date" && coerced instanceof Date) {
       const iso = coerced.toISOString()
       // Only a UTC-midnight instant in years 0000-9999 is a calendar date.

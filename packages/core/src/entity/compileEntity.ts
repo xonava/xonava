@@ -15,16 +15,20 @@ import { compileQueryBudget, type QueryBudget } from "../query/queryBudget"
 import { entityFieldClassifications, queryableFieldFilter } from "./queryableFields"
 
 /**
- * Default per-entity namespace `${moduleKey}:${namespace}:${name}`. Entity names
- * are unique only within a module and persistence namespace, so defaults are
- * qualified by both. Neither the module key nor the entity name may contain
- * ":" (validateEntity), so the first and last segments delimit the namespace
- * and the encoding is injective. An absent namespace and "" are the same
- * persistence namespace. Used for the default idempotency namespace and, under
- * the reserved "entity:" prefix, the default cache tag and key prefix.
+ * Default per-entity namespace: `${moduleKey}:${name}`, or
+ * `${moduleKey}:${namespace}:${name}` when the entity declares a persistence
+ * namespace. Entity names are unique only within a module and persistence
+ * namespace, so defaults are qualified by both; entities without a namespace
+ * keep the original two-segment form, so their idempotency namespaces are
+ * unchanged. Injective: neither the module key nor the entity name may contain
+ * ":" (validateEntity), so the form without a namespace has exactly two
+ * segments and every form with a non-empty namespace has at least three. An
+ * absent namespace and "" are the same persistence namespace. Used for the
+ * default idempotency namespace and, under the reserved "entity:" prefix, the
+ * default cache tag and key prefix.
  */
 export function defaultEntityNamespace(moduleKey: string, entity: { readonly name: string; readonly namespace?: string }): string {
-  return `${moduleKey}:${entity.namespace ?? ""}:${entity.name}`
+  return entity.namespace ? `${moduleKey}:${entity.namespace}:${entity.name}` : `${moduleKey}:${entity.name}`
 }
 import type { AuditFieldClassification, AuditFieldClassifications } from "../events/durability/audit"
 import type { SearchPort } from "../query/search"

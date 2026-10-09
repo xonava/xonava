@@ -21,7 +21,7 @@ import { createFrameworkErrorHandler, frameworkJson } from "./handleFrameworkCor
 import { parseJsonBodySafely, parseUniqueQueryParameters, resolveRequestMetadata } from "./requestBody"
 import type { CacheAdapter } from "core/cache"
 import type { AuditSink, OutboxSink } from "core/events"
-import { boundRateLimitKeyMaterial, buildIdempotencyScopeIdentity, buildIdempotencySecurityContext, deserializeResponse, fingerprintJson, MAX_IDEMPOTENCY_KEY_LENGTH, serializeResponse, type SerializedResponse, type SerializedResponseIdempotencyPort } from "./idempotency"
+import { boundRateLimitKeyMaterial, buildIdempotencyScopeIdentity, buildIdempotencySecurityContext, deserializeResponse, fingerprintJson, legacyFingerprintJson, MAX_IDEMPOTENCY_KEY_LENGTH, serializeResponse, type SerializedResponse, type SerializedResponseIdempotencyPort } from "./idempotency"
 import { authorizeFrameworkModule, normalizeCrudRequest, tenantIdFromContext } from "./crudHandlers/shared"
 
 const frameworkErrorHandler = createFrameworkErrorHandler()
@@ -105,9 +105,9 @@ async function enrichValidatedContext(args: {
   return { validated: { validatedParams, validatedQuery, validatedBody }, raw }
 }
 
-async function fingerprintClientMutation(value: unknown): Promise<string> {
+async function fingerprintClientMutation(value: unknown, fingerprint: (value: unknown) => Promise<string> = fingerprintJson): Promise<string> {
   try {
-    return await fingerprintJson(value)
+    return await fingerprint(value)
   } catch (error) {
     // The client controls this material; anything without a canonical JSON
     // form (e.g. a "__proto__" member or an unsafe integer) is a bad request.
@@ -365,10 +365,7 @@ export function createFrameworkWriteHandler<
            const scope = tenantId
              ? `${encodeTenantIdempotencyScope(tenantId)}:${args.moduleKey}:${args.action}:principal:${scopeIdentity}`
              : `${requestContext.scopeId}:${args.moduleKey}:${args.action}:principal:${scopeIdentity}`
-           const idempotencyRequest = {
-             scope,
-             key: idempotencyKey,
-            fingerprint: await fingerprintClientMutation({
+           const fingerprintMaterial = {
               moduleKey: args.moduleKey,
               action: args.action,
               securityContext,
@@ -387,7 +384,11 @@ export function createFrameworkWriteHandler<
               // A replay is only valid under the exact policy bundle that
               // authorized the original mutation.
               abacSecurityDigest: abacBundle?.securityDigest ?? null,
-            }),
+            }
+           const idempotencyRequest = {
+             scope,
+             key: idempotencyKey,
+            fingerprint: await fingerprintClientMutation(fingerprintMaterial),
             leaseDurationMs: 30_000,
           }
           const port: import("core/events").IdempotencyPort<SerializedResponse> = tenantId
@@ -406,7 +407,21 @@ export function createFrameworkWriteHandler<
               `Idempotency for "${args.moduleKey}" requires a transaction- or atomic-batch-integrated idempotency port`,
             )
           }
-          const acquired = await port.acquire(idempotencyRequest)
+          let acquired = await port.acquire(idempotencyRequest)
+          if (acquired.outcome === "conflict") {
+            // A record written before the RFC 8785 key-order fix carries the v2
+            // fingerprint of the same request. Retry once with it so a retry
+            // across that deploy replays instead of conflicting; the lease then
+            // keeps the stored fingerprint for renew/complete.
+            const legacyFingerprint = await fingerprintClientMutation(fingerprintMaterial, legacyFingerprintJson)
+            if (legacyFingerprint !== idempotencyRequest.fingerprint) {
+              const legacy = await port.acquire({ ...idempotencyRequest, fingerprint: legacyFingerprint })
+              if (legacy.outcome !== "conflict") {
+                idempotencyRequest.fingerprint = legacyFingerprint
+                acquired = legacy
+              }
+            }
+          }
           if (acquired.outcome === "replay") {
             return responseWithMetadata(deserializeResponse(acquired.result), requestMetadata)
           }

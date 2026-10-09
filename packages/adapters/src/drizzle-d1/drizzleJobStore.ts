@@ -19,7 +19,7 @@ import type {
   JobTransitionResult,
 } from "core/execution"
 import { assertRequesterCanEnqueueScope, assertJobScopeCanEnqueue, assertDurableJob, assertDurableIdentifier, requesterJobScope, requesterTenantId, scheduleCorrelationId, CorruptJobMetadataError, JobIdempotencyConflictError } from "core/execution"
-import { buildJobFingerprintInput, decodeStoredJobMaxAttempts, encodeStoredJobMaxAttempts, fingerprintJob } from "core/execution"
+import { buildJobFingerprintInput, decodeStoredJobMaxAttempts, encodeStoredJobMaxAttempts, fingerprintJob, jobFingerprintMatches } from "core/execution"
 import { decodePersistedJobFingerprint, decodePersistedJobScope, encodeJobScope } from "../drizzle-shared/jobScope"
 import { uuidv7 } from "uuidv7"
 import type { DrizzleColumnMap } from "../drizzle-shared/predicateCompiler"
@@ -194,7 +194,8 @@ export class DrizzleJobStore implements JobStore {
     assertJobScopeCanEnqueue(scope, tenantId)
     const now = new Date()
     const idempotencyScope = buildIdempotencyScope(tenantId, scope)
-    const fingerprint = await fingerprintJob(buildJobFingerprintInput(job, runAt))
+    const fingerprintInput = buildJobFingerprintInput(job, runAt)
+    const fingerprint = await fingerprintJob(fingerprintInput)
     if (job.idempotencyKey) {
       const id = uuidv7()
       const insertion = this.db.insert(this.jobsTable).values({
@@ -225,7 +226,7 @@ export class DrizzleJobStore implements JobStore {
       if (typeof existingFingerprint !== "string" || existingFingerprint.length === 0) {
         throw new Error("Stored job fingerprint is missing; migrate fingerprints before replaying jobs.")
       }
-      if (existingFingerprint !== fingerprint) throw new JobIdempotencyConflictError(idempotencyScope, job.idempotencyKey)
+      if (!(await jobFingerprintMatches(existingFingerprint, fingerprintInput))) throw new JobIdempotencyConflictError(idempotencyScope, job.idempotencyKey)
       return toStoredJob(row)
     }
     const id = uuidv7()

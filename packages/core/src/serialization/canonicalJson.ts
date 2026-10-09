@@ -311,6 +311,29 @@ export function canonicalJsonString(value: unknown): string {
   return json;
 }
 
+/**
+ * COMPATIBILITY ONLY — do not use for new digests, keys or stored values.
+ *
+ * Reproduces the serialization canonicalJsonString produced before the
+ * RFC 8785 key-order fix: the same validation and normalisation, but object
+ * members in JavaScript property order (integer-like keys such as "9" < "10"
+ * first, in numeric order). It differs from canonicalJsonString only for
+ * objects whose integer-like keys sort differently as strings. It exists so
+ * stores can still recognise fingerprints persisted under the previous
+ * fingerprint versions (outbox "v2", job 3, HTTP idempotency "v2") during a
+ * deploy; remove it with those legacy versions.
+ *
+ * @internal
+ */
+export function legacyJavaScriptOrderJsonString(value: unknown): string {
+  const json = JSON.stringify(canonicalizeValue(value));
+  if (json === undefined) throw new CanonicalJsonError("Canonical JSON is not serializable");
+  if (utf8ByteLength(json) > CANONICAL_JSON_LIMITS_V1.maxUtf8Bytes) {
+    throwLimit(`canonical JSON bytes exceeds maxUtf8Bytes ${CANONICAL_JSON_LIMITS_V1.maxUtf8Bytes}`);
+  }
+  return json;
+}
+
 export function canonicalJsonBytes(value: unknown): Uint8Array {
   const json = canonicalJsonString(value);
   return utf8Encoder.encode(json);

@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest"
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { createRng, forAll, forAllAsync } from "./harness"
 import { generatePredicate, generateRecord, shrinkPredicate } from "./arbitraries"
 import { evaluatePredicateTruth } from "../../domain/evaluatePredicate"
@@ -39,5 +42,38 @@ describe("differential harness", () => {
 
   it("supports async properties", async () => {
     await expect(forAllAsync("async planted", (rng) => rng.int(10), async (value) => { if (value === 3) throw new Error("three") }, { runs: 200 })).rejects.toThrow("three")
+  })
+
+  describe("success reports (DIFFERENTIAL_REPORT_DIR)", () => {
+    let directory: string | undefined
+    afterEach(() => {
+      vi.unstubAllEnvs()
+      if (directory) rmSync(directory, { recursive: true, force: true })
+      directory = undefined
+    })
+
+    it("appends one line per passing property with the seed, scale, and runs it used", async () => {
+      directory = mkdtempSync(join(tmpdir(), "differential-report-"))
+      vi.stubEnv("DIFFERENTIAL_REPORT_DIR", directory)
+      vi.stubEnv("DIFFERENTIAL_SEED", "77")
+      vi.stubEnv("DIFFERENTIAL_SCALE", "2")
+      forAll("reported sync", (rng) => rng.int(10), () => undefined, { runs: 30 })
+      await forAllAsync("reported async", (rng) => rng.int(10), async () => undefined, { runs: 20 })
+      expect(() => forAll("unreported failure", (rng) => rng.int(10), () => { throw new Error("no") }, { runs: 5 })).toThrow("no")
+      const files = readdirSync(directory)
+      expect(files).toHaveLength(1)
+      const lines = readFileSync(join(directory, files[0]!), "utf8").trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>)
+      expect(lines.map(({ recordedAt: _recordedAt, ...rest }) => rest)).toEqual([
+        { property: "reported sync", seed: 77, scale: 2, baseRuns: 30, runs: 60, replayRun: null, passed: true },
+        { property: "reported async", seed: 77, scale: 2, baseRuns: 20, runs: 40, replayRun: null, passed: true },
+      ])
+    })
+
+    it("writes nothing when the directory is not configured", () => {
+      directory = mkdtempSync(join(tmpdir(), "differential-report-"))
+      vi.stubEnv("DIFFERENTIAL_REPORT_DIR", "")
+      forAll("quiet", (rng) => rng.int(10), () => undefined, { runs: 5 })
+      expect(readdirSync(directory)).toEqual([])
+    })
   })
 })

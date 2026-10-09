@@ -56,6 +56,15 @@ function applyProjection(row: SelectableRow, projection: ProjectionSpec | undefi
   return Object.fromEntries(projection.fields.filter(field => Object.hasOwn(row, field)).map(field => [field, row[field]]))
 }
 
+const STALE_CURSOR_MESSAGE = "Cursor is no longer valid; restart from the first page"
+
+/** A cursor that cannot be used for this request; answered as a 400 with a restart hint. */
+class StaleCursorError extends ValidationError {
+  constructor(cause: unknown) {
+    super(STALE_CURSOR_MESSAGE, cause)
+  }
+}
+
 /**
  * The scope segment of a list cache key: security partition, request scope and
  * read-scope key. Encoded as a canonical cache key part (a JSON array), so it is
@@ -220,9 +229,17 @@ export function createListHandler<
             }
             const opaque = input.query.cursor ?? input.query.before
             if (opaque) {
-              cursorPayload = await decodeCursor(opaque, cursorConfig.integrity, cursorConfig.maxCursorBytes)
+              try {
+                cursorPayload = await decodeCursor(opaque, cursorConfig.integrity, cursorConfig.maxCursorBytes)
+                assertCursorBinding(cursorPayload, cursorBindings)
+              } catch (error) {
+                // Malformed, tampered, expired, signed by a retired key, or bound to
+                // another entity/query/scope (including every cursor issued before
+                // the bindings changed): the client can only start over.
+                if (error instanceof ValidationError) throw new StaleCursorError(error)
+                throw error
+              }
               if (cursorPayload.direction !== (input.query.before ? "before" : "after")) throw new ValidationError("cursor direction does not match the request parameter")
-              assertCursorBinding(cursorPayload, cursorBindings)
             }
           }
           const requestedProjection = parseProjection(input.query.fields)
@@ -463,6 +480,12 @@ export function createListHandler<
       }
       return withReadMetadata(frameworkJson(result), requestMetadata)
     } catch (error) {
+      if (error instanceof StaleCursorError) {
+        const response = frameworkJson({ error: STALE_CURSOR_MESSAGE, code: "VALIDATION_ERROR" }, { status: 400 })
+        if (requestMetadata?.requestId) response.headers.set("x-request-id", requestMetadata.requestId)
+        if (requestMetadata?.correlationId) response.headers.set("x-correlation-id", requestMetadata.correlationId)
+        return response
+      }
       return frameworkErrorHandler(error, requestMetadata)
     }
   }

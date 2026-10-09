@@ -4,6 +4,8 @@ import { integer, pgTable, text } from "drizzle-orm/pg-core"
 import { PgDialect } from "drizzle-orm/pg-core/dialect"
 import type { SQL } from "drizzle-orm/sql/sql"
 import { ConfigurationError } from "core/domain"
+import { JobIdempotencyConflictError, buildJobFingerprintInput, fingerprintJob } from "core/execution"
+import { canonicalizeValue } from "core/serialization"
 import { createDrizzleJobStore, type DrizzleSessionLike } from "adapters/drizzle-pg"
 
 const jobsTable = pgTable("platform_jobs", {
@@ -119,6 +121,33 @@ describe("PostgreSQL job-store idempotency lookup", () => {
       requester: { scope: "platform", actorId: "worker-1" },
       job: { executionScope: { kind: "platform", platformKey: "default" }, jobType: "test.job", jobVersion: 1, payload: {}, idempotencyKey: "job-1" },
     })).rejects.toThrow("fingerprint is missing")
+  })
+
+  describe("fingerprints persisted before the RFC 8785 key-order fix (job fingerprint version 3)", () => {
+    const runAt = new Date("2026-01-01T00:00:00.000Z")
+    const job = { executionScope: { kind: "platform" as const, platformKey: "default" }, jobType: "test.job", jobVersion: 1, payload: { "10": 1, "9": 2 }, idempotencyKey: "job-1", runAt }
+    const storedV3 = async (payload: Record<string, unknown>): Promise<string> => {
+      const text = JSON.stringify(canonicalizeValue({ version: 3, job: { ...buildJobFingerprintInput({ ...job, payload }, runAt), runAt: runAt.toISOString() } }))
+      return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))), (byte) => byte.toString(16).padStart(2, "0")).join("")
+    }
+    const storeWithExisting = (fingerprint: string) => createDrizzleJobStore({
+      insert: vi.fn(() => ({ values: () => ({ onConflictDoNothing: () => ({ returning: async () => [] }) }) })),
+      select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ limit: async () => [{
+        id: "job-1", jobType: "test.job", jobVersion: 1, tenantId: null, scope: "platform", payload: JSON.stringify(job.payload), status: "pending", priority: 0, attempts: 0, maxAttempts: 3,
+        runAt: runAt.toISOString(), nextAttemptAt: runAt.toISOString(), leaseOwner: null, leaseExpiresAt: null, claimToken: null, idempotencyKey: "job-1", idempotencyScope: "platform",
+        fingerprint, correlationId: null, lastError: null, resultPayload: null, metadata: null, createdAt: runAt.toISOString(), startedAt: null, completedAt: null, partitionKey: null,
+      }] })) })) })),
+    } as unknown as DrizzleSessionLike, { jobsTable, executionsTable, columnMap })
+
+    it("replays an identical re-enqueue whose stored fingerprint is version 3", async () => {
+      expect(await storedV3(job.payload)).not.toBe(await fingerprintJob(buildJobFingerprintInput(job, runAt)))
+      const stored = await storeWithExisting(await storedV3(job.payload)).enqueue({ requester: { scope: "platform", actorId: "worker-1" }, job })
+      expect(stored.id).toBe("job-1")
+    })
+
+    it("still rejects a different job under a version-3 fingerprint", async () => {
+      await expect(storeWithExisting(await storedV3({ "10": 2 })).enqueue({ requester: { scope: "platform", actorId: "worker-1" }, job })).rejects.toThrow(JobIdempotencyConflictError)
+    })
   })
 
   it("requires a partitionKey column to serialize schedule execution", () => {

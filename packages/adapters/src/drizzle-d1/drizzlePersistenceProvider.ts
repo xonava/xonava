@@ -15,7 +15,7 @@ import { ConfigurationError, ConflictError, FrameworkCoreError, ImmutableFieldVi
 import { assertOutboxScope } from "core/events"
 import { normalizeDrizzleError } from "../drizzle-shared/errors"
 import { Predicate } from "core/domain"
-import { compileDrizzlePredicate, type PredicateCompilerOptions } from "../drizzle-shared/predicateCompiler"
+import { DrizzlePredicateCompiler, type PredicateCompilerOptions } from "../drizzle-shared/predicateCompiler"
 
 const SQLITE_PREDICATES: PredicateCompilerOptions = Object.freeze({ dialect: "sqlite" })
 import { assertD1BatchLimits, estimateD1Statement } from "./d1BatchLimits"
@@ -292,7 +292,7 @@ function createTenantCommandEncoder(
           ...effectiveExpectedAffectedRows(command, mapping),
           statement: adapter.raw.update(mapping.table)
             .set(drizzleValues(command, mapping, values))
-            .where(compileDrizzlePredicate(versionedFilter, mapping.columnMap, SQLITE_PREDICATES)) as RunnableQuery<unknown, "sqlite">
+            .where(new DrizzlePredicateCompiler(mapping.columnMap, SQLITE_PREDICATES).compileWhere(versionedFilter)) as RunnableQuery<unknown, "sqlite">
         }
       }
       if (mapping.entity.versionField && command.expectedVersion === undefined) {
@@ -306,7 +306,7 @@ function createTenantCommandEncoder(
         kind: "statement",
         ...effectiveExpectedAffectedRows(command, mapping),
         statement: adapter.raw.delete(mapping.table)
-          .where(compileDrizzlePredicate(versionedFilter, mapping.columnMap, SQLITE_PREDICATES)) as RunnableQuery<unknown, "sqlite">
+          .where(new DrizzlePredicateCompiler(mapping.columnMap, SQLITE_PREDICATES).compileWhere(versionedFilter)) as RunnableQuery<unknown, "sqlite">
       }
     },
   }
@@ -346,7 +346,7 @@ function createUnscopedCommandEncoder(
         ...effectiveExpectedAffectedRows(command, mapping),
         statement: adapter.raw.update(mapping.table)
           .set(drizzleValues(command, mapping, values))
-          .where(compileDrizzlePredicate(filter, mapping.columnMap, SQLITE_PREDICATES)) as RunnableQuery<unknown, "sqlite">
+          .where(new DrizzlePredicateCompiler(mapping.columnMap, SQLITE_PREDICATES).compileWhere(filter)) as RunnableQuery<unknown, "sqlite">
       }
     }
     if (mapping.entity.versionField && command.expectedVersion === undefined) {
@@ -359,7 +359,7 @@ function createUnscopedCommandEncoder(
       kind: "statement",
       ...effectiveExpectedAffectedRows(command, mapping),
       statement: adapter.raw.delete(mapping.table)
-        .where(compileDrizzlePredicate(filter, mapping.columnMap, SQLITE_PREDICATES)) as RunnableQuery<unknown, "sqlite">
+        .where(new DrizzlePredicateCompiler(mapping.columnMap, SQLITE_PREDICATES).compileWhere(filter)) as RunnableQuery<unknown, "sqlite">
     }
   }
 }
@@ -521,7 +521,7 @@ export function createDrizzlePersistenceProvider(args: DrizzlePersistenceProvide
           .limit(1)
         const existing = existingRows[0] as { eventFingerprint?: unknown } | undefined
         if (existing) {
-          assertOutboxFingerprintMatches(existing.eventFingerprint, fingerprint)
+          await assertOutboxFingerprintMatches(existing.eventFingerprint, fingerprint, item.record)
           existingOutboxKeys.add(key)
           verifiedIdempotentNoOps.add(item.record)
         }

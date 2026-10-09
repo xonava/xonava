@@ -43,6 +43,8 @@ function npm(args, additions = {}) {
 
 console.log(`Starting fresh framework release certification run ${runId}`)
 npm(["run", "verify:framework-release:baseline"])
+// DF1: differential/property suites at release volume with a run-derived seed.
+npm(["run", "verify:framework:df1"])
 for (const adapter of ["pg", "mysql", "d1"]) npm(["run", `test:framework:crash:${adapter}`], { FRAMEWORK_CRASH_REPETITIONS: "20" })
 npm(["run", "verify:framework:cert"])
 console.log(`Framework release certification completed for run ${runId}`)

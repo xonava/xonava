@@ -99,15 +99,46 @@ describe("defect 1: clear() keeps tag generations monotonic", () => {
     expect(await adapter.getTagGeneration("t")).toBe(generation)
   })
 
-  it("KV keeps reading generation counters written by the previous key layout until the tag advances", async () => {
-    const kv = createFakeKv()
-    kv.store.set("__cache__:__generation__:legacy", JSON.stringify("123:abc"))
-    const adapter = new KvCacheAdapter(kv as never)
-    expect(await adapter.getTagGeneration("legacy")).toBe("123:abc")
-    await adapter.clear()
-    expect(await adapter.getTagGeneration("legacy")).toBe("123:abc")
-    const next = await adapter.advanceTagGeneration("legacy")
-    expect(await adapter.getTagGeneration("legacy")).toBe(next)
+  describe("rolling deploy with instances on the previous counter layout", () => {
+    const legacyKey = (tag: string) => `__cache__:__generation__:${tag}`
+    const newKey = (tag: string) => `__cachegen__:${tag}`
+
+    it("reads a counter only the previous layout has", async () => {
+      const kv = createFakeKv()
+      kv.store.set(legacyKey("legacy"), JSON.stringify("123:abc"))
+      const adapter = new KvCacheAdapter(kv as never)
+      expect(await adapter.getTagGeneration("legacy")).toBe("123:abc")
+    })
+
+    it("sees an advance made by an old instance after a new instance already wrote the new counter", async () => {
+      const kv = createFakeKv()
+      const adapter = new KvCacheAdapter(kv as never)
+      kv.store.set(newKey("t"), JSON.stringify("1000:new"))
+      // An old instance advances only the legacy counter, later in time.
+      kv.store.set(legacyKey("t"), JSON.stringify("2000:old-instance"))
+      expect(await adapter.getTagGeneration("t")).toBe("2000:old-instance")
+      kv.store.set(newKey("t"), JSON.stringify("3000:new"))
+      expect(await adapter.getTagGeneration("t")).toBe("3000:new")
+    })
+
+    it("advances both layouts so old instances observe new advances", async () => {
+      const kv = createFakeKv()
+      const adapter = new KvCacheAdapter(kv as never)
+      const generation = await adapter.advanceTagGeneration("t")
+      expect(JSON.parse(kv.store.get(newKey("t"))!)).toBe(generation)
+      expect(JSON.parse(kv.store.get(legacyKey("t"))!)).toBe(generation)
+    })
+
+    it("clear keeps both counter layouts but removes tagged values stored under the legacy prefix", async () => {
+      const kv = createFakeKv()
+      const adapter = new KvCacheAdapter(kv as never)
+      const generation = await adapter.advanceTagGeneration("users")
+      await new CacheService({ adapter }).getOrSet("user:1", async () => "v1", ["users"])
+      await adapter.clear()
+      expect(JSON.parse(kv.store.get(legacyKey("users"))!)).toBe(generation)
+      expect(await adapter.getTagGeneration("users")).toBe(generation)
+      expect([...kv.store.keys()].filter((name) => name.includes("user:1"))).toEqual([])
+    })
   })
 })
 

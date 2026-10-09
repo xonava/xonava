@@ -1,7 +1,7 @@
 import { Predicate, createAbacAuthorizer, markTrustedPredicate, evaluatePredicate, evaluatePredicateTruth, type NormalizedAbacPolicy, type PredicateNode, type PredicatePrimitive } from "core/domain"
 import { validateQueryPlan, type ListResult, type QueryOptions, type SortSpec } from "core/query"
-import { createRng, forAllAsync, hashSeed, scaledRuns } from "../../../core/src/__tests__/differential/harness.js"
-import { DIFFERENTIAL_FIELDS, generatePredicate, generateRecord, shrinkPredicate, type DifferentialField, type ValueDomains } from "../../../core/src/__tests__/differential/arbitraries.js"
+import { createRng, forAllAsync, hashSeed, scaledRuns, type Rng } from "../../../core/src/__tests__/differential/harness.js"
+import { DIFFERENTIAL_FIELDS, generateCondition, generatePredicate, generateRecord, shrinkPredicate, type DifferentialField, type ValueDomains } from "../../../core/src/__tests__/differential/arbitraries.js"
 import { ABAC_ACTIONS, bindPolicies, describePolicyCase, generatePolicies, shrinkPolicies } from "../../../core/src/__tests__/differential/abacArbitraries.js"
 import { compileCursorPredicate } from "../../../adapters/src/drizzle-shared/cursorPagination.js"
 
@@ -54,6 +54,14 @@ export const RECORD_DOMAINS = {
  */
 export const LITERAL_DOMAINS: ValueDomains = {
   ...RECORD_DOMAINS,
+  /**
+   * Date fields get calendar-date literals only (valid, or strings that are not
+   * RFC 3339 and so compare as text / are UNKNOWN). A date-time literal against
+   * a date column is cast by the engine to a calendar date, while core compares
+   * an instant or a string: not portable, so not generated (see
+   * docs/spec/persistence/predicates.md, "Temporal columns").
+   */
+  date: [...RECORD_DOMAINS.date, "2026-02-30", "2026-1-1"],
   string: [...RECORD_DOMAINS.string, "a%", "%a", "ft", "😀", "aa", "éz"],
   datetime: [
     ...RECORD_DOMAINS.datetime,
@@ -73,7 +81,32 @@ export type ParityRecord = Record<string, unknown> & { id: number }
  * Canonical entity values: date fields are `YYYY-MM-DD` strings, datetimes
  * are `Date`, tags are string arrays, and absent keys are NULL.
  */
-export function generateDataset(seed = hashSeed("rich-parity-dataset"), randomRows = 200): ParityRecord[] {
+/**
+ * A dialect-specific string-hydrated column beyond {@link PARITY_FIELDS}.
+ * `order: "core"` compares and sorts by code point like any string field;
+ * `order: "native"` (PostgreSQL enums) compares and sorts in the engine's own
+ * order, so ordering comparisons are not generated against core, and cursor
+ * pagination is checked for self-consistency with the repository's ORDER BY.
+ */
+export interface ExtraField {
+  readonly key: string
+  /** Stored values (as rows hydrate them). */
+  readonly values: readonly string[]
+  /** Literal values for predicates (should include non-stored strings). */
+  readonly literals: readonly string[]
+  readonly order: "core" | "native"
+}
+
+export function generateDataset(seed = hashSeed("rich-parity-dataset"), randomRows = 200, extraFields: readonly ExtraField[] = []): ParityRecord[] {
+  const records = generateBaseDataset(seed, randomRows)
+  for (const field of extraFields) {
+    const rng = createRng(hashSeed(`rich-parity-extra:${field.key}`))
+    for (const record of records) record[field.key] = rng.bool(0.15) ? null : rng.pick(field.values)
+  }
+  return records
+}
+
+function generateBaseDataset(seed: number, randomRows: number): ParityRecord[] {
   const rng = createRng(seed)
   const records: Record<string, unknown>[] = []
   // Every string value is stored at least once in `name` so ordering covers the whole domain.
@@ -109,6 +142,8 @@ export interface ParityDriver {
   readonly explicitNulls: boolean
   /** Cursor page size for the pagination walks (default 7); slow drivers use larger pages. */
   readonly pageSize?: number
+  /** Dialect-specific columns stored in the table and covered by every property. */
+  readonly extraFields?: readonly ExtraField[]
 }
 
 export const PAGE_ALL = 10_000
@@ -142,7 +177,7 @@ export async function roundTripMismatches(driver: ParityDriver, dataset: readonl
   for (const record of dataset) {
     const row = byId.get(record.id)
     if (!row) { out.push(`row ${record.id} missing`); continue }
-    for (const field of PARITY_FIELDS) {
+    for (const field of [...PARITY_FIELDS, ...(driver.extraFields ?? []).map((extra) => ({ key: extra.key, type: "string" as const }))]) {
       if (!sameValue(field.type, record[field.key], row[field.key])) out.push(`row ${record.id}.${field.key}: stored ${describeValue(record[field.key])}, read ${describeValue(row[field.key])}`)
     }
   }
@@ -172,14 +207,13 @@ function idDiff(rows: readonly ParityRecord[], expected: readonly number[], actu
 export async function checkPredicateParity(driver: ParityDriver, rows: readonly ParityRecord[], runs = 1500): Promise<PredicateParityStats> {
   const stats: PredicateParityStats = { cases: 0, nonTrivial: 0, empty: 0, all: 0 }
   const sortedIds = (list: readonly ParityRecord[]) => list.map((row) => row.id).sort((a, b) => a - b)
-  await forAllAsync(`real-database predicate parity (${driver.label})`, (rng) => generatePredicate(rng, {
-    portable: true,
-    emptyTests: true,
-    fields: PARITY_FIELDS,
-    domains: LITERAL_DOMAINS,
-    maxDepth: 6,
-    literalRate: 0.08,
-  }), async (predicate) => {
+  const extras = driver.extraFields ?? []
+  await forAllAsync(`real-database predicate parity (${driver.label})`, (rng) => {
+    const base = generatePredicate(rng, { portable: true, emptyTests: true, fields: PARITY_FIELDS, domains: LITERAL_DOMAINS, maxDepth: 6, literalRate: 0.08 })
+    if (extras.length === 0 || !rng.bool(0.4)) return base
+    const condition = extraCondition(rng, rng.pick(extras))
+    return rng.pick([Predicate.and(base, condition), Predicate.or(base, condition), condition, Predicate.not(condition)])
+  }, async (predicate) => {
     const expected = sortedIds(rows.filter((row) => evaluatePredicate(row, predicate)))
     const actual = [...await driver.selectIds(predicate)].sort((a, b) => a - b)
     stats.cases++
@@ -191,6 +225,18 @@ export async function checkPredicateParity(driver: ParityDriver, rows: readonly 
     }
   }, { runs, shrink: shrinkPredicate, describe: describeValue })
   return stats
+}
+
+const ORDERED_OPS = new Set(["gt", "lt", "gte", "lte", "between"])
+
+/** A condition on an extra field; native-order fields get no ordering comparisons (their order is not core's). */
+function extraCondition(rng: Rng, field: ExtraField): PredicateNode {
+  const options = { portable: true, emptyTests: true, fields: [{ key: field.key, type: "string" as const }], domains: { string: field.literals } }
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const condition = generateCondition(rng, options)
+    if (field.order === "core" || condition.kind !== "condition" || !ORDERED_OPS.has(condition.op)) return condition
+  }
+  return Predicate.eq(field.key, rng.pick(field.literals))
 }
 
 // ---------------------------------------------------------------------------
@@ -234,14 +280,22 @@ function cursorValue(value: unknown): string | number | boolean | null {
   return value as string | number | boolean
 }
 
-export interface OrderingCase { field: string; direction: "asc" | "desc"; nulls?: "first" | "last" }
+export interface OrderingCase {
+  field: string
+  direction: "asc" | "desc"
+  nulls?: "first" | "last"
+  /** The engine's own order (PostgreSQL enum): checked for self-consistency, not against core. */
+  native?: boolean
+}
 
 export function orderingCases(driver: ParityDriver): OrderingCase[] {
   const out: OrderingCase[] = []
-  for (const field of SCALAR_FIELDS) {
+  const fields = [...SCALAR_FIELDS.map((field) => ({ key: field.key, native: false })), ...(driver.extraFields ?? []).map((field) => ({ key: field.key, native: field.order === "native" }))]
+  for (const field of fields) {
     for (const direction of ["asc", "desc"] as const) {
-      if (driver.explicitNulls) for (const nulls of ["first", "last"] as const) out.push({ field: field.key, direction, nulls })
-      else out.push({ field: field.key, direction })
+      const base = { field: field.key, direction, ...(field.native ? { native: true } : {}) }
+      if (driver.explicitNulls) for (const nulls of ["first", "last"] as const) out.push({ ...base, nulls })
+      else out.push(base)
     }
   }
   return out
@@ -274,7 +328,10 @@ export async function orderingReport(driver: ParityDriver, rows: readonly Parity
   const failures: Partial<Record<OrderingAspect, string>> = {}
   const filter = spec.nulls ? undefined : Predicate.isNotNull(spec.field)
   const scoped = filter ? rows.filter((row) => evaluatePredicate(row, filter)) : [...rows]
-  const expected = coreOrder(scoped, sort).map((row) => row.id)
+  // The order of a cursor page (one page holding every row): offset pages only promise a deterministic order.
+  const sqlOrder = async () => (await driver.findMany({ ...(filter ? { filter } : {}), sort, pagination: { kind: "cursor", direction: "after", limit: PAGE_ALL } })).rows.map((row) => row.id)
+  // A native order has no core reference: the repository's own ORDER BY is the order every other aspect must reproduce.
+  const expected = spec.native ? await sqlOrder() : coreOrder(scoped, sort).map((row) => row.id)
   const show = (id: number | undefined) => (id === undefined ? "<end>" : `${id}:${describeValue(rows.find((row) => row.id === id)?.[spec.field] ?? null)}`)
   const firstDifference = (actual: readonly number[]): string | undefined => {
     const index = expected.findIndex((id, position) => actual[position] !== id)
@@ -291,11 +348,26 @@ export async function orderingReport(driver: ParityDriver, rows: readonly Parity
     }
   }
 
-  await attempt("order", async () => firstDifference((await selectAll(driver, filter, sort)).map((row) => row.id)))
+  if (spec.native) {
+    await attempt("order", async () => (JSON.stringify([...expected].sort((a, b) => a - b)) === JSON.stringify(scoped.map((row) => row.id).sort((a, b) => a - b)) ? undefined : "ORDER BY does not return exactly the scoped rows"))
+  } else {
+    await attempt("order", async () => firstDifference(await sqlOrder()))
+  }
 
-  // Keyset boundaries evaluated by core must split the core order exactly.
+  // Keyset boundaries must split the order exactly: evaluated by core, or for a native order by the database.
   await attempt("keyset", async () => {
     const byId = new Map(rows.map((row) => [row.id, row]))
+    if (spec.native) {
+      for (let index = 0; index < expected.length; index++) {
+        const boundary = byId.get(expected[index]!)!
+        const after = compileCursorPredicate(sort, { direction: "after", values: sort.map((item) => cursorValue(boundary[item.field])) })
+        const selected = new Set(await driver.selectIds(filter ? Predicate.and(filter, after) : after))
+        for (let other = 0; other < expected.length; other++) {
+          if (selected.has(expected[other]!) !== other > index) return `database keyset predicate after ${show(expected[index])} ${selected.has(expected[other]!) ? "admits" : "rejects"} ${show(expected[other])} at position ${other}`
+        }
+      }
+      return undefined
+    }
     for (let index = 0; index < expected.length; index++) {
       const boundary = byId.get(expected[index]!)!
       const after = compileCursorPredicate(sort, { direction: "after", values: sort.map((item) => cursorValue(boundary[item.field])) })

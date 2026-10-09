@@ -88,6 +88,10 @@ export function createEnvelope(
       code: INVALID_ENVELOPE_ERROR,
     });
   }
+  if (payload === undefined) {
+    // JSON serialization would drop the member and produce an envelope without a payload.
+    throw new CanonicalJsonError("envelope payload must not be undefined", { code: INVALID_ENVELOPE_ERROR });
+  }
   const envelope: Record<string, unknown> = {
     format,
     version,

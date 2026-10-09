@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
-import { CanonicalJsonError, canonicalJsonString, canonicalSha256Hex, decodeCanonicalJson } from "../../serialization/canonicalJson"
+import { CanonicalJsonError, canonicalJsonString, canonicalSha256Hex, canonicalizeValue, decodeCanonicalJson, legacyJavaScriptOrderJsonString } from "../../serialization/canonicalJson"
 import { sha256Hex } from "../../serialization/sha256"
-import { parseEnvelope } from "../../serialization/formatEnvelope"
+import { createEnvelope, parseEnvelope } from "../../serialization/formatEnvelope"
 import { createVersionedCodec, decodeFromString } from "../../serialization/versionedCodec"
 import { buildKey } from "../../cache/cache"
 import { encodeQuotaSubject } from "../../quota/quota"
@@ -9,6 +9,8 @@ import { sequencePeriod } from "../../sequence/sequence"
 import { encodeCursor, type CursorIntegrityPort } from "../../query/cursorCodec"
 import type { CursorPayloadV1 } from "../../query/cursor"
 import { ConfigurationError, ValidationError } from "../../domain/errors"
+import { defaultEntityNamespace } from "../../entity/compileEntity"
+import { JOB_FINGERPRINT_VERSION, fingerprintJob, jobFingerprintMatches, type JobFingerprintInput } from "../../execution/jobFingerprint"
 
 /** Minimal counterexamples found by the encoding property suites, pinned after their fixes. */
 describe("encoding regressions", () => {
@@ -51,5 +53,49 @@ describe("encoding regressions", () => {
     const integrity: CursorIntegrityPort = { sign: async () => new Uint8Array([1]), verify: async () => true }
     const payload = { format: "framework.cursor", version: 1, direction: ["after"], values: [], routeHash: "r", queryHash: "q", scopeHash: "s", sortHash: "o" }
     await expect(encodeCursor(payload as unknown as CursorPayloadV1, integrity)).rejects.toThrow(ValidationError)
+  })
+
+  it("createEnvelope rejects an undefined payload (JSON would silently drop the member)", () => {
+    expect(() => createEnvelope("framework.test", 1, undefined)).toThrow(CanonicalJsonError)
+    expect(createEnvelope("framework.test", 1, null)).toEqual({ format: "framework.test", version: 1, payload: null })
+  })
+})
+
+describe("fingerprint compatibility across the RFC 8785 key-order fix", () => {
+  const numericKeyed = { "10": "ten", "9": "nine", a: { "2": 0, "11": 1 } }
+
+  it("keeps the pre-fix JavaScript-order serializer for compatibility checks only", () => {
+    expect(legacyJavaScriptOrderJsonString(numericKeyed)).toBe(JSON.stringify(canonicalizeValue(numericKeyed)))
+    expect(legacyJavaScriptOrderJsonString(numericKeyed)).not.toBe(canonicalJsonString(numericKeyed))
+    // Same validation as canonical JSON: it is not a general-purpose escape hatch.
+    expect(() => legacyJavaScriptOrderJsonString({ at: new Date(0) })).toThrow(CanonicalJsonError)
+  })
+
+  const input: JobFingerprintInput = {
+    executionScope: { kind: "tenant", tenantId: "t1" }, jobType: "billing.sync", jobVersion: 1, payload: numericKeyed,
+    runAt: new Date("2026-01-01T00:00:00.000Z"), maxAttempts: 3, priority: 0, correlationId: null, partitionKey: null, metadata: null,
+  }
+  /** What version 3 persisted: sha256 of the JavaScript-order serialization of { version: 3, job }. */
+  const storedV3 = async (job: JobFingerprintInput): Promise<string> => {
+    const text = JSON.stringify(canonicalizeValue({ version: 3, job: { ...job, runAt: job.runAt.toISOString() } }))
+    return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))), (byte) => byte.toString(16).padStart(2, "0")).join("")
+  }
+
+  it("bumps the job fingerprint version and still matches a version-3 fingerprint of the same job", async () => {
+    expect(JOB_FINGERPRINT_VERSION).toBe(4)
+    const legacy = await storedV3(input)
+    expect(await fingerprintJob(input)).not.toBe(legacy)
+    await expect(jobFingerprintMatches(await fingerprintJob(input), input)).resolves.toBe(true)
+    await expect(jobFingerprintMatches(legacy, input)).resolves.toBe(true)
+    await expect(jobFingerprintMatches(await storedV3({ ...input, jobType: "billing.other" }), input)).resolves.toBe(false)
+    await expect(jobFingerprintMatches("", input)).resolves.toBe(false)
+  })
+})
+
+describe("default entity namespace", () => {
+  it("keeps `module:name` for entities without a persistence namespace (pre-existing idempotency namespaces)", () => {
+    expect(defaultEntityNamespace("billing", { name: "invoice" })).toBe("billing:invoice")
+    expect(defaultEntityNamespace("billing", { name: "invoice", namespace: "" })).toBe("billing:invoice")
+    expect(defaultEntityNamespace("billing", { name: "invoice", namespace: "eu" })).toBe("billing:eu:invoice")
   })
 })

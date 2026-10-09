@@ -64,7 +64,7 @@ export class DrizzleOutboxSink implements OutboxSink {
       .limit(1)
     const existingRow = existing as Record<string, unknown> | undefined
     const existingFingerprint = existingRow?.eventFingerprint ?? existingRow?.event_fingerprint
-    assertOutboxFingerprintMatches(existingFingerprint, fingerprint)
+    await assertOutboxFingerprintMatches(existingFingerprint, fingerprint, record)
   }
 }
 

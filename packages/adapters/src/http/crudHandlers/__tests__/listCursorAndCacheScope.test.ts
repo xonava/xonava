@@ -96,6 +96,23 @@ describe("list cursor bindings", () => {
     expect((await list(entity("invoices"), `?cursor=${cursor}`)).status).toBe(400)
   })
 
+  it("answers a stale, foreign or corrupted cursor with a clean 400 asking to restart from the first page", async () => {
+    const cursor = await endCursor(entity("orders"))
+    const [prefix, body, signature] = cursor.split(".")
+    for (const stale of [
+      cursor.replace(/.$/, (last) => (last === "A" ? "B" : "A")),
+      `${prefix}.${signature}.${body}`,
+      "v1.e30.AAAA",
+      "not-a-cursor",
+    ]) {
+      const response = await list(entity("invoices"), `?cursor=${encodeURIComponent(stale)}`)
+      expect(response.status).toBe(400)
+      expect(await response.text()).toMatch(/restart from the first page/)
+    }
+    const mismatched = await list(entity("invoices"), `?cursor=${cursor}`)
+    expect(await mismatched.text()).toMatch(/restart from the first page/)
+  })
+
   it("rejects a cursor replayed against the same entity name in another persistence namespace", async () => {
     const cursor = await endCursor(entity("orders", "a"))
     expect((await list(entity("orders", "b"), `?cursor=${cursor}`)).status).toBe(400)

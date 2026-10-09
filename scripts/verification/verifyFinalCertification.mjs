@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises"
 import { dirname, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+import { loadAndValidateDf1Evidence } from "./differentialCertification.mjs"
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url))
 const repositoryRoot = resolve(scriptDirectory, "../..")
@@ -132,6 +133,15 @@ for (const [capabilityPhase, file] of coreCapabilityEvidence) {
   if (artifact.runId !== runId || artifact.status !== "proven" || String(artifact.phase).toLowerCase() !== capabilityPhase) fail(`${capabilityPhase} capability evidence is invalid`)
   evidence.push({ adapter: "core", kind: capabilityPhase, path: relative(repositoryRoot, path).replaceAll("\\", "/"), sha256: createHash("sha256").update(await readFile(path)).digest("hex") })
 }
+// DF1: the differential/property suites must have run in this certification
+// run at release volume with a recorded seed, over the current sources.
+let differential
+try {
+  differential = await loadAndValidateDf1Evidence({ repositoryRoot, artifactRoot: resolve(repositoryRoot, "artifacts/framework-conformance"), runId, startedAt })
+} catch (error) {
+  fail(error.message)
+}
+evidence.push({ adapter: "core", kind: "df1", path: relative(repositoryRoot, differential.path).replaceAll("\\", "/"), sha256: differential.sha256 })
 for (const adapter of adapters) {
   const guaranteePath = join(directory, `${adapter}-guarantees.json`)
   const crashPath = join(directory, `${adapter}-crash-replay.json`)
@@ -169,6 +179,13 @@ const manifest = {
   source: { sha256: source.sha256, fileCount: source.fileCount },
   lockfile: { path: "package-lock.json", sha256: createHash("sha256").update(await readFile(lockfilePath)).digest("hex") },
   evidence,
+  differential: {
+    seed: differential.artifact.seed,
+    seedSource: differential.artifact.seedSource,
+    scales: differential.artifact.scales,
+    properties: differential.artifact.totals.properties,
+    cases: differential.artifact.totals.cases,
+  },
   certificationScope: {
     level: "local-multi-backend",
     providers: ["PostgreSQL", "MySQL", "D1 Miniflare"],

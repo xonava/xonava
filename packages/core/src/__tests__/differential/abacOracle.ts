@@ -6,7 +6,7 @@ import { hasGlobalAbacCapability } from "../../domain/abacCapabilities"
 import { enforceAbacWrite } from "../../domain/abacWrite"
 import { FIELD_READ_DEFAULT_KEY, resolveFieldQueryDenials, resolveFieldReadOverrides, type FieldReadMode, type FieldReadOverride } from "../../domain/fieldAccess"
 import { buildTieredPolicyOutcome } from "../../domain/policyTierResolver"
-import { ForbiddenError } from "../../domain/errors"
+import { ForbiddenError, ValidationError } from "../../domain/errors"
 import type { AbacPolicyBundle, NormalizedAbacPolicy, VerifiedAbacPolicyBundle } from "../../domain/abacTypes"
 import { generateRecord, fieldValue, DIFFERENTIAL_FIELDS } from "./arbitraries"
 import { ABAC_ACTIONS, ABAC_CAPABILITIES, ABAC_MODULE, FIELD_KEYS } from "./abacArbitraries"
@@ -168,6 +168,7 @@ export function writeOutcome(bundle: VerifiedAbacPolicyBundle, write: WriteCase)
     })
     return "ok"
   } catch (error) {
+    if (error instanceof ValidationError) return `INVALID:${error.message}`
     if (!(error instanceof ForbiddenError)) throw error
     const details = (error as unknown as { details?: { reasonCode?: string; fields?: string[] } }).details ?? {}
     return `${details.reasonCode ?? "FORBIDDEN"}${details.fields ? `:${[...details.fields].sort().join(",")}` : ""}`

@@ -312,7 +312,8 @@ function normalizeCapabilityPolicy(config: CapabilityCheckConfig): CapabilityChe
 }
 
 /**
- * Default cache tag and key prefix: `entity:${moduleKey}:${namespace}:${name}`.
+ * Default cache tag and key prefix: `entity:` + defaultEntityNamespace (`entity:${moduleKey}:${name}`,
+ * or `entity:${moduleKey}:${namespace}:${name}` for an entity with a persistence namespace).
  *
  * Format history: `${moduleKey}:${namespace}:${name}` (earlier this release)
  * could equal a tenant-owned tag `tenant:<len>:<tenantId>` — moduleKey

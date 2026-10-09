@@ -267,3 +267,33 @@ describe("ABAC differential: read-mode vocabulary", () => {
     }, { runs: 100, ...POLICY_CASE_OPTIONS, shrink: shrinkPolicyCase<FieldCase> })
   })
 })
+
+/** Other spellings of the calendar date `day` that a database would cast to that date. */
+function dateSpellings(day: string): unknown[] {
+  return [
+    `${day}T00:00:00Z`, `${day}T00:00:00.000Z`, `${day}T05:30:00+05:30`, `${day}T23:59:59-05:00`, `${day}T00:00`,
+    ` ${day}`, `${day} `, day.replace(/-/g, ""), `${day}T00:00:00.000000Z`,
+  ]
+}
+
+describe("ABAC differential: date spellings on write", () => {
+  it("no spelling of a date passes a write the canonical YYYY-MM-DD spelling is denied, and a UTC-midnight Date decides identically", async () => {
+    const dateHeavy = { fields: DIFFERENTIAL_FIELDS.filter((field) => field.key === "dueOn" || field.key === "ownerId"), unconditionalRate: 0.2, fieldAccessRate: 0.4, min: 1 }
+    await forAllAsync("abac date spellings on write", generateWriteBundle(dateHeavy), async ({ policies, writes }) => {
+      const bundle = await bindPolicies(policies)
+      for (const write of writes) {
+        if (write.action === "delete") continue
+        const day = write.record.dueOn
+        if (typeof day !== "string") continue
+        const changedFields = [...new Set([...(write.changedFields ?? Object.keys(write.record)), "dueOn"])]
+        const canonical = writeOutcome(bundle, { ...write, changedFields })
+        const respell = (value: unknown): WriteCase => ({ ...write, record: { ...write.record, dueOn: value }, changedFields })
+        expect(writeOutcome(bundle, respell(new Date(`${day}T00:00:00.000Z`))), `Date(${day})`).toBe(canonical)
+        for (const spelling of dateSpellings(day)) {
+          const outcome = writeOutcome(bundle, respell(spelling))
+          if (outcome === "ok") expect(canonical, `${JSON.stringify(spelling)} passed where ${day} is ${canonical}`).toBe("ok")
+        }
+      }
+    }, { runs: 300, shrink: shrinkWriteBundle, describe: POLICY_CASE_OPTIONS.describe })
+  })
+})

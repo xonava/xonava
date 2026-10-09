@@ -1,8 +1,14 @@
 import type { IdempotencyCompletion, IdempotencyPort, IdempotencyRequest } from "core/events"
-import { canonicalJsonString } from "core/serialization"
+import { canonicalJsonString, legacyJavaScriptOrderJsonString } from "core/serialization"
 import type { RequestContext } from "core/domain"
 
-export const IDEMPOTENCY_FINGERPRINT_VERSION = "v2"
+/**
+ * v3: canonical JSON in RFC 8785 key order. v2 serialized integer-like object
+ * keys in JavaScript property order; a retry whose stored record still carries
+ * a v2 fingerprint is matched via {@link legacyFingerprintJson}.
+ */
+export const IDEMPOTENCY_FINGERPRINT_VERSION = "v3"
+const LEGACY_IDEMPOTENCY_FINGERPRINT_VERSION = "v2"
 export const SERIALIZED_RESPONSE_VERSION = "v1"
 export const MAX_IDEMPOTENCY_KEY_LENGTH = 255
 export const MAX_IDEMPOTENCY_CANONICAL_BYTES = 1024 * 1024
@@ -66,14 +72,26 @@ function assertHeader(name: string, value: string): void {
   if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name) || /[\r\n]/.test(value)) throw new Error("Invalid serialized idempotency response header")
 }
 
-export async function fingerprintJson(value: unknown): Promise<string> {
-  const canonical = canonicalJsonString(value)
-  const encoded = new TextEncoder().encode(`${IDEMPOTENCY_FINGERPRINT_VERSION}\0${canonical}`)
+async function digestFingerprintInput(version: string, canonical: string): Promise<string> {
+  const encoded = new TextEncoder().encode(`${version}\0${canonical}`)
   if (encoded.byteLength > MAX_IDEMPOTENCY_CANONICAL_BYTES) {
     throw new Error("Idempotency fingerprint payload is too large")
   }
   const digest = await crypto.subtle.digest("SHA-256", encoded)
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")
+}
+
+export async function fingerprintJson(value: unknown): Promise<string> {
+  return digestFingerprintInput(IDEMPOTENCY_FINGERPRINT_VERSION, canonicalJsonString(value))
+}
+
+/**
+ * COMPATIBILITY ONLY: the v2 fingerprint of `value` (JavaScript key order), used
+ * solely to recognise idempotency records written before the RFC 8785 fix.
+ * Never use it for new records; remove it with v2.
+ */
+export async function legacyFingerprintJson(value: unknown): Promise<string> {
+  return digestFingerprintInput(LEGACY_IDEMPOTENCY_FINGERPRINT_VERSION, legacyJavaScriptOrderJsonString(value))
 }
 
 export async function serializeResponse(response: Response): Promise<SerializedResponse> {

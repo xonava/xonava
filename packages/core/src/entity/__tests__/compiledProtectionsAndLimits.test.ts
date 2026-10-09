@@ -112,8 +112,8 @@ describe("cache namespace defaults", () => {
     expect(a.cache.keyPrefix).not.toBe(b.cache.keyPrefix)
     expect(a.cache.tag).not.toBe(b.cache.tag)
     // Defaults carry the reserved "entity:" prefix so they can never be a tenant-owned tag ("tenant:<len>:<id>").
-    expect(a.cache.keyPrefix).toBe("entity:tenant.people::person")
-    expect(a.cache.tag).toBe("entity:tenant.people::person")
+    expect(a.cache.keyPrefix).toBe("entity:tenant.people:person")
+    expect(a.cache.tag).toBe("entity:tenant.people:person")
   })
 
   it("qualifies default cache and idempotency namespaces by the entity's persistence namespace", () => {

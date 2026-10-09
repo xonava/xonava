@@ -10,7 +10,15 @@
  * - `DIFFERENTIAL_SCALE`  multiplies every property's run count (default 1).
  * - `DIFFERENTIAL_SEED`   overrides the base seed of every property.
  * - `DIFFERENTIAL_RUN`    runs only that run index (replay one failure).
+ * - `DIFFERENTIAL_REPORT_DIR` when set, every property that passes appends one
+ *   JSON line (name, base seed, scale, runs) to a per-worker file in that
+ *   directory. Release certification (DF1) uses it as evidence; unset, the
+ *   harness writes nothing.
  */
+
+import { appendFileSync, mkdirSync } from "node:fs"
+import { join } from "node:path"
+import { threadId } from "node:worker_threads"
 
 export interface Rng {
   /** Uniform 32-bit unsigned integer. */
@@ -118,16 +126,43 @@ function failureMessage(name: string, base: number, run: number, shrinkSteps: nu
   ].join("\n")
 }
 
-function plan(name: string, options: { runs?: number; seed?: number }): { base: number; runs: number[] } {
+interface Plan { name: string; base: number; baseRuns: number; scale: number; replayRun: number | undefined; runs: number[] }
+
+function plan(name: string, options: { runs?: number; seed?: number }): Plan {
   const base = (envNumber("DIFFERENTIAL_SEED") ?? options.seed ?? hashSeed(name)) >>> 0
   const only = envNumber("DIFFERENTIAL_RUN")
-  const count = scaledRuns(options.runs ?? 200)
-  return { base, runs: only === undefined ? Array.from({ length: count }, (_, index) => index) : [only] }
+  const baseRuns = options.runs ?? 200
+  const count = scaledRuns(baseRuns)
+  return { name, base, baseRuns, scale: envNumber("DIFFERENTIAL_SCALE") ?? 1, replayRun: only, runs: only === undefined ? Array.from({ length: count }, (_, index) => index) : [only] }
+}
+
+/**
+ * Opt-in success evidence for release certification: one JSON line per
+ * passing property, appended to a file owned by this worker (process and
+ * thread) so concurrent workers never interleave writes. No-op when
+ * `DIFFERENTIAL_REPORT_DIR` is unset.
+ */
+function reportSuccess(executed: Plan): void {
+  const directory = typeof process === "undefined" ? undefined : process.env.DIFFERENTIAL_REPORT_DIR
+  if (directory === undefined || directory === "") return
+  const line = JSON.stringify({
+    property: executed.name,
+    seed: executed.base,
+    scale: executed.scale,
+    baseRuns: executed.baseRuns,
+    runs: executed.runs.length,
+    replayRun: executed.replayRun ?? null,
+    passed: true,
+    recordedAt: new Date().toISOString(),
+  })
+  mkdirSync(directory, { recursive: true })
+  appendFileSync(join(directory, `properties-${process.pid}-${threadId}.jsonl`), `${line}\n`, "utf8")
 }
 
 /** Checks a synchronous property over generated cases; throws a replayable report on failure. */
 export function forAll<T>(name: string, generate: (rng: Rng) => T, property: (value: T) => void, options: PropertyOptions<T> = {}): void {
-  const { base, runs } = plan(name, options)
+  const executed = plan(name, options)
+  const { base, runs } = executed
   const describe = options.describe ?? defaultDescribe
   const fails = (value: T): unknown => {
     try {
@@ -162,11 +197,13 @@ export function forAll<T>(name: string, generate: (rng: Rng) => T, property: (va
     }
     throw new Error(failureMessage(name, base, run, steps, describe(smallest), error))
   }
+  reportSuccess(executed)
 }
 
 /** Asynchronous variant of {@link forAll} (for real-database differentials). */
 export async function forAllAsync<T>(name: string, generate: (rng: Rng) => T, property: (value: T) => Promise<void>, options: PropertyOptions<T> = {}): Promise<void> {
-  const { base, runs } = plan(name, options)
+  const executed = plan(name, options)
+  const { base, runs } = executed
   const describe = options.describe ?? defaultDescribe
   const fails = async (value: T): Promise<unknown> => {
     try {
@@ -201,4 +238,5 @@ export async function forAllAsync<T>(name: string, generate: (rng: Rng) => T, pr
     }
     throw new Error(failureMessage(name, base, run, steps, describe(smallest), error))
   }
+  reportSuccess(executed)
 }

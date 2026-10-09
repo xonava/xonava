@@ -159,13 +159,17 @@ function isAlwaysTruePredicate(node: unknown): boolean {
  * True when the field-write outcome for a permitted row can depend on the
  * row. Such decisions are only safe under optimistic concurrency because the
  * authorization-driving row state can otherwise change between the field
- * decision and the mutation. Without any write list every permitted row may
- * write every field. With one, the outcome varies when a policy restricting
- * fields is conditional, and also when a conditional allow (with or without a
- * list) can decide or join a tier: e.g. a conditional unrestricted allow tied
- * with an unconditional restricted one widens the writable fields only on rows
- * that satisfy it. Conditional denies without a write list deny the whole row,
- * so they never vary the fields of a permitted one.
+ * decision and the mutation (the atomic WHERE re-checks the action scope, so
+ * only variation among PERMITTED rows matters).
+ *
+ * A permitted row's writable fields are the union of the write lists (no list
+ * = every field) of the TRUE allows in its deciding tier; a deny that is not
+ * FALSE there denies the whole row, so denies never vary the fields of a
+ * permitted row. The outcome can therefore vary only when there are at least
+ * two allows, at least one of them restricts fields, and at least one is
+ * conditional (which allows are TRUE, or which tier decides, then depends on
+ * the row). A conditional policy that itself restricts fields is always
+ * flagged, as before, conservatively.
  */
 export function hasRecordDependentFieldWrite(
   policies: NormalizedAbacPolicy[],
@@ -175,9 +179,10 @@ export function hasRecordDependentFieldWrite(
   const relevant = policies.filter((policy) => policy.moduleKey === moduleKey && policy.payload.actions.includes(action))
   const restricts = (policy: NormalizedAbacPolicy) =>
     Array.isArray(policy.payload.fieldAccess?.write) && policy.payload.fieldAccess.write.length > 0
-  if (!relevant.some(restricts)) return false
-  return relevant.some((policy) =>
-    !isAlwaysTruePredicate(policy.compiledConditions) && (restricts(policy) || policy.effect === "allow"))
+  const conditional = (policy: NormalizedAbacPolicy) => !isAlwaysTruePredicate(policy.compiledConditions)
+  if (relevant.some((policy) => restricts(policy) && conditional(policy))) return true
+  const allows = relevant.filter((policy) => policy.effect === "allow")
+  return allows.length >= 2 && allows.some(restricts) && allows.some(conditional)
 }
 
 function collectDeniedWriteFields(

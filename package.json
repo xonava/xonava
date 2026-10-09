@@ -60,6 +60,8 @@
     "verify:framework:ht1": "node scripts/verification/verifyHT1Certification.mjs",
     "verify:framework:b1": "node scripts/verification/verifyB1Certification.mjs",
     "verify:framework:f1": "node scripts/verification/verifyF1Certification.mjs",
+    "verify:framework:df1": "node scripts/verification/verifyDF1Certification.mjs",
+    "test:verification": "node --test scripts/verification/differentialCertification.test.mjs",
     "verify:framework:api": "node scripts/verification/verifyApiCertification.mjs",
     "verify:framework:cert": "node scripts/verification/verifyFinalCertification.mjs",
     "verify:framework:mysql1": "node scripts/verification/verifyMYSQL1Certification.mjs",
