@@ -131,10 +131,24 @@ describe("defect 1: clear() keeps tag generations monotonic", () => {
       const before = await adapter.getTagGeneration("users")
       expect(await service.getOrSet("user:1", async () => "stale", ["users"])).toBe("stale")
       // Old-release instance B, clock 200 ms behind, invalidates: it writes only the legacy key, with an OLDER timestamp.
-      const [current] = JSON.parse(before) as [string, string]
-      kv.store.set(legacyKey("users"), JSON.stringify(`${Number(current.split(":")[0]) - 200}:00000000-0000-0000-0000-000000000000`))
+      kv.store.set(legacyKey("users"), JSON.stringify(`${Number(before.split(":")[0]) - 200}:00000000-0000-0000-0000-000000000000`))
       expect(await adapter.getTagGeneration("users")).not.toBe(before)
       expect(await new CacheService({ adapter }).getOrSet("user:1", async () => "fresh", ["users"])).toBe("fresh")
+    })
+
+    // Regression (third review): the pair was reported even when both counters were equal, so each
+    // tag added ~150 bytes to generation-qualified keys and keys with 3+ tags passed KV's 512-byte cap.
+    it("reports a single counter in the steady state, keeping cache keys short", async () => {
+      const kv = createFakeKv()
+      const adapter = new KvCacheAdapter(kv as never)
+      const advanced = await adapter.advanceTagGeneration("users")
+      expect(advanced).toMatch(/^\d+:[0-9a-f-]{36}$/)
+      expect(await adapter.getTagGeneration("users")).toBe(advanced)
+      const service = new CacheService({ adapter })
+      const tags = ["tenant.records.alpha", "tenant.records.bravo", "tenant.records.charlie", "tenant.records.delta"]
+      for (const tag of tags) await adapter.advanceTagGeneration(tag)
+      expect(await service.getOrSet("records:list:page-1", async () => "v", tags)).toBe("v")
+      for (const key of kv.store.keys()) expect(new TextEncoder().encode(key).length).toBeLessThanOrEqual(512)
     })
 
     it("advances both layouts (legacy first) so old instances observe new advances", async () => {

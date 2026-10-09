@@ -218,6 +218,18 @@ describe("temporal literals outside the engine's input range never reach the ser
     expect(temporalSql(Predicate.eq("dayDate", "0000-01-01")).params).toEqual(["0001-01-01 BC"])
   })
 
+  // Regression (third review): Date literals before 4714-11-24 BC made PostgreSQL throw
+  // ("timestamp out of range"); every stored value lies after that instant.
+  it("PostgreSQL: Date literals before its lower limit compare as constants", () => {
+    const tooEarly = new Date(0)
+    tooEarly.setUTCFullYear(-4713, 10, 23)
+    expect(temporalSql(Predicate.eq("at", tooEarly))).toMatchObject({ sql: 'COALESCE(("temporal_rows"."at" is null and null), FALSE)', params: [] })
+    expect(temporalSql(Predicate.gt("day", tooEarly))).toMatchObject({ sql: 'COALESCE(("temporal_rows"."day" is not null or null), FALSE)', params: [] })
+    const earliest = new Date(0)
+    earliest.setUTCFullYear(-4713, 10, 24)
+    expect(temporalSql(Predicate.gte("at", earliest)).params).toEqual(["4714-11-24 00:00:00.000+00 BC"])
+  })
+
   it("PostgreSQL: engine-text literals outside its input range compare through the text form", () => {
     const textForm = '(CASE WHEN "temporal_rows"."at" IS NULL THEN NULL ELSE format(\'%s\', "temporal_rows"."at") END COLLATE "C")'
     for (const literal of ["2024-01-01 10:00:00+99", "2024-01-01 10:00:00+16:00", "0000-12-31 10:00:00+00"]) {
@@ -230,9 +242,13 @@ describe("temporal literals outside the engine's input range never reach the ser
     const rows = mysqlTable("rows", { day: mysqlDate("day"), at: datetime("at", { mode: "string" }) })
     const map = { day: rows.day, at: rows.at }
     const query = (node: Parameters<typeof compileMySql>[0]) => my.sqlToQuery(compileMySql(node, map))
-    // Every stored value lies after year 0500 and before year 10000.
-    expect(query(Predicate.eq("day", "0500-01-01"))).toMatchObject({ sql: "COALESCE((`rows`.`day` is null and null), FALSE)", params: [] })
-    expect(query(Predicate.gt("day", "0500-01-01"))).toMatchObject({ sql: "COALESCE((`rows`.`day` is not null or null), FALSE)", params: [] })
+    // MySQL stores years 0000-0999 too: they bind natively. Only instants outside 0000-9999 are constants.
+    expect(query(Predicate.eq("day", "0500-01-01"))).toMatchObject({ sql: "COALESCE(`rows`.`day` = ?, FALSE)", params: ["0500-01-01"] })
+    expect(query(Predicate.gt("day", "0000-01-01"))).toMatchObject({ sql: "COALESCE(`rows`.`day` > ?, FALSE)", params: ["0000-01-01"] })
+    const bc = new Date(0)
+    bc.setUTCFullYear(-1, 0, 1)
+    expect(query(Predicate.eq("day", bc))).toMatchObject({ sql: "COALESCE((`rows`.`day` is null and null), FALSE)", params: [] })
+    expect(query(Predicate.gt("day", bc))).toMatchObject({ sql: "COALESCE((`rows`.`day` is not null or null), FALSE)", params: [] })
     expect(query(Predicate.lt("at", "9999-12-31T23:00:00-05:00"))).toMatchObject({ sql: "COALESCE((`rows`.`at` is not null or null), FALSE)", params: [] })
     expect(query(Predicate.gte("at", "9999-12-31T23:00:00-05:00"))).toMatchObject({ sql: "COALESCE((`rows`.`at` is null and null), FALSE)", params: [] })
     // A driver-form literal with an offset is not passed to the server: it compares as text.

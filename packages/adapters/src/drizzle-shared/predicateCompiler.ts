@@ -49,7 +49,7 @@ export type DrizzleColumnMap = Record<string, AnyColumn>
  *   instant is bound in a fixed, time-zone-free form (never through the
  *   driver's local-time Date serialization): PostgreSQL's own input form
  *   (BC and five-digit years included); on MySQL a UTC literal, or a constant
- *   comparison for instants outside DATE/DATETIME's 1000-9999 range (every
+ *   comparison for instants outside DATE/DATETIME's stored 0000-9999 range (every
  *   stored value lies inside it). Engine-text literals are passed through only
  *   when the engine accepts them (PostgreSQL years 0001-9999 and offsets up
  *   to ±15:59; on MySQL no offset at all). Any other string compares with
@@ -159,8 +159,17 @@ function clockText(date: Date): string {
   return `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}.${pad(date.getUTCMilliseconds(), 3)}`
 }
 
+/** The earliest instant PostgreSQL date/timestamp types accept: 4714-11-24 BC (astronomical year -4713), 00:00 UTC. */
+const POSTGRES_MIN_TIME = (() => {
+  const date = new Date(0)
+  date.setUTCFullYear(-4713, 10, 24)
+  return date.getTime()
+})()
+
 /** An instant in PostgreSQL's input form: astronomical year 0 is 1 BC; years past 9999 keep all digits. */
-function postgresInstant(time: number, calendarDate: boolean): string {
+function postgresInstant(time: number, calendarDate: boolean): string | typeof BELOW_RANGE {
+  // Every JavaScript instant is below PostgreSQL's upper limits (294276 AD); only the lower limit can be crossed.
+  if (time < POSTGRES_MIN_TIME) return BELOW_RANGE
   const date = new Date(time)
   const year = date.getUTCFullYear()
   const era = year >= 1 ? "" : " BC"
@@ -169,11 +178,14 @@ function postgresInstant(time: number, calendarDate: boolean): string {
   return `${day} ${clockText(date)}+00${era}`
 }
 
-/** MySQL DATE/DATETIME support years 1000-9999; every stored value lies inside. */
+/**
+ * MySQL DATE/DATETIME document years 1000-9999 but store and compare years 0000-0999 too, so only
+ * instants outside 0000-9999 lie beyond every stored value.
+ */
 function mysqlInstant(time: number, calendarDate: boolean): string | typeof BELOW_RANGE | typeof ABOVE_RANGE {
   const date = new Date(time)
   const year = date.getUTCFullYear()
-  if (year < 1000) return BELOW_RANGE
+  if (year < 0) return BELOW_RANGE
   if (year > 9999) return ABOVE_RANGE
   const day = `${pad(year, 4)}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`
   return calendarDate && isUtcMidnight(date) ? day : `${day} ${clockText(date)}`
@@ -309,9 +321,8 @@ class Comparison {
   private bindInstant(time: number): Operand {
     const { temporal } = this.info
     const column = this.column
-    if (this.dialect === "postgres" && temporal !== "epoch") return { left: column, right: new Param(postgresInstant(time, temporal === "date")) }
-    if (this.dialect === "mysql" && temporal !== "epoch") {
-      const literal = mysqlInstant(time, temporal === "date")
+    if ((this.dialect === "postgres" || this.dialect === "mysql") && temporal !== "epoch") {
+      const literal = this.dialect === "postgres" ? postgresInstant(time, temporal === "date") : mysqlInstant(time, temporal === "date")
       return typeof literal === "string" ? { left: column, right: new Param(literal) } : literal
     }
     // SQLite/generic: Date-hydrated columns encode Dates themselves.

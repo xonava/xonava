@@ -28,7 +28,7 @@ describe("MySQL temporal predicates do not depend on the process or connection t
     pool = mysql.createPool({ host: url.hostname, port: Number(url.port || 3306), user: decodeURIComponent(url.username), password: decodeURIComponent(url.password), database: url.pathname.slice(1), connectionLimit: 1 })
     await pool.query(`DROP TABLE IF EXISTS ${TABLE}`)
     await pool.query(`CREATE TABLE ${TABLE} (id INT PRIMARY KEY, day DATE NULL, at DATETIME(3) NULL, at_text DATETIME(3) NULL)`)
-    await pool.query(`INSERT INTO ${TABLE} VALUES (1, '2024-01-01', '2024-01-01 10:00:00.000', '2024-01-01 10:00:00.000'), (2, '2023-12-31', '2023-12-31 23:00:00.000', '2023-12-31 23:00:00.000')`)
+    await pool.query(`INSERT INTO ${TABLE} VALUES (1, '2024-01-01', '2024-01-01 10:00:00.000', '2024-01-01 10:00:00.000'), (2, '2023-12-31', '2023-12-31 23:00:00.000', '2023-12-31 23:00:00.000'), (3, '0500-01-01', '0500-01-01 10:00:00.000', '0500-01-01 10:00:00.000')`)
   }, 60_000)
 
   afterEach(() => { expect(new Date("2024-01-01T00:00:00Z").getTimezoneOffset()).toBe(300) })
@@ -45,7 +45,7 @@ describe("MySQL temporal predicates do not depend on the process or connection t
   it("compares DATE columns with calendar-date and UTC-midnight literals as that date", async () => {
     expect(await ids(Predicate.eq("day", "2024-01-01"))).toEqual([1])
     expect(await ids(Predicate.eq("day", new Date("2024-01-01T00:00:00Z")))).toEqual([1])
-    expect(await ids(Predicate.lt("day", "2024-01-01"))).toEqual([2])
+    expect(await ids(Predicate.lt("day", "2024-01-01"))).toEqual([2, 3])
   })
 
   it("compares DATETIME columns (Date and string modes) with instants in UTC", async () => {
@@ -56,11 +56,18 @@ describe("MySQL temporal predicates do not depend on the process or connection t
     expect(await ids(Predicate.eq("atText", "2024-01-01 10:00:00.000"))).toEqual([1])
   })
 
-  it("compares instants outside DATE/DATETIME's range as constants and never sends offsets", async () => {
+  it("compares years 0000-0999 natively (MySQL stores them) and only instants outside 0000-9999 as constants", async () => {
+    // Regression (third review): years below 1000 were treated as below every stored value.
+    expect(await ids(Predicate.eq("day", "0500-01-01"))).toEqual([3])
     expect(await ids(Predicate.gt("day", "0500-01-01"))).toEqual([1, 2])
-    expect(await ids(Predicate.eq("day", "0500-01-01"))).toEqual([])
-    expect(await ids(Predicate.lt("at", "9999-12-31T23:00:00-05:00"))).toEqual([1, 2])
-    expect(await ids(Predicate.not(Predicate.gte("atText", "0999-12-31T23:59:59Z")))).toEqual([])
+    expect(await ids(Predicate.lt("day", "0999-01-01"))).toEqual([3])
+    expect(await ids(Predicate.gt("at", "0500-01-01T10:00:00.000Z"))).toEqual([1, 2])
+    expect(await ids(Predicate.not(Predicate.gte("atText", "0999-12-31T23:59:59Z")))).toEqual([3])
+    const bc = new Date(0)
+    bc.setUTCFullYear(-1, 0, 1)
+    expect(await ids(Predicate.eq("day", bc))).toEqual([])
+    expect(await ids(Predicate.gt("day", bc))).toEqual([1, 2, 3])
+    expect(await ids(Predicate.lt("at", "9999-12-31T23:00:00-05:00"))).toEqual([1, 2, 3])
     // A driver-form literal with an offset compares as text (core compares the hydrated string).
     expect(await ids(Predicate.eq("atText", "2024-01-01 10:00:00+01:00"))).toEqual([])
   })

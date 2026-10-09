@@ -37,10 +37,16 @@ const LEGACY_GENERATION_PREFIX = "__generation__:"
  * to EITHER key fences previously cached values. CacheService compares
  * generations only by equality and keys values by them; nothing here orders
  * generations by time, so clock skew between instances cannot hide an advance.
- * JSON keeps the pair injective; "0" means neither counter exists yet.
+ * In the steady state both counters hold the same value and it is returned
+ * as is, which keeps generation-qualified cache keys short (KV keys are capped
+ * at 512 bytes and each tag's generation appears in the key). Only differing
+ * counters are reported as a JSON pair; a pair starts with "[" and so never
+ * equals a single `ms:uuid` counter or "0" (neither counter exists yet).
  */
 function compositeGeneration(current: string | undefined, legacy: string | undefined): string {
-  return current === undefined && legacy === undefined ? "0" : JSON.stringify([current ?? null, legacy ?? null])
+  if (current === undefined && legacy === undefined) return "0"
+  if (current !== undefined && current === legacy) return current
+  return JSON.stringify([current ?? null, legacy ?? null])
 }
 const REVISION_PREFIX = "__revision__:"
 /** Cloudflare KV rejects an expirationTtl below 60 seconds. */
