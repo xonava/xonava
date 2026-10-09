@@ -285,15 +285,51 @@ export function canonicalizeValue(value: unknown): unknown {
   return visit(value, 0);
 }
 
+/**
+ * Serializes an already-canonicalized value. Objects are written member by
+ * member in UTF-16 code-unit order (RFC 8785 section 3.2.3) rather than via
+ * JSON.stringify of the object: JavaScript enumerates integer-like keys
+ * ("9", "10") in numeric order before all other keys, which would emit
+ * {"9":..,"10":..} where JCS requires {"10":..,"9":..}. Strings and numbers
+ * use ECMAScript JSON serialization, which is exactly what JCS specifies.
+ */
+function serializeCanonical(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(serializeCanonical).join(",")}]`;
+  const record = value as Record<string, unknown>;
+  const members = Object.keys(record).sort(compareByte).map((key) => `${JSON.stringify(key)}:${serializeCanonical(record[key])}`);
+  return `{${members.join(",")}}`;
+}
+
 export function canonicalJsonString(value: unknown): string {
   const canonical = canonicalizeValue(value);
-  const json = JSON.stringify(canonical);
-  if (json === undefined) {
-    throw new CanonicalJsonError("Canonical JSON is not serializable");
-  }
+  const json = serializeCanonical(canonical);
   const bytes = utf8ByteLength(json);
   if (bytes > CANONICAL_JSON_LIMITS_V1.maxUtf8Bytes) {
     throwLimit(`canonical JSON bytes ${bytes} exceeds maxUtf8Bytes ${CANONICAL_JSON_LIMITS_V1.maxUtf8Bytes}`);
+  }
+  return json;
+}
+
+/**
+ * COMPATIBILITY ONLY — do not use for new digests, keys or stored values.
+ *
+ * Reproduces the serialization canonicalJsonString produced before the
+ * RFC 8785 key-order fix: the same validation and normalisation, but object
+ * members in JavaScript property order (integer-like keys such as "9" < "10"
+ * first, in numeric order). It differs from canonicalJsonString only for
+ * objects whose integer-like keys sort differently as strings. It exists so
+ * stores can still recognise fingerprints persisted under the previous
+ * fingerprint versions (outbox "v2", job 3, HTTP idempotency "v2") during a
+ * deploy; remove it with those legacy versions.
+ *
+ * @internal
+ */
+export function legacyJavaScriptOrderJsonString(value: unknown): string {
+  const json = JSON.stringify(canonicalizeValue(value));
+  if (json === undefined) throw new CanonicalJsonError("Canonical JSON is not serializable");
+  if (utf8ByteLength(json) > CANONICAL_JSON_LIMITS_V1.maxUtf8Bytes) {
+    throwLimit(`canonical JSON bytes exceeds maxUtf8Bytes ${CANONICAL_JSON_LIMITS_V1.maxUtf8Bytes}`);
   }
   return json;
 }

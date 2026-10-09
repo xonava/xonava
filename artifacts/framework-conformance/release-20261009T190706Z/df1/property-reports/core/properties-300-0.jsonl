@@ -1,0 +1,28 @@
+{"property":"scope id round trip","seed":3383902479,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:57.400Z"}
+{"property":"scope id injectivity","seed":3383902479,"scale":5,"baseRuns":600,"runs":3000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:57.767Z"}
+{"property":"scope id strict decode","seed":3383902479,"scale":5,"baseRuns":800,"runs":4000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:58.097Z"}
+{"property":"scope id non-canonical payload","seed":3383902479,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:58.360Z"}
+{"property":"scope id invalid keys","seed":3383902479,"scale":5,"baseRuns":150,"runs":750,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:58.423Z"}
+{"property":"tenant idempotency scope injective","seed":3383902479,"scale":5,"baseRuns":500,"runs":2500,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:58.477Z"}
+{"property":"tenant idempotency scope ownership","seed":3383902479,"scale":5,"baseRuns":600,"runs":3000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:58.763Z"}
+{"property":"tenant cache tag injective","seed":3383902479,"scale":5,"baseRuns":500,"runs":2500,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:59.104Z"}
+{"property":"tenant scope canonical spelling","seed":3383902479,"scale":5,"baseRuns":50,"runs":250,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:59.118Z"}
+{"property":"idempotency namespace injective","seed":3383902479,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:59.700Z"}
+{"property":"idempotency namespace vs tenant scope","seed":3383902479,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:59.815Z"}
+{"property":"quota subject injective","seed":3383902479,"scale":5,"baseRuns":600,"runs":3000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:00.374Z"}
+{"property":"quota subject invalid text","seed":3383902479,"scale":5,"baseRuns":100,"runs":500,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:00.391Z"}
+{"property":"cache key part vs reference","seed":3383902479,"scale":5,"baseRuns":1500,"runs":7500,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:00.976Z"}
+{"property":"buildKey injective","seed":3383902479,"scale":5,"baseRuns":800,"runs":4000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:01.704Z"}
+{"property":"buildKey lone surrogate","seed":3383902479,"scale":5,"baseRuns":100,"runs":500,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:01.726Z"}
+{"property":"cache generation storage keys","seed":3383902479,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:01.981Z"}
+{"property":"entity cache prefix injective","seed":3383902479,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:02.320Z"}
+{"property":"entity tag vs tenant tag","seed":3383902479,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:03.983Z"}
+{"property":"entity idempotency namespace injective","seed":3383902479,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:04.270Z"}
+{"property":"sequence period vs model","seed":3383902479,"scale":5,"baseRuns":1000,"runs":5000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:04.397Z"}
+{"property":"sequence period era","seed":3383902479,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:04.468Z"}
+{"property":"sequence formatted injective","seed":3383902479,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:04.663Z"}
+{"property":"job fingerprint stable","seed":3383902479,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:05.371Z"}
+{"property":"job fingerprint sensitive","seed":3383902479,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:06.826Z"}
+{"property":"idempotency keyspace","seed":3383902479,"scale":5,"baseRuns":500,"runs":2500,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:06.945Z"}
+{"property":"cache tag keyspace","seed":3383902479,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:07.050Z"}
+{"property":"rate-limit window parse","seed":3383902479,"scale":5,"baseRuns":600,"runs":3000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:07.145Z"}

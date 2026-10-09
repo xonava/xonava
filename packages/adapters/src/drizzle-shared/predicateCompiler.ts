@@ -1,4 +1,5 @@
 import {
+  Param,
   and,
   eq,
   gt,
@@ -15,6 +16,7 @@ import {
   type AnyColumn,
   type SQL,
 } from "drizzle-orm"
+import { parseRfc3339Timestamp } from "core/domain"
 import type {
   PredicateCompiler,
   PredicateCondition,
@@ -27,46 +29,321 @@ import type {
 export type DrizzleColumnMap = Record<string, AnyColumn>
 
 /**
- * Text semantics differ by engine. The normative semantics are case-sensitive,
- * Unicode code-point ordered string comparison (docs/spec/persistence/predicates.md).
- * - "sqlite": LIKE is ASCII case-insensitive, so substring operators compile to
- *   instr()/substr(); the default BINARY collation is code-point ordered.
- * - "postgres": ordering comparisons on text use COLLATE "C" (UTF-8 byte order,
- *   i.e. code-point order) so locale/ICU column collations cannot reorder
- *   results. Equality and LIKE are already exact under deterministic collations,
- *   so equality indexes remain usable.
- * - "mysql": default `_ci` collations ignore case even for `=`, so every text
- *   comparison is made through utf8mb4_bin. When the schema declares binary
- *   collations on every predicate column (verify with assertMySqlBinaryCollation),
- *   set `mysqlBinaryCollation: true` to compare columns directly and keep index use.
- * - "generic": plain operators; the engine collation must already be binary.
+ * How each column is compared. The normative semantics are the core
+ * evaluator's (docs/spec/persistence/predicates.md); SQL must agree with core
+ * on the value kinds rows hydrate into. One classification drives both
+ * predicates and repository sort keys ({@link sortExpression}), so keyset
+ * cursor predicates always compare exactly as ORDER BY orders.
+ *
+ * - Character columns compare by Unicode code point. PostgreSQL orders them
+ *   under COLLATE "C" (equality and LIKE are exact under deterministic
+ *   collations, so equality indexes stay usable); MySQL compares through NO PAD
+ *   `utf8mb4_0900_bin` unless `mysqlBinaryCollation` says the character
+ *   columns already use it (`utf8mb4_bin` is PAD SPACE: 'a' = 'a '); SQLite's
+ *   BINARY collation is already code-point order, and its LIKE is ASCII
+ *   case-insensitive, so substring operators use instr()/substr().
+ * - Temporal SQL columns (date, timestamp/datetime, time) compare natively as
+ *   temporal values, index-usable, whenever the literal is a strict RFC 3339
+ *   date or date-time (or a Date), and also for the engine's own text form of
+ *   the type (string-mode columns hydrate it, so cursor values carry it). The
+ *   instant is bound in a fixed, time-zone-free form (never through the
+ *   driver's local-time Date serialization): PostgreSQL's own input form
+ *   (BC and five-digit years included); on MySQL a UTC literal, or a constant
+ *   comparison for instants outside DATE/DATETIME's stored 0000-9999 range (every
+ *   stored value lies inside it). Engine-text literals are passed through only
+ *   when the engine accepts them (PostgreSQL years 0001-9999 and offsets up
+ *   to ±15:59; on MySQL no offset at all). Any other string compares with
+ *   the column's text form when rows hydrate as strings, and is UNKNOWN when
+ *   rows hydrate as Dates. A date column compares as a calendar date: compare
+ *   it with full-date literals; a date-time literal is cast by the engine.
+ * - PostgreSQL enums compare natively for equality and membership
+ *   (index-usable; a literal that is not a member equals nothing). Ordering
+ *   comparisons and sort keys use the text form, by code point, exactly like
+ *   core (declaration order would disagree with core: an ABAC `lessThan` scope
+ *   would select rows the record decision denies).
+ * - PostgreSQL uuid compares natively for canonical lowercase literals and
+ *   through its text form otherwise. Other string-hydrated types without a
+ *   portable native order (inet, interval, ...) compare and sort through their
+ *   text form.
+ * - DECIMAL/NUMERIC (drivers return strings; entities hydrate numbers),
+ *   numbers, and booleans compare natively.
+ *
+ * Literals are typed like the core evaluator types them: a literal of another
+ * kind than the column's row values ("1" for a number column, a number for a
+ * text column, a non-boolean for a boolean column) is not comparable and
+ * yields UNKNOWN.
  */
 export type PredicateDialect = "generic" | "sqlite" | "postgres" | "mysql"
 export interface PredicateCompilerOptions {
   readonly dialect?: PredicateDialect
-  /** MySQL only: every mapped text column already uses a binary collation. */
+  /** MySQL only: every mapped character column already uses a NO PAD binary collation (utf8mb4_0900_bin). */
   readonly mysqlBinaryCollation?: boolean
 }
 
-interface TextSemantics {
-  /** Expression used for equality, membership, and substring matching. */
-  readonly exact: (column: AnyColumn) => AnyColumn | SQL<unknown>
-  /** Expression used for ordering comparisons. */
-  readonly ordered: (column: AnyColumn) => AnyColumn | SQL<unknown>
+type ColumnClass = "number" | "boolean" | "text" | "enum" | "temporal" | "uuid" | "textual" | "other"
+type TemporalType = "date" | "timestamp" | "time" | "epoch"
+
+interface ColumnInfo {
+  readonly cls: ColumnClass
+  readonly temporal?: TemporalType
+  /** Rows hydrate as Date (drizzle dataType "date"). */
+  readonly hydratesDate: boolean
+  readonly enumValues?: readonly string[]
 }
 
-function isTextColumn(column: AnyColumn): boolean {
-  return (column as { dataType?: unknown }).dataType === "string"
+const CHARACTER_SQL_TYPE = /^(text|tinytext|mediumtext|longtext|varchar|character varying|char|character|nchar|nvarchar|bpchar|enum)\b/
+const NUMERIC_SQL_TYPE = /^(numeric|decimal)\b/
+
+function sqlTypeOf(column: AnyColumn): string | undefined {
+  const getSQLType = (column as { getSQLType?: () => string }).getSQLType
+  if (typeof getSQLType !== "function") return undefined
+  return String(getSQLType.call(column)).trim().toLowerCase()
 }
 
-function textSemantics(options: PredicateCompilerOptions): TextSemantics {
-  const identity = (column: AnyColumn) => column
-  if (options.dialect === "postgres") return { exact: identity, ordered: (column) => isTextColumn(column) ? sql`(${column} COLLATE "C")` : column }
-  if (options.dialect === "mysql" && options.mysqlBinaryCollation !== true) {
-    const binary = (column: AnyColumn) => isTextColumn(column) ? sql`(CONVERT(${column} USING utf8mb4) COLLATE utf8mb4_bin)` : column
-    return { exact: binary, ordered: binary }
+function temporalSqlType(sqlType: string | undefined): TemporalType | undefined {
+  if (sqlType === undefined) return undefined
+  if (/^date\b/.test(sqlType) && !/^datetime\b/.test(sqlType)) return "date"
+  if (/^(timestamp|datetime)\b/.test(sqlType)) return "timestamp"
+  if (/^time\b/.test(sqlType)) return "time"
+  return undefined
+}
+
+function classify(column: AnyColumn, dialect: PredicateDialect): ColumnInfo {
+  const dataType = (column as { dataType?: unknown }).dataType
+  const columnType = String((column as { columnType?: unknown }).columnType ?? "")
+  const sqlType = sqlTypeOf(column)
+  const hydratesDate = dataType === "date"
+  if (dataType === "number") return { cls: "number", hydratesDate }
+  if (dataType === "boolean") return { cls: "boolean", hydratesDate }
+  if (dialect === "postgres" && columnType.startsWith("PgEnum")) {
+    const values = (column as { enumValues?: unknown }).enumValues
+    return { cls: "enum", hydratesDate, enumValues: Array.isArray(values) ? values.map(String) : [] }
   }
-  return { exact: identity, ordered: identity }
+  const temporal = temporalSqlType(sqlType)
+  if (temporal && (dataType === "string" || hydratesDate)) return { cls: "temporal", temporal, hydratesDate }
+  if (hydratesDate) return { cls: "temporal", temporal: "epoch", hydratesDate }
+  if (dataType === "string") {
+    if (NUMERIC_SQL_TYPE.test(sqlType ?? "")) return { cls: "number", hydratesDate }
+    if (sqlType === undefined || CHARACTER_SQL_TYPE.test(sqlType)) return { cls: "text", hydratesDate }
+    if (dialect === "postgres" && sqlType === "uuid") return { cls: "uuid", hydratesDate }
+    return { cls: "textual", hydratesDate }
+  }
+  return { cls: "other", hydratesDate }
+}
+
+const UUID_TEXT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+/** PostgreSQL/MySQL text output of a timestamp: `YYYY-MM-DD HH:MM:SS[.f][+HH[:MM[:SS]]]`. */
+const ENGINE_TIMESTAMP_TEXT = /^(\d{4})(-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})(\.\d{1,6})?(?:[+-](\d{2})(?::(\d{2}))?(?::(\d{2}))?)?$/
+const TIME_TEXT = /^([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d{1,6})?$/
+
+/** Whether the engine accepts this text form of a timestamp as input (so it is never a server error). */
+function isEngineTimestampText(value: string, dialect: PredicateDialect): boolean {
+  const match = ENGINE_TIMESTAMP_TEXT.exec(value)
+  if (match === null || parseRfc3339Timestamp(`${match[1]}${match[2]}T${match[3]}Z`) === null) return false
+  const year = Number(match[1])
+  const hasOffset = match[5] !== undefined
+  if (dialect === "mysql") return !hasOffset && year >= 1000
+  // PostgreSQL rejects year 0 in ISO form and displacements beyond ±15:59(:59).
+  return year >= 1 && (!hasOffset || (Number(match[5]) <= 15 && Number(match[6] ?? "0") <= 59 && Number(match[7] ?? "0") <= 59))
+}
+
+function pad(value: number, width = 2): string {
+  return String(value).padStart(width, "0")
+}
+
+function isUtcMidnight(date: Date): boolean {
+  return date.getUTCHours() === 0 && date.getUTCMinutes() === 0 && date.getUTCSeconds() === 0 && date.getUTCMilliseconds() === 0
+}
+
+function clockText(date: Date): string {
+  return `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}.${pad(date.getUTCMilliseconds(), 3)}`
+}
+
+/** The earliest instant PostgreSQL date/timestamp types accept: 4714-11-24 BC (astronomical year -4713), 00:00 UTC. */
+const POSTGRES_MIN_TIME = (() => {
+  const date = new Date(0)
+  date.setUTCFullYear(-4713, 10, 24)
+  return date.getTime()
+})()
+
+/** An instant in PostgreSQL's input form: astronomical year 0 is 1 BC; years past 9999 keep all digits. */
+function postgresInstant(time: number, calendarDate: boolean): string | typeof BELOW_RANGE {
+  // Every JavaScript instant is below PostgreSQL's upper limits (294276 AD); only the lower limit can be crossed.
+  if (time < POSTGRES_MIN_TIME) return BELOW_RANGE
+  const date = new Date(time)
+  const year = date.getUTCFullYear()
+  const era = year >= 1 ? "" : " BC"
+  const day = `${pad(year >= 1 ? year : 1 - year, 4)}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`
+  if (calendarDate && isUtcMidnight(date)) return `${day}${era}`
+  return `${day} ${clockText(date)}+00${era}`
+}
+
+/**
+ * MySQL DATE/DATETIME document years 1000-9999 but store and compare years 0000-0999 too, so only
+ * instants outside 0000-9999 lie beyond every stored value.
+ */
+function mysqlInstant(time: number, calendarDate: boolean): string | typeof BELOW_RANGE | typeof ABOVE_RANGE {
+  const date = new Date(time)
+  const year = date.getUTCFullYear()
+  if (year < 0) return BELOW_RANGE
+  if (year > 9999) return ABOVE_RANGE
+  const day = `${pad(year, 4)}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`
+  return calendarDate && isUtcMidnight(date) ? day : `${day} ${clockText(date)}`
+}
+
+/** The left/right of one comparison, or why there is none. */
+type Operand =
+  | { readonly left: AnyColumn | SQL<unknown>; readonly right: unknown }
+  | typeof INCOMPARABLE
+  | typeof NOT_A_MEMBER
+  | typeof BELOW_RANGE
+  | typeof ABOVE_RANGE
+
+/** An instant before / after every value the column can store (a constant comparison). */
+const BELOW_RANGE = Symbol("belowRange")
+const ABOVE_RANGE = Symbol("aboveRange")
+
+/** A literal that cannot be compared with the column's values: the comparison is UNKNOWN. */
+const INCOMPARABLE = Symbol("incomparable")
+/** A string that is not a member of the column's enum: equal to no row. */
+const NOT_A_MEMBER = Symbol("notAMember")
+
+class Comparison {
+  readonly info: ColumnInfo
+
+  constructor(readonly column: AnyColumn, private readonly options: PredicateCompilerOptions) {
+    this.info = classify(column, options.dialect ?? "generic")
+  }
+
+  private get dialect(): PredicateDialect {
+    return this.options.dialect ?? "generic"
+  }
+
+  private memo: { textForm?: AnyColumn | SQL<unknown>; textOrdered?: AnyColumn | SQL<unknown> } = {}
+
+  /**
+   * The column's text form under code-point comparison (one instance, so
+   * membership lists group by it). PostgreSQL uses the type's output function
+   * (`format('%s', ...)`), which is exactly what the driver hydrates; a
+   * `::text` cast differs for some types (inet gains its netmask). NULL stays
+   * NULL (format would print it as '').
+   */
+  textForm(): AnyColumn | SQL<unknown> {
+    this.memo.textForm ??= this.dialect === "postgres"
+      ? sql`(CASE WHEN ${this.column} IS NULL THEN NULL ELSE format('%s', ${this.column}) END COLLATE "C")`
+      : this.dialect === "mysql" ? sql`(CONVERT(${this.column} USING utf8mb4) COLLATE utf8mb4_0900_bin)` : this.column
+    return this.memo.textForm
+  }
+
+  /** Expression for equality and membership on character columns. */
+  private textExact(): AnyColumn | SQL<unknown> {
+    if (this.dialect === "mysql" && this.options.mysqlBinaryCollation !== true) return this.textForm()
+    return this.column
+  }
+
+  /** Expression for ordering comparisons and sort keys on character columns. */
+  private textOrdered(): AnyColumn | SQL<unknown> {
+    if (this.dialect !== "postgres") return this.textExact()
+    this.memo.textOrdered ??= sql`(${this.column} COLLATE "C")`
+    return this.memo.textOrdered
+  }
+
+  /** The sort key consistent with every ordered comparison of this column. */
+  sortKey(): AnyColumn | SQL<unknown> {
+    if (this.info.cls === "text") return this.textOrdered()
+    if (this.info.cls === "textual" || this.info.cls === "enum") return this.textForm()
+    return this.column
+  }
+
+  /** Expression whose string value substring/emptiness tests examine, or undefined when rows are not strings. */
+  stringForm(): AnyColumn | SQL<unknown> | undefined {
+    switch (this.info.cls) {
+      case "number":
+      case "boolean":
+        return undefined
+      case "text":
+        return this.textExact()
+      case "temporal":
+        return this.info.hydratesDate ? undefined : this.textForm()
+      case "enum":
+      case "uuid":
+      case "textual":
+        return this.textForm()
+      default:
+        return this.column
+    }
+  }
+
+  operand(value: PredicatePrimitive | undefined, purpose: "exact" | "ordered"): Operand {
+    if (value === null || value === undefined) return INCOMPARABLE
+    const column = this.column
+    switch (this.info.cls) {
+      case "number": return typeof value === "number" && !Number.isNaN(value) ? { left: column, right: value } : INCOMPARABLE
+      case "boolean": return typeof value === "boolean" ? { left: column, right: value } : INCOMPARABLE
+      case "text":
+        if (typeof value === "number" || typeof value === "boolean") return INCOMPARABLE
+        return { left: purpose === "exact" ? this.textExact() : this.textOrdered(), right: value }
+      case "textual": return typeof value === "string" ? { left: this.textForm(), right: value } : INCOMPARABLE
+      case "uuid":
+        if (typeof value !== "string") return INCOMPARABLE
+        return UUID_TEXT.test(value) ? { left: column, right: value } : { left: this.textForm(), right: value }
+      case "enum":
+        if (typeof value !== "string") return INCOMPARABLE
+        // Ordering is by code point, like core; only equality may use the enum's native type.
+        if (purpose === "ordered") return { left: this.textForm(), right: value }
+        return this.info.enumValues?.includes(value) ? { left: column, right: value } : NOT_A_MEMBER
+      case "temporal": return this.temporalOperand(value)
+      default: return { left: column, right: value }
+    }
+  }
+
+  private temporalOperand(value: PredicatePrimitive): Operand {
+    const { temporal, hydratesDate } = this.info
+    const column = this.column
+    let time: number | null = null
+    if (value instanceof Date) time = Number.isNaN(value.getTime()) ? null : value.getTime()
+    else if (typeof value === "string") time = parseRfc3339Timestamp(value)
+    else return INCOMPARABLE
+    if (time !== null) {
+      if (temporal === "time") return INCOMPARABLE
+      return this.bindInstant(time)
+    }
+    if (typeof value !== "string") return INCOMPARABLE
+    // The engine's own text form (what string-mode rows and their cursor values carry).
+    if ((this.dialect === "postgres" || this.dialect === "mysql") && !hydratesDate) {
+      if (temporal === "timestamp" && isEngineTimestampText(value, this.dialect)) return { left: column, right: new Param(value) }
+      if (temporal === "time" && TIME_TEXT.test(value)) return { left: column, right: new Param(value) }
+    }
+    return hydratesDate ? INCOMPARABLE : { left: this.textForm(), right: value }
+  }
+
+  /** A time-zone-free literal for the instant, bound without the driver's Date serialization. */
+  private bindInstant(time: number): Operand {
+    const { temporal } = this.info
+    const column = this.column
+    if ((this.dialect === "postgres" || this.dialect === "mysql") && temporal !== "epoch") {
+      const literal = this.dialect === "postgres" ? postgresInstant(time, temporal === "date") : mysqlInstant(time, temporal === "date")
+      return typeof literal === "string" ? { left: column, right: new Param(literal) } : literal
+    }
+    // SQLite/generic: Date-hydrated columns encode Dates themselves.
+    return { left: column, right: this.info.hydratesDate ? new Date(time) : new Param(new Date(time).toISOString()) }
+  }
+}
+
+/**
+ * The expression a repository sorts by so ORDER BY agrees with predicate
+ * comparison (keyset cursors are predicates): code-point order for character
+ * data, native order for numbers, temporal values, PostgreSQL enums and uuids.
+ * Sorting through COLLATE "C" or CONVERT cannot use an index built under
+ * another collation, so repositories use it for cursor pagination only.
+ */
+export function sortExpression(column: AnyColumn, options: PredicateCompilerOptions = {}): AnyColumn | SQL<unknown> {
+  return new Comparison(column, options).sortKey()
+}
+
+/** SQL UNKNOWN: stays UNKNOWN under NOT, like the core evaluator. */
+function unknown(): SQL<unknown> {
+  return sql`(1 = NULL)`
 }
 
 function escapeLike(value: string): string {
@@ -86,13 +363,14 @@ function asArray(value: PredicateValue | undefined): PredicatePrimitive[] {
 }
 
 function asRange(value: PredicateValue | undefined): PredicateRangeValue | undefined {
-  if (!value || Array.isArray(value)) return undefined
+  if (!value || Array.isArray(value) || value instanceof Date) return undefined
   if (typeof value === "object") return value as PredicateRangeValue
   return undefined
 }
 
 function requireScalarValue(condition: PredicateCondition): PredicatePrimitive {
-  if (Array.isArray(condition.value) || (condition.value && typeof condition.value === "object")) {
+  // A Date is a scalar instant literal, not a structured value.
+  if (Array.isArray(condition.value) || (condition.value && typeof condition.value === "object" && !(condition.value instanceof Date))) {
     throw new Error(`Predicate operator ${condition.op} requires a scalar value`)
   }
 
@@ -118,64 +396,96 @@ function sqliteTextMatch(column: AnyColumn, op: "contains" | "startsWith" | "end
   return sql`substr(${column}, -length(${needle})) = ${needle}`
 }
 
-function compileCondition(columnMap: DrizzleColumnMap, condition: PredicateCondition, dialect: PredicateDialect, text: TextSemantics): SQL<unknown> {
+function compileCondition(columnMap: DrizzleColumnMap, condition: PredicateCondition, options: PredicateCompilerOptions): SQL<unknown> {
   const column = requireColumn(columnMap, condition.field)
-  // Text expressions are SQL wrappers; drizzle binds the compared value as a plain
-  // parameter for them. Non-text columns stay columns so their encoders apply.
-  const exact = text.exact(column) as AnyColumn
-  const ordered = text.ordered(column) as AnyColumn
-  const like = (pattern: (escape: (value: string) => string) => string): SQL<unknown> =>
-    dialect === "mysql"
-      ? sql`${exact} LIKE ${pattern(escapeLikeForMySql)} ESCAPE '!'`
-      : sql`${exact} LIKE ${pattern(escapeLike)} ESCAPE '\\'`
+  const dialect = options.dialect ?? "generic"
+  const comparison = new Comparison(column, options)
+  const { cls } = comparison.info
+  // Equality to no row: FALSE, or UNKNOWN for a NULL value.
+  const equalsNothing = () => sql`(${column} is null and null)`
+  // TRUE for every non-NULL value (UNKNOWN for NULL).
+  const holdsForAll = () => sql`(${column} is not null or null)`
+  const compare = (operator: typeof eq, value: PredicatePrimitive | undefined, purpose: "exact" | "ordered"): SQL<unknown> => {
+    const operand = comparison.operand(value, purpose)
+    if (operand === INCOMPARABLE) return unknown()
+    if (operand === NOT_A_MEMBER) {
+      if (operator === eq) return equalsNothing()
+      if (operator === ne) return holdsForAll()
+      return unknown()
+    }
+    if (operand === BELOW_RANGE || operand === ABOVE_RANGE) {
+      // Every stored value is greater than a literal below the range, and smaller than one above it.
+      const valueIsGreater = operand === BELOW_RANGE
+      if (operator === eq) return equalsNothing()
+      if (operator === ne) return holdsForAll()
+      const holds = operator === gt || operator === gte ? valueIsGreater : !valueIsGreater
+      return holds ? holdsForAll() : equalsNothing()
+    }
+    return operator(operand.left as AnyColumn, operand.right as never)
+  }
+  const textMatch = (op: "contains" | "startsWith" | "endsWith"): SQL<unknown> => {
+    const value = requireScalarValue(condition)
+    if (typeof value !== "string") throw new Error(`Predicate operator ${op} requires a string value`)
+    // Core matches substrings only against string values.
+    const subject = comparison.stringForm()
+    if (subject === undefined) return unknown()
+    if (dialect === "sqlite") return sqliteTextMatch(column, op, value)
+    const pattern = (escape: (value: string) => string) => op === "contains" ? `%${escape(value)}%` : op === "startsWith" ? `${escape(value)}%` : `%${escape(value)}`
+    return dialect === "mysql"
+      ? sql`${subject} LIKE ${pattern(escapeLikeForMySql)} ESCAPE '!'`
+      : sql`${subject} LIKE ${pattern(escapeLike)} ESCAPE '\\'`
+  }
 
   switch (condition.op) {
     case "eq":
-      return condition.value === null ? isNull(column) : eq(exact, requireScalarValue(condition) as never)
+      return condition.value === null ? isNull(column) : compare(eq, requireScalarValue(condition), "exact")
     case "neq":
-      return condition.value === null ? isNotNull(column) : ne(exact, requireScalarValue(condition) as never)
-    case "contains": {
-      const value = requireScalarValue(condition)
-      if (typeof value !== "string") throw new Error(`Predicate operator contains requires a string value`)
-      if (dialect === "sqlite") return sqliteTextMatch(column, "contains", value)
-      return like((escape) => `%${escape(value)}%`)
+      return condition.value === null ? isNotNull(column) : compare(ne, requireScalarValue(condition), "exact")
+    case "contains":
+    case "startsWith":
+    case "endsWith":
+      return textMatch(condition.op)
+    case "isEmpty": {
+      // Only strings can be empty; for any other kind isEmpty is exactly IS NULL.
+      const subject = comparison.stringForm()
+      return subject === undefined ? isNull(column) : or(isNull(column), eq(subject as AnyColumn, "")) ?? sql`1 = 0`
     }
-    case "startsWith": {
-      const value = requireScalarValue(condition)
-      if (typeof value !== "string") throw new Error(`Predicate operator startsWith requires a string value`)
-      if (dialect === "sqlite") return sqliteTextMatch(column, "startsWith", value)
-      return like((escape) => `${escape(value)}%`)
+    case "isNotEmpty": {
+      const subject = comparison.stringForm()
+      return subject === undefined ? isNotNull(column) : and(isNotNull(column), ne(subject as AnyColumn, "")) ?? sql`1 = 0`
     }
-    case "endsWith": {
-      const value = requireScalarValue(condition)
-      if (typeof value !== "string") throw new Error(`Predicate operator endsWith requires a string value`)
-      if (dialect === "sqlite") return sqliteTextMatch(column, "endsWith", value)
-      return like((escape) => `%${escape(value)}`)
-    }
-    case "isEmpty":
-      return or(isNull(column), eq(exact, "")) ?? sql`1 = 0`
-    case "isNotEmpty":
-      return and(isNotNull(column), ne(exact, "")) ?? sql`1 = 0`
     case "gt":
-      return gt(ordered, requireScalarValue(condition) as never)
+      return compare(gt, requireScalarValue(condition), "ordered")
     case "lt":
-      return lt(ordered, requireScalarValue(condition) as never)
+      return compare(lt, requireScalarValue(condition), "ordered")
     case "gte":
-      return gte(ordered, requireScalarValue(condition) as never)
+      return compare(gte, requireScalarValue(condition), "ordered")
     case "lte":
-      return lte(ordered, requireScalarValue(condition) as never)
+      return compare(lte, requireScalarValue(condition), "ordered")
     case "isTrue":
-      return eq(column, true)
+      return cls === "boolean" || cls === "other" ? eq(column, true) : unknown()
     case "isFalse":
-      return eq(column, false)
+      return cls === "boolean" || cls === "other" ? eq(column, false) : unknown()
     case "isNull":
       return isNull(column)
     case "isNotNull":
       return isNotNull(column)
     case "in": {
       if (!Array.isArray(condition.value)) throw new Error("Predicate operator in requires a value list")
-      const values = asArray(condition.value).filter((value) => value !== null)
-      return values.length > 0 ? inArray(exact, values as never[]) : sql`1 = 0`
+      const members = asArray(condition.value).filter((value) => value !== null)
+      // `x IN ()` is FALSE; an incomparable member is an UNKNOWN disjunct; a non-member equals nothing.
+      if (members.length === 0) return sql`1 = 0`
+      const operands = members.map((value) => comparison.operand(value, "exact"))
+      const comparable = operands.filter((operand): operand is Exclude<Operand, symbol> => typeof operand !== "symbol")
+      const someIncomparable = operands.includes(INCOMPARABLE)
+      // Group by left expression: canonical and non-canonical literals may compare differently.
+      const groups = new Map<AnyColumn | SQL<unknown>, unknown[]>()
+      for (const operand of comparable) groups.set(operand.left, [...(groups.get(operand.left) ?? []), operand.right])
+      const disjuncts: SQL<unknown>[] = []
+      for (const [left, values] of groups) disjuncts.push(inArray(left as AnyColumn, values as never[]))
+      if (someIncomparable) disjuncts.push(unknown())
+      if (disjuncts.length === 0) return equalsNothing()
+      return disjuncts.length === 1 ? disjuncts[0]! : or(...disjuncts) ?? disjuncts[0]!
     }
     case "includesAny":
     case "includesAll":
@@ -184,8 +494,8 @@ function compileCondition(columnMap: DrizzleColumnMap, condition: PredicateCondi
       const range = asRange(condition.value)
       if (!range) throw new Error("Predicate operator between requires a range value")
       const clauses: SQL<unknown>[] = []
-      if (range.from !== undefined) clauses.push(gte(ordered, range.from as never))
-      if (range.to !== undefined) clauses.push(lte(ordered, range.to as never))
+      if (range.from !== undefined) clauses.push(compare(gte, range.from, "ordered"))
+      if (range.to !== undefined) clauses.push(compare(lte, range.to, "ordered"))
       if (clauses.length === 0) return sql`1 = 0`
       return clauses.length === 1 ? clauses[0]! : and(...clauses) ?? sql`1 = 0`
     }
@@ -201,18 +511,26 @@ function compileCondition(columnMap: DrizzleColumnMap, condition: PredicateCondi
  * UNKNOWN stays UNKNOWN; only the root collapses UNKNOWN to FALSE.
  */
 export class DrizzlePredicateCompiler implements PredicateCompiler<SQL<unknown>> {
-  private readonly dialect: PredicateDialect
-  private readonly text: TextSemantics
+  constructor(private readonly columnMap: DrizzleColumnMap, private readonly options: PredicateCompilerOptions = {}) {}
 
-  constructor(private readonly columnMap: DrizzleColumnMap, options: PredicateCompilerOptions = {}) {
-    this.dialect = options.dialect ?? "generic"
-    this.text = textSemantics(options)
-  }
-
+  /** A strictly two-valued expression (UNKNOWN is FALSE), safe to negate or project. */
   compile(filter: PredicateNode): SQL<unknown> {
     // Literals are already two-valued and stay unwrapped for readable plans.
     if (filter.kind === "literal") return this.compileNode(filter)
     return strictBoolean(this.compileNode(filter))
+  }
+
+  /**
+   * The same predicate for a WHERE clause (alone or AND-ed with other
+   * conditions), where UNKNOWN already excludes the row. The root stays
+   * three-valued, so the planner sees the comparisons and can use indexes
+   * (a root COALESCE(..., FALSE) hides them). Never negate or project it.
+   */
+  compileWhere(filter: PredicateNode): SQL<unknown> {
+    // A subclass that overrides compile() keeps control of its WHERE clauses.
+    if (this.compile !== DrizzlePredicateCompiler.prototype.compile) return this.compile(filter)
+    if (filter.kind === "literal") return this.compileNode(filter)
+    return sql`(${this.compileNode(filter)})`
   }
 
   private compileNode(filter: PredicateNode): SQL<unknown> {
@@ -220,7 +538,7 @@ export class DrizzlePredicateCompiler implements PredicateCompiler<SQL<unknown>>
       case "literal":
         return filter.value ? sql`1 = 1` : sql`1 = 0`
       case "condition":
-        return compileCondition(this.columnMap, filter, this.dialect, this.text)
+        return compileCondition(this.columnMap, filter, this.options)
       case "and": {
         if (filter.filters.length === 0) return sql`1 = 1`
         const compiled = filter.filters.map((child) => this.compileNode(child))
@@ -237,6 +555,17 @@ export class DrizzlePredicateCompiler implements PredicateCompiler<SQL<unknown>>
         throw new Error(`Unsupported predicate node kind: ${(filter as PredicateNode).kind}`)
     }
   }
+}
+
+/**
+ * A predicate compiler a repository accepts: anything with `compile`; when it
+ * also offers `compileWhere` (as {@link DrizzlePredicateCompiler} does), WHERE
+ * clauses use that index-usable form.
+ */
+export type DrizzleWhereCompiler = PredicateCompiler<SQL<unknown>> & { compileWhere?: (filter: PredicateNode) => SQL<unknown> }
+
+export function compileWhereClause(compiler: DrizzleWhereCompiler, filter: PredicateNode): SQL<unknown> {
+  return typeof compiler.compileWhere === "function" ? compiler.compileWhere(filter) : compiler.compile(filter)
 }
 
 export function compileDrizzlePredicate(filter: PredicateNode, columnMap: DrizzleColumnMap, options: PredicateCompilerOptions = {}): SQL<unknown> {

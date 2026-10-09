@@ -157,6 +157,19 @@ has a regression test that failed first.
 | Entities, queries, serialization | Application scope columns are protected and injected from the trusted scope; tenant and application entities refuse other request scopes; `queryLimits` compile into a valid query budget and unknown keys are rejected; explicit audit maps merge with classification redaction (stricter wins); cache prefixes/tags default to `module:namespace:name`; `custom` fields with durable codecs fail closed until codecs are applied by persistence; idempotency fingerprints the raw request; default sorts respect classification; spec constants are frozen |
 | Cache and infrastructure | `delete`/`set` fence in-flight lookups; correctness-critical `delete`/`has` surface backend errors; the 10,000-rule limit is reachable and errors are `ConfigurationError`; default rule conflict groups cannot collide; temporal page size follows `maxRevisions`; quota keys encode principal kind; telemetry redacts `jwt`, `bearer`, `session`, `signature`, and `auth`/`otp` segments; health checks accept a signal and deadline; resetting sequences must declare `periodFormat` (no silent default that could repeat identifiers or change an existing series' format) |
 
+## Differential test suites (resolved)
+
+Seeded, replayable property/differential suites now check core invariants
+over thousands of generated cases per run (`packages/core/src/__tests__/differential`;
+`DIFFERENTIAL_SCALE`, `DIFFERENTIAL_SEED`, `DIFFERENTIAL_RUN`). Every failure
+was triaged against the spec; real bugs were fixed with a named regression test.
+
+| Suite | Checks | Bugs found and fixed |
+|---|---|---|
+| Predicate semantics | Kleene laws, simplifier soundness, missing ≡ NULL, instant spellings, operator laws, depth limits, post-image rewrite end to end, validation and round trips | `in []` on an array field was UNKNOWN; `includesAll` depended on NULL position; the depth limit was skipped under short-circuiting; RFC 3339 years 0000–0099 were rejected; an `undefined` patch value made the post-image check fail open |
+| ABAC authorization | record decision ≡ query scope (all actions, capabilities) against an independent oracle; collection vs rows; global ⇒ record; order independence; deny monotonicity; read plan ⇒ query denials ⇒ projection; pre/post-image writes; digest tamper detection; normalization | global capabilities were looser than record decisions under a conditional higher-tier allow; a deny read map with `"*"` left fields queryable (`"*"` is now reserved); record-dependent field writes were not flagged for optimistic concurrency; policies using `in` were always rejected |
+| Encodings and isolation | round trips, injectivity across every key builder, canonical JSON against an RFC 8785 model, mutation agreement with `JSON.parse`, cursor tamper/binding, fingerprint domain separation, sequence periods | canonical JSON ordered integer-like keys like JavaScript, not RFC 8785; envelopes without a payload were accepted; cursors accepted a non-string direction; BC dates collided with AD periods; lone surrogates raised raw `URIError`; tenant idempotency scopes accepted leading zeros; default entity cache tags could parse as tenant tags (now under `entity:`); entity idempotency namespaces ignored the entity namespace; list cursors were not bound to the entity, search, or projection; list/detail cache scope keys were not injective; KV `clear()` left tagged values |
+
 ## Remaining
 
 - A code formatter is still not configured; style is enforced only by lint.
@@ -178,3 +191,16 @@ has a regression test that failed first.
 - Behaviour change: idempotency fingerprints cover the raw request (body, path, query), so a retry that differs only in fields the schema would strip is a conflict.
 - Unknown job definitions are held for at most 24 hours from their first deferral before being dead-lettered (`unknownDefinitionMaxDeferralMs`).
 - Drizzle adapters report any non-framework error escaping a transaction as `PersistenceError` (sanitising driver detail); business code should throw framework errors (for example `BusinessRuleError`) to surface its own failures.
+- Behaviour change: default entity cache prefixes/tags are now `entity:module:namespace:name` and list/detail cache scope keys changed (one cold cache); explicit cache tags may not start with `tenant:`.
+- Behaviour change: a global capability is denied when a higher-priority conditional allow could take over its tier (matches the record path).
+- Behaviour change: canonical JSON orders integer-like object keys per RFC 8785; fingerprints of such objects change once.
+- A lowest-tier allow with a read map narrows readable fields even when a higher tier decides the row (read maps are allowlists).
+- KV cache: plain value keys still share `__cache__:` with tag lists and revisions; keys are built by `buildKey`, but a raw key such as `__tag__:x` is not rejected.
+- List cursors carry no `expiresAt`; tenant idempotency scope has two encodings (`fscope:v1:` and `tenant:N:`).
+- The RFC 3339 parser rejects lowercase `t`/`z` and leap second `:60`; an unknown operator evaluates FALSE (validated inputs never reach it).
+- ABAC `datetime` literals are canonical RFC 3339 UTC instants. A `datetime` column must hydrate as a `Date` (or that exact canonical string); a column that stores datetimes as text in another format compares as text and a date-time equality policy will not match it. `date` literals stay `YYYY-MM-DD` and match both string and `Date` hydration.
+- Trusted scopes (ABAC and structural) are exempt from the caller's query budget by identity brand; a cloned scope loses the brand and is charged to the caller (fails closed).
+- ABAC `date` fields on write accept only `YYYY-MM-DD` strings or `Date` objects. A `Date` that is not UTC midnight is evaluated as that instant; if the database casts it to a calendar date, a date-equality deny can be bypassed. JSON request bodies cannot produce `Date` values, so this only affects server-side hooks that write Dates; rejecting them would break drivers that hydrate DATE as local-midnight Dates.
+- Fingerprint versions were bumped for the RFC 8785 key-order change (outbox `v3`, jobs `4`, HTTP idempotency `v3`); stored previous-version fingerprints are still recognised through the compatibility-only legacy serializer, which should be removed with those versions. Rate-limit windows restart and old list cursors are refused (400, "restart from the first page") once after the deploy.
+- KV cache tag generations are read from and written to both the old and new counter layouts during the rolling upgrade; drop the old layout one release after every instance is upgraded.
+- Process: the third-round fixes (MySQL years 0000–0999 bound natively, KV single-counter generations in the steady state, PostgreSQL lower date limit) are covered by regression tests and certification but have not had an independent review of their own.

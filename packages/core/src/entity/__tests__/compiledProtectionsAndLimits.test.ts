@@ -111,7 +111,23 @@ describe("cache namespace defaults", () => {
     if (a.cache === false || b.cache === false) throw new Error("cache expected")
     expect(a.cache.keyPrefix).not.toBe(b.cache.keyPrefix)
     expect(a.cache.tag).not.toBe(b.cache.tag)
-    expect(a.cache.keyPrefix).toBe("tenant.people::person")
+    // Defaults carry the reserved "entity:" prefix so they can never be a tenant-owned tag ("tenant:<len>:<id>").
+    expect(a.cache.keyPrefix).toBe("entity:tenant.people:person")
+    expect(a.cache.tag).toBe("entity:tenant.people:person")
+  })
+
+  it("qualifies default cache and idempotency namespaces by the entity's persistence namespace", () => {
+    const a = defineEntity<Record<string, unknown>>({ ...base(), entity: { ...base().entity, namespace: "a" }, cache: {} })
+    const b = defineEntity<Record<string, unknown>>({ ...base(), entity: { ...base().entity, namespace: "b" }, cache: {} })
+    if (a.cache === false || b.cache === false) throw new Error("cache expected")
+    expect(a.cache.tag).not.toBe(b.cache.tag)
+    // Regression: the idempotency default was `${moduleKey}:${name}`, shared by both entities.
+    expect(a.compiledIdempotency.namespace).toBe("tenant.people:a:person")
+    expect(b.compiledIdempotency.namespace).toBe("tenant.people:b:person")
+  })
+
+  it("rejects explicit cache tags in the reserved tenant tag namespace", () => {
+    expect(() => defineEntity<Record<string, unknown>>({ ...base(), cache: { tag: "tenant:1:x", keyPrefix: "p" } })).toThrow(/reserved "tenant:" prefix/)
   })
 
   it("keeps explicit cache configuration unchanged", () => {

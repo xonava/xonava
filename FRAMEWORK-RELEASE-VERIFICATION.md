@@ -12,6 +12,11 @@ recovery, and real D1/PostgreSQL integration and conformance tests. PostgreSQL c
 closed unless `FRAMEWORK_TEST_PG_URL` or `DATABASE_URL` identifies a real PostgreSQL server.
 The gate also regenerates and validates RL1 business-rule, AG1 aggregate, TH1 temporal-history,
 N1 sequence-numbering, and HT1 HTTP-adapter evidence from the same source snapshot and run identifier.
+The DF1 gate (`npm run verify:framework:df1`) then reruns the core differential suites and the
+PostgreSQL, MySQL, and D1 real-database parity suites at elevated volume with a seed derived from the
+run identifier (a fixed `DIFFERENTIAL_SEED` is refused in a release run), and the final certification refuses the run without fresh,
+complete, source-matching `df1/differential-conformance.json` evidence. See
+[Running certification](docs/guides/certification.md#differential-certification-df1).
 
 The `verify:framework:core-purity` gate enforces the dependency-free core contract against both
 production TypeScript and built JavaScript. It rejects runtime package/Node imports, Node runtime

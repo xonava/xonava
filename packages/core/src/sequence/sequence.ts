@@ -16,7 +16,8 @@ function zonedFormatter(timeZone: string): Intl.DateTimeFormat {
   let formatter = formatters.get(timeZone)
   if (!formatter) {
     try {
-      formatter = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hourCycle: "h23" })
+      // The era is requested so a year before 1 CE (which Intl reports as an era year, e.g. 44 BC -> "44") is never aliased onto the CE year.
+      formatter = new Intl.DateTimeFormat("en-US", { timeZone, era: "short", year: "numeric", month: "2-digit", day: "2-digit", hourCycle: "h23" })
     } catch {
       throw new ConfigurationError("Sequence time zone is invalid")
     }
@@ -54,6 +55,7 @@ export function sequencePeriod(reset: SequenceResetPeriod, at: Date, timeZone = 
   if (!(at instanceof Date) || Number.isNaN(at.getTime())) throw new ConfigurationError("Sequence allocation time is invalid")
   if (reset === "never") return "all"
   const parts = Object.fromEntries(zonedFormatter(timeZone).formatToParts(at).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]))
+  if (parts.era !== "AD") throw new ConfigurationError("Sequence allocation time is invalid")
   const year = String(parts.year).padStart(4, "0")
   if (reset === "year") return year
   if (reset === "month") return `${year}-${parts.month}`

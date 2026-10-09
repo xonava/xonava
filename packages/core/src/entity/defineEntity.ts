@@ -12,7 +12,7 @@ import type {
 } from "../operation"
 import { ConfigurationError } from "../domain"
 import { cloneAndFreezeDefinition } from "../kernel/definitionIntegrity"
-import { compileEntity, type CompiledEntityDefinition } from "./compileEntity"
+import { compileEntity, defaultEntityNamespace, type CompiledEntityDefinition } from "./compileEntity"
 import type { EntityLifecyclePolicy } from "./lifecycle"
 import type { FieldDataClassifications } from "../domain/dataClassification"
 import type { DurableCodecRegistry } from "../serialization/durableCodec"
@@ -312,12 +312,23 @@ function normalizeCapabilityPolicy(config: CapabilityCheckConfig): CapabilityChe
 }
 
 /**
- * Entity names are only unique within a module (and persistence namespace), so
- * default cache partitions are qualified by both. Neither the module key nor
- * the entity name may contain ":", so the segments cannot be confused.
+ * Default cache tag and key prefix: `entity:` + defaultEntityNamespace (`entity:${moduleKey}:${name}`,
+ * or `entity:${moduleKey}:${namespace}:${name}` for an entity with a persistence namespace).
+ *
+ * Format history: `${moduleKey}:${namespace}:${name}` (earlier this release)
+ * could equal a tenant-owned tag `tenant:<len>:<tenantId>` — moduleKey
+ * "tenant", namespace "1", name "x" gave "tenant:1:x", which a tenant-scoped
+ * batch for tenant "x" was allowed to advance. The reserved "entity:" prefix
+ * keeps defaults disjoint from tenant tags by construction. Upgrading changes
+ * every default prefix/tag once (one cold cache); explicit configuration is
+ * unaffected.
  */
+const ENTITY_CACHE_NAMESPACE_PREFIX = "entity:"
+/** Prefix of tenant-owned cache tags (see encodeTenantCacheTag in persistence/scoped.ts). */
+const TENANT_CACHE_TAG_PREFIX = "tenant:"
+
 function defaultCacheNamespace(moduleKey: string, entity: { readonly name: string; readonly namespace?: string }): string {
-  return `${moduleKey}:${entity.namespace ?? ""}:${entity.name}`
+  return `${ENTITY_CACHE_NAMESPACE_PREFIX}${defaultEntityNamespace(moduleKey, entity)}`
 }
 
 export function defineEntity<
@@ -332,6 +343,8 @@ export function defineEntity<
   input: EntityDefinitionInput<TRow, TCreateBody, TUpdateBody, TListRow, TDetailRow, TIdParams, TListQuery>,
 ): CompiledEntityDefinition<TRow, TCreateBody, TUpdateBody, TListRow, TDetailRow, TIdParams, TListQuery> {
   if (input.audit && Object.hasOwn(input.audit, "enabled")) throw new ConfigurationError(`Entity "${input.entity.name}" audit must use false or a configuration object without enabled.`)
+  // A global entity tag in the tenant tag namespace could be advanced by that tenant's atomic batches.
+  if (input.cache && typeof input.cache.tag === "string" && input.cache.tag.startsWith(TENANT_CACHE_TAG_PREFIX)) throw new ConfigurationError(`Entity "${input.entity.name}" cache tag must not start with the reserved "${TENANT_CACHE_TAG_PREFIX}" prefix.`)
   if (input.cache && Object.hasOwn(input.cache, "enabled")) throw new ConfigurationError(`Entity "${input.entity.name}" cache must use false or a configuration object without enabled.`)
   if (input.idempotency && Object.hasOwn(input.idempotency, "required")) throw new ConfigurationError(`Entity "${input.entity.name}" idempotency must use false or a configuration object without required.`)
   const routes = normalizeRoutes(input.routes)

@@ -1,8 +1,8 @@
 import { pgTable, integer, text } from "drizzle-orm/pg-core"
 import { PgDialect } from "drizzle-orm/pg-core/dialect"
-import type { AnyColumn, SQL } from "drizzle-orm"
+import { sql, type AnyColumn, type SQL } from "drizzle-orm"
 import { describe, expect, it, vi } from "vitest"
-import { ConfigurationError, ValidationError } from "core/domain"
+import { ConfigurationError, Predicate, ValidationError } from "core/domain"
 import { createDrizzlePersistenceProvider, createDrizzleRepository, type DrizzleSessionLike, DrizzleEntityRegistry, type PgDatabaseLike } from "adapters/drizzle-pg"
 
 const table = pgTable("pagination_rows", { id: text("id").primaryKey(), name: text("name"), version: integer("version") })
@@ -59,7 +59,7 @@ describe("PostgreSQL pagination boundaries", () => {
       .rejects.toEqual(new ValidationError("pagination offset exceeds the configured maximum of 3"))
   })
 
-  it("appends the primary key to non-unique sorts", async () => {
+  async function capturedOrderBy(options: Parameters<ReturnType<typeof createDrizzleRepository>["findMany"]>[0]): Promise<string> {
     let orderBy: unknown
     const db = session()
     const originalSelect = db.select
@@ -84,8 +84,26 @@ describe("PostgreSQL pagination boundaries", () => {
       })
       return builder
     })
+    await createDrizzleRepository({ db, table, entity, columnMap }).findMany(options)
+    return new PgDialect().sqlToQuery(orderBy as SQL<unknown>).sql
+  }
 
-    await createDrizzleRepository({ db, table, entity, columnMap }).findMany({ sort: [{ field: "name", direction: "desc" }] })
-    expect(new PgDialect().sqlToQuery(orderBy as SQL<unknown>).sql).toContain('"pagination_rows"."id" desc')
+  it("appends the primary key to non-unique sorts and keeps offset pages index-friendly", async () => {
+    // Offset pages only need a deterministic order: native column order keeps index scans.
+    expect(await capturedOrderBy({ sort: [{ field: "name", direction: "desc" }] })).toBe('"pagination_rows"."name" desc, "pagination_rows"."id" desc')
+  })
+
+  it("orders cursor pages exactly like keyset predicates compare (code-point text)", async () => {
+    // Text sort keys, including the text primary-key tie breaker, order under COLLATE "C" like the cursor predicate.
+    expect(await capturedOrderBy({ sort: [{ field: "name", direction: "desc" }], pagination: { kind: "cursor", direction: "after", limit: 2 } }))
+      .toBe('("pagination_rows"."name" COLLATE "C") desc, ("pagination_rows"."id" COLLATE "C") desc')
+  })
+
+  it("accepts a plain predicate compiler that only implements compile", async () => {
+    // Regression (second review, LOW): repositories required compileWhere.
+    const compile = vi.fn(() => sql`1 = 1`)
+    const repository = createDrizzleRepository({ db: session(), table, entity, columnMap, predicateCompiler: { compile } })
+    await repository.findMany({ filter: Predicate.eq("name", "x") })
+    expect(compile).toHaveBeenCalled()
   })
 })

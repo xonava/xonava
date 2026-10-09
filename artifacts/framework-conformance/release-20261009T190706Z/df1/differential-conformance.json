@@ -1,0 +1,1860 @@
+{
+  "schemaVersion": 1,
+  "phase": "DF1",
+  "status": "proven",
+  "runId": "release-20261009T190706Z",
+  "recordedAt": "2026-10-09T19:22:10.479Z",
+  "gateStartedAt": "2026-10-09T19:17:52.172Z",
+  "seed": 3383902479,
+  "seedSource": "run-id",
+  "scales": {
+    "core": 5,
+    "database": 2
+  },
+  "minimums": {
+    "baseRuns": 50,
+    "releaseScales": {
+      "core": 5,
+      "database": 2
+    },
+    "baseline": {
+      "path": "scripts/verification/differentialBaseline.json",
+      "sites": 113
+    }
+  },
+  "suites": [
+    {
+      "id": "core",
+      "kind": "core",
+      "scale": 5,
+      "testFiles": [
+        "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts",
+        "packages/core/src/__tests__/differential/abacDigest.differential.test.ts",
+        "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts",
+        "packages/core/src/__tests__/differential/abacMonotonicity.differential.test.ts",
+        "packages/core/src/__tests__/differential/abacNormalization.differential.test.ts",
+        "packages/core/src/__tests__/differential/encodingIdentity.test.ts",
+        "packages/core/src/__tests__/differential/encodingRegressions.test.ts",
+        "packages/core/src/__tests__/differential/encodingSerialization.test.ts",
+        "packages/core/src/__tests__/differential/predicateInstants.differential.test.ts",
+        "packages/core/src/__tests__/differential/predicatePostImage.differential.test.ts",
+        "packages/core/src/__tests__/differential/predicateRegressions.test.ts",
+        "packages/core/src/__tests__/differential/predicateRoundTrip.differential.test.ts",
+        "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts"
+      ],
+      "command": "npm run test -w core -- --testTimeout=1800000 src/__tests__/differential/abacAuthorization.differential.test.ts src/__tests__/differential/abacDigest.differential.test.ts src/__tests__/differential/abacFieldAccess.differential.test.ts src/__tests__/differential/abacMonotonicity.differential.test.ts src/__tests__/differential/abacNormalization.differential.test.ts src/__tests__/differential/encodingIdentity.test.ts src/__tests__/differential/encodingRegressions.test.ts src/__tests__/differential/encodingSerialization.test.ts src/__tests__/differential/predicateInstants.differential.test.ts src/__tests__/differential/predicatePostImage.differential.test.ts src/__tests__/differential/predicateRegressions.test.ts src/__tests__/differential/predicateRoundTrip.differential.test.ts src/__tests__/differential/predicateSemantics.differential.test.ts",
+      "callSites": 107,
+      "properties": 136,
+      "cases": 498000,
+      "durationMs": 100131
+    },
+    {
+      "id": "pg",
+      "kind": "database",
+      "scale": 2,
+      "testFiles": [
+        "packages/testing/integration/pg/richParity.integration.test.ts",
+        "packages/testing/integration/pg/predicateParity.integration.test.ts"
+      ],
+      "command": "npm run test -w testing -- --config vitest.integration.config.ts --testTimeout=1800000 integration/pg/richParity.integration.test.ts integration/pg/predicateParity.integration.test.ts",
+      "callSites": 2,
+      "properties": 4,
+      "cases": 14400,
+      "durationMs": 37743
+    },
+    {
+      "id": "mysql",
+      "kind": "database",
+      "scale": 2,
+      "testFiles": [
+        "packages/testing/integration/mysql/richParity.integration.test.ts",
+        "packages/testing/integration/mysql/predicateParity.integration.test.ts"
+      ],
+      "command": "npm run test -w testing -- --config vitest.integration.config.ts --testTimeout=1800000 integration/mysql/richParity.integration.test.ts integration/mysql/predicateParity.integration.test.ts",
+      "callSites": 2,
+      "properties": 6,
+      "cases": 21600,
+      "durationMs": 49029
+    },
+    {
+      "id": "d1",
+      "kind": "database",
+      "scale": 2,
+      "testFiles": [
+        "packages/testing/integration/d1/richParity.integration.test.ts",
+        "packages/testing/integration/d1/predicateParity.integration.test.ts"
+      ],
+      "command": "npm run test -w testing -- --config vitest.integration.config.ts --testTimeout=1800000 integration/d1/richParity.integration.test.ts integration/d1/predicateParity.integration.test.ts",
+      "callSites": 2,
+      "properties": 2,
+      "cases": 2000,
+      "durationMs": 67072
+    }
+  ],
+  "properties": [
+    {
+      "suite": "core",
+      "name": "abac capability≡scope conditional-only bundles with heavy ties",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:91",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac capability≡scope ${…}",
+      "executions": 1,
+      "baseRuns": 200,
+      "runs": 1000
+    },
+    {
+      "suite": "core",
+      "name": "abac capability≡scope deny-heavy bundles",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:91",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac capability≡scope ${…}",
+      "executions": 1,
+      "baseRuns": 200,
+      "runs": 1000
+    },
+    {
+      "suite": "core",
+      "name": "abac capability≡scope mixed bundles",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:91",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac capability≡scope ${…}",
+      "executions": 1,
+      "baseRuns": 200,
+      "runs": 1000
+    },
+    {
+      "suite": "core",
+      "name": "abac capability≡scope two-field bundles (UNKNOWN-heavy)",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:91",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac capability≡scope ${…}",
+      "executions": 1,
+      "baseRuns": 200,
+      "runs": 1000
+    },
+    {
+      "suite": "core",
+      "name": "abac collection conditional-only bundles with heavy ties",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:113",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac collection ${…}",
+      "executions": 1,
+      "baseRuns": 200,
+      "runs": 1000
+    },
+    {
+      "suite": "core",
+      "name": "abac collection deny-heavy bundles",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:113",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac collection ${…}",
+      "executions": 1,
+      "baseRuns": 200,
+      "runs": 1000
+    },
+    {
+      "suite": "core",
+      "name": "abac collection mixed bundles",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:113",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac collection ${…}",
+      "executions": 1,
+      "baseRuns": 200,
+      "runs": 1000
+    },
+    {
+      "suite": "core",
+      "name": "abac collection two-field bundles (UNKNOWN-heavy)",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:113",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac collection ${…}",
+      "executions": 1,
+      "baseRuns": 200,
+      "runs": 1000
+    },
+    {
+      "suite": "core",
+      "name": "abac create complete record",
+      "site": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts:221",
+      "siteKey": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts::abac create complete record",
+      "executions": 1,
+      "baseRuns": 200,
+      "runs": 1000
+    },
+    {
+      "suite": "core",
+      "name": "abac create explicit null",
+      "site": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts:200",
+      "siteKey": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts::abac create explicit null",
+      "executions": 1,
+      "baseRuns": 250,
+      "runs": 1250
+    },
+    {
+      "suite": "core",
+      "name": "abac date hydration",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:232",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac date hydration",
+      "executions": 1,
+      "baseRuns": 300,
+      "runs": 1500
+    },
+    {
+      "suite": "core",
+      "name": "abac date spellings on write",
+      "site": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts:282",
+      "siteKey": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts::abac date spellings on write",
+      "executions": 1,
+      "baseRuns": 300,
+      "runs": 1500
+    },
+    {
+      "suite": "core",
+      "name": "abac deny monotone conditional deny into tied tiers",
+      "site": "packages/core/src/__tests__/differential/abacMonotonicity.differential.test.ts:91",
+      "siteKey": "packages/core/src/__tests__/differential/abacMonotonicity.differential.test.ts::abac deny monotone ${…}",
+      "executions": 1,
+      "baseRuns": 250,
+      "runs": 1250
+    },
+    {
+      "suite": "core",
+      "name": "abac deny monotone deny at the top tier",
+      "site": "packages/core/src/__tests__/differential/abacMonotonicity.differential.test.ts:91",
+      "siteKey": "packages/core/src/__tests__/differential/abacMonotonicity.differential.test.ts::abac deny monotone ${…}",
+      "executions": 1,
+      "baseRuns": 250,
+      "runs": 1250
+    },
+    {
+      "suite": "core",
+      "name": "abac deny monotone deny with field access",
+      "site": "packages/core/src/__tests__/differential/abacMonotonicity.differential.test.ts:91",
+      "siteKey": "packages/core/src/__tests__/differential/abacMonotonicity.differential.test.ts::abac deny monotone ${…}",
+      "executions": 1,
+      "baseRuns": 250,
+      "runs": 1250
+    },
+    {
+      "suite": "core",
+      "name": "abac deny monotone random deny",
+      "site": "packages/core/src/__tests__/differential/abacMonotonicity.differential.test.ts:91",
+      "siteKey": "packages/core/src/__tests__/differential/abacMonotonicity.differential.test.ts::abac deny monotone ${…}",
+      "executions": 1,
+      "baseRuns": 250,
+      "runs": 1250
+    },
+    {
+      "suite": "core",
+      "name": "abac deny read map",
+      "site": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts:118",
+      "siteKey": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts::abac deny read map",
+      "executions": 1,
+      "baseRuns": 200,
+      "runs": 1000
+    },
+    {
+      "suite": "core",
+      "name": "abac digest determinism",
+      "site": "packages/core/src/__tests__/differential/abacDigest.differential.test.ts:109",
+      "siteKey": "packages/core/src/__tests__/differential/abacDigest.differential.test.ts::abac digest determinism",
+      "executions": 1,
+      "baseRuns": 150,
+      "runs": 750
+    },
+    {
+      "suite": "core",
+      "name": "abac digest tamper",
+      "site": "packages/core/src/__tests__/differential/abacDigest.differential.test.ts:125",
+      "siteKey": "packages/core/src/__tests__/differential/abacDigest.differential.test.ts::abac digest tamper",
+      "executions": 1,
+      "baseRuns": 400,
+      "runs": 2000
+    },
+    {
+      "suite": "core",
+      "name": "abac foreign module inert",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:189",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac foreign module inert",
+      "executions": 1,
+      "baseRuns": 150,
+      "runs": 750
+    },
+    {
+      "suite": "core",
+      "name": "abac global⇒record conditional-only bundles with heavy ties",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:146",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac global⇒record ${…}",
+      "executions": 1,
+      "baseRuns": 300,
+      "runs": 1500
+    },
+    {
+      "suite": "core",
+      "name": "abac global⇒record deny-heavy bundles",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:146",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac global⇒record ${…}",
+      "executions": 1,
+      "baseRuns": 300,
+      "runs": 1500
+    },
+    {
+      "suite": "core",
+      "name": "abac global⇒record mixed bundles",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:146",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac global⇒record ${…}",
+      "executions": 1,
+      "baseRuns": 300,
+      "runs": 1500
+    },
+    {
+      "suite": "core",
+      "name": "abac global⇒record two-field bundles (UNKNOWN-heavy)",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:146",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac global⇒record ${…}",
+      "executions": 1,
+      "baseRuns": 300,
+      "runs": 1500
+    },
+    {
+      "suite": "core",
+      "name": "abac literal canonicalization",
+      "site": "packages/core/src/__tests__/differential/abacNormalization.differential.test.ts:133",
+      "siteKey": "packages/core/src/__tests__/differential/abacNormalization.differential.test.ts::abac literal canonicalization",
+      "executions": 1,
+      "baseRuns": 200,
+      "runs": 1000
+    },
+    {
+      "suite": "core",
+      "name": "abac lowest allow monotone",
+      "site": "packages/core/src/__tests__/differential/abacMonotonicity.differential.test.ts:116",
+      "siteKey": "packages/core/src/__tests__/differential/abacMonotonicity.differential.test.ts::abac lowest allow monotone",
+      "executions": 1,
+      "baseRuns": 300,
+      "runs": 1500
+    },
+    {
+      "suite": "core",
+      "name": "abac lowest allow with field access monotone",
+      "site": "packages/core/src/__tests__/differential/abacMonotonicity.differential.test.ts:135",
+      "siteKey": "packages/core/src/__tests__/differential/abacMonotonicity.differential.test.ts::abac lowest allow with field access monotone",
+      "executions": 1,
+      "baseRuns": 300,
+      "runs": 1500
+    },
+    {
+      "suite": "core",
+      "name": "abac normalization fail closed",
+      "site": "packages/core/src/__tests__/differential/abacNormalization.differential.test.ts:90",
+      "siteKey": "packages/core/src/__tests__/differential/abacNormalization.differential.test.ts::abac normalization fail closed",
+      "executions": 1,
+      "baseRuns": 400,
+      "runs": 2000
+    },
+    {
+      "suite": "core",
+      "name": "abac order independence conditional-only bundles with heavy ties",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:173",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac order independence ${…}",
+      "executions": 1,
+      "baseRuns": 150,
+      "runs": 750
+    },
+    {
+      "suite": "core",
+      "name": "abac order independence deny-heavy bundles",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:173",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac order independence ${…}",
+      "executions": 1,
+      "baseRuns": 150,
+      "runs": 750
+    },
+    {
+      "suite": "core",
+      "name": "abac order independence mixed bundles",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:173",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac order independence ${…}",
+      "executions": 1,
+      "baseRuns": 150,
+      "runs": 750
+    },
+    {
+      "suite": "core",
+      "name": "abac order independence two-field bundles (UNKNOWN-heavy)",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:173",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac order independence ${…}",
+      "executions": 1,
+      "baseRuns": 150,
+      "runs": 750
+    },
+    {
+      "suite": "core",
+      "name": "abac read modes",
+      "site": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts:258",
+      "siteKey": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts::abac read modes",
+      "executions": 1,
+      "baseRuns": 100,
+      "runs": 500
+    },
+    {
+      "suite": "core",
+      "name": "abac read plan vs query conditional read maps with ties",
+      "site": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts:77",
+      "siteKey": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts::abac read plan vs query ${…}",
+      "executions": 1,
+      "baseRuns": 300,
+      "runs": 1500
+    },
+    {
+      "suite": "core",
+      "name": "abac read plan vs query read maps everywhere",
+      "site": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts:77",
+      "siteKey": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts::abac read plan vs query ${…}",
+      "executions": 1,
+      "baseRuns": 300,
+      "runs": 1500
+    },
+    {
+      "suite": "core",
+      "name": "abac read plan vs query read maps with the reserved * key",
+      "site": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts:77",
+      "siteKey": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts::abac read plan vs query ${…}",
+      "executions": 1,
+      "baseRuns": 300,
+      "runs": 1500
+    },
+    {
+      "suite": "core",
+      "name": "abac record-dependent field write",
+      "site": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts:237",
+      "siteKey": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts::abac record-dependent field write",
+      "executions": 1,
+      "baseRuns": 300,
+      "runs": 1500
+    },
+    {
+      "suite": "core",
+      "name": "abac record≡scope conditional-only bundles with heavy ties",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:65",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac record≡scope ${…}",
+      "executions": 1,
+      "baseRuns": 250,
+      "runs": 1250
+    },
+    {
+      "suite": "core",
+      "name": "abac record≡scope deny-heavy bundles",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:65",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac record≡scope ${…}",
+      "executions": 1,
+      "baseRuns": 250,
+      "runs": 1250
+    },
+    {
+      "suite": "core",
+      "name": "abac record≡scope mixed bundles",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:65",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac record≡scope ${…}",
+      "executions": 1,
+      "baseRuns": 250,
+      "runs": 1250
+    },
+    {
+      "suite": "core",
+      "name": "abac record≡scope two-field bundles (UNKNOWN-heavy)",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:65",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac record≡scope ${…}",
+      "executions": 1,
+      "baseRuns": 250,
+      "runs": 1250
+    },
+    {
+      "suite": "core",
+      "name": "abac scope query budget",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:258",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac scope query budget",
+      "executions": 1,
+      "baseRuns": 200,
+      "runs": 1000
+    },
+    {
+      "suite": "core",
+      "name": "abac unnamed capability",
+      "site": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts:204",
+      "siteKey": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac unnamed capability",
+      "executions": 1,
+      "baseRuns": 100,
+      "runs": 500
+    },
+    {
+      "suite": "core",
+      "name": "abac write oracle mixed",
+      "site": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts:167",
+      "siteKey": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts::abac write oracle ${…}",
+      "executions": 1,
+      "baseRuns": 250,
+      "runs": 1250
+    },
+    {
+      "suite": "core",
+      "name": "abac write oracle UNKNOWN-heavy",
+      "site": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts:167",
+      "siteKey": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts::abac write oracle ${…}",
+      "executions": 1,
+      "baseRuns": 250,
+      "runs": 1250
+    },
+    {
+      "suite": "core",
+      "name": "abac write oracle write lists with ties",
+      "site": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts:167",
+      "siteKey": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts::abac write oracle ${…}",
+      "executions": 1,
+      "baseRuns": 250,
+      "runs": 1250
+    },
+    {
+      "suite": "core",
+      "name": "absorption distributivity",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:87",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::absorption distributivity",
+      "executions": 1,
+      "baseRuns": 1500,
+      "runs": 7500
+    },
+    {
+      "suite": "core",
+      "name": "base64url round trip",
+      "site": "packages/core/src/__tests__/differential/encodingSerialization.test.ts:179",
+      "siteKey": "packages/core/src/__tests__/differential/encodingSerialization.test.ts::base64url round trip",
+      "executions": 1,
+      "baseRuns": 500,
+      "runs": 2500
+    },
+    {
+      "suite": "core",
+      "name": "base64url strict",
+      "site": "packages/core/src/__tests__/differential/encodingSerialization.test.ts:188",
+      "siteKey": "packages/core/src/__tests__/differential/encodingSerialization.test.ts::base64url strict",
+      "executions": 1,
+      "baseRuns": 1500,
+      "runs": 7500
+    },
+    {
+      "suite": "core",
+      "name": "between law",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:211",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::between law",
+      "executions": 1,
+      "baseRuns": 2500,
+      "runs": 12500
+    },
+    {
+      "suite": "core",
+      "name": "boolean tests",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:267",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::boolean tests",
+      "executions": 1,
+      "baseRuns": 2500,
+      "runs": 12500
+    },
+    {
+      "suite": "core",
+      "name": "buildKey injective",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:279",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::buildKey injective",
+      "executions": 1,
+      "baseRuns": 800,
+      "runs": 4000
+    },
+    {
+      "suite": "core",
+      "name": "buildKey lone surrogate",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:294",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::buildKey lone surrogate",
+      "executions": 1,
+      "baseRuns": 100,
+      "runs": 500
+    },
+    {
+      "suite": "core",
+      "name": "cache generation storage keys",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:305",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::cache generation storage keys",
+      "executions": 1,
+      "baseRuns": 400,
+      "runs": 2000
+    },
+    {
+      "suite": "core",
+      "name": "cache key part vs reference",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:263",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::cache key part vs reference",
+      "executions": 1,
+      "baseRuns": 1500,
+      "runs": 7500
+    },
+    {
+      "suite": "core",
+      "name": "cache tag keyspace",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:531",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::cache tag keyspace",
+      "executions": 1,
+      "baseRuns": 300,
+      "runs": 1500
+    },
+    {
+      "suite": "core",
+      "name": "canonical json round trip",
+      "site": "packages/core/src/__tests__/differential/predicateRoundTrip.differential.test.ts:69",
+      "siteKey": "packages/core/src/__tests__/differential/predicateRoundTrip.differential.test.ts::canonical json round trip",
+      "executions": 1,
+      "baseRuns": 1000,
+      "runs": 5000
+    },
+    {
+      "suite": "core",
+      "name": "canonical no normalization",
+      "site": "packages/core/src/__tests__/differential/encodingSerialization.test.ts:93",
+      "siteKey": "packages/core/src/__tests__/differential/encodingSerialization.test.ts::canonical no normalization",
+      "executions": 1,
+      "baseRuns": 200,
+      "runs": 1000
+    },
+    {
+      "suite": "core",
+      "name": "canonical rejection anywhere",
+      "site": "packages/core/src/__tests__/differential/encodingSerialization.test.ts:101",
+      "siteKey": "packages/core/src/__tests__/differential/encodingSerialization.test.ts::canonical rejection anywhere",
+      "executions": 1,
+      "baseRuns": 600,
+      "runs": 3000
+    },
+    {
+      "suite": "core",
+      "name": "canonical round trip vs JSON",
+      "site": "packages/core/src/__tests__/differential/encodingSerialization.test.ts:69",
+      "siteKey": "packages/core/src/__tests__/differential/encodingSerialization.test.ts::canonical round trip vs JSON",
+      "executions": 1,
+      "baseRuns": 800,
+      "runs": 4000
+    },
+    {
+      "suite": "core",
+      "name": "canonical stability",
+      "site": "packages/core/src/__tests__/differential/encodingSerialization.test.ts:79",
+      "siteKey": "packages/core/src/__tests__/differential/encodingSerialization.test.ts::canonical stability",
+      "executions": 1,
+      "baseRuns": 800,
+      "runs": 4000
+    },
+    {
+      "suite": "core",
+      "name": "canonical vs JCS model",
+      "site": "packages/core/src/__tests__/differential/encodingSerialization.test.ts:59",
+      "siteKey": "packages/core/src/__tests__/differential/encodingSerialization.test.ts::canonical vs JCS model",
+      "executions": 1,
+      "baseRuns": 800,
+      "runs": 4000
+    },
+    {
+      "suite": "core",
+      "name": "code point order",
+      "site": "packages/core/src/__tests__/differential/predicateInstants.differential.test.ts:151",
+      "siteKey": "packages/core/src/__tests__/differential/predicateInstants.differential.test.ts::code point order",
+      "executions": 1,
+      "baseRuns": 3000,
+      "runs": 15000
+    },
+    {
+      "suite": "core",
+      "name": "commutative associative idempotent",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:71",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::commutative associative idempotent",
+      "executions": 1,
+      "baseRuns": 1500,
+      "runs": 7500
+    },
+    {
+      "suite": "core",
+      "name": "cursor binding",
+      "site": "packages/core/src/__tests__/differential/encodingSerialization.test.ts:384",
+      "siteKey": "packages/core/src/__tests__/differential/encodingSerialization.test.ts::cursor binding",
+      "executions": 1,
+      "baseRuns": 400,
+      "runs": 2000
+    },
+    {
+      "suite": "core",
+      "name": "cursor expiry and rotation",
+      "site": "packages/core/src/__tests__/differential/encodingSerialization.test.ts:407",
+      "siteKey": "packages/core/src/__tests__/differential/encodingSerialization.test.ts::cursor expiry and rotation",
+      "executions": 1,
+      "baseRuns": 400,
+      "runs": 2000
+    },
+    {
+      "suite": "core",
+      "name": "cursor payload types",
+      "site": "packages/core/src/__tests__/differential/encodingSerialization.test.ts:426",
+      "siteKey": "packages/core/src/__tests__/differential/encodingSerialization.test.ts::cursor payload types",
+      "executions": 1,
+      "baseRuns": 400,
+      "runs": 2000
+    },
+    {
+      "suite": "core",
+      "name": "cursor round trip",
+      "site": "packages/core/src/__tests__/differential/encodingSerialization.test.ts:315",
+      "siteKey": "packages/core/src/__tests__/differential/encodingSerialization.test.ts::cursor round trip",
+      "executions": 1,
+      "baseRuns": 400,
+      "runs": 2000
+    },
+    {
+      "suite": "core",
+      "name": "cursor strict canonical",
+      "site": "packages/core/src/__tests__/differential/encodingSerialization.test.ts:354",
+      "siteKey": "packages/core/src/__tests__/differential/encodingSerialization.test.ts::cursor strict canonical",
+      "executions": 1,
+      "baseRuns": 600,
+      "runs": 3000
+    },
+    {
+      "suite": "core",
+      "name": "cursor tamper",
+      "site": "packages/core/src/__tests__/differential/encodingSerialization.test.ts:326",
+      "siteKey": "packages/core/src/__tests__/differential/encodingSerialization.test.ts::cursor tamper",
+      "executions": 1,
+      "baseRuns": 600,
+      "runs": 3000
+    },
+    {
+      "suite": "core",
+      "name": "de morgan",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:62",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::de morgan",
+      "executions": 1,
+      "baseRuns": 1500,
+      "runs": 7500
+    },
+    {
+      "suite": "core",
+      "name": "decoder bytes vs TextDecoder",
+      "site": "packages/core/src/__tests__/differential/encodingSerialization.test.ts:158",
+      "siteKey": "packages/core/src/__tests__/differential/encodingSerialization.test.ts::decoder bytes vs TextDecoder",
+      "executions": 1,
+      "baseRuns": 800,
+      "runs": 4000
+    },
+    {
+      "suite": "core",
+      "name": "decoder vs JSON.parse under mutation",
+      "site": "packages/core/src/__tests__/differential/encodingSerialization.test.ts:125",
+      "siteKey": "packages/core/src/__tests__/differential/encodingSerialization.test.ts::decoder vs JSON.parse under mutation",
+      "executions": 1,
+      "baseRuns": 3000,
+      "runs": 15000
+    },
+    {
+      "suite": "core",
+      "name": "depth limit admits legal depth",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:367",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::depth limit admits legal depth",
+      "executions": 1,
+      "baseRuns": 100,
+      "runs": 500
+    },
+    {
+      "suite": "core",
+      "name": "depth limit is data independent",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:352",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::depth limit is data independent",
+      "executions": 1,
+      "baseRuns": 300,
+      "runs": 1500
+    },
+    {
+      "suite": "core",
+      "name": "entity cache prefix injective",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:355",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::entity cache prefix injective",
+      "executions": 1,
+      "baseRuns": 400,
+      "runs": 2000
+    },
+    {
+      "suite": "core",
+      "name": "entity idempotency namespace injective",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:391",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::entity idempotency namespace injective",
+      "executions": 1,
+      "baseRuns": 400,
+      "runs": 2000
+    },
+    {
+      "suite": "core",
+      "name": "entity tag vs tenant tag",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:376",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::entity tag vs tenant tag",
+      "executions": 1,
+      "baseRuns": 400,
+      "runs": 2000
+    },
+    {
+      "suite": "core",
+      "name": "fingerprint domain separation",
+      "site": "packages/core/src/__tests__/differential/encodingSerialization.test.ts:204",
+      "siteKey": "packages/core/src/__tests__/differential/encodingSerialization.test.ts::fingerprint domain separation",
+      "executions": 1,
+      "baseRuns": 300,
+      "runs": 1500
+    },
+    {
+      "suite": "core",
+      "name": "fingerprint semantic stability",
+      "site": "packages/core/src/__tests__/differential/encodingSerialization.test.ts:251",
+      "siteKey": "packages/core/src/__tests__/differential/encodingSerialization.test.ts::fingerprint semantic stability",
+      "executions": 1,
+      "baseRuns": 300,
+      "runs": 1500
+    },
+    {
+      "suite": "core",
+      "name": "fingerprint separator grammar",
+      "site": "packages/core/src/__tests__/differential/encodingSerialization.test.ts:236",
+      "siteKey": "packages/core/src/__tests__/differential/encodingSerialization.test.ts::fingerprint separator grammar",
+      "executions": 1,
+      "baseRuns": 500,
+      "runs": 2500
+    },
+    {
+      "suite": "core",
+      "name": "fingerprint separator injective",
+      "site": "packages/core/src/__tests__/differential/encodingSerialization.test.ts:214",
+      "siteKey": "packages/core/src/__tests__/differential/encodingSerialization.test.ts::fingerprint separator injective",
+      "executions": 1,
+      "baseRuns": 600,
+      "runs": 3000
+    },
+    {
+      "suite": "core",
+      "name": "idempotency keyspace",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:520",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::idempotency keyspace",
+      "executions": 1,
+      "baseRuns": 500,
+      "runs": 2500
+    },
+    {
+      "suite": "core",
+      "name": "idempotency namespace injective",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:195",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::idempotency namespace injective",
+      "executions": 1,
+      "baseRuns": 300,
+      "runs": 1500
+    },
+    {
+      "suite": "core",
+      "name": "idempotency namespace vs tenant scope",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:213",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::idempotency namespace vs tenant scope",
+      "executions": 1,
+      "baseRuns": 300,
+      "runs": 1500
+    },
+    {
+      "suite": "core",
+      "name": "in empty list",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:244",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::in empty list",
+      "executions": 1,
+      "baseRuns": 400,
+      "runs": 2000
+    },
+    {
+      "suite": "core",
+      "name": "in law",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:237",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::in law",
+      "executions": 1,
+      "baseRuns": 2500,
+      "runs": 12500
+    },
+    {
+      "suite": "core",
+      "name": "includes decomposition",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:323",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::includes decomposition",
+      "executions": 1,
+      "baseRuns": 1500,
+      "runs": 7500
+    },
+    {
+      "suite": "core",
+      "name": "incomparable",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:274",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::incomparable",
+      "executions": 1,
+      "baseRuns": 1500,
+      "runs": 7500
+    },
+    {
+      "suite": "core",
+      "name": "instant order",
+      "site": "packages/core/src/__tests__/differential/predicateInstants.differential.test.ts:85",
+      "siteKey": "packages/core/src/__tests__/differential/predicateInstants.differential.test.ts::instant order",
+      "executions": 1,
+      "baseRuns": 2000,
+      "runs": 10000
+    },
+    {
+      "suite": "core",
+      "name": "job fingerprint sensitive",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:492",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::job fingerprint sensitive",
+      "executions": 1,
+      "baseRuns": 400,
+      "runs": 2000
+    },
+    {
+      "suite": "core",
+      "name": "job fingerprint stable",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:470",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::job fingerprint stable",
+      "executions": 1,
+      "baseRuns": 300,
+      "runs": 1500
+    },
+    {
+      "suite": "core",
+      "name": "kleene truth tables",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:45",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::kleene truth tables",
+      "executions": 1,
+      "baseRuns": 1500,
+      "runs": 7500
+    },
+    {
+      "suite": "core",
+      "name": "list order",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:309",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::list order",
+      "executions": 1,
+      "baseRuns": 1500,
+      "runs": 7500
+    },
+    {
+      "suite": "core",
+      "name": "missing is null per operator",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:167",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::missing is null per operator",
+      "executions": 1,
+      "baseRuns": 2000,
+      "runs": 10000
+    },
+    {
+      "suite": "core",
+      "name": "missing is null typed records, full operator set",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:155",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::missing is null ${…}",
+      "executions": 1,
+      "baseRuns": 800,
+      "runs": 4000
+    },
+    {
+      "suite": "core",
+      "name": "missing is null typed records, portable",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:155",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::missing is null ${…}",
+      "executions": 1,
+      "baseRuns": 800,
+      "runs": 4000
+    },
+    {
+      "suite": "core",
+      "name": "missing is null wild records, full operator set",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:155",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::missing is null ${…}",
+      "executions": 1,
+      "baseRuns": 800,
+      "runs": 4000
+    },
+    {
+      "suite": "core",
+      "name": "neq law",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:221",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::neq law",
+      "executions": 1,
+      "baseRuns": 2500,
+      "runs": 12500
+    },
+    {
+      "suite": "core",
+      "name": "order laws",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:251",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::order laws",
+      "executions": 1,
+      "baseRuns": 2500,
+      "runs": 12500
+    },
+    {
+      "suite": "core",
+      "name": "own fields only",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:180",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::own fields only",
+      "executions": 1,
+      "baseRuns": 800,
+      "runs": 4000
+    },
+    {
+      "suite": "core",
+      "name": "plan snapshot",
+      "site": "packages/core/src/__tests__/differential/predicateRoundTrip.differential.test.ts:84",
+      "siteKey": "packages/core/src/__tests__/differential/predicateRoundTrip.differential.test.ts::plan snapshot",
+      "executions": 1,
+      "baseRuns": 600,
+      "runs": 3000
+    },
+    {
+      "suite": "core",
+      "name": "post-image updateManyWhere full operator set, patches with NULL",
+      "site": "packages/core/src/__tests__/differential/predicatePostImage.differential.test.ts:136",
+      "siteKey": "packages/core/src/__tests__/differential/predicatePostImage.differential.test.ts::post-image updateManyWhere ${…}",
+      "executions": 1,
+      "baseRuns": 1200,
+      "runs": 6000
+    },
+    {
+      "suite": "core",
+      "name": "post-image updateManyWhere portable mandatory predicates, patches with NULL",
+      "site": "packages/core/src/__tests__/differential/predicatePostImage.differential.test.ts:136",
+      "siteKey": "packages/core/src/__tests__/differential/predicatePostImage.differential.test.ts::post-image updateManyWhere ${…}",
+      "executions": 1,
+      "baseRuns": 1200,
+      "runs": 6000
+    },
+    {
+      "suite": "core",
+      "name": "post-image updateManyWhere portable mandatory predicates, patches with NULL and undefined",
+      "site": "packages/core/src/__tests__/differential/predicatePostImage.differential.test.ts:136",
+      "siteKey": "packages/core/src/__tests__/differential/predicatePostImage.differential.test.ts::post-image updateManyWhere ${…}",
+      "executions": 1,
+      "baseRuns": 1200,
+      "runs": 6000
+    },
+    {
+      "suite": "core",
+      "name": "post-image updateOneWhereReturning",
+      "site": "packages/core/src/__tests__/differential/predicatePostImage.differential.test.ts:172",
+      "siteKey": "packages/core/src/__tests__/differential/predicatePostImage.differential.test.ts::post-image updateOneWhereReturning",
+      "executions": 1,
+      "baseRuns": 800,
+      "runs": 4000
+    },
+    {
+      "suite": "core",
+      "name": "predicate instant spelling",
+      "site": "packages/core/src/__tests__/differential/predicateInstants.differential.test.ts:45",
+      "siteKey": "packages/core/src/__tests__/differential/predicateInstants.differential.test.ts::predicate instant spelling",
+      "executions": 1,
+      "baseRuns": 1200,
+      "runs": 6000
+    },
+    {
+      "suite": "core",
+      "name": "query budget verdict",
+      "site": "packages/core/src/__tests__/differential/predicateRoundTrip.differential.test.ts:38",
+      "siteKey": "packages/core/src/__tests__/differential/predicateRoundTrip.differential.test.ts::query budget verdict",
+      "executions": 1,
+      "baseRuns": 3000,
+      "runs": 15000
+    },
+    {
+      "suite": "core",
+      "name": "query validation is pure",
+      "site": "packages/core/src/__tests__/differential/predicateRoundTrip.differential.test.ts:59",
+      "siteKey": "packages/core/src/__tests__/differential/predicateRoundTrip.differential.test.ts::query validation is pure",
+      "executions": 1,
+      "baseRuns": 500,
+      "runs": 2500
+    },
+    {
+      "suite": "core",
+      "name": "quota subject injective",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:236",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::quota subject injective",
+      "executions": 1,
+      "baseRuns": 600,
+      "runs": 3000
+    },
+    {
+      "suite": "core",
+      "name": "quota subject invalid text",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:249",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::quota subject invalid text",
+      "executions": 1,
+      "baseRuns": 100,
+      "runs": 500
+    },
+    {
+      "suite": "core",
+      "name": "rate-limit window parse",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:548",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::rate-limit window parse",
+      "executions": 1,
+      "baseRuns": 600,
+      "runs": 3000
+    },
+    {
+      "suite": "core",
+      "name": "record instant spelling",
+      "site": "packages/core/src/__tests__/differential/predicateInstants.differential.test.ts:71",
+      "siteKey": "packages/core/src/__tests__/differential/predicateInstants.differential.test.ts::record instant spelling",
+      "executions": 1,
+      "baseRuns": 1200,
+      "runs": 6000
+    },
+    {
+      "suite": "core",
+      "name": "rfc3339 rejects invalid fields",
+      "site": "packages/core/src/__tests__/differential/predicateInstants.differential.test.ts:118",
+      "siteKey": "packages/core/src/__tests__/differential/predicateInstants.differential.test.ts::rfc3339 rejects invalid fields",
+      "executions": 1,
+      "baseRuns": 3000,
+      "runs": 15000
+    },
+    {
+      "suite": "core",
+      "name": "rfc3339 round trip",
+      "site": "packages/core/src/__tests__/differential/predicateInstants.differential.test.ts:108",
+      "siteKey": "packages/core/src/__tests__/differential/predicateInstants.differential.test.ts::rfc3339 round trip",
+      "executions": 1,
+      "baseRuns": 3000,
+      "runs": 15000
+    },
+    {
+      "suite": "core",
+      "name": "root collapse full operator set, typed records",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:37",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::root collapse ${…}",
+      "executions": 1,
+      "baseRuns": 1500,
+      "runs": 7500
+    },
+    {
+      "suite": "core",
+      "name": "root collapse full operator set, wild records",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:37",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::root collapse ${…}",
+      "executions": 1,
+      "baseRuns": 1500,
+      "runs": 7500
+    },
+    {
+      "suite": "core",
+      "name": "root collapse portable predicates, typed records",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:37",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::root collapse ${…}",
+      "executions": 1,
+      "baseRuns": 1500,
+      "runs": 7500
+    },
+    {
+      "suite": "core",
+      "name": "scope id injectivity",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:72",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::scope id injectivity",
+      "executions": 1,
+      "baseRuns": 600,
+      "runs": 3000
+    },
+    {
+      "suite": "core",
+      "name": "scope id invalid keys",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:136",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::scope id invalid keys",
+      "executions": 1,
+      "baseRuns": 150,
+      "runs": 750
+    },
+    {
+      "suite": "core",
+      "name": "scope id non-canonical payload",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:106",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::scope id non-canonical payload",
+      "executions": 1,
+      "baseRuns": 400,
+      "runs": 2000
+    },
+    {
+      "suite": "core",
+      "name": "scope id round trip",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:62",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::scope id round trip",
+      "executions": 1,
+      "baseRuns": 400,
+      "runs": 2000
+    },
+    {
+      "suite": "core",
+      "name": "scope id strict decode",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:85",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::scope id strict decode",
+      "executions": 1,
+      "baseRuns": 800,
+      "runs": 4000
+    },
+    {
+      "suite": "core",
+      "name": "sequence formatted injective",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:438",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::sequence formatted injective",
+      "executions": 1,
+      "baseRuns": 300,
+      "runs": 1500
+    },
+    {
+      "suite": "core",
+      "name": "sequence period era",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:427",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::sequence period era",
+      "executions": 1,
+      "baseRuns": 400,
+      "runs": 2000
+    },
+    {
+      "suite": "core",
+      "name": "sequence period vs model",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:419",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::sequence period vs model",
+      "executions": 1,
+      "baseRuns": 1000,
+      "runs": 5000
+    },
+    {
+      "suite": "core",
+      "name": "simplifier few literals",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:118",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::simplifier ${…}",
+      "executions": 1,
+      "baseRuns": 800,
+      "runs": 4000
+    },
+    {
+      "suite": "core",
+      "name": "simplifier folds constant trees",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:142",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::simplifier folds constant trees",
+      "executions": 1,
+      "baseRuns": 800,
+      "runs": 4000
+    },
+    {
+      "suite": "core",
+      "name": "simplifier literal-heavy",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:118",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::simplifier ${…}",
+      "executions": 1,
+      "baseRuns": 800,
+      "runs": 4000
+    },
+    {
+      "suite": "core",
+      "name": "tenant cache tag injective",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:170",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::tenant cache tag injective",
+      "executions": 1,
+      "baseRuns": 500,
+      "runs": 2500
+    },
+    {
+      "suite": "core",
+      "name": "tenant idempotency scope injective",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:149",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::tenant idempotency scope injective",
+      "executions": 1,
+      "baseRuns": 500,
+      "runs": 2500
+    },
+    {
+      "suite": "core",
+      "name": "tenant idempotency scope ownership",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:155",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::tenant idempotency scope ownership",
+      "executions": 1,
+      "baseRuns": 600,
+      "runs": 3000
+    },
+    {
+      "suite": "core",
+      "name": "tenant scope canonical spelling",
+      "site": "packages/core/src/__tests__/differential/encodingIdentity.test.ts:182",
+      "siteKey": "packages/core/src/__tests__/differential/encodingIdentity.test.ts::tenant scope canonical spelling",
+      "executions": 1,
+      "baseRuns": 50,
+      "runs": 250
+    },
+    {
+      "suite": "core",
+      "name": "text matching",
+      "site": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts:288",
+      "siteKey": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts::text matching",
+      "executions": 1,
+      "baseRuns": 2500,
+      "runs": 12500
+    },
+    {
+      "suite": "core",
+      "name": "versioned codec malformed envelope",
+      "site": "packages/core/src/__tests__/differential/encodingSerialization.test.ts:283",
+      "siteKey": "packages/core/src/__tests__/differential/encodingSerialization.test.ts::versioned codec malformed envelope",
+      "executions": 1,
+      "baseRuns": 400,
+      "runs": 2000
+    },
+    {
+      "suite": "core",
+      "name": "versioned codec round trip",
+      "site": "packages/core/src/__tests__/differential/encodingSerialization.test.ts:274",
+      "siteKey": "packages/core/src/__tests__/differential/encodingSerialization.test.ts::versioned codec round trip",
+      "executions": 1,
+      "baseRuns": 400,
+      "runs": 2000
+    },
+    {
+      "suite": "pg",
+      "name": "real-database ABAC scope parity (PostgreSQL en-US-x-icu)",
+      "site": "packages/testing/integration/shared/richParity.ts:455",
+      "siteKey": "packages/testing/integration/shared/richParity.ts::real-database ABAC scope parity (${…})",
+      "executions": 1,
+      "baseRuns": 600,
+      "runs": 1200
+    },
+    {
+      "suite": "pg",
+      "name": "real-database ABAC scope parity (PostgreSQL)",
+      "site": "packages/testing/integration/shared/richParity.ts:455",
+      "siteKey": "packages/testing/integration/shared/richParity.ts::real-database ABAC scope parity (${…})",
+      "executions": 1,
+      "baseRuns": 600,
+      "runs": 1200
+    },
+    {
+      "suite": "pg",
+      "name": "real-database predicate parity (PostgreSQL en-US-x-icu)",
+      "site": "packages/testing/integration/shared/richParity.ts:216",
+      "siteKey": "packages/testing/integration/shared/richParity.ts::real-database predicate parity (${…})",
+      "executions": 1,
+      "baseRuns": 3000,
+      "runs": 6000
+    },
+    {
+      "suite": "pg",
+      "name": "real-database predicate parity (PostgreSQL)",
+      "site": "packages/testing/integration/shared/richParity.ts:216",
+      "siteKey": "packages/testing/integration/shared/richParity.ts::real-database predicate parity (${…})",
+      "executions": 1,
+      "baseRuns": 3000,
+      "runs": 6000
+    },
+    {
+      "suite": "mysql",
+      "name": "real-database ABAC scope parity (MySQL utf8mb4_0900_ai_ci)",
+      "site": "packages/testing/integration/shared/richParity.ts:455",
+      "siteKey": "packages/testing/integration/shared/richParity.ts::real-database ABAC scope parity (${…})",
+      "executions": 1,
+      "baseRuns": 600,
+      "runs": 1200
+    },
+    {
+      "suite": "mysql",
+      "name": "real-database ABAC scope parity (MySQL utf8mb4_0900_bin (direct))",
+      "site": "packages/testing/integration/shared/richParity.ts:455",
+      "siteKey": "packages/testing/integration/shared/richParity.ts::real-database ABAC scope parity (${…})",
+      "executions": 1,
+      "baseRuns": 600,
+      "runs": 1200
+    },
+    {
+      "suite": "mysql",
+      "name": "real-database ABAC scope parity (MySQL utf8mb4_bin)",
+      "site": "packages/testing/integration/shared/richParity.ts:455",
+      "siteKey": "packages/testing/integration/shared/richParity.ts::real-database ABAC scope parity (${…})",
+      "executions": 1,
+      "baseRuns": 600,
+      "runs": 1200
+    },
+    {
+      "suite": "mysql",
+      "name": "real-database predicate parity (MySQL utf8mb4_0900_ai_ci)",
+      "site": "packages/testing/integration/shared/richParity.ts:216",
+      "siteKey": "packages/testing/integration/shared/richParity.ts::real-database predicate parity (${…})",
+      "executions": 1,
+      "baseRuns": 3000,
+      "runs": 6000
+    },
+    {
+      "suite": "mysql",
+      "name": "real-database predicate parity (MySQL utf8mb4_0900_bin (direct))",
+      "site": "packages/testing/integration/shared/richParity.ts:216",
+      "siteKey": "packages/testing/integration/shared/richParity.ts::real-database predicate parity (${…})",
+      "executions": 1,
+      "baseRuns": 3000,
+      "runs": 6000
+    },
+    {
+      "suite": "mysql",
+      "name": "real-database predicate parity (MySQL utf8mb4_bin)",
+      "site": "packages/testing/integration/shared/richParity.ts:216",
+      "siteKey": "packages/testing/integration/shared/richParity.ts::real-database predicate parity (${…})",
+      "executions": 1,
+      "baseRuns": 3000,
+      "runs": 6000
+    },
+    {
+      "suite": "d1",
+      "name": "real-database ABAC scope parity (SQLite/D1)",
+      "site": "packages/testing/integration/shared/richParity.ts:455",
+      "siteKey": "packages/testing/integration/shared/richParity.ts::real-database ABAC scope parity (${…})",
+      "executions": 1,
+      "baseRuns": 300,
+      "runs": 600
+    },
+    {
+      "suite": "d1",
+      "name": "real-database predicate parity (SQLite/D1)",
+      "site": "packages/testing/integration/shared/richParity.ts:216",
+      "siteKey": "packages/testing/integration/shared/richParity.ts::real-database predicate parity (${…})",
+      "executions": 1,
+      "baseRuns": 700,
+      "runs": 1400
+    }
+  ],
+  "totals": {
+    "suites": 4,
+    "properties": 148,
+    "callSites": 113,
+    "cases": 536000,
+    "durationMs": 258307
+  },
+  "replay": {
+    "seed": 3383902479,
+    "environment": "DIFFERENTIAL_SEED=<seed> DIFFERENTIAL_SCALE=<suite scale> [DIFFERENTIAL_RUN=<run from the failure report>]",
+    "core": "DIFFERENTIAL_SEED=3383902479 DIFFERENTIAL_SCALE=5 npm run test -w core -- --testTimeout=1800000 src/__tests__/differential",
+    "database": "DIFFERENTIAL_SEED=3383902479 DIFFERENTIAL_SCALE=2 npm run test -w testing -- --config vitest.integration.config.ts --testTimeout=1800000 integration/<pg|mysql|d1>/richParity.integration.test.ts",
+    "singleCase": "Add DIFFERENTIAL_RUN=<n> from a failure's 'Replay:' line to rerun exactly that (shrunk) case."
+  },
+  "sourceManifest": [
+    {
+      "path": "docs/guides/certification.md",
+      "sha256": "928ab0efac4e2195944344c4bb887c158753daa514a37996e4567dc4ada52d23"
+    },
+    {
+      "path": "docs/spec/certification.md",
+      "sha256": "1d1e622068e9c598c3f0393419bd3a86b6642d0886679c1b5a83c38724b4bee7"
+    },
+    {
+      "path": "docs/spec/domain.md",
+      "sha256": "b5965096e9a36e3c695c0809a406b6ac2bd30527ba98badf56dead08d6bb0fe3"
+    },
+    {
+      "path": "docs/spec/persistence/predicates.md",
+      "sha256": "46358cf360bf22baff12af8a7aa1ae34655040d8190987a420b2e7ba2104a467"
+    },
+    {
+      "path": "docs/spec/query.md",
+      "sha256": "914c1c1611904312dee9e4c36599b72e9194b39ffc6c8755e9e7cef1b0874989"
+    },
+    {
+      "path": "packages/adapters/src/drizzle-d1/drizzleRepository.ts",
+      "sha256": "ee0b840331d6e7effba97aca7769434cac240be87951472b2b876327ff8ccd6d"
+    },
+    {
+      "path": "packages/adapters/src/drizzle-d1/sqlitePredicate.ts",
+      "sha256": "845f89b5c0c2e065d3e0e4720d31be4d8bbfeee54afed3a07e36de4c094576be"
+    },
+    {
+      "path": "packages/adapters/src/drizzle-mysql/drizzleRepository.ts",
+      "sha256": "e58faa5ce370d34ca710f3583c9964ffedfa53b51f5846c4e348f472dbd16928"
+    },
+    {
+      "path": "packages/adapters/src/drizzle-mysql/mysqlPredicate.ts",
+      "sha256": "98c48ba7c60e9db5951f2abc17f7427286c5b51ea3d4572004c93a9d421e3852"
+    },
+    {
+      "path": "packages/adapters/src/drizzle-pg/drizzleRepository.ts",
+      "sha256": "91ff9b57d89043a49e921ab7fd09ddf0cbf9d560e5eb8eca50e89cb41a1dc01d"
+    },
+    {
+      "path": "packages/adapters/src/drizzle-pg/postgresPredicate.ts",
+      "sha256": "495319df693fd93230590254f9063c7fe1c6f9de12f40255e29dc85396c928b6"
+    },
+    {
+      "path": "packages/adapters/src/drizzle-shared/cursorPagination.ts",
+      "sha256": "c5b2068747ef39ecefce5fcc4575b611dff95ad9faafa723f5024e325e143fb9"
+    },
+    {
+      "path": "packages/adapters/src/drizzle-shared/pagination.ts",
+      "sha256": "c25ba05ab32f57e91e6512427a3f1f0b0ca3eec8c379402304c303a26ea6ff6f"
+    },
+    {
+      "path": "packages/adapters/src/drizzle-shared/predicateCompiler.ts",
+      "sha256": "aa5b6f3995fa08de978ea4d72c707fff38901ecf4502bd75526cb887d5121926"
+    },
+    {
+      "path": "packages/core/src/__tests__/differential/abacArbitraries.ts",
+      "sha256": "2945c9781b1c58f913d673b2565fbc6ef79cc42bcd02a6020cad7542b974b44a"
+    },
+    {
+      "path": "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts",
+      "sha256": "624ffbec9f3baaa8f86799108f261aff796f9e892016abe8588db9f823c27d09"
+    },
+    {
+      "path": "packages/core/src/__tests__/differential/abacDigest.differential.test.ts",
+      "sha256": "d0026ad3a18b076a239549075efb286f100e0c4429fc0ab7f4b606e000063cf6"
+    },
+    {
+      "path": "packages/core/src/__tests__/differential/abacFieldAccess.differential.test.ts",
+      "sha256": "06e4e4bf5f4891163f213fd2d0dbaa4d9a074630569c5d8d9496a4ae62378395"
+    },
+    {
+      "path": "packages/core/src/__tests__/differential/abacMonotonicity.differential.test.ts",
+      "sha256": "653cde495fe0f4170987f2786e4cf0795f31fbedc13abdbdc381c1dcac275513"
+    },
+    {
+      "path": "packages/core/src/__tests__/differential/abacNormalization.differential.test.ts",
+      "sha256": "61dbcef3cf69e162bdbcdbc105fb09195efd7781ae318e31595fbb7f9e74571e"
+    },
+    {
+      "path": "packages/core/src/__tests__/differential/abacOracle.ts",
+      "sha256": "568340f9220745683100498a04b423bca94e6c3a4d5c8f913896d649744a4304"
+    },
+    {
+      "path": "packages/core/src/__tests__/differential/arbitraries.ts",
+      "sha256": "e425bf3c91f0e17315574908a956f2fd85bbed87f0b80e947e4839f6e6992f50"
+    },
+    {
+      "path": "packages/core/src/__tests__/differential/encodingArbitraries.ts",
+      "sha256": "82879501a24e3898f6472cae23a108ce6deae7b8f5bcc8d2109be01715346dbf"
+    },
+    {
+      "path": "packages/core/src/__tests__/differential/encodingIdentity.test.ts",
+      "sha256": "9eb5f3726a01031f77d702f55a6c5d2a01d89788aab64d053317c47e8cd66108"
+    },
+    {
+      "path": "packages/core/src/__tests__/differential/encodingRegressions.test.ts",
+      "sha256": "75f4dbda1d84e6b0f22916fddbabca749b083ff921e937077da68a20a4406db5"
+    },
+    {
+      "path": "packages/core/src/__tests__/differential/encodingSerialization.test.ts",
+      "sha256": "e28e66134c60ae110049df82947bd2c167aa1963dfc230439d0a2355a48da363"
+    },
+    {
+      "path": "packages/core/src/__tests__/differential/harness.test.ts",
+      "sha256": "0a67dc6aa4973b727b2732b846dc4e99e763c188988c7b528e5e7fc749a367f4"
+    },
+    {
+      "path": "packages/core/src/__tests__/differential/harness.ts",
+      "sha256": "2a6501531a4a78dcd4e25391e80e757f3200d0be3dda6808b7599178e6eb6aa4"
+    },
+    {
+      "path": "packages/core/src/__tests__/differential/predicateArbitraries.ts",
+      "sha256": "f188c2981ff915f7d6785e1b6073ad79175a2300c2075a659c9ff659719368bd"
+    },
+    {
+      "path": "packages/core/src/__tests__/differential/predicateInstants.differential.test.ts",
+      "sha256": "f30ef13dfea34e0d702f71567a88f91518dde21c0e8f1a7e2660de72aefe1128"
+    },
+    {
+      "path": "packages/core/src/__tests__/differential/predicatePostImage.differential.test.ts",
+      "sha256": "c74e71dd80bef977915d3cbf3e8b0b0f494e665d2dfd7b383d9993e5c622420b"
+    },
+    {
+      "path": "packages/core/src/__tests__/differential/predicateRegressions.test.ts",
+      "sha256": "dfd87db80919c4bf4f0cfbfcdcc4915c1d949017d0930807be0cea7a1e4c07f3"
+    },
+    {
+      "path": "packages/core/src/__tests__/differential/predicateRoundTrip.differential.test.ts",
+      "sha256": "7f080a3b411b65d5296d347a5b6f0269bd5d2e16c4a4dc59311408998ce34da8"
+    },
+    {
+      "path": "packages/core/src/__tests__/differential/predicateSemantics.differential.test.ts",
+      "sha256": "ad24c75fa2aba1393bd94291fc3da56e77669b6b1f821a0b3d0c69c487db3706"
+    },
+    {
+      "path": "packages/core/src/cache/cache.ts",
+      "sha256": "5828bfb4b9675221f7fb8d2cdff53947fc0a721dac5262d26e374602ed515a7a"
+    },
+    {
+      "path": "packages/core/src/cache/generation.ts",
+      "sha256": "1757af00eac16ee4620d2c4854e00938caa40b3d556bddf25bae779c235c9301"
+    },
+    {
+      "path": "packages/core/src/cache/index.ts",
+      "sha256": "ceaab7a30044d48d4413606b7bfdc9797c2df56b138b7a5385acd80178d75ddf"
+    },
+    {
+      "path": "packages/core/src/domain/abacAuthorizer.ts",
+      "sha256": "e09895818f0f19c401647f4aacad1fe5d87734901dbab2d82a4290abcb82d482"
+    },
+    {
+      "path": "packages/core/src/domain/abacBundleFactory.ts",
+      "sha256": "70b20acee02a92b83a2009a1e1b04de7138d81a418181445f8e4ae391bc3ab58"
+    },
+    {
+      "path": "packages/core/src/domain/abacBundleIntegrity.ts",
+      "sha256": "45ca93395f64f468f46eada129da8966668626052f46b00477d18edfeb2c983a"
+    },
+    {
+      "path": "packages/core/src/domain/abacCapabilities.ts",
+      "sha256": "f213b85abb8cfd9940d80439e56513b6a0e414a434dd6cd165060481d20652f8"
+    },
+    {
+      "path": "packages/core/src/domain/abacCatalog.ts",
+      "sha256": "3040493ba7950796fa1992fcf09da60e42567d49fa96914961ab615169c45ebb"
+    },
+    {
+      "path": "packages/core/src/domain/abacConditionCompiler.ts",
+      "sha256": "02daa1c9c49111244a156b38807d94324d7c79453d9f8ed32fb5711d602d57ae"
+    },
+    {
+      "path": "packages/core/src/domain/abacDecision.ts",
+      "sha256": "2d3dbcfe8ab46ed4cb826218643cce710c24f16719365c6290f1baff3505bfe8"
+    },
+    {
+      "path": "packages/core/src/domain/abacPolicyNormalizer.ts",
+      "sha256": "76e2321b2be37a3f1524ed736a56f58896c35c3c7dbb431c78ac7d06f33354e6"
+    },
+    {
+      "path": "packages/core/src/domain/abacPolicySchema.ts",
+      "sha256": "005f6f95f4eab945938a12cf051f935c4d21c0c85970bc400fbbee4caa718f85"
+    },
+    {
+      "path": "packages/core/src/domain/abacReadScope.ts",
+      "sha256": "c73f1841925ec9c3dc080e0a5c2d2bf35f32332e9a8c340fd85284df44ad3e1f"
+    },
+    {
+      "path": "packages/core/src/domain/abacTierDecision.ts",
+      "sha256": "1e575996a5d183a8dc29d4ccfa5ea1a74ce5761ba0cca63c71ea0b2c8feb7b91"
+    },
+    {
+      "path": "packages/core/src/domain/abacTypes.ts",
+      "sha256": "a4cc6193dee4d11e4f748d18ab36f8af7dddbe3e4f39ab0f265d0c3a1f9d7c27"
+    },
+    {
+      "path": "packages/core/src/domain/abacWrite.ts",
+      "sha256": "f180e7b5b37ba3e6497cfc8d3a7b030f93744369de5ae0f5d3fe057071502bfd"
+    },
+    {
+      "path": "packages/core/src/domain/abacWriteMatch.ts",
+      "sha256": "e3fd5daec441f78857cbfec849f686de26652184e9df9887408f93fdb6297c88"
+    },
+    {
+      "path": "packages/core/src/domain/evaluatePredicate.ts",
+      "sha256": "50d87e943cf3a54ad155e54dc3239809ad3dfa15c7336461762d355dfe4c2ee3"
+    },
+    {
+      "path": "packages/core/src/domain/fieldAccess.ts",
+      "sha256": "b1d080cac252f8b43728dd8ca7d13a8ec4e67ed511a550b456b4fabfe0fb12fe"
+    },
+    {
+      "path": "packages/core/src/domain/predicate.ts",
+      "sha256": "15400bfe0adde66fb9c86048664612156e0979fd222602a9547157de73390951"
+    },
+    {
+      "path": "packages/core/src/domain/predicateSimplifier.ts",
+      "sha256": "662e7ea8a4476c566b16892537193a60e36bfc78ccc0d8a5ddbdcc2ebdeb9e2f"
+    },
+    {
+      "path": "packages/core/src/domain/trustedPredicate.ts",
+      "sha256": "733cc8f72bee4f1c3166ccf93365f5351c163a9e84c7ea8b11f94938d916ec44"
+    },
+    {
+      "path": "packages/core/src/entity/brands.ts",
+      "sha256": "17e279d1cbc557ada8ee1427be60a53e1c5200760c0da6df37fb665937bfe64a"
+    },
+    {
+      "path": "packages/core/src/entity/capabilityCheck.ts",
+      "sha256": "e1488795366c2e3a86eb4ed180f92757f65e5ac3515bf10e378dcec044f5cccc"
+    },
+    {
+      "path": "packages/core/src/entity/compileEntity.ts",
+      "sha256": "4c8cd7249f527a5e996dd96346d8b2975126c53fa3c80c860d72f2a5a0e730f0"
+    },
+    {
+      "path": "packages/core/src/entity/defineEntity.ts",
+      "sha256": "6119d5eef73fda14b7487e70251cbd88ffbe2c62e1179a1ea9e3486d2a17b2cf"
+    },
+    {
+      "path": "packages/core/src/entity/entityScope.ts",
+      "sha256": "2af7b196d549fc32b4b8dc45b0841007bf2461965d8d84d43d3eda3977c2fa95"
+    },
+    {
+      "path": "packages/core/src/entity/index.ts",
+      "sha256": "99aaf3da7c1f80f48ecee8ab0ed24ed314ad1093352798e3a026601bac4cb012"
+    },
+    {
+      "path": "packages/core/src/entity/lifecycle.ts",
+      "sha256": "2d37fc0ac1202762ba16f6b92c941ad157b83e7f5825bdeb3d3b4609c389957a"
+    },
+    {
+      "path": "packages/core/src/entity/queryableFields.ts",
+      "sha256": "9da09a70a4fdb796a6debe76748690099afe84d5a28e0512ca490526cb0ea24d"
+    },
+    {
+      "path": "packages/core/src/entity/readModelDefinition.ts",
+      "sha256": "81919b45fb87eb11d0226ae6a5cb820bee52629a59bef7f149d7adcadc845512"
+    },
+    {
+      "path": "packages/core/src/entity/validateEntity.ts",
+      "sha256": "02263116a11ef06a7fa86efeffb293fe39d2ab257ec04edd6d81cbcf60e50a43"
+    },
+    {
+      "path": "packages/core/src/execution/jobFingerprint.ts",
+      "sha256": "70c8fbea7bb534db22bc2b223b65712780f6a0da3152ae08645b081a7de4b17c"
+    },
+    {
+      "path": "packages/core/src/operation/authorizationPlanEnforcement.ts",
+      "sha256": "b9cc47973bf004ae5340f2b81026cd6692d0b78528a53424c46b67771d88aa6b"
+    },
+    {
+      "path": "packages/core/src/persistence/scoped.ts",
+      "sha256": "825e77010c70923ac0c1d9de5810eed382ff90d34d2e97c2b2196534ec3a5437"
+    },
+    {
+      "path": "packages/core/src/query/cursor.ts",
+      "sha256": "5c90942c7cff95f1e5676a6e3fa852084f84be5e2082eb6ac7b7fe6570244cfe"
+    },
+    {
+      "path": "packages/core/src/query/cursorCodec.ts",
+      "sha256": "52822fec6ecc9a7aaf13e1a09d651a8dfee2108db94f6e0c2a90b4387b1e8465"
+    },
+    {
+      "path": "packages/core/src/query/index.ts",
+      "sha256": "a7e8237abfe7af0c408ab1f5887a8fb19a90b685832b34423230e72e7f8c5aa4"
+    },
+    {
+      "path": "packages/core/src/query/pagination.ts",
+      "sha256": "5797482a97caf21988fd2e889a352256dfe1f4f8a2ca07992a6cc44e49d4e733"
+    },
+    {
+      "path": "packages/core/src/query/projection.ts",
+      "sha256": "d0ebd6633c516e2d40901dbd8b635421b88c12496593f9d0108375c459164813"
+    },
+    {
+      "path": "packages/core/src/query/queryBudget.ts",
+      "sha256": "b2feaff7f879c26ba423652a546c044bd67f255cb0eb31252d23ff13bd5f22d9"
+    },
+    {
+      "path": "packages/core/src/query/queryPlan.ts",
+      "sha256": "aac31222200e31ede8f0e00c2534e90b23814d50e9909918110adc0a0f683cd3"
+    },
+    {
+      "path": "packages/core/src/query/readConsistency.ts",
+      "sha256": "5119f8aa70c48501a49b5f7dd676502a91753ac987c8e05f6edf55a53c4a5bee"
+    },
+    {
+      "path": "packages/core/src/query/search.ts",
+      "sha256": "a2fc9fd62244ffed434f0481ce5d38d5b3df5a67a4d6cc9e2ac4e03dfdce8e1b"
+    },
+    {
+      "path": "packages/core/src/quota/index.ts",
+      "sha256": "b895870b07e826e89007d5f65c40581a42da82a9b92aafc4d1d052987d8e1578"
+    },
+    {
+      "path": "packages/core/src/quota/quota.ts",
+      "sha256": "45f523897cad8b9f6ea04ad6e921c799ee57041fd7da70031c5073992069d0c7"
+    },
+    {
+      "path": "packages/core/src/sequence/index.ts",
+      "sha256": "d80b6bd74d79d34dbb2179f370398d48c3ba026febefe474abf174ce2ff67ce9"
+    },
+    {
+      "path": "packages/core/src/sequence/sequence.ts",
+      "sha256": "215b0630f71ff0c4ead0f981a9c42b9d5ce301142209c03e1159a98d14d8027e"
+    },
+    {
+      "path": "packages/core/src/sequence/types.ts",
+      "sha256": "adbb40d85589321d7a5ff3864a258510619c60df65b4cac21f97b00245cfa277"
+    },
+    {
+      "path": "packages/core/src/serialization/canonicalJson.ts",
+      "sha256": "5e1c118dc235c5ab66f207e68bc214f8ede20d2563cfc83fcbc5d476f85d6703"
+    },
+    {
+      "path": "packages/core/src/serialization/durableCodec.ts",
+      "sha256": "a08114ace4aa96e829fa0f9d841abb174cf689680240b09d47556d0f3d5e8d24"
+    },
+    {
+      "path": "packages/core/src/serialization/fingerprint.ts",
+      "sha256": "95d142bef32010f72a3c69f6c06350cc0451b405b0157e583bad9f6b02601b05"
+    },
+    {
+      "path": "packages/core/src/serialization/formatEnvelope.ts",
+      "sha256": "b0dfc22a3229c90b840fbfc2bb05fa3bc5bdf8c89ae61de82bbb97382309a2fa"
+    },
+    {
+      "path": "packages/core/src/serialization/formatRegistry.ts",
+      "sha256": "2900df678166e74b91c046ced3e36ef5454b253e0da2874bcde2e7ddbaebb222"
+    },
+    {
+      "path": "packages/core/src/serialization/hmac.ts",
+      "sha256": "1ca29dda7c97de98d2b68d68b1ab5bd28f48d37332b563b158c8b451cbb0f6b1"
+    },
+    {
+      "path": "packages/core/src/serialization/index.ts",
+      "sha256": "7b86a830e5b6d0e19eb48eabb84ee2315abe7c0f125ba33189e995ea3c90f459"
+    },
+    {
+      "path": "packages/core/src/serialization/sha256.ts",
+      "sha256": "867c1fc45c078c11e92e27795cb4b329622292e29899775c91490e2e7b92df2c"
+    },
+    {
+      "path": "packages/core/src/serialization/version.ts",
+      "sha256": "4a79e64c12efb85e1eb33a1669a8e46e4ef676eb2691c441e5c0abb4c9e966b1"
+    },
+    {
+      "path": "packages/core/src/serialization/versionedCodec.ts",
+      "sha256": "abdb4f9156cb36e0cb86236d62f47680b42f2f8ee32260d472b992840b854d14"
+    },
+    {
+      "path": "packages/testing/integration/d1/predicateParity.integration.test.ts",
+      "sha256": "c84e935f5418c5556bcaacdc11392f2b41c57b98f50c772c79d3b53a5b24743c"
+    },
+    {
+      "path": "packages/testing/integration/d1/richParity.integration.test.ts",
+      "sha256": "85c74e73163c45dc138e1940bd5e8b71ed51d8d1076643725ee1956b9d32a6a7"
+    },
+    {
+      "path": "packages/testing/integration/mysql/predicateParity.integration.test.ts",
+      "sha256": "5bcb432ec70f218b3a0ca5acba3a5e69f6a9ea4905d12433d6b1c1e465af1c75"
+    },
+    {
+      "path": "packages/testing/integration/mysql/richParity.integration.test.ts",
+      "sha256": "b063f19b0a9c7b51a0f079e6046f4b6981f36891ccfe82eb812ac1210feb2e2a"
+    },
+    {
+      "path": "packages/testing/integration/pg/predicateParity.integration.test.ts",
+      "sha256": "1adf2f5fe10087c1f1beadbf8b219572243133cffc49614068ee6a4338f6ba65"
+    },
+    {
+      "path": "packages/testing/integration/pg/richParity.integration.test.ts",
+      "sha256": "326b603310dae5362d96cef163aaa9178a711fbe6118ffeb3fcacd6edf082bb9"
+    },
+    {
+      "path": "packages/testing/integration/shared/predicateParity.ts",
+      "sha256": "2837b6ce161561cdd5baafc2834237d97f15187de9d69dffdb58d1ca1d50228e"
+    },
+    {
+      "path": "packages/testing/integration/shared/richParity.ts",
+      "sha256": "1e51b921508fd9a17aa467640af9ebd88a592bb70c208c8dfd324c322b44e6be"
+    },
+    {
+      "path": "scripts/verification/differentialBaseline.json",
+      "sha256": "a4047784b10094f01289581f6b154152aca69201cc2bc4841a379c1aef8cb2b4"
+    },
+    {
+      "path": "scripts/verification/differentialCertification.mjs",
+      "sha256": "d7e2b2e801e57f2174294b72c6c69885f18476a027674a0b83aa5910daba5671"
+    },
+    {
+      "path": "scripts/verification/verifyDF1Certification.mjs",
+      "sha256": "1363cd6b3b107e672c724b0c8db4aa06a08075a46799a8dad0cd73bd41e8721b"
+    }
+  ]
+}

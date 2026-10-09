@@ -7,7 +7,8 @@ import { Predicate, evaluatePredicate, type PredicateNode, type PredicatePrimiti
  * negation, mixed case, and non-ASCII ordering.
  */
 export const NUMBERS = [null, -2, 0, 1, 2.5, 10] as const
-export const STRINGS = [null, "", "a", "A", "ab", "Ab", "b", "é", "z", "😀", "a%_\\"] as const
+// "a " and "a\t" catch PAD SPACE collations (MySQL utf8mb4_bin), which ignore trailing spaces.
+export const STRINGS = [null, "", "a", "A", "ab", "Ab", "b", "é", "z", "😀", "a%_\\", "a ", "a\t"] as const
 export const BOOLEANS = [null, true, false] as const
 
 export interface ParityRow { id: number; n: number | null; s: string | null; b: boolean | null }

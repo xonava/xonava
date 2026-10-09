@@ -69,7 +69,7 @@ export class DrizzleOutboxSink implements OutboxSink {
         .limit(1)
       const conflict = conflictRows[0]
       if (!isRow(conflict)) throw new Error("Outbox conflict row disappeared")
-      assertOutboxFingerprintMatches(conflict.eventFingerprint, fingerprint)
+      await assertOutboxFingerprintMatches(conflict.eventFingerprint, fingerprint, record)
     }
   }
 }

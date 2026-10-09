@@ -204,7 +204,8 @@ export function encodeTenantIdempotencyScope(tenantId: string): string {
 }
 
 function decodeTenantIdempotencyScope(scope: string): string | null {
-  const match = /^tenant:(\d+):/.exec(scope)
+  // Canonical decimal only: "tenant:01:x" must not be a second spelling of "tenant:1:x".
+  const match = /^tenant:(0|[1-9]\d*):/.exec(scope)
   if (!match) return null
 
   const encodedLength = Number(match[1])

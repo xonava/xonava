@@ -150,7 +150,9 @@ export function findUnsupportedPredicateCombination(
         return { condition: current, message: `Operator "${current.op}" requires a boolean field` }
       if ((current.op === "isEmpty" || current.op === "isNotEmpty") && scalar && !isStringField(field.type))
         return { condition: current, message: `Operator "${current.op}" requires a string or array field` }
-      if (scalar && (arrayValue || objectValue) && current.op !== "between")
+      if (current.op === "in" && (current.value as unknown[]).some((member) => member !== null && typeof member === "object" && !(member instanceof Date)))
+        return { condition: current, message: `Operator "in" requires a list of scalar values` }
+      if (scalar && (arrayValue || objectValue) && current.op !== "between" && current.op !== "in")
         return { condition: current, message: `Operator "${current.op}" requires a scalar value` }
       return undefined
     }

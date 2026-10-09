@@ -15,7 +15,39 @@ declare class KVNamespace {
 
 const TAG_PREFIX = "__tag__"
 const CACHE_NS_PREFIX = "__cache__:"
-const GENERATION_PREFIX = "__generation__:"
+/**
+ * Tag generation counters live outside the cache namespace, so no cache key
+ * (including CacheService's tagged storage keys `__generation__:"<gen>":<key>`)
+ * can overwrite a counter and clear() can delete every cached value without
+ * touching the counters.
+ */
+const GENERATION_NS_PREFIX = "__cachegen__:"
+/**
+ * Previous layout: counters at `__cache__:__generation__:<tag>`, sharing a
+ * prefix with tagged values. During a rolling deploy, instances on the previous
+ * release read and advance only this key, so this release observes both
+ * counters (see compositeGeneration) and advances both. Remove the legacy
+ * counter (reads, writes and the clear() exemption) one release after every
+ * instance runs this layout.
+ */
+const LEGACY_GENERATION_PREFIX = "__generation__:"
+
+/**
+ * The observed generation of a tag is the pair of both counters, so a change
+ * to EITHER key fences previously cached values. CacheService compares
+ * generations only by equality and keys values by them; nothing here orders
+ * generations by time, so clock skew between instances cannot hide an advance.
+ * In the steady state both counters hold the same value and it is returned
+ * as is, which keeps generation-qualified cache keys short (KV keys are capped
+ * at 512 bytes and each tag's generation appears in the key). Only differing
+ * counters are reported as a JSON pair; a pair starts with "[" and so never
+ * equals a single `ms:uuid` counter or "0" (neither counter exists yet).
+ */
+function compositeGeneration(current: string | undefined, legacy: string | undefined): string {
+  if (current === undefined && legacy === undefined) return "0"
+  if (current !== undefined && current === legacy) return current
+  return JSON.stringify([current ?? null, legacy ?? null])
+}
 const REVISION_PREFIX = "__revision__:"
 /** Cloudflare KV rejects an expirationTtl below 60 seconds. */
 export const KV_MIN_EXPIRATION_TTL_SECONDS = 60
@@ -39,6 +71,14 @@ function isEnvelope(value: unknown): value is Envelope {
 
 function cacheKey(raw: string): string {
   return `${CACHE_NS_PREFIX}${raw}`
+}
+
+function generationKey(tag: string): string {
+  return `${GENERATION_NS_PREFIX}${tag}`
+}
+
+function legacyGenerationKey(tag: string): string {
+  return cacheKey(`${LEGACY_GENERATION_PREFIX}${tag}`)
 }
 
 function revisionKey(raw: string): string {
@@ -127,18 +167,20 @@ export class KvCacheAdapter implements CacheAdapter {
   }
 
   /**
-   * Deletes cached values, revisions and tag lists. Tag generation keys are
-   * excluded: generations are the shared fence and must stay monotonic, so a
-   * resolver started before an invalidate+clear cannot later look fresh.
+   * Deletes every cached value (tagged or not), revision and tag list. Tag
+   * generation counters are kept, in both layouts: they must stay monotonic so
+   * a resolver started before an invalidate+clear cannot later look fresh.
+   * Under the legacy prefix a counter is a bare JSON string while a tagged
+   * value is a value envelope, which tells them apart.
    */
   async clear(): Promise<void> {
-    const generationKeyPrefix = cacheKey(GENERATION_PREFIX)
+    const legacyPrefix = cacheKey(LEGACY_GENERATION_PREFIX)
     try {
       let cursor: string | undefined
       do {
         const list = await this.kv.list(cursor ? { cursor, prefix: CACHE_NS_PREFIX } : { prefix: CACHE_NS_PREFIX })
         for (const k of list.keys) {
-          if (k.name.startsWith(generationKeyPrefix)) continue
+          if (k.name.startsWith(legacyPrefix) && typeof (await this.kv.get<unknown>(k.name, { type: "json" })) === "string") continue
           await this.kv.delete(k.name)
         }
         cursor = list.list_complete ? undefined : list.cursor
@@ -204,8 +246,11 @@ export class KvCacheAdapter implements CacheAdapter {
 
   async getTagGeneration(tag: string): Promise<string> {
     try {
-      const generation = await this.kv.get<string>(cacheKey(`${GENERATION_PREFIX}${tag}`), { type: "json" })
-      return generation ?? "0"
+      const current = await this.kv.get<unknown>(generationKey(tag), { type: "json" })
+      // Also read the previous layout: an upgrade must never reset a generation,
+      // and an instance still on the previous release advances only that key.
+      const legacy = await this.kv.get<unknown>(legacyGenerationKey(tag), { type: "json" })
+      return compositeGeneration(typeof current === "string" ? current : undefined, typeof legacy === "string" ? legacy : undefined)
     } catch (error) {
       throw this.failure("getTagGeneration", error)
     }
@@ -216,8 +261,11 @@ export class KvCacheAdapter implements CacheAdapter {
     // suitable for correctness-critical cache reads.
     try {
       const generation = `${Date.now()}:${crypto.randomUUID()}`
-      await this.kv.put(cacheKey(`${GENERATION_PREFIX}${tag}`), JSON.stringify(generation))
-      return generation
+      // Legacy first: instances on the previous release read only that key, and
+      // a reader between the two writes already observes a changed pair.
+      await this.kv.put(legacyGenerationKey(tag), JSON.stringify(generation))
+      await this.kv.put(generationKey(tag), JSON.stringify(generation))
+      return compositeGeneration(generation, generation)
     } catch (error) {
       throw this.failure("advanceTagGeneration", error)
     }

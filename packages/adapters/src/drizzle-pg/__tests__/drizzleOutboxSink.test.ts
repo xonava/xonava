@@ -4,6 +4,7 @@ import { ConfigurationError } from "core/domain"
 import { DrizzleOutboxSink, computeOutboxFingerprint } from "../drizzleOutboxSink"
 import type { DrizzleSessionLike } from "../drizzleRepository"
 import type { OutboxRecord } from "core/events"
+import { canonicalizeValue } from "core/serialization"
 
 const tenantOutboxTable = pgTable("outbox_events", {
   id: text("id"),
@@ -163,7 +164,28 @@ describe("PostgreSQL outbox idempotency", () => {
     await expect(new DrizzleOutboxSink(db, tenantOutboxTable, mappedRecord).append(record)).rejects.toThrow("migrate fingerprints")
   })
 
-  it("stores a versioned v2 canonical fingerprint", async () => {
-    expect((await computeOutboxFingerprint(record)).startsWith("v2:")).toBe(true)
+  it("stores a versioned v3 (RFC 8785 key order) canonical fingerprint", async () => {
+    expect((await computeOutboxFingerprint(record)).startsWith("v3:")).toBe(true)
+  })
+
+  describe("fingerprints persisted before the RFC 8785 key-order fix", () => {
+    const numeric = { ...record, payload: { "10": "ten", "9": "nine" } } as OutboxRecord
+    /** What a v2 writer stored: JavaScript property order, so "9" before "10". */
+    const storedV2 = async (value: OutboxRecord): Promise<string> => {
+      const text = JSON.stringify(canonicalizeValue({ type: value.type, version: value.version, scopeId: value.scopeId, aggregateType: value.aggregateType, aggregateId: value.aggregateId, payload: value.payload }))
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))
+      return `v2:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}`
+    }
+
+    it("replays an identical event whose stored fingerprint is v2", async () => {
+      expect(await storedV2(numeric)).not.toBe((await computeOutboxFingerprint(numeric)).replace(/^v3:/, "v2:"))
+      const { db } = createDb({ rowCount: 0 }, [{ eventFingerprint: await storedV2(numeric) }])
+      await expect(new DrizzleOutboxSink(db, tenantOutboxTable, mappedRecord).append(numeric)).resolves.toBeUndefined()
+    })
+
+    it("still rejects a different event under a v2 fingerprint", async () => {
+      const { db } = createDb({ rowCount: 0 }, [{ eventFingerprint: await storedV2({ ...numeric, payload: { "10": "other" } } as OutboxRecord) }])
+      await expect(new DrizzleOutboxSink(db, tenantOutboxTable, mappedRecord).append(numeric)).rejects.toThrow(/different event/)
+    })
   })
 })

@@ -6,7 +6,7 @@ function validate(value: unknown): CursorPayloadV1 {
   if (!value || typeof value !== "object") throw new ValidationError("malformed cursor payload")
   const p = value as Partial<CursorPayloadV1>; const values = p.values
   if (p.expiresAt !== undefined && (!Number.isSafeInteger(p.expiresAt) || p.expiresAt < 0)) throw new ValidationError("malformed cursor payload")
-  if (p.format !== "framework.cursor" || p.version !== 1 || !["after", "before"].includes(String(p.direction)) || !Array.isArray(values) || values.some(v => !(["string", "number", "boolean"].includes(typeof v) || v === null)) || [p.routeHash, p.queryHash, p.scopeHash, p.sortHash].some(v => typeof v !== "string" || !v)) throw new ValidationError("malformed cursor payload")
+  if (p.format !== "framework.cursor" || p.version !== 1 || (p.direction !== "after" && p.direction !== "before") || !Array.isArray(values) || values.some(v => !(["string", "number", "boolean"].includes(typeof v) || v === null)) || [p.routeHash, p.queryHash, p.scopeHash, p.sortHash].some(v => typeof v !== "string" || !v)) throw new ValidationError("malformed cursor payload")
   return p as CursorPayloadV1
 }
 export async function encodeCursor(payload: CursorPayloadV1, integrity: CursorIntegrityPort, maxBytes = 8192): Promise<string> {

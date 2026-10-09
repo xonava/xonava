@@ -5,6 +5,7 @@ import {
   assertAbacSecurityDigest,
   ConflictError,
   hasRecordDependentFieldWrite,
+  markAbacPreImage,
   NotFoundError,
   Predicate,
   projectResponseRecord,
@@ -71,7 +72,9 @@ export function parseIfMatchVersion(raw: string | null | undefined): number | un
  */
 function enforceUpdateImages(enforcer: AbacWriteEnforcer, existing: object, patch: object): void {
   const changedFields = Object.keys(patch)
-  enforcer.enforce("update", toAuditObject(existing), changedFields)
+  // The pre-image is stored data, not written by this request: brand it so
+  // written-value checks (date spelling) apply only to the post-image.
+  enforcer.enforce("update", markAbacPreImage({ ...toAuditObject(existing) }), changedFields)
   enforcer.enforce("update", { ...toAuditObject(existing), ...toAuditObject(patch) }, changedFields)
 }
 
@@ -187,7 +190,7 @@ export function createUpdateHandler<
         // Pre-image and post-image must both permit the patch (see
         // enforceUpdateImages).
         for (const record of [
-          toAuditObject(input.existing),
+          markAbacPreImage({ ...toAuditObject(input.existing) }),
           { ...toAuditObject(input.existing), ...toAuditObject(input.patch as object) },
         ]) {
           await enforceFinalWrite({

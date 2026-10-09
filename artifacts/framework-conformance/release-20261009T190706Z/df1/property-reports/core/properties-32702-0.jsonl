@@ -1,0 +1,12 @@
+{"property":"abac read plan vs query read maps everywhere","seed":3383902479,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:10.638Z"}
+{"property":"abac read plan vs query conditional read maps with ties","seed":3383902479,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:22.961Z"}
+{"property":"abac read plan vs query read maps with the reserved * key","seed":3383902479,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:34.749Z"}
+{"property":"abac deny read map","seed":3383902479,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:36.264Z"}
+{"property":"abac write oracle mixed","seed":3383902479,"scale":5,"baseRuns":250,"runs":1250,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:39.993Z"}
+{"property":"abac write oracle write lists with ties","seed":3383902479,"scale":5,"baseRuns":250,"runs":1250,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:43.699Z"}
+{"property":"abac write oracle UNKNOWN-heavy","seed":3383902479,"scale":5,"baseRuns":250,"runs":1250,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:46.743Z"}
+{"property":"abac create explicit null","seed":3383902479,"scale":5,"baseRuns":250,"runs":1250,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:48.190Z"}
+{"property":"abac create complete record","seed":3383902479,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:49.512Z"}
+{"property":"abac record-dependent field write","seed":3383902479,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:51.109Z"}
+{"property":"abac read modes","seed":3383902479,"scale":5,"baseRuns":100,"runs":500,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:52.923Z"}
+{"property":"abac date spellings on write","seed":3383902479,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:56.317Z"}

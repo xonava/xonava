@@ -1,8 +1,14 @@
 import { assertOutboxScope, type OutboxRecord } from "core/events"
-import { canonicalJsonString } from "core/serialization"
+import { canonicalJsonString, legacyJavaScriptOrderJsonString } from "core/serialization"
 import { ConfigurationError, ConflictError } from "core/domain"
 
-export const OUTBOX_FINGERPRINT_VERSION = "v2"
+/**
+ * v3: canonical JSON in RFC 8785 key order. v2 serialized integer-like object
+ * keys in JavaScript property order; stored v2 fingerprints are still accepted
+ * by {@link assertOutboxFingerprintMatches} (never written).
+ */
+export const OUTBOX_FINGERPRINT_VERSION = "v3"
+const LEGACY_OUTBOX_FINGERPRINT_VERSION = "v2"
 export const OUTBOX_FINGERPRINT_MISSING_ERROR = "Stored outbox fingerprint is missing; migrate fingerprints before replaying events."
 
 export function assertOutboxProtectedFields(
@@ -17,24 +23,40 @@ export function assertOutboxProtectedFields(
   }
 }
 
-export async function fingerprintOutboxRecord(record: Pick<OutboxRecord, "type" | "version" | "scope" | "scopeId" | "aggregateType" | "aggregateId" | "payload">): Promise<string> {
+type FingerprintedOutboxFields = Pick<OutboxRecord, "type" | "version" | "scope" | "scopeId" | "aggregateType" | "aggregateId" | "payload">
+
+function outboxFingerprintMaterial(record: FingerprintedOutboxFields): Record<string, unknown> {
   assertOutboxScope(record)
-  const canonical = canonicalJsonString({
+  return {
     type: record.type,
     version: record.version,
     scopeId: record.scopeId,
     aggregateType: record.aggregateType,
     aggregateId: record.aggregateId,
     payload: record.payload,
-  })
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical))
-  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")
-  return `${OUTBOX_FINGERPRINT_VERSION}:${hex}`
+  }
 }
 
-export function assertOutboxFingerprintMatches(stored: unknown, expected: string): void {
+async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")
+}
+
+export async function fingerprintOutboxRecord(record: FingerprintedOutboxFields): Promise<string> {
+  return `${OUTBOX_FINGERPRINT_VERSION}:${await sha256Hex(canonicalJsonString(outboxFingerprintMaterial(record)))}`
+}
+
+/**
+ * Throws unless the stored fingerprint identifies `record`: the current
+ * version, or a v2 fingerprint written before the RFC 8785 key-order fix (so
+ * re-appending the same event across that deploy stays an idempotent no-op).
+ */
+export async function assertOutboxFingerprintMatches(stored: unknown, expected: string, record: FingerprintedOutboxFields): Promise<void> {
   if (typeof stored !== "string" || stored.length === 0) throw new Error(OUTBOX_FINGERPRINT_MISSING_ERROR)
-  if (stored !== expected) throw new ConflictError("Outbox idempotency key was reused for a different event")
+  if (stored === expected) return
+  if (stored.startsWith(`${LEGACY_OUTBOX_FINGERPRINT_VERSION}:`)
+    && stored === `${LEGACY_OUTBOX_FINGERPRINT_VERSION}:${await sha256Hex(legacyJavaScriptOrderJsonString(outboxFingerprintMaterial(record)))}`) return
+  throw new ConflictError("Outbox idempotency key was reused for a different event")
 }
 
 /**

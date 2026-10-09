@@ -27,7 +27,7 @@ describe("job fingerprint conformance", () => {
   }
 
   it("carries the current versioned contract", () => {
-    expect(JOB_FINGERPRINT_VERSION).toBe(3)
+    expect(JOB_FINGERPRINT_VERSION).toBe(4)
   })
 
   it("is stable across object key order and includes the versioned contract", async () => {

@@ -53,7 +53,10 @@ export function parseRfc3339Timestamp(value: string): number | null {
   const match = RFC3339.exec(value)
   if (!match) return null
   const [, year, month, day, hour = "0", minute = "0", second = "0", offsetHour = "0", offsetMinute = "0"] = match
-  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)))
+  // Date.UTC maps years 0-99 to 1900-1999; setUTCFullYear does not, so
+  // "0001-01-01T00:00:00Z" (a common minimum-date sentinel) stays valid.
+  const date = new Date(0)
+  date.setUTCFullYear(Number(year), Number(month) - 1, Number(day))
   if (date.getUTCFullYear() !== Number(year) || date.getUTCMonth() !== Number(month) - 1 || date.getUTCDate() !== Number(day)) return null
   if (Number(hour) > 23 || Number(minute) > 59 || Number(second) > 59 || Number(offsetHour) > 23 || Number(offsetMinute) > 59) return null
   const time = Date.parse(value.length === 10 ? `${value}T00:00:00Z` : value)
@@ -175,7 +178,9 @@ function evaluateCondition(record: Readonly<Record<string, unknown>>, condition:
     case "isNotNull": return !isNullish(actual)
     case "in":
       if (!Array.isArray(expected)) return false
-      if (isNullish(actual) || Array.isArray(actual)) return isNullish(actual) && membershipIsEmpty(expected) ? false : null
+      // SQL `x IN ()` is FALSE whatever x is (NULL, an array, incomparable).
+      if (membershipIsEmpty(expected)) return false
+      if (isNullish(actual) || Array.isArray(actual)) return null
       return membership(actual, expected)
     case "includesAny": {
       if (!Array.isArray(actual)) return null
@@ -191,8 +196,9 @@ function evaluateCondition(record: Readonly<Record<string, unknown>>, condition:
       if (!Array.isArray(actual)) return null
       let truth: Truth = true
       for (const candidate of asArray(expected)) {
-        if (candidate === null) return null
-        truth = and(truth, membership(candidate, actual as PredicatePrimitive[]))
+        // A NULL member is an UNKNOWN conjunct, not an early exit: the result
+        // must not depend on member order (a later absent member is FALSE).
+        truth = and(truth, candidate === null ? null : membership(candidate, actual as PredicatePrimitive[]))
         if (truth === false) return false
       }
       return truth
@@ -209,7 +215,7 @@ function evaluateCondition(record: Readonly<Record<string, unknown>>, condition:
   }
 }
 
-/** SQL `NULL IN ()` is FALSE; with candidates it is UNKNOWN. */
+/** SQL `x IN ()` is FALSE for every x; NULL members are ignored. */
 function membershipIsEmpty(candidates: readonly PredicatePrimitive[]): boolean {
   return candidates.every((candidate) => candidate === null)
 }
@@ -225,17 +231,19 @@ function evaluateTruth(record: Readonly<Record<string, unknown>>, predicate: Pre
       return evaluateCondition(record, predicate)
     case "and": {
       let truth: Truth = true
-      for (const filter of predicate.filters) {
-        truth = and(truth, evaluateTruth(record, filter, depth + 1))
-        if (truth === false) return false
+      const filters = predicate.filters
+      for (let index = 0; index < filters.length; index++) {
+        truth = and(truth, evaluateTruth(record, filters[index]!, depth + 1))
+        if (truth === false) return assertSkippedDepth(filters, index + 1, depth + 1, false)
       }
       return truth
     }
     case "or": {
       let truth: Truth = false
-      for (const filter of predicate.filters) {
-        truth = or(truth, evaluateTruth(record, filter, depth + 1))
-        if (truth === true) return true
+      const filters = predicate.filters
+      for (let index = 0; index < filters.length; index++) {
+        truth = or(truth, evaluateTruth(record, filters[index]!, depth + 1))
+        if (truth === true) return assertSkippedDepth(filters, index + 1, depth + 1, true)
       }
       return truth
     }
@@ -243,6 +251,26 @@ function evaluateTruth(record: Readonly<Record<string, unknown>>, predicate: Pre
       return not(evaluateTruth(record, predicate.filter, depth + 1))
     default:
       return null
+  }
+}
+
+/**
+ * The depth limit is a property of the predicate, not of the record: when
+ * `and`/`or` short-circuit, the siblings they skip are still depth-checked
+ * (iteratively), so a too-deep tree is rejected for every record.
+ */
+function assertSkippedDepth(filters: readonly PredicateNode[], from: number, depth: number, result: boolean): boolean {
+  for (let index = from; index < filters.length; index++) assertEvaluationDepth(filters[index]!, depth)
+  return result
+}
+
+function assertEvaluationDepth(predicate: PredicateNode, startDepth: number): void {
+  const stack: Array<readonly [PredicateNode, number]> = [[predicate, startDepth]]
+  while (stack.length > 0) {
+    const [node, depth] = stack.pop()!
+    if (depth > MAX_PREDICATE_EVALUATION_DEPTH) throw new ValidationError(`Predicate nesting exceeds ${MAX_PREDICATE_EVALUATION_DEPTH} levels`)
+    if (node.kind === "not") stack.push([node.filter, depth + 1])
+    else if ((node.kind === "and" || node.kind === "or") && Array.isArray(node.filters)) for (const child of node.filters) stack.push([child, depth + 1])
   }
 }
 

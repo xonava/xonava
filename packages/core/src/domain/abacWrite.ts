@@ -1,5 +1,6 @@
 import { evaluateWriteConditionTruth } from "./abacWriteMatch"
-import { ForbiddenError } from "./errors"
+import { ForbiddenError, ValidationError } from "./errors"
+import { parseRfc3339Timestamp } from "./evaluatePredicate"
 import { resolveTieredDecision } from "./abacTierDecision"
 import { assertPolicyWritableFields } from "./fieldAccess"
 import { toEvidence } from "./abacDecision"
@@ -94,6 +95,44 @@ export function evaluateWriteAccessForRecordDetailed(args: {
   }
 }
 
+const CALENDAR_DATE = /^\d{4}-\d{2}-\d{2}$/
+
+const preImages = new WeakSet<object>()
+
+/**
+ * Brands a record as the durable PRE-image of an update, for callers that can
+ * only pass one image per enforcement call (the HTTP AbacWriteEnforcer). The
+ * record decision and field-write tier are enforced on it as usual; only the
+ * written-value date-format check is skipped, because its values were not
+ * written by this request. Framework-internal: brand only rows read from
+ * storage, never request data. The brand is identity-based (a copy is unbranded).
+ */
+export function markAbacPreImage<T extends Record<string, unknown>>(record: T): T {
+  preImages.add(record)
+  return record
+}
+
+/**
+ * A written string for a catalog `date` field must be exactly YYYY-MM-DD.
+ * Policy literals for date fields are calendar dates and string values are
+ * compared as strings, so another spelling of a forbidden date (an ISO
+ * date-time such as "2024-01-01T00:00:00.000Z", padding, a short form) would
+ * evaluate as a different value and slip past a date-equality deny, while the
+ * database casts it to the forbidden date. Date instances are compared as
+ * instants and stay accepted. Only the written fields are checked: stored
+ * rows are expected to hydrate date columns as YYYY-MM-DD strings or Dates.
+ */
+function assertCanonicalDateValues(bundle: AbacPolicyBundle, record: Record<string, unknown>, fields: readonly string[]): void {
+  const catalog = bundle.fieldCatalog
+  for (const field of fields) {
+    if (!Object.hasOwn(catalog, field) || catalog[field]?.type !== "date" || !Object.hasOwn(record, field)) continue
+    const value = record[field]
+    if (typeof value === "string" && (!CALENDAR_DATE.test(value) || parseRfc3339Timestamp(value) === null)) {
+      throw new ValidationError("date fields take YYYY-MM-DD", { field })
+    }
+  }
+}
+
 /**
  * Enforce a write against the post-image `record`. For updates, callers pass
  * the durable pre-image as `existing`: the field-write tier and the record
@@ -109,6 +148,12 @@ export function enforceAbacWrite(args: {
   changedFields?: string[]
 }): void {
   assertVerifiedAbacBundle(args.bundle)
+  // Only written values are format-checked: a stored pre-image (passed as
+  // `existing`, or as a `record` branded with markAbacPreImage) is not, so a
+  // row stored with a legacy date spelling can still be repaired.
+  if (args.action !== "delete" && !preImages.has(args.record)) {
+    assertCanonicalDateValues(args.bundle, args.record, args.changedFields ?? Object.keys(args.record))
+  }
   if (args.action !== "delete") {
     assertPolicyWritableFields({
       policies: args.bundle.policies,

@@ -171,7 +171,13 @@ export function serializeCacheKeyPart(value: unknown): string {
 }
 
 export function buildKey(prefix: string, scope: string, suffix: string): string {
-  const encoded = [prefix, scope, suffix].map((part) => encodeURIComponent(part)).join(":")
+  let encoded: string
+  try {
+    encoded = [prefix, scope, suffix].map((part) => encodeURIComponent(part)).join(":")
+  } catch (error) {
+    // encodeURIComponent throws URIError for lone surrogates; report it as an invalid key.
+    throw new CanonicalJsonError("Cache key parts must be well-formed UTF-16 strings", { cause: error })
+  }
   const bytes = new TextEncoder().encode(encoded).byteLength
   if (bytes > MAX_CACHE_KEY_BYTES) {
     throw new CanonicalJsonError(`Cache key exceeds the maximum of ${MAX_CACHE_KEY_BYTES} bytes`)

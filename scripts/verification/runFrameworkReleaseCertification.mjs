@@ -24,8 +24,12 @@ try {
 }
 const verifierPath = fileURLToPath(new URL("./verifyFinalCertification.mjs", import.meta.url))
 const sourceDigest = execFileSync(process.execPath, [verifierPath, "--source-digest"], { cwd: process.cwd(), encoding: "utf8" }).trim()
+// The release explores cases chosen by its own run ID: never inherit a fixed
+// seed, a single-case replay, a volume override, or a report directory.
+const inherited = { ...process.env }
+for (const name of ["DIFFERENTIAL_SEED", "DIFFERENTIAL_RUN", "DIFFERENTIAL_SCALE", "DIFFERENTIAL_REPORT_DIR"]) delete inherited[name]
 const env = {
-  ...process.env,
+  ...inherited,
   FRAMEWORK_CONFORMANCE_RUN_ID: runId,
   FRAMEWORK_CONFORMANCE_PHASE: "release",
   FRAMEWORK_CERTIFICATION_STARTED_AT: new Date().toISOString(),
@@ -43,6 +47,8 @@ function npm(args, additions = {}) {
 
 console.log(`Starting fresh framework release certification run ${runId}`)
 npm(["run", "verify:framework-release:baseline"])
+// DF1: differential/property suites at release volume with a run-derived seed.
+npm(["run", "verify:framework:df1"])
 for (const adapter of ["pg", "mysql", "d1"]) npm(["run", `test:framework:crash:${adapter}`], { FRAMEWORK_CRASH_REPETITIONS: "20" })
 npm(["run", "verify:framework:cert"])
 console.log(`Framework release certification completed for run ${runId}`)

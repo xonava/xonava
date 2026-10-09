@@ -5,8 +5,8 @@ import { assertVersionedWriteHasExpectedVersion, type DeleteOptions, type Entity
 import type { ListResult, QueryOptions, SortSpec } from "core/query"
 import type { InternalDynamicRepository } from "../repository/dynamicRepository"
 import { Predicate, type PredicateNode } from "core/domain"
-import type { DrizzleColumnMap, DrizzlePredicateCompiler } from "../drizzle-shared/predicateCompiler"
-import { DrizzlePredicateCompiler as DefaultDrizzlePredicateCompiler } from "../drizzle-shared/predicateCompiler"
+import type { DrizzleColumnMap, DrizzleWhereCompiler } from "../drizzle-shared/predicateCompiler"
+import { DrizzlePredicateCompiler as DefaultDrizzlePredicateCompiler, compileWhereClause, sortExpression } from "../drizzle-shared/predicateCompiler"
 import { NotFoundError, ValidationError, ConfigurationError, OptimisticConcurrencyError } from "core/domain"
 import { getAffectedRows } from "./d1Utils"
 import { DEFAULT_MAX_PAGE_SIZE, resolvePagination } from "../drizzle-shared/pagination"
@@ -56,7 +56,8 @@ export interface CreateDrizzleRepositoryArgs<T> {
   table: AnySQLiteTable
   entity: EntityDescriptor<T>
   columnMap: DrizzleColumnMap
-  predicateCompiler?: DrizzlePredicateCompiler
+  /** Any `{ compile }`; `compileWhere`, when present, is used for WHERE clauses. */
+  predicateCompiler?: DrizzleWhereCompiler
   maxPageSize?: number
   maxOffset?: number
   constraintMap?: Record<string, string>
@@ -72,13 +73,18 @@ function resolveVersionField<T>(entity: EntityDescriptor<T>): (keyof T & string)
   return entity.versionField
 }
 
+const SORT_OPTIONS = { dialect: "sqlite" } as const
+
 function compileOrderBy(
   sort: readonly SortSpec[] | undefined,
   columnMap: DrizzleColumnMap,
   fallbackColumn: AnyColumn,
   primaryKey: string,
   primaryKeyColumn: AnyColumn,
+  /** Cursor pages need sort keys that order exactly like keyset predicates compare; offset pages keep native (index-friendly) order. */
+  forCursor: boolean,
 ): SQL<unknown> {
+  const sortKey = (column: AnyColumn) => (forCursor ? sortExpression(column, SORT_OPTIONS) : column)
   if (!sort || sort.length === 0) {
     return fallbackColumn === primaryKeyColumn ? sql`${fallbackColumn}` : sql`${asc(fallbackColumn)}, ${asc(primaryKeyColumn)}`
   }
@@ -87,13 +93,16 @@ function compileOrderBy(
     .map((s) => {
       const column = columnMap[s.field]
       if (!column) throw new ValidationError(`Unknown sort field: "${s.field}"`)
-      if (s.nulls) return sql`${column} ${sql.raw(s.direction === "desc" ? "DESC" : "ASC")} ${sql.raw(s.nulls === "first" ? "NULLS FIRST" : "NULLS LAST")}`
-      return s.direction === "desc" ? desc(column) : asc(column)
+      // Cursor sort keys order exactly like keyset predicates compare (code-point text).
+      const key = sortKey(column)
+      if (s.nulls) return sql`${key} ${sql.raw(s.direction === "desc" ? "DESC" : "ASC")} ${sql.raw(s.nulls === "first" ? "NULLS FIRST" : "NULLS LAST")}`
+      return s.direction === "desc" ? desc(key) : asc(key)
     })
 
   if (!sort.some((s) => s.field === primaryKey)) {
     const direction = sort[sort.length - 1]!.direction
-    clauses.push(direction === "desc" ? desc(primaryKeyColumn) : asc(primaryKeyColumn))
+    const key = sortKey(primaryKeyColumn)
+    clauses.push(direction === "desc" ? desc(key) : asc(key))
   }
   if (clauses.length === 1) return clauses[0]!
   return sql.join(clauses, sql`, `)
@@ -211,7 +220,7 @@ export function createDrizzleRepository<T extends SelectableRow, TId = string>(a
       return fetchFirstByWhere<T>({
         db: args.db,
         table: args.table,
-        whereClause: predicateCompiler.compile(filter),
+        whereClause: compileWhereClause(predicateCompiler, filter),
       })
     },
     async findMany(options?: QueryOptions): Promise<ListResult<T>> {
@@ -226,7 +235,7 @@ export function createDrizzleRepository<T extends SelectableRow, TId = string>(a
       const filter = cursor
         ? (cursor.values ? (options?.filter ? Predicate.and(options.filter, compileCursorPredicate(sort!, { ...cursor, values: cursor.values })) : compileCursorPredicate(sort!, { ...cursor, values: cursor.values })) : options?.filter)
         : options?.filter
-      const whereClause = filter ? predicateCompiler.compile(filter) : undefined
+      const whereClause = filter ? compileWhereClause(predicateCompiler, filter) : undefined
       const [countResult] = await args.db
         .select({ count: count() })
         .from(args.table)
@@ -235,7 +244,7 @@ export function createDrizzleRepository<T extends SelectableRow, TId = string>(a
 
       const rowCount = Number((countResult as { count?: number } | undefined)?.count ?? 0)
        const effectiveSort = cursor ? executionSort(sort!, cursor.direction) : sort
-       const orderBy = compileOrderBy(effectiveSort, args.columnMap, fallbackSortColumn, primaryKey, primaryKeyColumn)
+       const orderBy = compileOrderBy(effectiveSort, args.columnMap, fallbackSortColumn, primaryKey, primaryKeyColumn, cursor !== undefined)
       const selection = options?.projection
         ? Object.fromEntries(options.projection.fields.map(field => {
             const column = args.columnMap[field]
@@ -302,7 +311,7 @@ export function createDrizzleRepository<T extends SelectableRow, TId = string>(a
 
        requireOptimisticConcurrencyVersion(args.entity, options?.optimisticConcurrency !== undefined)
 
-       let compiledFilter = predicateCompiler.compile(filter)
+       let compiledFilter = compileWhereClause(predicateCompiler, filter)
        const matchingRows = await fetchMatchingPrimaryKeys<{ primaryKey: TId }>({
          db: args.db,
          table: args.table,
@@ -377,7 +386,7 @@ export function createDrizzleRepository<T extends SelectableRow, TId = string>(a
       if (options?.optimisticConcurrency && !versionColumn) {
         throw new ConfigurationError(`Optimistic concurrency for "${args.entity.name}" requires a mapped version field`)
       }
-      const compiledWhere = predicateCompiler.compile(filter)
+      const compiledWhere = compileWhereClause(predicateCompiler, filter)
       if (!compiledWhere) throw new Error(`Delete filter for ${args.entity.name} compiled to an empty where clause`)
       let whereClause = compiledWhere
       if (options?.optimisticConcurrency) {
@@ -408,7 +417,7 @@ export function createDrizzleRepository<T extends SelectableRow, TId = string>(a
       assertVersionFieldIsFrameworkManaged(args.entity, data)
       const mappedVersionColumn = requireMappedVersionColumn(args.entity, versionField, args.columnMap)
        requireOptimisticConcurrencyVersion(args.entity, options?.optimisticConcurrency !== undefined)
-      const compiledFilter = predicateCompiler.compile(filter)
+      const compiledFilter = compileWhereClause(predicateCompiler, filter)
       const matchingRows = await fetchMatchingPrimaryKeys<{ primaryKey: TId }>({
         db: args.db,
         table: args.table,

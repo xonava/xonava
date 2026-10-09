@@ -1,4 +1,4 @@
-import { Predicate, ConfigurationError, ForbiddenError, assertFieldQueryAccess, assertVerifiedAbacBundle, resolveFieldQueryDenials, type PredicateNode } from "core/domain"
+import { Predicate, ConfigurationError, ForbiddenError, assertFieldQueryAccess, assertVerifiedAbacBundle, markTrustedPredicate, resolveFieldQueryDenials, type PredicateNode } from "core/domain"
 import { FIELD_READ_DEFAULT_KEY, projectResponseRecord, type AbacAuthorizer, type FieldReadOverride, type VerifiedAbacPolicyBundle } from "core/domain"
 import { assertEntityVersion, type EntityVersion } from "core/serialization"
 import type { EntityDescriptor, VersionedRepository } from "core/persistence"
@@ -82,10 +82,14 @@ export function createAuthorizedRepository<TRow extends Record<string, unknown>,
     throw new ConfigurationError(`Authorized repository for "${args.entity.name}" requires a versionField for optimistic concurrency`)
   }
   const primaryKey = (args.entity.primaryKey ?? "id")
+  // The structural scope is framework wiring, not caller input: like the ABAC
+  // action scope it is a trusted mandatory scope that validateQueryPlan bounds
+  // separately instead of charging it to the caller's query budget.
+  const structuralScope = markTrustedPredicate(args.structuralScope)
 
   function buildAccessFilter(action: string, extraFilter?: PredicateNode, existingScope?: PredicateNode): PredicateNode {
     const actionScope = existingScope ?? args.authorizer.assertCollectionAction(action).scope
-    const filters: PredicateNode[] = [args.structuralScope]
+    const filters: PredicateNode[] = [structuralScope]
     if (actionScope) filters.push(actionScope)
     if (extraFilter) filters.push(extraFilter)
     return Predicate.and(...filters)

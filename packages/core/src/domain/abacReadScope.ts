@@ -2,6 +2,7 @@ import { Predicate, type PredicateNode } from "./predicate"
 import { buildTieredPolicyOutcome } from "./policyTierResolver"
 import type { AbacPolicyBundle, AbacReadScope } from "./abacTypes"
 import { assertVerifiedAbacBundle } from "./abacBundleIntegrity"
+import { markTrustedPredicate } from "./trustedPredicate"
 
 function combineOr(filters: PredicateNode[]): PredicateNode {
   if (filters.length === 0) return Predicate.alwaysFalse()
@@ -27,7 +28,7 @@ export function buildActionScope(args: {
   )
   if (relevant.length === 0) {
     return {
-      filter: defaultEffect === "allow" ? Predicate.alwaysTrue() : Predicate.alwaysFalse(),
+      filter: markTrustedPredicate(defaultEffect === "allow" ? Predicate.alwaysTrue() : Predicate.alwaysFalse()),
       ...(args.bundle.cacheScopeKey !== undefined ? { cacheScopeKey: args.bundle.cacheScopeKey } : {}),
     }
   }
@@ -50,5 +51,6 @@ export function buildActionScope(args: {
     },
   })
 
-  return { filter, ...(args.bundle.cacheScopeKey !== undefined ? { cacheScopeKey: args.bundle.cacheScopeKey } : {}) }
+  // A mandatory scope: query budgets validate it separately from caller filters.
+  return { filter: markTrustedPredicate(filter), ...(args.bundle.cacheScopeKey !== undefined ? { cacheScopeKey: args.bundle.cacheScopeKey } : {}) }
 }

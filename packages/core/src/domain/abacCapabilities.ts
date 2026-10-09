@@ -4,7 +4,9 @@ import type { AbacPolicyBundle } from "./abacTypes"
 /**
  * Check a capability as a GLOBAL grant.
  * Only policies with unrestricted conditions can grant global capabilities,
- * while any relevant deny, conditional or not, blocks the grant in its tier.
+ * while any relevant deny, conditional or not, blocks the grant in its tier,
+ * and a conditional allow in a higher tier blocks lower tiers (a record whose
+ * attribute is NULL would be decided, and denied, by that tier).
  */
 export function hasGlobalAbacCapability(args: {
   bundle: AbacPolicyBundle

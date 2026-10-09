@@ -88,6 +88,10 @@ export function createEnvelope(
       code: INVALID_ENVELOPE_ERROR,
     });
   }
+  if (payload === undefined) {
+    // JSON serialization would drop the member and produce an envelope without a payload.
+    throw new CanonicalJsonError("envelope payload must not be undefined", { code: INVALID_ENVELOPE_ERROR });
+  }
   const envelope: Record<string, unknown> = {
     format,
     version,
@@ -119,6 +123,16 @@ export function parseEnvelope(envelope: unknown): {
     throw new CanonicalJsonError(`invalid envelope version ${JSON.stringify(versionRaw)}`, {
       code: INVALID_ENVELOPE_ERROR,
     });
+  }
+  // A durable envelope is exactly { format, version, payload }: a missing
+  // payload would hand `undefined` to the payload decoder (partial decoding),
+  // and an unknown member is data the reader would silently drop.
+  if (!Object.hasOwn(raw, "payload")) {
+    throw new CanonicalJsonError("envelope is missing its payload", { code: INVALID_ENVELOPE_ERROR });
+  }
+  const unknown = Object.keys(raw).filter((key) => key !== "format" && key !== "version" && key !== "payload");
+  if (unknown.length > 0) {
+    throw new CanonicalJsonError(`envelope has unknown members ${JSON.stringify(unknown)}`, { code: INVALID_ENVELOPE_ERROR });
   }
   const payload = raw["payload"];
   return {

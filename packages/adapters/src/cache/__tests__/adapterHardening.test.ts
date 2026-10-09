@@ -73,6 +73,105 @@ describe("defect 1: clear() keeps tag generations monotonic", () => {
     expect(await cache.getTagGeneration("users")).toBe(generation)
     expect(await cache.get("a")).toBeUndefined()
   })
+
+  it("KV clear removes tagged (generation-qualified) values written by CacheService", async () => {
+    // Regression: clear() skipped every `__generation__:` key, which also matched
+    // CacheService's tagged storage keys `__generation__:"<gen>":<key>`.
+    const kv = createFakeKv()
+    const adapter = new KvCacheAdapter(kv as never)
+    const service = new CacheService({ adapter })
+    await adapter.advanceTagGeneration("users")
+    expect(await service.getOrSet("user:1", async () => "v1", ["users"])).toBe("v1")
+    await service.clear()
+    const survivors = [...kv.store.keys()].filter((name) => name.includes("user:1"))
+    expect(survivors).toEqual([])
+    expect(await new CacheService({ adapter }).getOrSet("user:1", async () => "v2", ["users"])).toBe("v2")
+  })
+
+  it("KV generation counters cannot be overwritten by a cached value and survive clear", async () => {
+    const kv = createFakeKv()
+    const adapter = new KvCacheAdapter(kv as never)
+    const generation = await adapter.advanceTagGeneration("t")
+    const counter = kv.store.get("__cachegen__:t")
+    // A value key spelled like the LEGACY counter location of tag "t".
+    await adapter.set("__generation__:t", "not-a-generation")
+    // The new-layout counter is out of reach of any cache key.
+    expect(kv.store.get("__cachegen__:t")).toBe(counter)
+    // The overwritten legacy counter only changes the observed (composite)
+    // generation: a fail-safe extra invalidation, never a value read as a
+    // generation and never a return to the previously observed generation.
+    const afterOverwrite = await adapter.getTagGeneration("t")
+    expect(afterOverwrite).not.toBe(generation)
+    expect(afterOverwrite).not.toContain("not-a-generation")
+    await adapter.clear()
+    expect(kv.store.get("__cachegen__:t")).toBe(counter)
+    expect(await adapter.getTagGeneration("t")).toBe(afterOverwrite)
+  })
+
+  describe("rolling deploy with instances on the previous counter layout", () => {
+    const legacyKey = (tag: string) => `__cache__:__generation__:${tag}`
+    const newKey = (tag: string) => `__cachegen__:${tag}`
+
+    it("a counter only the previous layout has still fences: changing it changes the generation", async () => {
+      const kv = createFakeKv()
+      const adapter = new KvCacheAdapter(kv as never)
+      expect(await adapter.getTagGeneration("legacy")).toBe("0")
+      kv.store.set(legacyKey("legacy"), JSON.stringify("123:abc"))
+      const first = await adapter.getTagGeneration("legacy")
+      expect(first).not.toBe("0")
+      kv.store.set(legacyKey("legacy"), JSON.stringify("124:def"))
+      expect(await adapter.getTagGeneration("legacy")).not.toBe(first)
+    })
+
+    it("an old instance with a skewed clock still fences values cached by new instances (no ordering by time)", async () => {
+      const kv = createFakeKv()
+      const adapter = new KvCacheAdapter(kv as never)
+      const service = new CacheService({ adapter })
+      await adapter.advanceTagGeneration("users")
+      const before = await adapter.getTagGeneration("users")
+      expect(await service.getOrSet("user:1", async () => "stale", ["users"])).toBe("stale")
+      // Old-release instance B, clock 200 ms behind, invalidates: it writes only the legacy key, with an OLDER timestamp.
+      kv.store.set(legacyKey("users"), JSON.stringify(`${Number(before.split(":")[0]) - 200}:00000000-0000-0000-0000-000000000000`))
+      expect(await adapter.getTagGeneration("users")).not.toBe(before)
+      expect(await new CacheService({ adapter }).getOrSet("user:1", async () => "fresh", ["users"])).toBe("fresh")
+    })
+
+    // Regression (third review): the pair was reported even when both counters were equal, so each
+    // tag added ~150 bytes to generation-qualified keys and keys with 3+ tags passed KV's 512-byte cap.
+    it("reports a single counter in the steady state, keeping cache keys short", async () => {
+      const kv = createFakeKv()
+      const adapter = new KvCacheAdapter(kv as never)
+      const advanced = await adapter.advanceTagGeneration("users")
+      expect(advanced).toMatch(/^\d+:[0-9a-f-]{36}$/)
+      expect(await adapter.getTagGeneration("users")).toBe(advanced)
+      const service = new CacheService({ adapter })
+      const tags = ["tenant.records.alpha", "tenant.records.bravo", "tenant.records.charlie", "tenant.records.delta"]
+      for (const tag of tags) await adapter.advanceTagGeneration(tag)
+      expect(await service.getOrSet("records:list:page-1", async () => "v", tags)).toBe("v")
+      for (const key of kv.store.keys()) expect(new TextEncoder().encode(key).length).toBeLessThanOrEqual(512)
+    })
+
+    it("advances both layouts (legacy first) so old instances observe new advances", async () => {
+      const kv = createFakeKv()
+      const adapter = new KvCacheAdapter(kv as never)
+      const generation = await adapter.advanceTagGeneration("t")
+      const raw = JSON.parse(kv.store.get(newKey("t"))!) as string
+      expect(JSON.parse(kv.store.get(legacyKey("t"))!)).toBe(raw)
+      expect(kv.put.mock.calls.map(([key]) => key)).toEqual([legacyKey("t"), newKey("t")])
+      expect(await adapter.getTagGeneration("t")).toBe(generation)
+    })
+
+    it("clear keeps both counter layouts but removes tagged values stored under the legacy prefix", async () => {
+      const kv = createFakeKv()
+      const adapter = new KvCacheAdapter(kv as never)
+      const generation = await adapter.advanceTagGeneration("users")
+      await new CacheService({ adapter }).getOrSet("user:1", async () => "v1", ["users"])
+      await adapter.clear()
+      expect(kv.store.has(legacyKey("users"))).toBe(true)
+      expect(await adapter.getTagGeneration("users")).toBe(generation)
+      expect([...kv.store.keys()].filter((name) => name.includes("user:1"))).toEqual([])
+    })
+  })
 })
 
 describe("defect 2: KV short TTLs", () => {
