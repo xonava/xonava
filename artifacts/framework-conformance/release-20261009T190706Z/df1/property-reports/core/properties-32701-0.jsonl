@@ -1,0 +1,24 @@
+{"property":"abac record≡scope mixed bundles","seed":3383902479,"scale":5,"baseRuns":250,"runs":1250,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:06.299Z"}
+{"property":"abac capability≡scope mixed bundles","seed":3383902479,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:09.929Z"}
+{"property":"abac record≡scope conditional-only bundles with heavy ties","seed":3383902479,"scale":5,"baseRuns":250,"runs":1250,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:17.710Z"}
+{"property":"abac capability≡scope conditional-only bundles with heavy ties","seed":3383902479,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:21.353Z"}
+{"property":"abac record≡scope two-field bundles (UNKNOWN-heavy)","seed":3383902479,"scale":5,"baseRuns":250,"runs":1250,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:28.007Z"}
+{"property":"abac capability≡scope two-field bundles (UNKNOWN-heavy)","seed":3383902479,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:31.371Z"}
+{"property":"abac record≡scope deny-heavy bundles","seed":3383902479,"scale":5,"baseRuns":250,"runs":1250,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:39.372Z"}
+{"property":"abac capability≡scope deny-heavy bundles","seed":3383902479,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:42.953Z"}
+{"property":"abac collection mixed bundles","seed":3383902479,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:46.386Z"}
+{"property":"abac collection conditional-only bundles with heavy ties","seed":3383902479,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:50.757Z"}
+{"property":"abac collection two-field bundles (UNKNOWN-heavy)","seed":3383902479,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:54.669Z"}
+{"property":"abac collection deny-heavy bundles","seed":3383902479,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:18:59.028Z"}
+{"property":"abac global⇒record mixed bundles","seed":3383902479,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:01.153Z"}
+{"property":"abac global⇒record conditional-only bundles with heavy ties","seed":3383902479,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:03.540Z"}
+{"property":"abac global⇒record two-field bundles (UNKNOWN-heavy)","seed":3383902479,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:05.277Z"}
+{"property":"abac global⇒record deny-heavy bundles","seed":3383902479,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:07.822Z"}
+{"property":"abac order independence mixed bundles","seed":3383902479,"scale":5,"baseRuns":150,"runs":750,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:11.934Z"}
+{"property":"abac order independence conditional-only bundles with heavy ties","seed":3383902479,"scale":5,"baseRuns":150,"runs":750,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:16.654Z"}
+{"property":"abac order independence two-field bundles (UNKNOWN-heavy)","seed":3383902479,"scale":5,"baseRuns":150,"runs":750,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:20.364Z"}
+{"property":"abac order independence deny-heavy bundles","seed":3383902479,"scale":5,"baseRuns":150,"runs":750,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:24.713Z"}
+{"property":"abac foreign module inert","seed":3383902479,"scale":5,"baseRuns":150,"runs":750,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:27.386Z"}
+{"property":"abac unnamed capability","seed":3383902479,"scale":5,"baseRuns":100,"runs":500,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:28.020Z"}
+{"property":"abac date hydration","seed":3383902479,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:31.665Z"}
+{"property":"abac scope query budget","seed":3383902479,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:36.515Z"}

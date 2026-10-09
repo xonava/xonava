@@ -1,0 +1,4 @@
+{"property":"real-database predicate parity (PostgreSQL)","seed":3383902479,"scale":2,"baseRuns":3000,"runs":6000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:43.742Z"}
+{"property":"real-database ABAC scope parity (PostgreSQL)","seed":3383902479,"scale":2,"baseRuns":600,"runs":1200,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:55.269Z"}
+{"property":"real-database predicate parity (PostgreSQL en-US-x-icu)","seed":3383902479,"scale":2,"baseRuns":3000,"runs":6000,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:19:59.645Z"}
+{"property":"real-database ABAC scope parity (PostgreSQL en-US-x-icu)","seed":3383902479,"scale":2,"baseRuns":600,"runs":1200,"replayRun":null,"passed":true,"recordedAt":"2026-10-09T19:20:11.239Z"}

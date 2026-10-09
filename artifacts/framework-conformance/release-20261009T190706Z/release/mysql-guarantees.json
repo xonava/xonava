@@ -1,0 +1,151 @@
+{
+  "schemaVersion": 1,
+  "runId": "release-20261009T190706Z",
+  "adapter": "mysql",
+  "records": [
+    {
+      "guaranteeId": "transaction.interactive",
+      "adapter": "mysql",
+      "status": "proven",
+      "suite": "mysql1-conformance",
+      "assertions": 22,
+      "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
+      "recordedAt": "2026-10-09T19:17:38.528Z"
+    },
+    {
+      "guaranteeId": "persistence.conditionalVersionedMutation",
+      "adapter": "mysql",
+      "status": "proven",
+      "suite": "mysql1-conformance",
+      "assertions": 22,
+      "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
+      "recordedAt": "2026-10-09T19:17:38.529Z"
+    },
+    {
+      "guaranteeId": "persistence.conditionalAuthorizedMutation",
+      "adapter": "mysql",
+      "status": "proven",
+      "suite": "mysql1-conformance",
+      "assertions": 22,
+      "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
+      "recordedAt": "2026-10-09T19:17:38.529Z"
+    },
+    {
+      "guaranteeId": "idempotency.atomicCommitReceipt",
+      "adapter": "mysql",
+      "status": "proven",
+      "suite": "mysql1-conformance",
+      "assertions": 22,
+      "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
+      "recordedAt": "2026-10-09T19:17:38.529Z"
+    },
+    {
+      "guaranteeId": "audit.atomic",
+      "adapter": "mysql",
+      "status": "proven",
+      "suite": "mysql1-conformance",
+      "assertions": 22,
+      "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
+      "recordedAt": "2026-10-09T19:17:38.529Z"
+    },
+    {
+      "guaranteeId": "outbox.atomic",
+      "adapter": "mysql",
+      "status": "proven",
+      "suite": "mysql1-conformance",
+      "assertions": 22,
+      "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
+      "recordedAt": "2026-10-09T19:17:38.529Z"
+    },
+    {
+      "guaranteeId": "cacheGeneration.atomic",
+      "adapter": "mysql",
+      "status": "proven",
+      "suite": "mysql1-conformance",
+      "assertions": 22,
+      "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
+      "recordedAt": "2026-10-09T19:17:38.529Z"
+    },
+    {
+      "guaranteeId": "delivery.inboxFenced",
+      "adapter": "mysql",
+      "status": "proven",
+      "suite": "mysql1-conformance",
+      "assertions": 22,
+      "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
+      "recordedAt": "2026-10-09T19:17:38.529Z"
+    },
+    {
+      "guaranteeId": "delivery.outboxFenced",
+      "adapter": "mysql",
+      "status": "proven",
+      "suite": "mysql1-conformance",
+      "assertions": 22,
+      "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
+      "recordedAt": "2026-10-09T19:17:38.529Z"
+    },
+    {
+      "guaranteeId": "lease.fenced",
+      "adapter": "mysql",
+      "status": "proven",
+      "suite": "mysql1-conformance",
+      "assertions": 22,
+      "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
+      "recordedAt": "2026-10-09T19:17:38.529Z"
+    },
+    {
+      "guaranteeId": "jobs.fenced",
+      "adapter": "mysql",
+      "status": "proven",
+      "suite": "mysql1-conformance",
+      "assertions": 22,
+      "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
+      "recordedAt": "2026-10-09T19:17:38.529Z"
+    },
+    {
+      "guaranteeId": "schedules.fenced",
+      "adapter": "mysql",
+      "status": "proven",
+      "suite": "mysql1-conformance",
+      "assertions": 22,
+      "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
+      "recordedAt": "2026-10-09T19:17:38.529Z"
+    },
+    {
+      "guaranteeId": "workflows.fenced",
+      "adapter": "mysql",
+      "status": "proven",
+      "suite": "mysql1-conformance",
+      "assertions": 22,
+      "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
+      "recordedAt": "2026-10-09T19:17:38.529Z"
+    },
+    {
+      "guaranteeId": "temporal.atomicAppend",
+      "adapter": "mysql",
+      "status": "proven",
+      "suite": "mysql1-conformance",
+      "assertions": 22,
+      "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
+      "recordedAt": "2026-10-09T19:17:38.529Z"
+    },
+    {
+      "guaranteeId": "temporal.monotonicRevision",
+      "adapter": "mysql",
+      "status": "proven",
+      "suite": "mysql1-conformance",
+      "assertions": 22,
+      "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
+      "recordedAt": "2026-10-09T19:17:38.529Z"
+    },
+    {
+      "guaranteeId": "sequence.atomicGapless",
+      "adapter": "mysql",
+      "status": "proven",
+      "suite": "mysql1-conformance",
+      "assertions": 22,
+      "sourceDigest": "54aef618246b1fa8371887759d09050598798c01e6bd0e56b05789d43d3a4d2d",
+      "recordedAt": "2026-10-09T19:17:38.529Z"
+    }
+  ]
+}

@@ -1,20 +1,20 @@
 {
   "schema": "framework.release-evidence",
   "schemaVersion": 1,
-  "generatedAt": "2026-09-19T08:20:59.809Z",
+  "generatedAt": "2026-10-09T19:07:07.713Z",
   "frameworkLine": "2.0",
   "certificationScope": "framework-only",
   "applicationPackageVersionsConsidered": false,
   "sourceRevision": {
-    "kind": "content-sha256",
-    "value": "25fbeeefc67256771726cc3ba02f50c1d63c0545aeefa2bce9f1ed5ab6b60873"
+    "kind": "git",
+    "value": "3ddca2cb974855b61c508ce00e71b57e50d11ef7"
   },
   "lockfile": {
     "path": "package-lock.json",
     "sha256": "5819bce28d4f6773e01945dd1a5a0ea2fa1a48f58adc04e9a5997327ec74d78b"
   },
   "publicApi": {
-    "manifest": "docs\\governance\\public-api-manifest.json",
+    "manifest": "docs/governance/public-api-manifest.json",
     "sha256": "5de9a120df2862c27a8dd2e1402b1530ae72f90cc3d01a2cdbf66f7774671f7c",
     "packages": [
       {
