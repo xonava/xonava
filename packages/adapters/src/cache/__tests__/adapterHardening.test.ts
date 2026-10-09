@@ -73,6 +73,42 @@ describe("defect 1: clear() keeps tag generations monotonic", () => {
     expect(await cache.getTagGeneration("users")).toBe(generation)
     expect(await cache.get("a")).toBeUndefined()
   })
+
+  it("KV clear removes tagged (generation-qualified) values written by CacheService", async () => {
+    // Regression: clear() skipped every `__generation__:` key, which also matched
+    // CacheService's tagged storage keys `__generation__:"<gen>":<key>`.
+    const kv = createFakeKv()
+    const adapter = new KvCacheAdapter(kv as never)
+    const service = new CacheService({ adapter })
+    await adapter.advanceTagGeneration("users")
+    expect(await service.getOrSet("user:1", async () => "v1", ["users"])).toBe("v1")
+    await service.clear()
+    const survivors = [...kv.store.keys()].filter((name) => name.includes("user:1"))
+    expect(survivors).toEqual([])
+    expect(await new CacheService({ adapter }).getOrSet("user:1", async () => "v2", ["users"])).toBe("v2")
+  })
+
+  it("KV generation counters cannot be overwritten by a cached value and survive clear", async () => {
+    const kv = createFakeKv()
+    const adapter = new KvCacheAdapter(kv as never)
+    const generation = await adapter.advanceTagGeneration("t")
+    // A value key spelled like the counter location of tag "t".
+    await adapter.set("__generation__:t", "not-a-generation")
+    expect(await adapter.getTagGeneration("t")).toBe(generation)
+    await adapter.clear()
+    expect(await adapter.getTagGeneration("t")).toBe(generation)
+  })
+
+  it("KV keeps reading generation counters written by the previous key layout until the tag advances", async () => {
+    const kv = createFakeKv()
+    kv.store.set("__cache__:__generation__:legacy", JSON.stringify("123:abc"))
+    const adapter = new KvCacheAdapter(kv as never)
+    expect(await adapter.getTagGeneration("legacy")).toBe("123:abc")
+    await adapter.clear()
+    expect(await adapter.getTagGeneration("legacy")).toBe("123:abc")
+    const next = await adapter.advanceTagGeneration("legacy")
+    expect(await adapter.getTagGeneration("legacy")).toBe(next)
+  })
 })
 
 describe("defect 2: KV short TTLs", () => {

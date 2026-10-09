@@ -1,4 +1,6 @@
-import { ValidationError } from "../domain/errors.js"
+import { ConfigurationError, ValidationError } from "../domain/errors.js"
+import { MAX_PREDICATE_EVALUATION_DEPTH } from "../domain/evaluatePredicate.js"
+import { isTrustedPredicate } from "../domain/trustedPredicate.js"
 import type { PredicateOp } from "../domain/predicate.js"
 import type { QueryPlan } from "./queryPlan.js"
 
@@ -124,12 +126,33 @@ export function compileQueryBudget(limits?: object): QueryBudget {
   return Object.freeze(parseQueryBudget(budget as unknown as QueryBudget))
 }
 
+interface PredicateWalk {
+  readonly limits: Pick<QueryBudget, "maxPredicateDepth" | "maxPredicateNodes" | "maxOrBranches" | "maxInValues">
+  readonly trusted: boolean
+  nodes: number
+  orBranches: number
+  readonly valueBytes: { total: number }
+}
+
+/**
+ * Hard limits for framework-built mandatory scopes (markTrustedPredicate):
+ * structural and ABAC scopes only narrow a query, are bounded by policy
+ * normalization, and must never consume the caller's query budget, but they
+ * still have to stay evaluable (MAX_PREDICATE_EVALUATION_DEPTH) and finite.
+ */
+const TRUSTED_SCOPE_LIMITS = Object.freeze({ maxPredicateDepth: MAX_PREDICATE_EVALUATION_DEPTH, maxPredicateNodes: 100_000, maxOrBranches: 100_000, maxInValues: 100_000 })
+
+function isTransparentConjunction(value: object): boolean {
+  const kind = Object.getOwnPropertyDescriptor(value, "kind")
+  const filters = Object.getOwnPropertyDescriptor(value, "filters")
+  return kind !== undefined && "value" in kind && kind.value === "and" &&
+    filters !== undefined && Array.isArray(filters.value) && (filters.value as unknown[]).some(isTrustedPredicate)
+}
+
 export function validateQueryPlan(plan: QueryPlan, budget: QueryBudget = DEFAULT_QUERY_BUDGET): void {
   const limits = parseQueryBudget(budget)
   const active = new Set<object>()
-  let nodes = 0
-  let orBranches = 0
-  const valueBytes = { total: 0 }
+  const callerWalk: PredicateWalk = { limits, trusted: false, nodes: 0, orBranches: 0, valueBytes: { total: 0 } }
 
   const enter = (value: object): void => {
     if (active.has(value)) fail("query plan contains a cycle")
@@ -137,13 +160,43 @@ export function validateQueryPlan(plan: QueryPlan, budget: QueryBudget = DEFAULT
   }
   const leave = (value: object): void => { active.delete(value) }
 
-  const visitPredicate = (value: unknown, depth: number): void => {
+  /**
+   * `depth` is the depth charged to the walk's budget; `nesting` is the real
+   * nesting depth, which must stay evaluable whatever the budgets allow.
+   */
+  const visitPredicate = (value: unknown, depth: number, nesting: number, walk: PredicateWalk): void => {
     if (value === null || typeof value !== "object") fail("query predicate must be an object")
+    if (!walk.trusted && isTrustedPredicate(value)) {
+      // A trusted scope is checked against hard limits with its own counters;
+      // any problem with it is a server configuration error, not a bad request.
+      const trustedWalk: PredicateWalk = { limits: TRUSTED_SCOPE_LIMITS, trusted: true, nodes: 0, orBranches: 0, valueBytes: { total: 0 } }
+      try {
+        visitPredicate(value, 1, nesting, trustedWalk)
+      } catch (error) {
+        if (error instanceof ValidationError) throw new ConfigurationError(`Trusted query scope is invalid: ${error.message}`)
+        throw error
+      }
+      return
+    }
+    if (nesting > MAX_PREDICATE_EVALUATION_DEPTH) {
+      if (walk.trusted) fail(`query predicate nesting exceeds ${MAX_PREDICATE_EVALUATION_DEPTH} levels`)
+      throw new ConfigurationError(`Query predicate combined with trusted scopes exceeds ${MAX_PREDICATE_EVALUATION_DEPTH} levels`)
+    }
     enter(value)
     try {
-      nodes += 1
-      if (depth > limits.maxPredicateDepth) fail("query predicate exceeds maximum depth")
-      if (nodes > limits.maxPredicateNodes) fail("query predicate exceeds maximum node count")
+      // `and(..., trustedScope, ...)` is the framework conjoining a mandatory
+      // scope: it is not charged to the caller (nodes or depth); the caller's
+      // own conjuncts are charged as if they stood alone.
+      if (!walk.trusted && isTransparentConjunction(value)) {
+        const node = dataRecord(value, "and predicate", ["kind", "filters"])
+        const filters = denseArray(required(node, "filters", "and predicate"), "and predicate.filters", TRUSTED_SCOPE_LIMITS.maxPredicateNodes, "query predicate exceeds maximum node count")
+        enter(filters)
+        try { for (const child of filters) visitPredicate(child, depth, nesting + 1, walk) } finally { leave(filters) }
+        return
+      }
+      walk.nodes += 1
+      if (depth > walk.limits.maxPredicateDepth) fail("query predicate exceeds maximum depth")
+      if (walk.nodes > walk.limits.maxPredicateNodes) fail("query predicate exceeds maximum node count")
 
       const base = dataRecord(value, "query predicate", ["kind", "field", "op", "value", "filters", "filter"])
       const kind = required(base, "kind", "query predicate")
@@ -165,8 +218,8 @@ export function validateQueryPlan(plan: QueryPlan, budget: QueryBudget = DEFAULT
         }
         if (!hasValue) fail(`predicate operator ${typedOp} requires a value`)
         if (listOps.has(typedOp)) {
-          const values = denseArray(node.value, `${typedOp} predicate.value`, limits.maxInValues, "query predicate exceeds maximum IN values")
-          for (const item of values) scalar(item, `${typedOp} predicate value`, active, valueBytes)
+          const values = denseArray(node.value, `${typedOp} predicate.value`, walk.limits.maxInValues, "query predicate exceeds maximum IN values")
+          for (const item of values) scalar(item, `${typedOp} predicate value`, active, walk.valueBytes)
           return
         }
         if (typedOp === "between") {
@@ -175,28 +228,28 @@ export function validateQueryPlan(plan: QueryPlan, budget: QueryBudget = DEFAULT
           try {
             const range = dataRecord(node.value, "between predicate.value", ["from", "to"])
             if (!own(range, "from") && !own(range, "to")) fail("between predicate requires at least one bound")
-            if (own(range, "from")) scalar(range.from, "between predicate.from", active, valueBytes)
-            if (own(range, "to")) scalar(range.to, "between predicate.to", active, valueBytes)
+            if (own(range, "from")) scalar(range.from, "between predicate.from", active, walk.valueBytes)
+            if (own(range, "to")) scalar(range.to, "between predicate.to", active, walk.valueBytes)
           } finally { leave(node.value) }
           return
         }
-        scalar(node.value, `${typedOp} predicate.value`, active, valueBytes)
+        scalar(node.value, `${typedOp} predicate.value`, active, walk.valueBytes)
         return
       }
       if (kind === "and" || kind === "or") {
         const node = dataRecord(value, `${kind} predicate`, ["kind", "filters"])
-        const filters = denseArray(required(node, "filters", `${kind} predicate`), `${kind} predicate.filters`, limits.maxPredicateNodes - nodes, "query predicate exceeds maximum node count")
+        const filters = denseArray(required(node, "filters", `${kind} predicate`), `${kind} predicate.filters`, walk.limits.maxPredicateNodes - walk.nodes, "query predicate exceeds maximum node count")
         if (kind === "or") {
-          orBranches += filters.length
-          if (orBranches > limits.maxOrBranches) fail("query predicate exceeds maximum OR branches")
+          walk.orBranches += filters.length
+          if (walk.orBranches > walk.limits.maxOrBranches) fail("query predicate exceeds maximum OR branches")
         }
         enter(filters)
-        try { for (const child of filters) visitPredicate(child, depth + 1) } finally { leave(filters) }
+        try { for (const child of filters) visitPredicate(child, depth + 1, nesting + 1, walk) } finally { leave(filters) }
         return
       }
       if (kind === "not") {
         const node = dataRecord(value, "not predicate", ["kind", "filter"])
-        visitPredicate(required(node, "filter", "not predicate"), depth + 1)
+        visitPredicate(required(node, "filter", "not predicate"), depth + 1, nesting + 1, walk)
         return
       }
       fail(`query predicate has unknown kind ${String(kind)}`)
@@ -206,7 +259,7 @@ export function validateQueryPlan(plan: QueryPlan, budget: QueryBudget = DEFAULT
   const root = dataRecord(plan, "query plan", ["filter", "sort", "pagination", "projection", "consistency", "search"])
   enter(plan)
   try {
-    if (own(root, "filter")) visitPredicate(root.filter, 1)
+    if (own(root, "filter")) visitPredicate(root.filter, 1, 1, callerWalk)
     if (own(root, "sort")) {
       const sort = denseArray(root.sort, "query sort", limits.maxSortFields, "query exceeds maximum sort fields")
       const fields = new Set<string>()

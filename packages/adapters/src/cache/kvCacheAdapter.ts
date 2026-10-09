@@ -15,7 +15,15 @@ declare class KVNamespace {
 
 const TAG_PREFIX = "__tag__"
 const CACHE_NS_PREFIX = "__cache__:"
-const GENERATION_PREFIX = "__generation__:"
+/**
+ * Tag generation counters live outside the cache namespace, so no cache key
+ * (including CacheService's tagged storage keys `__generation__:"<gen>":<key>`)
+ * can overwrite a counter and clear() can delete every cached value without
+ * touching the counters.
+ */
+const GENERATION_NS_PREFIX = "__cachegen__:"
+/** Previous layout: counters at `__cache__:__generation__:<tag>`, shared with tagged values. Read-only fallback. */
+const LEGACY_GENERATION_PREFIX = "__generation__:"
 const REVISION_PREFIX = "__revision__:"
 /** Cloudflare KV rejects an expirationTtl below 60 seconds. */
 export const KV_MIN_EXPIRATION_TTL_SECONDS = 60
@@ -39,6 +47,14 @@ function isEnvelope(value: unknown): value is Envelope {
 
 function cacheKey(raw: string): string {
   return `${CACHE_NS_PREFIX}${raw}`
+}
+
+function generationKey(tag: string): string {
+  return `${GENERATION_NS_PREFIX}${tag}`
+}
+
+function legacyGenerationKey(tag: string): string {
+  return cacheKey(`${LEGACY_GENERATION_PREFIX}${tag}`)
 }
 
 function revisionKey(raw: string): string {
@@ -127,18 +143,21 @@ export class KvCacheAdapter implements CacheAdapter {
   }
 
   /**
-   * Deletes cached values, revisions and tag lists. Tag generation keys are
-   * excluded: generations are the shared fence and must stay monotonic, so a
-   * resolver started before an invalidate+clear cannot later look fresh.
+   * Deletes every cached value (tagged or not), revision and tag list. Tag
+   * generation counters are kept: they live in their own namespace and must
+   * stay monotonic, so a resolver started before an invalidate+clear cannot
+   * later look fresh. Counters still in the legacy layout (inside the cache
+   * namespace) are first copied to the counter namespace, then removed with
+   * everything else.
    */
   async clear(): Promise<void> {
-    const generationKeyPrefix = cacheKey(GENERATION_PREFIX)
+    const legacyPrefix = cacheKey(LEGACY_GENERATION_PREFIX)
     try {
       let cursor: string | undefined
       do {
         const list = await this.kv.list(cursor ? { cursor, prefix: CACHE_NS_PREFIX } : { prefix: CACHE_NS_PREFIX })
         for (const k of list.keys) {
-          if (k.name.startsWith(generationKeyPrefix)) continue
+          if (k.name.startsWith(legacyPrefix)) await this.migrateLegacyGeneration(k.name.slice(legacyPrefix.length), k.name)
           await this.kv.delete(k.name)
         }
         cursor = list.list_complete ? undefined : list.cursor
@@ -146,6 +165,14 @@ export class KvCacheAdapter implements CacheAdapter {
     } catch (error) {
       throw this.failure("clear", error)
     }
+  }
+
+  /** Copies a legacy counter (a bare JSON string, never a value envelope) unless the tag already has a current one. */
+  private async migrateLegacyGeneration(tag: string, legacyKey: string): Promise<void> {
+    const legacy = await this.kv.get<unknown>(legacyKey, { type: "json" })
+    if (typeof legacy !== "string") return
+    if ((await this.kv.get<unknown>(generationKey(tag), { type: "json" })) !== null) return
+    await this.kv.put(generationKey(tag), JSON.stringify(legacy))
   }
 
   // Tag membership is a best-effort hint, never a correctness boundary.
@@ -204,8 +231,12 @@ export class KvCacheAdapter implements CacheAdapter {
 
   async getTagGeneration(tag: string): Promise<string> {
     try {
-      const generation = await this.kv.get<string>(cacheKey(`${GENERATION_PREFIX}${tag}`), { type: "json" })
-      return generation ?? "0"
+      const generation = await this.kv.get<unknown>(generationKey(tag), { type: "json" })
+      if (typeof generation === "string") return generation
+      // Fall back to a counter written by the previous key layout so an upgrade
+      // never resets a generation (which could make stale tagged data readable).
+      const legacy = await this.kv.get<unknown>(legacyGenerationKey(tag), { type: "json" })
+      return typeof legacy === "string" ? legacy : "0"
     } catch (error) {
       throw this.failure("getTagGeneration", error)
     }
@@ -216,7 +247,7 @@ export class KvCacheAdapter implements CacheAdapter {
     // suitable for correctness-critical cache reads.
     try {
       const generation = `${Date.now()}:${crypto.randomUUID()}`
-      await this.kv.put(cacheKey(`${GENERATION_PREFIX}${tag}`), JSON.stringify(generation))
+      await this.kv.put(generationKey(tag), JSON.stringify(generation))
       return generation
     } catch (error) {
       throw this.failure("advanceTagGeneration", error)

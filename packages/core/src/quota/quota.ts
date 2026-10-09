@@ -3,6 +3,8 @@ import { ValidationError } from "../domain/errors"
 import { PRINCIPAL_KINDS } from "../spec/authority"
 
 const principalKinds: ReadonlySet<string> = new Set(PRINCIPAL_KINDS)
+/** With the `u` flag a surrogate pair is one code point, so this matches only lone surrogates. */
+const LONE_SURROGATE = /\p{Cs}/u
 
 export interface QuotaSubject { readonly scope: ExecutionScope; readonly principal?: Pick<Principal,"id"|"kind">; readonly planKey?: string }
 export interface QuotaRequest { readonly quotaKey: string; readonly subject: QuotaSubject; readonly amount: number; readonly limit: number; readonly windowMs: number; readonly idempotencyKey?: string }
@@ -12,8 +14,9 @@ export interface QuotaPort { consume(request: QuotaRequest): Promise<QuotaDecisi
 export function encodeQuotaSubject(subject: QuotaSubject): string {
   if(!subject||typeof subject!=="object") throw new ValidationError("Quota subject must be valid.")
   const scope=validateExecutionScope(subject.scope)
-  if(subject.principal!==undefined && (subject.principal===null||typeof subject.principal!=="object"||typeof subject.principal.id!=="string"||!subject.principal.id.trim()||typeof subject.principal.kind!=="string"||!principalKinds.has(subject.principal.kind))) throw new ValidationError("Quota principal must be valid.")
-  if(subject.planKey!==undefined&&(typeof subject.planKey!=="string"||!subject.planKey.trim())) throw new ValidationError("Quota plan key must be non-empty.")
+  if(subject.principal!==undefined && (subject.principal===null||typeof subject.principal!=="object"||typeof subject.principal.id!=="string"||!subject.principal.id.trim()||LONE_SURROGATE.test(subject.principal.id)||typeof subject.principal.kind!=="string"||!principalKinds.has(subject.principal.kind))) throw new ValidationError("Quota principal must be valid.")
+  // encodeURIComponent throws a raw URIError on lone surrogates; reject them as invalid input first.
+  if(subject.planKey!==undefined&&(typeof subject.planKey!=="string"||!subject.planKey.trim()||LONE_SURROGATE.test(subject.planKey))) throw new ValidationError("Quota plan key must be non-empty well-formed text.")
   return [encodeExecutionScopeId(scope),subject.principal?`${encodeURIComponent(subject.principal.kind)}:${encodeURIComponent(subject.principal.id)}`:"all-principals",subject.planKey?`plan:${encodeURIComponent(subject.planKey)}`:"all-plans"].join(":")
 }
 

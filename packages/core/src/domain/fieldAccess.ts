@@ -156,23 +156,28 @@ function isAlwaysTruePredicate(node: unknown): boolean {
 }
 
 /**
- * True when any active update policy grants field writes conditionally on the
- * record. Such decisions are only safe under optimistic concurrency because
- * the authorization-driving row state can otherwise change between the field
- * decision and the mutation.
+ * True when the field-write outcome for a permitted row can depend on the
+ * row. Such decisions are only safe under optimistic concurrency because the
+ * authorization-driving row state can otherwise change between the field
+ * decision and the mutation. Without any write list every permitted row may
+ * write every field. With one, the outcome varies when a policy restricting
+ * fields is conditional, and also when a conditional allow (with or without a
+ * list) can decide or join a tier: e.g. a conditional unrestricted allow tied
+ * with an unconditional restricted one widens the writable fields only on rows
+ * that satisfy it. Conditional denies without a write list deny the whole row,
+ * so they never vary the fields of a permitted one.
  */
 export function hasRecordDependentFieldWrite(
   policies: NormalizedAbacPolicy[],
   moduleKey: string,
   action: string,
 ): boolean {
-  return policies.some((policy) =>
-    policy.moduleKey === moduleKey &&
-    policy.payload.actions.includes(action) &&
-    Array.isArray(policy.payload.fieldAccess?.write) &&
-    policy.payload.fieldAccess.write.length > 0 &&
-    !isAlwaysTruePredicate(policy.compiledConditions)
-  )
+  const relevant = policies.filter((policy) => policy.moduleKey === moduleKey && policy.payload.actions.includes(action))
+  const restricts = (policy: NormalizedAbacPolicy) =>
+    Array.isArray(policy.payload.fieldAccess?.write) && policy.payload.fieldAccess.write.length > 0
+  if (!relevant.some(restricts)) return false
+  return relevant.some((policy) =>
+    !isAlwaysTruePredicate(policy.compiledConditions) && (restricts(policy) || policy.effect === "allow"))
 }
 
 function collectDeniedWriteFields(
@@ -309,6 +314,11 @@ function collectDeniedQueryFields(
         if (!denied.includes(field)) denied.push(field)
       }
     }
+    // A deny read map naming the reserved default key sets the plan's default
+    // to omit, hiding every field the map does not name: deny them all.
+    if (policy.effect !== "allow" && Object.hasOwn(read, FIELD_READ_DEFAULT_KEY)) {
+      for (const field of knownFields) if (!denied.includes(field)) denied.push(field)
+    }
     if (policy.effect === "allow" && policy.payload.actions.includes("read")) {
       for (const field of knownFields) {
         if (!Object.hasOwn(read, field) && !denied.includes(field)) denied.push(field)
@@ -322,9 +332,9 @@ function collectDeniedQueryFields(
  * Only allow-effect policies grant query access, and a grant can only re-open
  * a field an allow policy masks/omits: a deny's omission is never subtracted.
  */
-function collectQueryGrants(policies: NormalizedAbacPolicy[], moduleKey: string): FieldQueryAccess {
+function collectQueryGrants(policies: NormalizedAbacPolicy[], moduleKey: string, knownFields: readonly string[]): FieldQueryAccess {
   const grants = emptyFieldQueryAccess()
-  const hardDenied = collectDeniedQueryFields(policies, moduleKey, true)
+  const hardDenied = collectDeniedQueryFields(policies, moduleKey, true, knownFields)
   for (const policy of policies) {
     if (policy.moduleKey !== moduleKey || policy.effect !== "allow") continue
     const query = policy.payload.fieldAccess?.query
@@ -356,7 +366,7 @@ export function resolveFieldQueryAccess(args: {
 }): FieldQueryAccess {
   const deniedFields = collectDeniedQueryFields(args.policies, args.moduleKey, false, args.fields)
   const allowed = emptyFieldQueryAccess()
-  const grants = collectQueryGrants(args.policies, args.moduleKey)
+  const grants = collectQueryGrants(args.policies, args.moduleKey, args.fields)
   for (const mode of FIELD_QUERY_MODES) {
     for (const field of grants[mode]) {
       if (!allowed[mode].includes(field)) allowed[mode].push(field)
@@ -396,7 +406,7 @@ export function resolveFieldQueryDenials(args: {
   fields: readonly string[]
 }): FieldQueryAccess {
   const deniedFields = collectDeniedQueryFields(args.policies, args.moduleKey, false, args.fields)
-  const grants = collectQueryGrants(args.policies, args.moduleKey)
+  const grants = collectQueryGrants(args.policies, args.moduleKey, args.fields)
   return {
     filter: deniedFields.filter((field) => !grants.filter.includes(field)),
     search: deniedFields.filter((field) => !grants.search.includes(field)),

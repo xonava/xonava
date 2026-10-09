@@ -6,7 +6,7 @@ import type { ListResult, QueryOptions, SortSpec } from "core/query"
 import type { InternalDynamicRepository } from "../repository/dynamicRepository"
 import { Predicate, type PredicateNode } from "core/domain"
 import type { DrizzleColumnMap, DrizzlePredicateCompiler } from "../drizzle-shared/predicateCompiler"
-import { DrizzlePredicateCompiler as DefaultDrizzlePredicateCompiler } from "../drizzle-shared/predicateCompiler"
+import { DrizzlePredicateCompiler as DefaultDrizzlePredicateCompiler, sortExpression } from "../drizzle-shared/predicateCompiler"
 import { ConflictError, NotFoundError, ValidationError, ConfigurationError, OptimisticConcurrencyError } from "core/domain"
 import { DEFAULT_MAX_PAGE_SIZE, resolvePagination } from "../drizzle-shared/pagination"
 import { assertVersionFieldIsFrameworkManaged, assertVersionedInsertValue, requireMappedVersionColumn, requireOptimisticConcurrencyVersion } from "../drizzle-shared/versioning"
@@ -86,6 +86,8 @@ function resolveVersionField<T>(entity: EntityDescriptor<T>): (keyof T & string)
   return entity.versionField
 }
 
+const SORT_OPTIONS = { dialect: "postgres" } as const
+
 function compileOrderBy(
   sort: readonly SortSpec[] | undefined,
   columnMap: DrizzleColumnMap,
@@ -100,13 +102,16 @@ function compileOrderBy(
   const clauses = sort.map((s) => {
     const column = columnMap[s.field]
     if (!column) throw new ValidationError(`Unknown sort field: "${s.field}"`)
-    if (s.nulls) return sql`${column} ${sql.raw(s.direction === "desc" ? "DESC" : "ASC")} ${sql.raw(s.nulls === "first" ? "NULLS FIRST" : "NULLS LAST")}`
-    return s.direction === "desc" ? desc(column) : asc(column)
+    // Sort keys order exactly like keyset cursor predicates compare (code-point text).
+    const key = sortExpression(column, SORT_OPTIONS)
+    if (s.nulls) return sql`${key} ${sql.raw(s.direction === "desc" ? "DESC" : "ASC")} ${sql.raw(s.nulls === "first" ? "NULLS FIRST" : "NULLS LAST")}`
+    return s.direction === "desc" ? desc(key) : asc(key)
   })
 
   if (!sort.some((s) => s.field === primaryKey)) {
     const direction = sort[sort.length - 1]!.direction
-    clauses.push(direction === "desc" ? desc(primaryKeyColumn) : asc(primaryKeyColumn))
+    const key = sortExpression(primaryKeyColumn, SORT_OPTIONS)
+    clauses.push(direction === "desc" ? desc(key) : asc(key))
   }
   if (clauses.length === 1) return clauses[0]!
   return sql.join(clauses, sql`, `)

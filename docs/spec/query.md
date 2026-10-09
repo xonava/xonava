@@ -12,6 +12,8 @@ Ordering used for pagination MUST be deterministic and include a stable tie-brea
 
 Forward/backward traversal MUST define comparison direction while returning results in the requested stable order. Cursor expiry, key rotation, version, and binding checks occur before position use. See [cursor](query/cursor.md).
 
+Sort keys MUST order values exactly as predicates compare them ([predicates](persistence/predicates.md#comparison)): text by Unicode code point, never by a column's locale, case-insensitive, or PAD SPACE collation. Keyset cursor boundaries are predicates, so any other order makes pages skip or repeat rows. Explicit NULL placement belongs to the order: traversing backward reverses it together with the direction (`asc` NULLS FIRST read backward is `desc` NULLS LAST). A text sort under the code-point collation cannot use an index built under a different collation; schemas that need index-backed text sorts declare a binary code-point collation on those columns (PostgreSQL `"C"`; MySQL `utf8mb4_0900_bin`, verified and enabled with the adapter's binary-collation option; SQLite's default `BINARY`).
+
 ## Errors and conformance
 
 Unknown/forbidden fields, operators, sort/projection entries, over-budget plans, invalid consistency, and malformed cursors are validation or authorization failures as appropriate. Unsupported search/consistency is capability failure. Conformance covers normalization, budgets, hostile predicates, field disclosure, stable ties, page gaps/duplicates, both directions, tampering, expiry, and provider equivalence.

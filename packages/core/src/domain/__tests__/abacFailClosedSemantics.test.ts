@@ -153,7 +153,13 @@ describe("global capabilities honour conditional denies", () => {
   it("keeps conditional allows non-granting and lower-tier denies shadowed", async () => {
     const conditionalAllow = policy({ id: "c", priority: 100, actions: [], capabilities: ["export"], when: Predicate.eq("region", "us") })
     expect(hasGlobalAbacCapability({ bundle: await bundle([conditionalAllow]), capabilityKey: "export" })).toBe(false)
-    expect(hasGlobalAbacCapability({ bundle: await bundle([conditionalAllow, allowExport]), capabilityKey: "export" })).toBe(true)
+    // A higher-tier conditional allow is UNKNOWN for a record whose region is
+    // NULL, and that record is denied (the tier shadows the lower allow), so
+    // the global grant must not be looser: found by the ABAC differential suite.
+    const shadowed = await bundle([conditionalAllow, allowExport])
+    expect(evaluateAbacRecordCapability({ bundle: shadowed, capability: "export", record: { region: null } }).allowed).toBe(false)
+    expect(hasGlobalAbacCapability({ bundle: shadowed, capabilityKey: "export" })).toBe(false)
+    expect(hasGlobalAbacCapability({ bundle: await bundle([{ ...conditionalAllow, priority: 10 }, allowExport]), capabilityKey: "export" })).toBe(true)
     const lowDeny = policy({ id: "low", effect: "deny", priority: 1, actions: [], capabilities: ["export"], when: Predicate.eq("region", "eu") })
     expect(hasGlobalAbacCapability({ bundle: await bundle([allowExport, lowDeny]), capabilityKey: "export" })).toBe(true)
     const neverDeny = policy({ id: "never", effect: "deny", priority: 100, actions: [], capabilities: ["export"], when: Predicate.alwaysFalse() })

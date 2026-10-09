@@ -13,6 +13,19 @@ import { compileEntityLifecycle, type CompiledEntityLifecycle } from "./lifecycl
 import { compileEntityScope, type CompiledEntityScope } from "./entityScope"
 import { compileQueryBudget, type QueryBudget } from "../query/queryBudget"
 import { entityFieldClassifications, queryableFieldFilter } from "./queryableFields"
+
+/**
+ * Default per-entity namespace `${moduleKey}:${namespace}:${name}`. Entity names
+ * are unique only within a module and persistence namespace, so defaults are
+ * qualified by both. Neither the module key nor the entity name may contain
+ * ":" (validateEntity), so the first and last segments delimit the namespace
+ * and the encoding is injective. An absent namespace and "" are the same
+ * persistence namespace. Used for the default idempotency namespace and, under
+ * the reserved "entity:" prefix, the default cache tag and key prefix.
+ */
+export function defaultEntityNamespace(moduleKey: string, entity: { readonly name: string; readonly namespace?: string }): string {
+  return `${moduleKey}:${entity.namespace ?? ""}:${entity.name}`
+}
 import type { AuditFieldClassification, AuditFieldClassifications } from "../events/durability/audit"
 import type { SearchPort } from "../query/search"
 
@@ -196,7 +209,7 @@ export function compileEntity<
     compiledPagination: { strategy: "offset" as const, ...(definition.queryLimits?.maxOffset !== undefined ? { maxOffset: definition.queryLimits.maxOffset } : {}) },
     compiledAudit: { enabled: definition.audit !== false, guarantee: definition.audit === false ? "best-effort" : definition.audit.auditGuarantee ?? "best-effort", fieldClassification: auditFieldClassification },
     compiledCache: { enabled: definition.cache !== false, guarantee: definition.cache !== false ? "generation-qualified" as const : "none" as const },
-    compiledIdempotency: { required: definition.idempotency !== false, namespace: definition.idempotency === false ? `${definition.moduleKey}:${definition.entity.name}` : definition.idempotency.namespace ?? `${definition.moduleKey}:${definition.entity.name}` },
+    compiledIdempotency: { required: definition.idempotency !== false, namespace: definition.idempotency === false ? defaultEntityNamespace(definition.moduleKey, definition.entity) : definition.idempotency.namespace ?? defaultEntityNamespace(definition.moduleKey, definition.entity) },
     compiledRateQuota: { routes: Object.keys(definition.rateLimit).sort() },
     compiledFieldProtections: { immutable: protectedFields, classified: dataClassification },
     compiledLifecycle: lifecycle,

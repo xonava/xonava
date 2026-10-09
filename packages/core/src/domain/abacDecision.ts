@@ -2,6 +2,7 @@ import { type PredicateNode } from "./predicate"
 import { resolveTieredDecision } from "./abacTierDecision"
 import { evaluatePredicateTruth } from "./evaluatePredicate"
 import { buildActionScope } from "./abacReadScope"
+import { markTrustedPredicate } from "./trustedPredicate"
 import { simplifyPredicate, isAlwaysFalse, isAlwaysTrue } from "./predicateSimplifier"
 import type { NormalizedAbacPolicy, AbacPolicyBundle } from "./abacTypes"
 
@@ -32,13 +33,18 @@ function policyMatchesRecord(policy: NormalizedAbacPolicy, record: Record<string
 }
 
 /**
- * Record-less match: only an unconditional allow can grant, while any deny
- * that is not statically false is assumed to match (fail closed), because some
- * record or context the global grant covers may satisfy it.
+ * Record-less match, evaluated as if every record attribute were UNKNOWN so a
+ * global grant is never looser than any record decision: only an
+ * unconditional allow can grant; any deny that is not statically false is
+ * assumed to match (fail closed), because some record the global grant covers
+ * may satisfy it; and a conditional allow is UNKNOWN, so it claims its tier
+ * without granting, exactly as it does for a record whose attribute is NULL.
  */
-function policyMatchesGlobally(policy: NormalizedAbacPolicy): boolean {
+function policyMatchesGlobally(policy: NormalizedAbacPolicy): boolean | null {
   const simplified = simplifyPredicate(policy.compiledConditions)
-  return policy.effect === "allow" ? isAlwaysTrue(simplified) : !isAlwaysFalse(simplified)
+  if (isAlwaysFalse(simplified)) return false
+  if (policy.effect !== "allow") return true
+  return isAlwaysTrue(simplified) ? true : null
 }
 
 export function toEvidence(policy: NormalizedAbacPolicy): AbacDecision["evidence"][number] {
@@ -156,7 +162,8 @@ export function evaluateAbacActionForCollection(args: {
   action: string
 }): AbacCollectionDecision {
   const scope = buildActionScope({ bundle: args.bundle, action: args.action })
-  const simplifiedScope = simplifyPredicate(scope.filter)
+  // A mandatory scope: query budgets validate it separately from caller filters.
+  const simplifiedScope = markTrustedPredicate(simplifyPredicate(scope.filter))
 
   if (isAlwaysFalse(simplifiedScope)) {
     return {

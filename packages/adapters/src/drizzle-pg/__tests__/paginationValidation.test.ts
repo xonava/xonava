@@ -86,6 +86,7 @@ describe("PostgreSQL pagination boundaries", () => {
     })
 
     await createDrizzleRepository({ db, table, entity, columnMap }).findMany({ sort: [{ field: "name", direction: "desc" }] })
-    expect(new PgDialect().sqlToQuery(orderBy as SQL<unknown>).sql).toContain('"pagination_rows"."id" desc')
+    // Text sort keys (including the text primary-key tie breaker) order by code point, like keyset predicates.
+    expect(new PgDialect().sqlToQuery(orderBy as SQL<unknown>).sql).toBe('("pagination_rows"."name" COLLATE "C") desc, ("pagination_rows"."id" COLLATE "C") desc')
   })
 })

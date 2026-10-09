@@ -120,7 +120,20 @@ function coerceClauseValue(
   }
   const fieldDef = fieldCatalog[field]
   try {
-    return { success: true, value: coercePolicyValue({ type: fieldDef!.type, value }) }
+    const coerced = coercePolicyValue({ type: fieldDef!.type, value })
+    // A `date` literal stays a calendar date ("YYYY-MM-DD"), never an instant:
+    // date columns hydrate as such strings (compared as strings) or as
+    // UTC-midnight Dates (compared as instants, which parse the full-date at
+    // UTC midnight), and only the full-date form equals both. Normalization
+    // would otherwise serialize the Date as "...T00:00:00.000Z", which no
+    // string-hydrated date ever equals (a date-equality deny would fail open).
+    if (fieldDef!.type === "date" && coerced instanceof Date) {
+      const iso = coerced.toISOString()
+      // Only a UTC-midnight instant in years 0000-9999 is a calendar date.
+      if (!/^\d{4}-\d{2}-\d{2}T00:00:00\.000Z$/.test(iso)) return { success: false, error: `Cannot coerce value for field "${field}": not a calendar date: ${iso}` }
+      return { success: true, value: iso.slice(0, 10) }
+    }
+    return { success: true, value: coerced }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     return { success: false, error: `Cannot coerce value for field "${field}": ${message}` }

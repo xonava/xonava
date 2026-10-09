@@ -12,6 +12,13 @@ describe("shared PG/D1 keyset pagination", () => {
     expect(normalizeCursorWindow([4, 3, 2], 2, "before")).toEqual({ rows: [3, 4], hasNextPage: true, hasPreviousPage: true })
     expect(normalizeCursorWindow([2, 3, 4], 2, "after")).toEqual({ rows: [2, 3], hasNextPage: true, hasPreviousPage: true })
   })
+  it("reverses NULL placement with the direction for a previous page", () => {
+    // Regression (real-database differential): `asc NULLS FIRST` executed backwards must be
+    // `desc NULLS LAST`, otherwise a backward walk never leaves the NULL group.
+    expect(executionSort(sort, "before")).toEqual([{ field: "createdAt", direction: "desc", nulls: "first" }, { field: "id", direction: "desc" }])
+    expect(executionSort([{ field: "a", direction: "desc", nulls: "first" }], "before")).toEqual([{ field: "a", direction: "asc", nulls: "last" }])
+    expect(executionSort(sort, "after")).toBe(sort)
+  })
   it("normalizes explicit null placement", () => {
     expect(compileCursorPredicate(sort, { direction: "after", values: [null, "a"] })).toMatchObject({ kind: "or" })
     expect(() => compileCursorPredicate([{ field: "nullable", direction: "asc" }], { direction: "after", values: [null] })).toThrow(/null ordering/)

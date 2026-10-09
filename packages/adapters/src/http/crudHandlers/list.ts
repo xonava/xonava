@@ -10,6 +10,7 @@ import {
   ForbiddenError,
   ValidationError,
   Predicate,
+  markTrustedPredicate,
   projectResponseRecord,
   resolveFieldQueryDenials,
   resolveFieldReadOverrides,
@@ -53,6 +54,19 @@ function parseProjection(raw: string | undefined): ProjectionSpec | undefined {
 function applyProjection(row: SelectableRow, projection: ProjectionSpec | undefined): SelectableRow {
   if (!projection) return row
   return Object.fromEntries(projection.fields.filter(field => Object.hasOwn(row, field)).map(field => [field, row[field]]))
+}
+
+/**
+ * The scope segment of a list cache key: security partition, request scope and
+ * read-scope key. Encoded as a canonical cache key part (a JSON array), so it is
+ * injective even when tenant ids, partitions or scope keys contain ":" — the
+ * former `${partition}:${tenantId}:${cacheScopeKey}` concatenation let tenant
+ * "a" with scope key "a:a" share a key with tenant "a:a:a" with scope key "a".
+ * An absent scope key (null) is distinct from every string, including "global".
+ */
+export function listCacheScope(args: { partition: string; scope: { kind: string; tenantId?: string }; scopeId: string; cacheScopeKey?: string | undefined }): string {
+  const owner = args.scope.kind === "tenant" ? ["tenant", args.scope.tenantId ?? null] : ["scope", args.scopeId]
+  return serializeCacheKeyPart(["list-scope:v2", args.partition, ...owner, args.cacheScopeKey ?? null])
 }
 
 export function assertHttpPaginationParameters(raw: Record<string, unknown>, strategy: "offset" | "cursor"): void {
@@ -157,17 +171,21 @@ export function createListHandler<
         kind: "read",
         atomicity: { kind: "standard", mode: "none" },
         execute: async ({ operation, input }) => {
-          let filter: PredicateNode | undefined = buildStructuralScope(
+          // Mandatory scopes (structural + ABAC read scope) are trusted: they
+          // are conjoined flat with the caller's filter so validateQueryPlan
+          // charges only the caller's own predicate to the query budget.
+          const structural = buildStructuralScope(
             entity,
             requestContext,
             options.entityScope
           )
-          if (readScope.filter)
-            filter = filter
-              ? Predicate.and(filter, readScope.filter)
-              : readScope.filter
+          const mandatory: PredicateNode[] = [
+            ...(structural ? [markTrustedPredicate(structural)] : []),
+            ...(readScope.filter ? [readScope.filter] : []),
+          ]
+          let search: PredicateNode | undefined
           if (input.query.filters) {
-            const search = filtersToPredicate(
+            search = filtersToPredicate(
               input.query.filters,
               effectiveSearchableColumns,
               effectiveFilterableColumns,
@@ -175,8 +193,9 @@ export function createListHandler<
               options.queryLimits,
               options.searchStrategy,
             )
-            if (search) filter = filter ? Predicate.and(filter, search) : search
           }
+          const conjuncts = [...mandatory, ...(search ? [search] : [])]
+          const filter: PredicateNode | undefined = conjuncts.length > 1 ? Predicate.and(...conjuncts) : conjuncts[0]
           const sort =
             parseSortString(input.query.sorting, {
               allowedFields: effectiveSortableColumns,
@@ -189,10 +208,14 @@ export function createListHandler<
             if (!sort) throw new ValidationError("cursor pagination requires a configured stable sort")
             if (sort.some(item => !isEntityField(item.field) || (!effectiveSortableColumns.includes(item.field) && !defaultSortFields.includes(item.field)))) throw new ValidationError("cursor sort contains a non-queryable field")
             assertStableCursorSort(sort, cursorConfig.uniqueFields, cursorConfig.nullableFields)
+            // Bind everything that changes which rows a page contains or how they
+            // are shaped, so a cursor cannot be replayed against another entity
+            // (same module, other name or persistence namespace), search/filter,
+            // projection, consistency mode or security context.
             cursorBindings = {
-              routeHash: await fingerprintJson({ moduleKey: options.moduleKey, route: "list" }),
-              queryHash: await fingerprintJson({ filters: input.query.filters ?? null }),
-              scopeHash: await fingerprintJson({ scopeId: requestContext.scopeId, cacheScopeKey: readScope.cacheScopeKey ?? null }),
+              routeHash: await fingerprintJson({ moduleKey: options.moduleKey, entity: { name: entity.name, namespace: entity.namespace ?? null }, route: "list" }),
+              queryHash: await fingerprintJson({ filters: input.query.filters ?? null, fields: input.query.fields ?? null, consistency: input.query.consistency ?? null }),
+              scopeHash: await fingerprintJson({ scopeId: requestContext.scopeId, cacheScopeKey: readScope.cacheScopeKey ?? null, securityDigest: abacBundle?.securityDigest ?? null }),
               sortHash: await fingerprintJson(sort),
             }
             const opaque = input.query.cursor ?? input.query.before
@@ -380,12 +403,6 @@ export function createListHandler<
           definition,
            input: { query: validatedTransformedQuery },
         })
-      const scopeKey =
-        requestContext.scope.kind === "tenant"
-          ? readScope.cacheScopeKey
-            ? `${requestContext.scope.tenantId}:${readScope.cacheScopeKey}`
-            : requestContext.scope.tenantId
-          : `${requestContext.scopeId}:${readScope.cacheScopeKey ?? "global"}`
       const cachePartition = deriveSecurityCachePartition({
         bundle: abacBundle,
         context: requestContext,
@@ -404,7 +421,7 @@ export function createListHandler<
             }).getOrSet(
               buildKey(
                 options.cache.keyPrefix,
-                `${cachePartition.partition}:${scopeKey}`,
+                listCacheScope({ partition: cachePartition.partition, scope: requestContext.scope, scopeId: requestContext.scopeId, cacheScopeKey: readScope.cacheScopeKey }),
                 serializeCacheKeyPart({ type: "list", query: validatedTransformedQuery })
               ),
               resolveList,

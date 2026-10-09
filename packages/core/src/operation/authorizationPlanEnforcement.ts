@@ -244,6 +244,18 @@ function postImagePredicate(predicate: PredicateNode, data: Readonly<Record<stri
   }
 }
 
+/**
+ * The fields an update actually writes. Adapters skip `undefined` values
+ * (drizzle's `.set()` drops them), so such a key leaves the stored value in
+ * place; treating it as a written NULL would let it decide mandatory
+ * conditions (e.g. `isNull(f)`) that the post-image does not satisfy. Strip
+ * them so the post-image rewrite and the adapter write see the same patch.
+ */
+function writtenData<T>(data: Partial<T>): Partial<T> {
+  if (!Object.values(data as object).includes(undefined)) return data
+  return Object.fromEntries(Object.entries(data as object).filter(([, value]) => value !== undefined)) as Partial<T>
+}
+
 /** The WHERE addition that keeps an updated row inside the mandatory predicate. */
 function postImageFilter(data: unknown, mandatory: PredicateNode | undefined): PredicateNode | undefined {
   if (!mandatory) return undefined
@@ -324,20 +336,23 @@ function constrainRepository<T, TId>(repository: ReturnType<PersistenceProvider[
     ...(mutation.updateOneWhere ? {
       updateOneWhere: async (filter: PredicateNode, data: Partial<T>, options?: unknown) => {
         assertWritableFields(data, plan)
-        return mutation.updateOneWhere!(addRequiredPredicate(addRequiredPredicate(filter, required), postImageFilter(data, mandatory))!, data, options)
+        const written = writtenData(data)
+        return mutation.updateOneWhere!(addRequiredPredicate(addRequiredPredicate(filter, required), postImageFilter(written, mandatory))!, written, options)
       },
     } : {}),
     ...(mutation.updateOneWhereReturning ? {
       updateOneWhereReturning: async (filter: PredicateNode, data: Partial<T>, options?: unknown) => {
         assertWritableFields(data, plan)
-        const row = await mutation.updateOneWhereReturning!(addRequiredPredicate(addRequiredPredicate(filter, required), postImageFilter(data, mandatory))!, data, options)
+        const written = writtenData(data)
+        const row = await mutation.updateOneWhereReturning!(addRequiredPredicate(addRequiredPredicate(filter, required), postImageFilter(written, mandatory))!, written, options)
         return permittedRecord(row, mandatory) ? row : null
       },
     } : {}),
     ...(mutation.updateManyWhere ? {
       updateManyWhere: async (filter: PredicateNode, data: Partial<T>, options?: unknown) => {
         assertWritableFields(data, plan)
-        return mutation.updateManyWhere!(addRequiredPredicate(addRequiredPredicate(filter, required), postImageFilter(data, mandatory))!, data, options)
+        const written = writtenData(data)
+        return mutation.updateManyWhere!(addRequiredPredicate(addRequiredPredicate(filter, required), postImageFilter(written, mandatory))!, written, options)
       },
     } : {}),
     delete: (id: TId, options?: unknown) => {

@@ -17,6 +17,7 @@ import {
   createFrameworkErrorHandler,
 } from "../handleFrameworkCoreError"
 import { resolveRequestMetadata } from "../requestBody"
+import { listCacheScope } from "./list"
 import type { CrudShared, SelectableRow } from "./types"
 import {
   buildStructuralScope,
@@ -142,12 +143,6 @@ export function createDetailHandler<
           definition,
           input: { id },
         })
-      const scopeKey =
-        requestContext.scope.kind === "tenant"
-          ? readScope.cacheScopeKey
-            ? `${requestContext.scope.tenantId}:${readScope.cacheScopeKey}`
-            : requestContext.scope.tenantId
-          : `${requestContext.scopeId}:${readScope.cacheScopeKey ?? "global"}`
       const cachePartition = deriveSecurityCachePartition({
         bundle: abacBundle,
         context: requestContext,
@@ -166,7 +161,7 @@ export function createDetailHandler<
             }).getOrSet(
               buildKey(
                 options.cache.keyPrefix,
-                `${cachePartition.partition}:${scopeKey}`,
+                listCacheScope({ partition: cachePartition.partition, scope: requestContext.scope, scopeId: requestContext.scopeId, cacheScopeKey: readScope.cacheScopeKey }),
                 serializeCacheKeyPart({ type: "detail", id })
               ),
               resolveDetail,

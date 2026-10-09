@@ -33,8 +33,14 @@ describe("predicate semantics parity: core evaluator vs compiled SQL (MySQL)", (
     expect(mismatches, mismatches.join("\n")).toEqual([])
   }, 180_000)
 
-  it("selects identical rows comparing columns directly on a verified binary collation", async () => {
-    const mismatches = await withTable("utf8mb4_bin", async (pool) => {
+  it("rejects direct comparison on a PAD SPACE binary collation", async () => {
+    await withTable("utf8mb4_bin", async (pool) => {
+      await expect(assertMySqlBinaryCollation(pool, "framework_predicate_parity", ["s"])).rejects.toThrow("PAD SPACE")
+    })
+  }, 60_000)
+
+  it("selects identical rows comparing columns directly on a verified NO PAD binary collation", async () => {
+    const mismatches = await withTable("utf8mb4_0900_bin", async (pool) => {
       await assertMySqlBinaryCollation(pool, "framework_predicate_parity", ["s"])
       const db = drizzle(pool)
       return findParityMismatches(async (predicate) => (await db.select({ id: rows.id }).from(rows).where(compileDrizzlePredicate(predicate, columnMap, { mysqlBinaryCollation: true }))).map((row) => row.id))

@@ -45,10 +45,18 @@ export function compileCursorPredicate(sort: readonly SortSpec[], boundary: Curs
   }))
 }
 
-/** SQL results are reversed for a `before` page and restored before delivery. */
+/**
+ * SQL results are reversed for a `before` page and restored before delivery.
+ * Reversing the order reverses NULL placement too: `asc NULLS FIRST` read
+ * backwards is `desc NULLS LAST`.
+ */
 export function executionSort(sort: readonly SortSpec[], direction: CursorDirection): readonly SortSpec[] {
   if (direction === "after") return sort
-  return sort.map(item => ({ ...item, direction: item.direction === "asc" ? "desc" : "asc" }))
+  return sort.map((item): SortSpec => ({
+    ...item,
+    direction: item.direction === "asc" ? "desc" : "asc",
+    ...(item.nulls ? { nulls: item.nulls === "first" ? "last" : "first" } : {}),
+  }))
 }
 
 /** Normalizes a limit+1 fetch into transport-neutral page information. */
