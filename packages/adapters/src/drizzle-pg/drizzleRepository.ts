@@ -5,8 +5,8 @@ import { assertVersionedWriteHasExpectedVersion, type DeleteOptions, type Entity
 import type { ListResult, QueryOptions, SortSpec } from "core/query"
 import type { InternalDynamicRepository } from "../repository/dynamicRepository"
 import { Predicate, type PredicateNode } from "core/domain"
-import type { DrizzleColumnMap, DrizzlePredicateCompiler } from "../drizzle-shared/predicateCompiler"
-import { DrizzlePredicateCompiler as DefaultDrizzlePredicateCompiler, sortExpression } from "../drizzle-shared/predicateCompiler"
+import type { DrizzleColumnMap, DrizzleWhereCompiler } from "../drizzle-shared/predicateCompiler"
+import { DrizzlePredicateCompiler as DefaultDrizzlePredicateCompiler, compileWhereClause, sortExpression } from "../drizzle-shared/predicateCompiler"
 import { ConflictError, NotFoundError, ValidationError, ConfigurationError, OptimisticConcurrencyError } from "core/domain"
 import { DEFAULT_MAX_PAGE_SIZE, resolvePagination } from "../drizzle-shared/pagination"
 import { assertVersionFieldIsFrameworkManaged, assertVersionedInsertValue, requireMappedVersionColumn, requireOptimisticConcurrencyVersion } from "../drizzle-shared/versioning"
@@ -70,7 +70,8 @@ export interface CreateDrizzleRepositoryArgs<T> {
   table: AnyPgTable
   entity: EntityDescriptor<T>
   columnMap: DrizzleColumnMap
-  predicateCompiler?: DrizzlePredicateCompiler
+  /** Any `{ compile }`; `compileWhere`, when present, is used for WHERE clauses. */
+  predicateCompiler?: DrizzleWhereCompiler
   maxPageSize?: number
   maxOffset?: number
   constraintMap?: Record<string, string>
@@ -251,7 +252,7 @@ export function createDrizzleRepository<T extends SelectableRow, TId = string>(a
       return fetchFirstByWhere<T>({
         db: args.db,
         table: args.table,
-        whereClause: predicateCompiler.compileWhere(filter),
+        whereClause: compileWhereClause(predicateCompiler, filter),
       })
     },
     async findMany(options?: QueryOptions): Promise<ListResult<T>> {
@@ -266,7 +267,7 @@ export function createDrizzleRepository<T extends SelectableRow, TId = string>(a
       const filter = cursor
         ? (cursor.values ? (options?.filter ? Predicate.and(options.filter, compileCursorPredicate(sort!, { ...cursor, values: cursor.values })) : compileCursorPredicate(sort!, { ...cursor, values: cursor.values })) : options?.filter)
         : options?.filter
-      const whereClause = filter ? predicateCompiler.compileWhere(filter) : undefined
+      const whereClause = filter ? compileWhereClause(predicateCompiler, filter) : undefined
       const [countResult] = await normalizedRead(() => args.db
         .select({ count: count() })
         .from(args.table)
@@ -363,7 +364,7 @@ export function createDrizzleRepository<T extends SelectableRow, TId = string>(a
         }
       }
 
-       const compiledFilter = predicateCompiler.compileWhere(filter)
+       const compiledFilter = compileWhereClause(predicateCompiler, filter)
        const matchingRows = await fetchMatchingPrimaryKeys<{ primaryKey: TId }>({
          db: args.db,
          table: args.table,
@@ -441,7 +442,7 @@ export function createDrizzleRepository<T extends SelectableRow, TId = string>(a
         )
       }
 
-      const compiledFilter = predicateCompiler.compileWhere(filter)
+      const compiledFilter = compileWhereClause(predicateCompiler, filter)
       const matchingRows = await fetchMatchingPrimaryKeys<{ primaryKey: TId }>({
         db: args.db,
         table: args.table,
@@ -518,7 +519,7 @@ export function createDrizzleRepository<T extends SelectableRow, TId = string>(a
         if (options?.optimisticConcurrency && !versionColumn) {
           throw new ConfigurationError(`Optimistic concurrency for "${args.entity.name}" requires a mapped version field`)
         }
-        let whereClause = predicateCompiler.compileWhere(filter)
+        let whereClause = compileWhereClause(predicateCompiler, filter)
         if (options?.optimisticConcurrency) {
           const versionPredicate = eq(versionColumn!, options.optimisticConcurrency.expectedVersion as never)
           whereClause = whereClause ? (and(whereClause, versionPredicate) ?? versionPredicate) : versionPredicate

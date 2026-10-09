@@ -24,8 +24,12 @@ try {
 }
 const verifierPath = fileURLToPath(new URL("./verifyFinalCertification.mjs", import.meta.url))
 const sourceDigest = execFileSync(process.execPath, [verifierPath, "--source-digest"], { cwd: process.cwd(), encoding: "utf8" }).trim()
+// The release explores cases chosen by its own run ID: never inherit a fixed
+// seed, a single-case replay, a volume override, or a report directory.
+const inherited = { ...process.env }
+for (const name of ["DIFFERENTIAL_SEED", "DIFFERENTIAL_RUN", "DIFFERENTIAL_SCALE", "DIFFERENTIAL_REPORT_DIR"]) delete inherited[name]
 const env = {
-  ...process.env,
+  ...inherited,
   FRAMEWORK_CONFORMANCE_RUN_ID: runId,
   FRAMEWORK_CONFORMANCE_PHASE: "release",
   FRAMEWORK_CERTIFICATION_STARTED_AT: new Date().toISOString(),

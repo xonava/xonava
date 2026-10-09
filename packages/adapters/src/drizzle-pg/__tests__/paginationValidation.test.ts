@@ -1,8 +1,8 @@
 import { pgTable, integer, text } from "drizzle-orm/pg-core"
 import { PgDialect } from "drizzle-orm/pg-core/dialect"
-import type { AnyColumn, SQL } from "drizzle-orm"
+import { sql, type AnyColumn, type SQL } from "drizzle-orm"
 import { describe, expect, it, vi } from "vitest"
-import { ConfigurationError, ValidationError } from "core/domain"
+import { ConfigurationError, Predicate, ValidationError } from "core/domain"
 import { createDrizzlePersistenceProvider, createDrizzleRepository, type DrizzleSessionLike, DrizzleEntityRegistry, type PgDatabaseLike } from "adapters/drizzle-pg"
 
 const table = pgTable("pagination_rows", { id: text("id").primaryKey(), name: text("name"), version: integer("version") })
@@ -97,5 +97,13 @@ describe("PostgreSQL pagination boundaries", () => {
     // Text sort keys, including the text primary-key tie breaker, order under COLLATE "C" like the cursor predicate.
     expect(await capturedOrderBy({ sort: [{ field: "name", direction: "desc" }], pagination: { kind: "cursor", direction: "after", limit: 2 } }))
       .toBe('("pagination_rows"."name" COLLATE "C") desc, ("pagination_rows"."id" COLLATE "C") desc')
+  })
+
+  it("accepts a plain predicate compiler that only implements compile", async () => {
+    // Regression (second review, LOW): repositories required compileWhere.
+    const compile = vi.fn(() => sql`1 = 1`)
+    const repository = createDrizzleRepository({ db: session(), table, entity, columnMap, predicateCompiler: { compile } })
+    await repository.findMany({ filter: Predicate.eq("name", "x") })
+    expect(compile).toHaveBeenCalled()
   })
 })

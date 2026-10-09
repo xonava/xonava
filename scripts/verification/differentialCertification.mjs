@@ -12,7 +12,7 @@
  */
 import { createHash } from "node:crypto"
 import { readFile, readdir, stat } from "node:fs/promises"
-import { join, relative, resolve } from "node:path"
+import { join, posix, relative, resolve } from "node:path"
 import ts from "typescript"
 
 export const DF1_PHASE = "df1"
@@ -25,12 +25,14 @@ export const DF1_MINIMUM_SCALES = Object.freeze({ core: 5, database: 2 })
 /** No property may be declared with fewer base cases than this. */
 export const DF1_MIN_BASE_RUNS = 50
 /**
- * Floors on distinct passing properties per suite. Scanning makes every
- * current call site mandatory; these floors catch deleted call sites. Lower a
- * floor only together with a reviewed removal of the property it counted.
+ * The checked-in property baseline: every known call site per suite with the
+ * number of distinct properties it expanded to. Scanning makes every current
+ * call site mandatory; the baseline makes a deleted call site, or a template
+ * site that expands to fewer properties (a scenario loop losing iterations),
+ * a refusal until the baseline is lowered deliberately
+ * (`npm run verify:framework:df1 -- --update-baseline`).
  */
-export const DF1_MIN_PROPERTIES = Object.freeze({ core: 136, pg: 4, mysql: 6, d1: 2 })
-
+export const DF1_BASELINE = "scripts/verification/differentialBaseline.json"
 const CORE_DIFFERENTIAL_DIR = "packages/core/src/__tests__/differential"
 const HARNESS = `${CORE_DIFFERENTIAL_DIR}/harness.ts`
 /** Harness self-tests plant failing properties on purpose; they are not certification properties. */
@@ -75,7 +77,7 @@ function isProductionTs(name) {
   return name.endsWith(".ts") && !name.endsWith(".test.ts") && !name.endsWith(".d.ts")
 }
 
-function posix(path) {
+function toPosix(path) {
   return path.replaceAll("\\", "/")
 }
 
@@ -139,38 +141,92 @@ function escapeRegExp(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
+const HARNESS_FUNCTIONS = new Set(["forAll", "forAllAsync"])
+
+function isHarnessSpecifier(specifier, path) {
+  if (typeof specifier !== "string" || !specifier.startsWith(".")) return false
+  const target = posix.normalize(posix.join(posix.dirname(path), specifier)).replace(/\.(?:[cm]?js|ts)$/, "")
+  return target === HARNESS.replace(/\.ts$/, "")
+}
+
 /**
- * Every `forAll(...)` / `forAllAsync(...)` call site in `source`. A literal
- * name is required exactly; a template name becomes a pattern whose
- * substitutions match any non-empty text, so each call site must be covered
- * by at least one reported property.
+ * Every harness property call site in `source`. Only the bare named imports
+ * `forAll` / `forAllAsync` of the harness may declare properties, and they may
+ * only be called directly: aliased, namespace, default, dynamic, or re-exported
+ * harness imports, and indirect uses of the functions, are refused because they
+ * would hide properties from DF1. A literal name is required exactly; a
+ * template name becomes a pattern whose substitutions match any non-empty text.
  */
 export function scanPropertyCallSites(source, path) {
   const sourceFile = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  const where = node => `${path}:${sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1}`
+  const violations = []
+  const imported = new Set()
+  const checkImports = node => {
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && isHarnessSpecifier(node.moduleSpecifier.text, path)) {
+      const clause = node.importClause
+      if (clause?.name) violations.push(`${where(node)} default-imports the differential harness`)
+      const bindings = clause?.namedBindings
+      if (bindings && ts.isNamespaceImport(bindings)) violations.push(`${where(node)} namespace-imports the differential harness; import forAll/forAllAsync by name`)
+      if (bindings && ts.isNamedImports(bindings)) {
+        for (const element of bindings.elements) {
+          const importedName = (element.propertyName ?? element.name).text
+          const localName = element.name.text
+          if ((HARNESS_FUNCTIONS.has(importedName) || HARNESS_FUNCTIONS.has(localName)) && importedName !== localName) {
+            violations.push(`${where(element)} imports harness ${importedName} as ${localName}; import forAll/forAllAsync without an alias`)
+          } else if (HARNESS_FUNCTIONS.has(importedName) && !clause.isTypeOnly && !element.isTypeOnly) {
+            imported.add(importedName)
+          }
+        }
+      }
+    } else if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier) && isHarnessSpecifier(node.moduleSpecifier.text, path) && !node.isTypeOnly) {
+      violations.push(`${where(node)} re-exports the differential harness`)
+    } else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference) && ts.isStringLiteral(node.moduleReference.expression) && isHarnessSpecifier(node.moduleReference.expression.text, path)) {
+      violations.push(`${where(node)} imports the differential harness with import =`)
+    } else if (ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(node.expression) && node.expression.text === "require"))) {
+      const [specifier] = node.arguments
+      if (specifier && ts.isStringLiteralLike(specifier) && isHarnessSpecifier(specifier.text, path)) violations.push(`${where(node)} loads the differential harness dynamically`)
+    }
+    ts.forEachChild(node, checkImports)
+  }
+  checkImports(sourceFile)
+
   const sites = []
   const visit = node => {
-    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && (node.expression.text === "forAll" || node.expression.text === "forAllAsync")) {
-      const [nameNode] = node.arguments
-      const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1
-      const location = `${path}:${line}`
-      if (nameNode && (ts.isStringLiteral(nameNode) || ts.isNoSubstitutionTemplateLiteral(nameNode))) {
-        sites.push({ location, display: nameNode.text, pattern: `^${escapeRegExp(nameNode.text)}$` })
-      } else if (nameNode && ts.isTemplateExpression(nameNode)) {
-        let display = nameNode.head.text
-        let pattern = escapeRegExp(nameNode.head.text)
-        for (const span of nameNode.templateSpans) {
-          display += "${…}" + span.literal.text
-          pattern += ".+" + escapeRegExp(span.literal.text)
+    if (ts.isIdentifier(node) && imported.has(node.text)) {
+      const parent = node.parent
+      if (ts.isCallExpression(parent) && parent.expression === node) {
+        const [nameNode] = parent.arguments
+        const location = where(parent)
+        if (nameNode && (ts.isStringLiteral(nameNode) || ts.isNoSubstitutionTemplateLiteral(nameNode))) {
+          sites.push({ file: path, location, display: nameNode.text, template: false, pattern: `^${escapeRegExp(nameNode.text)}$`, literalLength: nameNode.text.length })
+        } else if (nameNode && ts.isTemplateExpression(nameNode)) {
+          let display = nameNode.head.text
+          let pattern = escapeRegExp(nameNode.head.text)
+          let literalLength = nameNode.head.text.length
+          for (const span of nameNode.templateSpans) {
+            display += "${…}" + span.literal.text
+            pattern += ".+" + escapeRegExp(span.literal.text)
+            literalLength += span.literal.text.length
+          }
+          sites.push({ file: path, location, display, template: true, pattern: `^${pattern}$`, literalLength })
+        } else {
+          violations.push(`${location} names a differential property with a non-literal expression; use a string or template literal so DF1 can require it`)
         }
-        sites.push({ location, display, pattern: `^${pattern}$` })
-      } else {
-        refuse(`${location} names a differential property with a non-literal expression; use a string or template literal so DF1 can require it`)
+      } else if (!ts.isImportSpecifier(parent) && !(ts.isPropertyAccessExpression(parent) && parent.name === node) && !(ts.isPropertyAssignment(parent) && parent.name === node)) {
+        violations.push(`${where(node)} uses harness ${node.text} other than as a direct call; DF1 cannot require properties declared that way`)
       }
     }
     ts.forEachChild(node, visit)
   }
   visit(sourceFile)
+  if (violations.length > 0) refuse(violations.join("; "))
   return sites
+}
+
+/** Baseline identity of a call site (file and name, not line, so edits elsewhere do not churn it). */
+export function siteKey(site) {
+  return `${site.file}::${site.display}`
 }
 
 async function filesUnder(repositoryRoot, directory) {
@@ -208,7 +264,7 @@ export async function requiredCallSites(repositoryRoot, suites) {
     for (const path of await filesUnder(repositoryRoot, root)) {
       if (covered.has(path)) continue
       const source = await readFile(resolve(repositoryRoot, path), "utf8")
-      if (!/\bforAll(?:Async)?\s*[(<]/.test(source)) continue
+      if (!source.includes("harness")) continue
       if (scanPropertyCallSites(source, path).length > 0) refuse(`${path} declares differential properties but is not part of any DF1 suite`)
     }
   }
@@ -218,7 +274,7 @@ export async function requiredCallSites(repositoryRoot, suites) {
 /** The DF1 source manifest paths, recomputed from the current tree. */
 export async function df1SourcePaths(repositoryRoot) {
   const suites = await df1Suites(repositoryRoot)
-  const paths = new Set([HARNESS, HARNESS_SELF_TEST])
+  const paths = new Set([HARNESS, HARNESS_SELF_TEST, DF1_BASELINE])
   for (const suite of suites) for (const path of [...suite.propertySources, ...suite.testFiles]) paths.add(path)
   for (const entry of COVERED_SOURCES) {
     if (typeof entry === "string") paths.add(entry)
@@ -234,9 +290,39 @@ export async function createDf1SourceManifest(repositoryRoot) {
   })))
 }
 
+export async function readDf1Baseline(repositoryRoot) {
+  let baseline
+  try {
+    baseline = JSON.parse(await readFile(resolve(repositoryRoot, DF1_BASELINE), "utf8"))
+  } catch (error) {
+    refuse(`cannot read the property baseline ${DF1_BASELINE} (${error.message})`)
+  }
+  if (baseline?.schemaVersion !== 1 || typeof baseline.suites !== "object" || baseline.suites === null) refuse(`${DF1_BASELINE} has the wrong schema`)
+  for (const [suite, entries] of Object.entries(baseline.suites)) {
+    for (const [key, count] of Object.entries(entries ?? {})) {
+      if (!Number.isInteger(count) || count < 1) refuse(`${DF1_BASELINE} ${suite} "${key}" must expect a positive integer number of properties`)
+    }
+  }
+  return baseline
+}
+
+/** A baseline document from per-suite site expansion counts. */
+export function composeDf1Baseline(siteCounts) {
+  const suites = {}
+  for (const [suite, counts] of Object.entries(siteCounts)) {
+    suites[suite] = Object.fromEntries(Object.entries(counts).sort(([a], [b]) => a.localeCompare(b)))
+  }
+  return {
+    schemaVersion: 1,
+    description: "DF1 property baseline: distinct passing properties per differential call site (file::name). Lower or remove an entry only with a reviewed removal; regenerate with npm run verify:framework:df1 -- --update-baseline.",
+    suites,
+  }
+}
+
 /** Seed policy: an explicit `DIFFERENTIAL_SEED`, else a deterministic function of the run ID. */
-export function deriveDf1Seed(runId, explicitSeed) {
+export function deriveDf1Seed(runId, explicitSeed, { release = false } = {}) {
   if (explicitSeed !== undefined && explicitSeed.trim() !== "") {
+    if (release) refuse("DIFFERENTIAL_SEED is set; a release run must use the seed derived from its run ID so each release explores new cases")
     const text = explicitSeed.trim()
     if (!/^\d{1,10}$/.test(text) || Number(text) > 0xffffffff) refuse("DIFFERENTIAL_SEED must be an unsigned 32-bit integer")
     return { seed: Number(text), seedSource: "DIFFERENTIAL_SEED" }
@@ -280,11 +366,30 @@ export async function readPropertyReports(directory) {
 }
 
 /**
+ * Assigns a reported property name to exactly one call site: a literal site
+ * with that exact name first, else the most specific matching template site
+ * (most literal text). Two equally specific template sites are ambiguous.
+ */
+function assignSite(compiled, name, suite) {
+  const literal = compiled.filter(site => !site.template && site.display === name)
+  if (literal.length > 1) refuse(`${suite} declares "${name}" at more than one call site (${literal.map(site => site.location).join(", ")}); property names must be unique`)
+  if (literal.length === 1) return literal[0]
+  const templates = compiled.filter(site => site.template && site.regex.test(name)).sort((a, b) => b.literalLength - a.literalLength)
+  if (templates.length === 0) return undefined
+  if (templates.length > 1 && templates[0].literalLength === templates[1].literalLength) {
+    refuse(`${suite} property "${name}" matches template call sites ${templates[0].location} and ${templates[1].location} equally; make their names distinguishable`)
+  }
+  return templates[0]
+}
+
+/**
  * Aggregates one suite's harness reports into property records and checks
  * them: recorded seed and scale, no replay mode, case counts at the scaled
- * minimum, every call site covered, nothing unexpected, and the count floor.
+ * minimum, nothing unexpected, every call site covered by its own properties,
+ * and (unless `baseline` is undefined, as when regenerating it) no baselined
+ * site deleted or expanding to fewer properties than recorded.
  */
-export function aggregateSuiteReports({ suite, sites, reports, seed, scale, startedAt }) {
+export function aggregateSuiteReports({ suite, sites, reports, seed, scale, startedAt, baseline }) {
   const compiled = sites.map(site => ({ ...site, regex: new RegExp(site.pattern, "u") }))
   const properties = new Map()
   for (const report of reports) {
@@ -300,22 +405,30 @@ export function aggregateSuiteReports({ suite, sites, reports, seed, scale, star
       const recordedAt = Date.parse(report.recordedAt)
       if (!Number.isFinite(recordedAt) || recordedAt + 1000 < startedAt) refuse(`${suite} property "${name}" was not recorded by this run`)
     }
-    const matches = compiled.filter(site => site.regex.test(name))
-    if (matches.length === 0) refuse(`${suite} reported "${name}", which matches no differential call site in its suite`)
     const existing = properties.get(name)
     if (existing) {
       existing.executions++
       existing.runs += report.runs
       existing.baseRuns = Math.min(existing.baseRuns, report.baseRuns)
-    } else {
-      properties.set(name, { suite, name, sources: [...new Set(matches.map(site => site.location))], executions: 1, baseRuns: report.baseRuns, runs: report.runs })
+      continue
     }
+    const site = assignSite(compiled, name, suite)
+    if (site === undefined) refuse(`${suite} reported "${name}", which matches no differential call site in its suite`)
+    properties.set(name, { suite, name, site: site.location, siteKey: siteKey(site), executions: 1, baseRuns: report.baseRuns, runs: report.runs })
   }
-  const missing = compiled.filter(site => ![...properties.keys()].some(name => site.regex.test(name)))
+  const siteCounts = {}
+  for (const site of compiled) siteCounts[siteKey(site)] = 0
+  for (const property of properties.values()) siteCounts[property.siteKey]++
+  const missing = compiled.filter(site => siteCounts[siteKey(site)] === 0)
   if (missing.length > 0) refuse(`${suite} has no passing evidence for ${missing.map(site => `"${site.display}" (${site.location})`).join(", ")}`)
-  const floor = DF1_MIN_PROPERTIES[suite] ?? 1
-  if (properties.size < floor) refuse(`${suite} proved ${properties.size} distinct properties; at least ${floor} are required`)
-  return [...properties.values()].sort((a, b) => a.name.localeCompare(b.name))
+  if (baseline !== undefined) {
+    const expected = baseline ?? {}
+    const deleted = Object.keys(expected).filter(key => !(key in siteCounts))
+    if (deleted.length > 0) refuse(`${suite} baselined call site(s) no longer exist: ${deleted.map(key => `"${key}"`).join(", ")}; remove them from ${DF1_BASELINE} only with a reviewed removal`)
+    const dropped = Object.entries(expected).filter(([key, count]) => siteCounts[key] < count)
+    if (dropped.length > 0) refuse(`${suite} call site(s) expanded to fewer properties than the baseline: ${dropped.map(([key, count]) => `"${key}" ${siteCounts[key]} < ${count}`).join(", ")}; lower ${DF1_BASELINE} only with a reviewed removal`)
+  }
+  return { properties: [...properties.values()].sort((a, b) => a.name.localeCompare(b.name)), siteCounts }
 }
 
 export function replayInstructions(seed, scales) {
@@ -329,7 +442,7 @@ export function replayInstructions(seed, scales) {
 }
 
 /** The `differential-conformance.json` document. */
-export function composeDf1Artifact({ runId, seed, seedSource, scales, suites, properties, sourceManifest, gateStartedAt, recordedAt = new Date() }) {
+export function composeDf1Artifact({ runId, seed, seedSource, scales, suites, properties, sourceManifest, gateStartedAt, baseline, recordedAt = new Date() }) {
   return {
     schemaVersion: DF1_SCHEMA_VERSION,
     phase: "DF1",
@@ -340,7 +453,7 @@ export function composeDf1Artifact({ runId, seed, seedSource, scales, suites, pr
     seed,
     seedSource,
     scales,
-    minimums: { baseRuns: DF1_MIN_BASE_RUNS, properties: DF1_MIN_PROPERTIES, releaseScales: DF1_MINIMUM_SCALES },
+    minimums: { baseRuns: DF1_MIN_BASE_RUNS, releaseScales: DF1_MINIMUM_SCALES, baseline: { path: DF1_BASELINE, sites: Object.values(baseline.suites).reduce((sum, entries) => sum + Object.keys(entries).length, 0) } },
     suites,
     properties,
     totals: {
@@ -356,7 +469,7 @@ export function composeDf1Artifact({ runId, seed, seedSource, scales, suites, pr
 }
 
 /** Validates a DF1 artifact against the current tree (used by final certification). */
-export async function validateDf1Artifact(artifact, { repositoryRoot, runId, startedAt, minimumScales = DF1_MINIMUM_SCALES }) {
+export async function validateDf1Artifact(artifact, { repositoryRoot, runId, startedAt, minimumScales = DF1_MINIMUM_SCALES, requireRunIdSeed = false }) {
   if (artifact?.schemaVersion !== DF1_SCHEMA_VERSION || artifact.phase !== "DF1") refuse("evidence has the wrong schema or phase")
   if (artifact.runId !== runId) refuse(`evidence belongs to run ${String(artifact.runId)}, not ${runId}`)
   if (artifact.status !== "proven") refuse("evidence is not proven")
@@ -366,12 +479,14 @@ export async function validateDf1Artifact(artifact, { repositoryRoot, runId, sta
   if (!Number.isInteger(artifact.seed) || artifact.seed < 0 || artifact.seed > 0xffffffff) refuse("evidence has no valid recorded seed")
   if (artifact.seedSource === "run-id" && deriveDf1Seed(runId).seed !== artifact.seed) refuse("recorded seed does not match the seed derived from the run ID")
   if (artifact.seedSource !== "run-id" && artifact.seedSource !== "DIFFERENTIAL_SEED") refuse("evidence does not record its seed source")
+  if (requireRunIdSeed && artifact.seedSource !== "run-id") refuse(`release evidence must use the seed derived from its run ID, not ${String(artifact.seedSource)}`)
   const scales = artifact.scales ?? {}
   if (!(scales.core >= minimumScales.core) || !(scales.database >= minimumScales.database)) {
     refuse(`differential volume below the release minimum (core ${String(scales.core)} < ${minimumScales.core} or database ${String(scales.database)} < ${minimumScales.database})`)
   }
   const suites = await df1Suites(repositoryRoot)
   const sites = await requiredCallSites(repositoryRoot, suites)
+  const baseline = await readDf1Baseline(repositoryRoot)
   if (!Array.isArray(artifact.properties)) refuse("evidence lists no properties")
   for (const suite of suites) {
     const recorded = artifact.properties.filter(property => property?.suite === suite.id)
@@ -384,10 +499,12 @@ export async function validateDf1Artifact(artifact, { repositoryRoot, runId, sta
       replayRun: null,
       passed: true,
     }))
-    aggregateSuiteReports({ suite: suite.id, sites: sites[suite.id], reports, seed: artifact.seed, scale: suiteScale(suite, scales), startedAt: undefined })
+    aggregateSuiteReports({ suite: suite.id, sites: sites[suite.id], reports, seed: artifact.seed, scale: suiteScale(suite, scales), startedAt: undefined, baseline: baseline.suites[suite.id] ?? null })
   }
   const unknownSuites = artifact.properties.filter(property => !suites.some(suite => suite.id === property?.suite))
   if (unknownSuites.length > 0) refuse("evidence contains properties of unknown suites")
+  const unknownBaselineSuites = Object.keys(baseline.suites).filter(id => !suites.some(suite => suite.id === id))
+  if (unknownBaselineSuites.length > 0) refuse(`${DF1_BASELINE} names unknown suites ${unknownBaselineSuites.join(", ")}`)
   const expectedPaths = await df1SourcePaths(repositoryRoot)
   const manifest = Array.isArray(artifact.sourceManifest) ? artifact.sourceManifest : []
   const recordedPaths = manifest.map(entry => entry?.path).sort()
@@ -403,14 +520,17 @@ export async function validateDf1Artifact(artifact, { repositoryRoot, runId, sta
   }
 }
 
-/** Reads, freshness-checks, and validates `<artifactRoot>/<runId>/df1/differential-conformance.json`. */
-export async function loadAndValidateDf1Evidence({ repositoryRoot, artifactRoot, runId, startedAt, minimumScales }) {
+/**
+ * Reads, freshness-checks, and validates `<artifactRoot>/<runId>/df1/differential-conformance.json`.
+ * This is the release check, so the seed must be the run-derived one unless a caller opts out.
+ */
+export async function loadAndValidateDf1Evidence({ repositoryRoot, artifactRoot, runId, startedAt, minimumScales, requireRunIdSeed = true }) {
   const path = resolve(artifactRoot, runId, DF1_PHASE, DF1_ARTIFACT)
   let text
   try {
     text = await readFile(path, "utf8")
   } catch (error) {
-    refuse(`no differential evidence at ${posix(relative(repositoryRoot, path))} (${error.code ?? error.message}); run npm run verify:framework:df1 in this certification run`)
+    refuse(`no differential evidence at ${toPosix(relative(repositoryRoot, path))} (${error.code ?? error.message}); run npm run verify:framework:df1 in this certification run`)
   }
   if (startedAt !== undefined && (await stat(path)).mtimeMs + 1000 < startedAt) refuse("differential evidence predates this certification run")
   let artifact
@@ -419,6 +539,6 @@ export async function loadAndValidateDf1Evidence({ repositoryRoot, artifactRoot,
   } catch (error) {
     refuse(`differential evidence is not valid JSON (${error.message})`)
   }
-  await validateDf1Artifact(artifact, { repositoryRoot, runId, startedAt, minimumScales })
+  await validateDf1Artifact(artifact, { repositoryRoot, runId, startedAt, minimumScales, requireRunIdSeed })
   return { path, artifact, sha256: createHash("sha256").update(text).digest("hex") }
 }

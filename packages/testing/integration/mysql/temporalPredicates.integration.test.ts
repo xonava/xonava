@@ -55,4 +55,13 @@ describe("MySQL temporal predicates do not depend on the process or connection t
     // The driver's own text form of a string-mode column (cursor values carry it) compares natively.
     expect(await ids(Predicate.eq("atText", "2024-01-01 10:00:00.000"))).toEqual([1])
   })
+
+  it("compares instants outside DATE/DATETIME's range as constants and never sends offsets", async () => {
+    expect(await ids(Predicate.gt("day", "0500-01-01"))).toEqual([1, 2])
+    expect(await ids(Predicate.eq("day", "0500-01-01"))).toEqual([])
+    expect(await ids(Predicate.lt("at", "9999-12-31T23:00:00-05:00"))).toEqual([1, 2])
+    expect(await ids(Predicate.not(Predicate.gte("atText", "0999-12-31T23:59:59Z")))).toEqual([])
+    // A driver-form literal with an offset compares as text (core compares the hydrated string).
+    expect(await ids(Predicate.eq("atText", "2024-01-01 10:00:00+01:00"))).toEqual([])
+  })
 })

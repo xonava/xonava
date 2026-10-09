@@ -43,14 +43,14 @@ const liteMap = { name: liteRows.name, updatedAt: liteRows.updatedAt }
 describe("predicate compiler literal typing (core comparability)", () => {
   it("compares an instant column with a strict RFC 3339 string as that instant", () => {
     // Before: drizzle's timestamp encoder threw `value.toISOString is not a function`.
-    expect(pgSql(Predicate.eq("updatedAt", "2026-01-01T05:30:00+05:30")).params).toEqual(["2026-01-01T00:00:00.000Z"])
+    expect(pgSql(Predicate.eq("updatedAt", "2026-01-01T05:30:00+05:30")).params).toEqual(["2026-01-01 00:00:00.000+00"])
     expect(my.sqlToQuery(compileMySql(Predicate.gte("updatedAt", "2026-01-01"), myMap)).params).toEqual(["2026-01-01 00:00:00.000"])
     expect(lite.sqlToQuery(compileSqlite(Predicate.lt("updatedAt", "2026-01-01T00:00:00.001Z"), liteMap)).params).toEqual([1767225600001])
   })
 
   it("accepts Date literals as scalars", () => {
     // Before: `Predicate operator eq requires a scalar value`.
-    expect(pgSql(Predicate.eq("updatedAt", new Date("2026-01-01T00:00:00Z"))).params).toEqual(["2026-01-01T00:00:00.000Z"])
+    expect(pgSql(Predicate.eq("updatedAt", new Date("2026-01-01T00:00:00Z"))).params).toEqual(["2026-01-01 00:00:00.000+00"])
   })
 
   it("compiles an unparseable instant literal to UNKNOWN, which NOT keeps UNKNOWN", () => {
@@ -137,7 +137,7 @@ describe("temporal SQL columns compare natively (index-usable) for RFC 3339 lite
   it("PostgreSQL date: full-date and instant literals compare as dates", () => {
     expect(temporalSql(Predicate.eq("day", "2024-01-01"))).toMatchObject({ sql: 'COALESCE("temporal_rows"."day" = $1, FALSE)', params: ["2024-01-01"] })
     expect(temporalSql(Predicate.between("day", { from: "2024-01-01T00:00:00.000Z", to: "2024-01-01T23:59:59.999Z" })))
-      .toMatchObject({ sql: 'COALESCE(("temporal_rows"."day" >= $1 and "temporal_rows"."day" <= $2), FALSE)', params: ["2024-01-01", "2024-01-01T23:59:59.999Z"] })
+      .toMatchObject({ sql: 'COALESCE(("temporal_rows"."day" >= $1 and "temporal_rows"."day" <= $2), FALSE)', params: ["2024-01-01", "2024-01-01 23:59:59.999+00"] })
     expect(temporalSql(Predicate.eq("dayDate", new Date("2024-01-01T00:00:00Z")))).toMatchObject({ params: ["2024-01-01"] })
     // Not RFC 3339: string-mode rows hydrate as strings, so core compares text.
     expect(temporalSql(Predicate.eq("day", "2024-1-1")).sql).toBe('COALESCE((CASE WHEN "temporal_rows"."day" IS NULL THEN NULL ELSE format(\'%s\', "temporal_rows"."day") END COLLATE "C") = $1, FALSE)')
@@ -145,7 +145,7 @@ describe("temporal SQL columns compare natively (index-usable) for RFC 3339 lite
   })
 
   it("PostgreSQL timestamp (string mode) and time: RFC 3339 instants, engine text and clock literals stay native", () => {
-    expect(temporalSql(Predicate.gte("at", "2026-01-01T05:30:00+05:30"))).toMatchObject({ sql: 'COALESCE("temporal_rows"."at" >= $1, FALSE)', params: ["2026-01-01T00:00:00.000Z"] })
+    expect(temporalSql(Predicate.gte("at", "2026-01-01T05:30:00+05:30"))).toMatchObject({ sql: 'COALESCE("temporal_rows"."at" >= $1, FALSE)', params: ["2026-01-01 00:00:00.000+00"] })
     expect(temporalSql(Predicate.gt("at", "2026-01-01 00:00:00+00"))).toMatchObject({ sql: 'COALESCE("temporal_rows"."at" > $1, FALSE)', params: ["2026-01-01 00:00:00+00"] })
     expect(temporalSql(Predicate.eq("at", "soon")).sql).toBe('COALESCE((CASE WHEN "temporal_rows"."at" IS NULL THEN NULL ELSE format(\'%s\', "temporal_rows"."at") END COLLATE "C") = $1, FALSE)')
     expect(temporalSql(Predicate.lt("clock", "10:00:00")).sql).toBe('COALESCE("temporal_rows"."clock" < $1, FALSE)')
@@ -168,16 +168,21 @@ describe("temporal SQL columns compare natively (index-usable) for RFC 3339 lite
 describe("one comparison model for predicates and sort keys", () => {
   // Regression (review H2): enums sorted natively (declaration order) while keyset predicates
   // compared their text, so cursor pages skipped rows; `st::text = 'x'` also defeated the index.
-  it("PostgreSQL enum: native comparisons and sort in declaration order", () => {
+  it("PostgreSQL enum: native equality (index-usable); ordering and sort keys by code point like core", () => {
+    // Regression (second review, MEDIUM): ordering in declaration order disagreed with core, so an ABAC
+    // deny `status lessThan "pending"` (enum pending, approved) let SQL return rows core denies.
+    const textForm = '(CASE WHEN "temporal_rows"."status" IS NULL THEN NULL ELSE format(\'%s\', "temporal_rows"."status") END COLLATE "C")'
     expect(temporalSql(Predicate.eq("status", "draft"))).toMatchObject({ sql: 'COALESCE("temporal_rows"."status" = $1, FALSE)', params: ["draft"] })
-    expect(temporalSql(Predicate.gt("status", "draft")).sql).toBe('COALESCE("temporal_rows"."status" > $1, FALSE)')
-    expect(sortExpression(pgTemporal.status, { dialect: "postgres" })).toBe(pgTemporal.status)
-    // A non-member equals no row (and is never sent to the server, which would reject it).
+    expect(temporalSql(Predicate.in("status", ["zzz", "Active"]))).toMatchObject({ sql: 'COALESCE("temporal_rows"."status" in ($1), FALSE)', params: ["Active"] })
+    expect(temporalSql(Predicate.gt("status", "draft")).sql).toBe(`COALESCE(${textForm} > $1, FALSE)`)
+    expect(temporalSql(Predicate.between("status", { from: "a", to: "m" })).sql).toBe(`COALESCE((${textForm} >= $1 and ${textForm} <= $2), FALSE)`)
+    expect(pg.sqlToQuery(sql`${sortExpression(pgTemporal.status, { dialect: "postgres" })}`).sql).toBe(textForm)
+    // A non-member equals no row (and is never sent to the enum type, which would reject it)...
     expect(temporalSql(Predicate.eq("status", "zzz"))).toMatchObject({ sql: 'COALESCE(("temporal_rows"."status" is null and null), FALSE)', params: [] })
     expect(temporalSql(Predicate.neq("status", "zzz"))).toMatchObject({ sql: 'COALESCE(("temporal_rows"."status" is not null or null), FALSE)', params: [] })
-    expect(temporalSql(Predicate.lt("status", "zzz")).sql).toBe("COALESCE((1 = NULL), FALSE)")
-    expect(temporalSql(Predicate.in("status", ["zzz", "Active"]))).toMatchObject({ sql: 'COALESCE("temporal_rows"."status" in ($1), FALSE)', params: ["Active"] })
-    expect(temporalSql(Predicate.contains("status", "ft")).sql).toBe('COALESCE((CASE WHEN "temporal_rows"."status" IS NULL THEN NULL ELSE format(\'%s\', "temporal_rows"."status") END COLLATE "C") LIKE $1 ESCAPE \'\\\', FALSE)')
+    // ...but orders definitely, by code point, like core.
+    expect(temporalSql(Predicate.lt("status", "zzz"))).toMatchObject({ sql: `COALESCE(${textForm} < $1, FALSE)`, params: ["zzz"] })
+    expect(temporalSql(Predicate.contains("status", "ft")).sql).toBe(`COALESCE(${textForm} LIKE $1 ESCAPE '\\', FALSE)`)
   })
 
   it("PostgreSQL inet and other text-form types: predicates and sort keys both use the text form", () => {
@@ -185,7 +190,8 @@ describe("one comparison model for predicates and sort keys", () => {
     expect(pg.sqlToQuery(sql`${sortExpression(pgTemporal.addr, { dialect: "postgres" })}`).sql).toBe('(CASE WHEN "temporal_rows"."addr" IS NULL THEN NULL ELSE format(\'%s\', "temporal_rows"."addr") END COLLATE "C")')
   })
 
-  it("temporal sort keys are native in every dialect", () => {
+  it("temporal and uuid sort keys are native", () => {
+    expect(sortExpression(pgRows.key, { dialect: "postgres" })).toBe(pgRows.key)
     for (const column of [pgTemporal.day, pgTemporal.at, pgTemporal.clock]) expect(sortExpression(column, { dialect: "postgres" })).toBe(column)
   })
 })
@@ -199,5 +205,48 @@ describe("WHERE clauses stay index-usable", () => {
     expect(pg.sqlToQuery(compiler.compileWhere(Predicate.eq("day", "2024-01-01"))).sql).toBe('("temporal_rows"."day" = $1)')
     expect(pg.sqlToQuery(compiler.compile(Predicate.eq("day", "2024-01-01"))).sql).toBe('COALESCE("temporal_rows"."day" = $1, FALSE)')
     expect(pg.sqlToQuery(compiler.compileWhere(Predicate.literal(false))).sql).toBe("1 = 0")
+  })
+})
+
+describe("temporal literals outside the engine's input range never reach the server", () => {
+  // Regression (second review, LOW-MED): valid RFC 3339 literals made PostgreSQL throw
+  // ("0000-01-01" is out of range in ISO form; offsets beyond ±15:59; "+010000" years).
+  it("PostgreSQL: binds instants in its own input form, with BC and five-digit years", () => {
+    expect(temporalSql(Predicate.eq("day", "0000-01-01")).params).toEqual(["0001-01-01 BC"])
+    expect(temporalSql(Predicate.gt("at", "9999-12-31T23:00:00-05:00")).params).toEqual(["10000-01-01 04:00:00.000+00"])
+    expect(temporalSql(Predicate.lt("at", "0000-06-01T00:00:00Z")).params).toEqual(["0001-06-01 00:00:00.000+00 BC"])
+    expect(temporalSql(Predicate.eq("dayDate", "0000-01-01")).params).toEqual(["0001-01-01 BC"])
+  })
+
+  it("PostgreSQL: engine-text literals outside its input range compare through the text form", () => {
+    const textForm = '(CASE WHEN "temporal_rows"."at" IS NULL THEN NULL ELSE format(\'%s\', "temporal_rows"."at") END COLLATE "C")'
+    for (const literal of ["2024-01-01 10:00:00+99", "2024-01-01 10:00:00+16:00", "0000-12-31 10:00:00+00"]) {
+      expect(temporalSql(Predicate.gt("at", literal)).sql).toBe(`COALESCE(${textForm} > $1, FALSE)`)
+    }
+    expect(temporalSql(Predicate.gt("at", "2024-01-01 10:00:00+15:59")).sql).toBe('COALESCE("temporal_rows"."at" > $1, FALSE)')
+  })
+
+  it("MySQL: instants outside DATE/DATETIME's range compare as constants; offsets are never sent", () => {
+    const rows = mysqlTable("rows", { day: mysqlDate("day"), at: datetime("at", { mode: "string" }) })
+    const map = { day: rows.day, at: rows.at }
+    const query = (node: Parameters<typeof compileMySql>[0]) => my.sqlToQuery(compileMySql(node, map))
+    // Every stored value lies after year 0500 and before year 10000.
+    expect(query(Predicate.eq("day", "0500-01-01"))).toMatchObject({ sql: "COALESCE((`rows`.`day` is null and null), FALSE)", params: [] })
+    expect(query(Predicate.gt("day", "0500-01-01"))).toMatchObject({ sql: "COALESCE((`rows`.`day` is not null or null), FALSE)", params: [] })
+    expect(query(Predicate.lt("at", "9999-12-31T23:00:00-05:00"))).toMatchObject({ sql: "COALESCE((`rows`.`at` is not null or null), FALSE)", params: [] })
+    expect(query(Predicate.gte("at", "9999-12-31T23:00:00-05:00"))).toMatchObject({ sql: "COALESCE((`rows`.`at` is null and null), FALSE)", params: [] })
+    // A driver-form literal with an offset is not passed to the server: it compares as text.
+    expect(query(Predicate.eq("at", "2024-01-01 10:00:00+01:00")).sql).toBe("COALESCE((CONVERT(`rows`.`at` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)")
+    expect(query(Predicate.eq("at", "2024-01-01 10:00:00.000")).sql).toBe("COALESCE(`rows`.`at` = ?, FALSE)")
+  })
+})
+
+describe("custom compilers", () => {
+  // Regression (second review, LOW): compileWhere bypassed a subclass's compile().
+  it("compileWhere delegates to an overridden compile", () => {
+    class Audited extends DrizzlePredicateCompiler {
+      override compile(): ReturnType<DrizzlePredicateCompiler["compile"]> { return sql`audited` }
+    }
+    expect(pg.sqlToQuery(new Audited(pgTemporalMap, { dialect: "postgres" }).compileWhere(Predicate.eq("day", "2024-01-01"))).sql).toBe("audited")
   })
 })

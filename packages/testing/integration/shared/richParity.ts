@@ -61,7 +61,7 @@ export const LITERAL_DOMAINS: ValueDomains = {
    * an instant or a string: not portable, so not generated (see
    * docs/spec/persistence/predicates.md, "Temporal columns").
    */
-  date: [...RECORD_DOMAINS.date, "2026-02-30", "2026-1-1"],
+  date: [...RECORD_DOMAINS.date, "2026-02-30", "2026-1-1", "0000-01-01", "0999-12-31", "9999-12-31"],
   string: [...RECORD_DOMAINS.string, "a%", "%a", "ft", "😀", "aa", "éz"],
   datetime: [
     ...RECORD_DOMAINS.datetime,
@@ -72,6 +72,13 @@ export const LITERAL_DOMAINS: ValueDomains = {
     "2026-02-30T00:00:00Z",
     "2026-01-01 00:00:00Z",
     "yesterday",
+    // Outside engine input ranges: year 0 (1 BC), year 10000 after the offset, MySQL's 1000-9999.
+    "0000-01-01T00:00:00Z",
+    "9999-12-31T23:00:00-05:00",
+    "0999-12-31T23:59:59Z",
+    // Driver text forms with offsets PostgreSQL rejects (not RFC 3339: UNKNOWN for Date-hydrated rows).
+    "2024-01-01 10:00:00+99",
+    "2024-01-01 10:00:00+16:00",
   ],
 }
 
@@ -82,11 +89,10 @@ export type ParityRecord = Record<string, unknown> & { id: number }
  * are `Date`, tags are string arrays, and absent keys are NULL.
  */
 /**
- * A dialect-specific string-hydrated column beyond {@link PARITY_FIELDS}.
- * `order: "core"` compares and sorts by code point like any string field;
- * `order: "native"` (PostgreSQL enums) compares and sorts in the engine's own
- * order, so ordering comparisons are not generated against core, and cursor
- * pagination is checked for self-consistency with the repository's ORDER BY.
+ * A dialect-specific string-hydrated column beyond {@link PARITY_FIELDS}
+ * (PostgreSQL enum, inet, uuid, ...). It gets every string operator,
+ * ordering included, and is ordered and paginated against core's code-point
+ * order: whatever a column type's native comparison, SQL must agree with core.
  */
 export interface ExtraField {
   readonly key: string
@@ -94,7 +100,6 @@ export interface ExtraField {
   readonly values: readonly string[]
   /** Literal values for predicates (should include non-stored strings). */
   readonly literals: readonly string[]
-  readonly order: "core" | "native"
 }
 
 export function generateDataset(seed = hashSeed("rich-parity-dataset"), randomRows = 200, extraFields: readonly ExtraField[] = []): ParityRecord[] {
@@ -227,16 +232,9 @@ export async function checkPredicateParity(driver: ParityDriver, rows: readonly 
   return stats
 }
 
-const ORDERED_OPS = new Set(["gt", "lt", "gte", "lte", "between"])
-
-/** A condition on an extra field; native-order fields get no ordering comparisons (their order is not core's). */
+/** Any string condition on an extra field, ordering comparisons included. */
 function extraCondition(rng: Rng, field: ExtraField): PredicateNode {
-  const options = { portable: true, emptyTests: true, fields: [{ key: field.key, type: "string" as const }], domains: { string: field.literals } }
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const condition = generateCondition(rng, options)
-    if (field.order === "core" || condition.kind !== "condition" || !ORDERED_OPS.has(condition.op)) return condition
-  }
-  return Predicate.eq(field.key, rng.pick(field.literals))
+  return generateCondition(rng, { portable: true, emptyTests: true, fields: [{ key: field.key, type: "string" }], domains: { string: field.literals } })
 }
 
 // ---------------------------------------------------------------------------
@@ -284,16 +282,14 @@ export interface OrderingCase {
   field: string
   direction: "asc" | "desc"
   nulls?: "first" | "last"
-  /** The engine's own order (PostgreSQL enum): checked for self-consistency, not against core. */
-  native?: boolean
 }
 
 export function orderingCases(driver: ParityDriver): OrderingCase[] {
   const out: OrderingCase[] = []
-  const fields = [...SCALAR_FIELDS.map((field) => ({ key: field.key, native: false })), ...(driver.extraFields ?? []).map((field) => ({ key: field.key, native: field.order === "native" }))]
+  const fields = [...SCALAR_FIELDS.map((field) => field.key), ...(driver.extraFields ?? []).map((field) => field.key)]
   for (const field of fields) {
     for (const direction of ["asc", "desc"] as const) {
-      const base = { field: field.key, direction, ...(field.native ? { native: true } : {}) }
+      const base = { field, direction }
       if (driver.explicitNulls) for (const nulls of ["first", "last"] as const) out.push({ ...base, nulls })
       else out.push(base)
     }
@@ -330,8 +326,7 @@ export async function orderingReport(driver: ParityDriver, rows: readonly Parity
   const scoped = filter ? rows.filter((row) => evaluatePredicate(row, filter)) : [...rows]
   // The order of a cursor page (one page holding every row): offset pages only promise a deterministic order.
   const sqlOrder = async () => (await driver.findMany({ ...(filter ? { filter } : {}), sort, pagination: { kind: "cursor", direction: "after", limit: PAGE_ALL } })).rows.map((row) => row.id)
-  // A native order has no core reference: the repository's own ORDER BY is the order every other aspect must reproduce.
-  const expected = spec.native ? await sqlOrder() : coreOrder(scoped, sort).map((row) => row.id)
+  const expected = coreOrder(scoped, sort).map((row) => row.id)
   const show = (id: number | undefined) => (id === undefined ? "<end>" : `${id}:${describeValue(rows.find((row) => row.id === id)?.[spec.field] ?? null)}`)
   const firstDifference = (actual: readonly number[]): string | undefined => {
     const index = expected.findIndex((id, position) => actual[position] !== id)
@@ -348,26 +343,11 @@ export async function orderingReport(driver: ParityDriver, rows: readonly Parity
     }
   }
 
-  if (spec.native) {
-    await attempt("order", async () => (JSON.stringify([...expected].sort((a, b) => a - b)) === JSON.stringify(scoped.map((row) => row.id).sort((a, b) => a - b)) ? undefined : "ORDER BY does not return exactly the scoped rows"))
-  } else {
-    await attempt("order", async () => firstDifference(await sqlOrder()))
-  }
+  await attempt("order", async () => firstDifference(await sqlOrder()))
 
-  // Keyset boundaries must split the order exactly: evaluated by core, or for a native order by the database.
+  // Keyset boundaries evaluated by core must split the core order exactly.
   await attempt("keyset", async () => {
     const byId = new Map(rows.map((row) => [row.id, row]))
-    if (spec.native) {
-      for (let index = 0; index < expected.length; index++) {
-        const boundary = byId.get(expected[index]!)!
-        const after = compileCursorPredicate(sort, { direction: "after", values: sort.map((item) => cursorValue(boundary[item.field])) })
-        const selected = new Set(await driver.selectIds(filter ? Predicate.and(filter, after) : after))
-        for (let other = 0; other < expected.length; other++) {
-          if (selected.has(expected[other]!) !== other > index) return `database keyset predicate after ${show(expected[index])} ${selected.has(expected[other]!) ? "admits" : "rejects"} ${show(expected[other])} at position ${other}`
-        }
-      }
-      return undefined
-    }
     for (let index = 0; index < expected.length; index++) {
       const boundary = byId.get(expected[index]!)!
       const after = compileCursorPredicate(sort, { direction: "after", values: sort.map((item) => cursorValue(boundary[item.field])) })

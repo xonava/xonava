@@ -2,11 +2,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import pg from "pg"
 import { drizzle } from "drizzle-orm/node-postgres"
 import { date, integer, pgEnum, pgTable, text, timestamp } from "drizzle-orm/pg-core"
-import { Predicate, type PredicateNode } from "core/domain"
+import { Predicate, createAbacAuthorizer, type PredicateNode } from "core/domain"
 import type { UnversionedEntityDescriptor } from "core/persistence"
 import { createDrizzleRepository } from "adapters/drizzle-pg"
 import { DrizzlePredicateCompiler } from "../../../adapters/src/drizzle-shared/predicateCompiler.js"
 import { predicateFromFilterCondition } from "../../../adapters/src/http/filterInterop.js"
+import { bindPolicies, makePolicy } from "../../../core/src/__tests__/differential/abacArbitraries.js"
 import { pgCertificationUrl } from "./database.js"
 
 /**
@@ -73,6 +74,38 @@ describe("PostgreSQL temporal and enum predicates (native, index-usable)", () =>
     expect(await ids(Predicate.eq("st", "draft"))).toEqual([1])
     expect(await ids(Predicate.eq("st", "nope"))).toEqual([])
     expect(await ids(Predicate.not(Predicate.eq("st", "nope")))).toHaveLength(ROWS)
+  })
+
+  it("orders enum values by code point, so an ABAC scope agrees with the record decision", async () => {
+    // Declaration order is locked < draft < Active; code-point order is Active < draft < locked.
+    const all = await db.select({ id: rows.id, st: rows.st }).from(rows)
+    expect(await ids(Predicate.lt("st", "draft"))).toEqual(all.filter((row) => row.st === "Active").map((row) => row.id).sort((a, b) => a - b))
+    // Second review: a deny `st lessThan <literal>` must deny exactly what the record decision denies,
+    // for a member ("draft": natively only "locked" is below it) and a non-member ("e": only "locked"
+    // is not below it by code point).
+    for (const literal of ["draft", "e"]) {
+      const authorizer = createAbacAuthorizer(await bindPolicies([
+        makePolicy({ id: "deny", effect: "deny", priority: 10, actions: ["read"], when: Predicate.lt("st", literal) }),
+        makePolicy({ id: "allow", effect: "allow", priority: 1, actions: ["read"] }),
+      ]))
+      const scope = authorizer.authorizeCollection("read").scope
+      const allowed = all.filter((row) => authorizer.canRecordAction("read", row)).map((row) => row.id).sort((a, b) => a - b)
+      expect(allowed.length).toBeGreaterThan(0)
+      expect(allowed.length).toBeLessThan(all.length)
+      expect(await ids(scope), literal).toEqual(allowed)
+    }
+  })
+
+  it("never sends a temporal literal PostgreSQL would reject", async () => {
+    const nonNull = ROWS
+    expect(await ids(Predicate.eq("day", "0000-01-01"))).toEqual([])
+    expect(await ids(Predicate.gt("day", "0000-01-01"))).toHaveLength(nonNull)
+    expect(await ids(Predicate.gt("at", "9999-12-31T23:00:00-05:00"))).toEqual([])
+    expect(await ids(Predicate.lt("at", "0000-06-01T00:00:00Z"))).toEqual([])
+    for (const literal of ["2024-01-01 10:00:00+99", "2024-01-01 10:00:00+16:00", "0000-12-31 10:00:00+00"]) {
+      await expect(ids(Predicate.gt("at", literal))).resolves.toBeDefined()
+    }
+    expect(await ids(Predicate.eq("at", "2024-01-01 15:59:00+05:59"))).toEqual([1])
   })
 
   it("plans index scans for date, timestamptz, enum and text predicates", async () => {

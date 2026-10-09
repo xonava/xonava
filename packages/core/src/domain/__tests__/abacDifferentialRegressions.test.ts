@@ -5,7 +5,7 @@ import { evaluateAbacRecordCapability } from "../abacDecision"
 import { assertPolicyWritableFields, hasRecordDependentFieldWrite, projectResponseRecord, resolveFieldQueryDenials, resolveFieldReadOverrides } from "../fieldAccess"
 import { parseFieldAccessStrict } from "../abacPolicySchema"
 import { ForbiddenError, ValidationError } from "../errors"
-import { enforceAbacWrite } from "../abacWrite"
+import { enforceAbacWrite, markAbacPreImage } from "../abacWrite"
 import { Predicate, type PredicateNode } from "../predicate"
 import type { NormalizedAbacPolicy, VerifiedAbacPolicyBundle } from "../abacTypes"
 import type { ParsedPolicyPayload, PolicyFilterClause } from "../abacPolicySchema"
@@ -209,5 +209,24 @@ describe("regression: hasRecordDependentFieldWrite over-flagged a single conditi
     const own = policy({ id: "own", priority: 5, actions: ["update"], when: Predicate.eq("ownerId", "u1") })
     expect(hasRecordDependentFieldWrite([restricted, own], MODULE, "update")).toBe(true)
     expect(hasRecordDependentFieldWrite([own, { ...own, source: { ...own.source, policyId: "own2" } }], MODULE, "update")).toBe(false)
+  })
+})
+
+describe("regression: the date-format check validated the stored pre-image, making rows with legacy dates unrepairable", () => {
+  const allow = policy({ id: "allow", priority: 1, actions: ["update"] })
+  const stored = { dueOn: "2024-01-15T00:00:00.000Z", name: "n" }
+  async function dated(): Promise<VerifiedAbacPolicyBundle> {
+    return bindAbacSecurityDigest({
+      mode: "tenant", moduleKey: MODULE, policies: [allow], context: { tenantId: "t1" }, defaultEffect: "deny",
+      fieldCatalog: { dueOn: { key: "dueOn", type: "date", operators: [] } },
+    })
+  }
+
+  it("checks only written values: a branded pre-image and an explicit `existing` are never format-checked", async () => {
+    const verified = await dated()
+    expect(() => enforceAbacWrite({ bundle: verified, action: "update", record: markAbacPreImage({ ...stored }), changedFields: ["dueOn"] })).not.toThrow()
+    expect(() => enforceAbacWrite({ bundle: verified, action: "update", record: { ...stored, dueOn: "2024-01-20" }, existing: stored, changedFields: ["dueOn"] })).not.toThrow()
+    expect(() => enforceAbacWrite({ bundle: verified, action: "update", record: { ...stored }, changedFields: ["dueOn"] })).toThrow(ValidationError)
+    expect(() => enforceAbacWrite({ bundle: verified, action: "update", record: { ...stored, dueOn: "2024-01-20T00:00:00.000Z" }, existing: stored, changedFields: ["dueOn"] })).toThrow(ValidationError)
   })
 })

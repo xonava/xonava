@@ -97,6 +97,21 @@ export function evaluateWriteAccessForRecordDetailed(args: {
 
 const CALENDAR_DATE = /^\d{4}-\d{2}-\d{2}$/
 
+const preImages = new WeakSet<object>()
+
+/**
+ * Brands a record as the durable PRE-image of an update, for callers that can
+ * only pass one image per enforcement call (the HTTP AbacWriteEnforcer). The
+ * record decision and field-write tier are enforced on it as usual; only the
+ * written-value date-format check is skipped, because its values were not
+ * written by this request. Framework-internal: brand only rows read from
+ * storage, never request data. The brand is identity-based (a copy is unbranded).
+ */
+export function markAbacPreImage<T extends Record<string, unknown>>(record: T): T {
+  preImages.add(record)
+  return record
+}
+
 /**
  * A written string for a catalog `date` field must be exactly YYYY-MM-DD.
  * Policy literals for date fields are calendar dates and string values are
@@ -133,7 +148,12 @@ export function enforceAbacWrite(args: {
   changedFields?: string[]
 }): void {
   assertVerifiedAbacBundle(args.bundle)
-  if (args.action !== "delete") assertCanonicalDateValues(args.bundle, args.record, args.changedFields ?? Object.keys(args.record))
+  // Only written values are format-checked: a stored pre-image (passed as
+  // `existing`, or as a `record` branded with markAbacPreImage) is not, so a
+  // row stored with a legacy date spelling can still be repaired.
+  if (args.action !== "delete" && !preImages.has(args.record)) {
+    assertCanonicalDateValues(args.bundle, args.record, args.changedFields ?? Object.keys(args.record))
+  }
   if (args.action !== "delete") {
     assertPolicyWritableFields({
       policies: args.bundle.policies,

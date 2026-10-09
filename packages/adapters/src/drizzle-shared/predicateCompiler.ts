@@ -47,13 +47,20 @@ export type DrizzleColumnMap = Record<string, AnyColumn>
  *   date or date-time (or a Date), and also for the engine's own text form of
  *   the type (string-mode columns hydrate it, so cursor values carry it). The
  *   instant is bound in a fixed, time-zone-free form (never through the
- *   driver's local-time Date serialization). Any other string compares with
+ *   driver's local-time Date serialization): PostgreSQL's own input form
+ *   (BC and five-digit years included); on MySQL a UTC literal, or a constant
+ *   comparison for instants outside DATE/DATETIME's 1000-9999 range (every
+ *   stored value lies inside it). Engine-text literals are passed through only
+ *   when the engine accepts them (PostgreSQL years 0001-9999 and offsets up
+ *   to ±15:59; on MySQL no offset at all). Any other string compares with
  *   the column's text form when rows hydrate as strings, and is UNKNOWN when
  *   rows hydrate as Dates. A date column compares as a calendar date: compare
  *   it with full-date literals; a date-time literal is cast by the engine.
- * - PostgreSQL enums compare natively in declaration order (index-usable); a
- *   literal that is not a member equals nothing, and ordering against it is
- *   UNKNOWN.
+ * - PostgreSQL enums compare natively for equality and membership
+ *   (index-usable; a literal that is not a member equals nothing). Ordering
+ *   comparisons and sort keys use the text form, by code point, exactly like
+ *   core (declaration order would disagree with core: an ABAC `lessThan` scope
+ *   would select rows the record decision denies).
  * - PostgreSQL uuid compares natively for canonical lowercase literals and
  *   through its text form otherwise. Other string-hydrated types without a
  *   portable native order (inet, interval, ...) compare and sort through their
@@ -125,28 +132,51 @@ function classify(column: AnyColumn, dialect: PredicateDialect): ColumnInfo {
 }
 
 const UUID_TEXT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-/** PostgreSQL/MySQL text output of a timestamp: `YYYY-MM-DD HH:MM:SS[.f][+HH[:MM]]`. */
-const ENGINE_TIMESTAMP_TEXT = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})(\.\d{1,6})?([+-]\d{2}(:\d{2}){0,2})?$/
+/** PostgreSQL/MySQL text output of a timestamp: `YYYY-MM-DD HH:MM:SS[.f][+HH[:MM[:SS]]]`. */
+const ENGINE_TIMESTAMP_TEXT = /^(\d{4})(-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})(\.\d{1,6})?(?:[+-](\d{2})(?::(\d{2}))?(?::(\d{2}))?)?$/
 const TIME_TEXT = /^([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d{1,6})?$/
 
-function isEngineTimestampText(value: string): boolean {
+/** Whether the engine accepts this text form of a timestamp as input (so it is never a server error). */
+function isEngineTimestampText(value: string, dialect: PredicateDialect): boolean {
   const match = ENGINE_TIMESTAMP_TEXT.exec(value)
-  return match !== null && parseRfc3339Timestamp(`${match[1]}T${match[2]}Z`) !== null
+  if (match === null || parseRfc3339Timestamp(`${match[1]}${match[2]}T${match[3]}Z`) === null) return false
+  const year = Number(match[1])
+  const hasOffset = match[5] !== undefined
+  if (dialect === "mysql") return !hasOffset && year >= 1000
+  // PostgreSQL rejects year 0 in ISO form and displacements beyond ±15:59(:59).
+  return year >= 1 && (!hasOffset || (Number(match[5]) <= 15 && Number(match[6] ?? "0") <= 59 && Number(match[7] ?? "0") <= 59))
 }
 
 function pad(value: number, width = 2): string {
   return String(value).padStart(width, "0")
 }
 
-/** `YYYY-MM-DD` when the instant is a UTC midnight in years 0000-9999. */
-function utcCalendarDate(time: number): string | undefined {
-  const iso = new Date(time).toISOString()
-  return /^\d{4}-\d{2}-\d{2}T00:00:00\.000Z$/.test(iso) ? iso.slice(0, 10) : undefined
+function isUtcMidnight(date: Date): boolean {
+  return date.getUTCHours() === 0 && date.getUTCMinutes() === 0 && date.getUTCSeconds() === 0 && date.getUTCMilliseconds() === 0
 }
 
-function mysqlDateTime(time: number): string {
+function clockText(date: Date): string {
+  return `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}.${pad(date.getUTCMilliseconds(), 3)}`
+}
+
+/** An instant in PostgreSQL's input form: astronomical year 0 is 1 BC; years past 9999 keep all digits. */
+function postgresInstant(time: number, calendarDate: boolean): string {
   const date = new Date(time)
-  return `${pad(date.getUTCFullYear(), 4)}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}.${pad(date.getUTCMilliseconds(), 3)}`
+  const year = date.getUTCFullYear()
+  const era = year >= 1 ? "" : " BC"
+  const day = `${pad(year >= 1 ? year : 1 - year, 4)}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`
+  if (calendarDate && isUtcMidnight(date)) return `${day}${era}`
+  return `${day} ${clockText(date)}+00${era}`
+}
+
+/** MySQL DATE/DATETIME support years 1000-9999; every stored value lies inside. */
+function mysqlInstant(time: number, calendarDate: boolean): string | typeof BELOW_RANGE | typeof ABOVE_RANGE {
+  const date = new Date(time)
+  const year = date.getUTCFullYear()
+  if (year < 1000) return BELOW_RANGE
+  if (year > 9999) return ABOVE_RANGE
+  const day = `${pad(year, 4)}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`
+  return calendarDate && isUtcMidnight(date) ? day : `${day} ${clockText(date)}`
 }
 
 /** The left/right of one comparison, or why there is none. */
@@ -154,6 +184,12 @@ type Operand =
   | { readonly left: AnyColumn | SQL<unknown>; readonly right: unknown }
   | typeof INCOMPARABLE
   | typeof NOT_A_MEMBER
+  | typeof BELOW_RANGE
+  | typeof ABOVE_RANGE
+
+/** An instant before / after every value the column can store (a constant comparison). */
+const BELOW_RANGE = Symbol("belowRange")
+const ABOVE_RANGE = Symbol("aboveRange")
 
 /** A literal that cannot be compared with the column's values: the comparison is UNKNOWN. */
 const INCOMPARABLE = Symbol("incomparable")
@@ -203,7 +239,7 @@ class Comparison {
   /** The sort key consistent with every ordered comparison of this column. */
   sortKey(): AnyColumn | SQL<unknown> {
     if (this.info.cls === "text") return this.textOrdered()
-    if (this.info.cls === "textual") return this.textForm()
+    if (this.info.cls === "textual" || this.info.cls === "enum") return this.textForm()
     return this.column
   }
 
@@ -241,6 +277,8 @@ class Comparison {
         return UUID_TEXT.test(value) ? { left: column, right: value } : { left: this.textForm(), right: value }
       case "enum":
         if (typeof value !== "string") return INCOMPARABLE
+        // Ordering is by code point, like core; only equality may use the enum's native type.
+        if (purpose === "ordered") return { left: this.textForm(), right: value }
         return this.info.enumValues?.includes(value) ? { left: column, right: value } : NOT_A_MEMBER
       case "temporal": return this.temporalOperand(value)
       default: return { left: column, right: value }
@@ -256,30 +294,28 @@ class Comparison {
     else return INCOMPARABLE
     if (time !== null) {
       if (temporal === "time") return INCOMPARABLE
-      return { left: column, right: this.bindInstant(time) }
+      return this.bindInstant(time)
     }
     if (typeof value !== "string") return INCOMPARABLE
     // The engine's own text form (what string-mode rows and their cursor values carry).
     if ((this.dialect === "postgres" || this.dialect === "mysql") && !hydratesDate) {
-      if (temporal === "timestamp" && isEngineTimestampText(value)) return { left: column, right: new Param(value) }
+      if (temporal === "timestamp" && isEngineTimestampText(value, this.dialect)) return { left: column, right: new Param(value) }
       if (temporal === "time" && TIME_TEXT.test(value)) return { left: column, right: new Param(value) }
     }
     return hydratesDate ? INCOMPARABLE : { left: this.textForm(), right: value }
   }
 
   /** A time-zone-free literal for the instant, bound without the driver's Date serialization. */
-  private bindInstant(time: number): unknown {
+  private bindInstant(time: number): Operand {
     const { temporal } = this.info
-    if (this.dialect === "postgres" && temporal !== "epoch") {
-      if (temporal === "date") return new Param(utcCalendarDate(time) ?? new Date(time).toISOString())
-      return new Param(new Date(time).toISOString())
-    }
+    const column = this.column
+    if (this.dialect === "postgres" && temporal !== "epoch") return { left: column, right: new Param(postgresInstant(time, temporal === "date")) }
     if (this.dialect === "mysql" && temporal !== "epoch") {
-      if (temporal === "date") return new Param(utcCalendarDate(time) ?? mysqlDateTime(time))
-      return new Param(mysqlDateTime(time))
+      const literal = mysqlInstant(time, temporal === "date")
+      return typeof literal === "string" ? { left: column, right: new Param(literal) } : literal
     }
     // SQLite/generic: Date-hydrated columns encode Dates themselves.
-    return this.info.hydratesDate ? new Date(time) : new Param(new Date(time).toISOString())
+    return { left: column, right: this.info.hydratesDate ? new Date(time) : new Param(new Date(time).toISOString()) }
   }
 }
 
@@ -356,13 +392,23 @@ function compileCondition(columnMap: DrizzleColumnMap, condition: PredicateCondi
   const { cls } = comparison.info
   // Equality to no row: FALSE, or UNKNOWN for a NULL value.
   const equalsNothing = () => sql`(${column} is null and null)`
+  // TRUE for every non-NULL value (UNKNOWN for NULL).
+  const holdsForAll = () => sql`(${column} is not null or null)`
   const compare = (operator: typeof eq, value: PredicatePrimitive | undefined, purpose: "exact" | "ordered"): SQL<unknown> => {
     const operand = comparison.operand(value, purpose)
     if (operand === INCOMPARABLE) return unknown()
     if (operand === NOT_A_MEMBER) {
       if (operator === eq) return equalsNothing()
-      if (operator === ne) return sql`(${column} is not null or null)`
+      if (operator === ne) return holdsForAll()
       return unknown()
+    }
+    if (operand === BELOW_RANGE || operand === ABOVE_RANGE) {
+      // Every stored value is greater than a literal below the range, and smaller than one above it.
+      const valueIsGreater = operand === BELOW_RANGE
+      if (operator === eq) return equalsNothing()
+      if (operator === ne) return holdsForAll()
+      const holds = operator === gt || operator === gte ? valueIsGreater : !valueIsGreater
+      return holds ? holdsForAll() : equalsNothing()
     }
     return operator(operand.left as AnyColumn, operand.right as never)
   }
@@ -470,6 +516,8 @@ export class DrizzlePredicateCompiler implements PredicateCompiler<SQL<unknown>>
    * (a root COALESCE(..., FALSE) hides them). Never negate or project it.
    */
   compileWhere(filter: PredicateNode): SQL<unknown> {
+    // A subclass that overrides compile() keeps control of its WHERE clauses.
+    if (this.compile !== DrizzlePredicateCompiler.prototype.compile) return this.compile(filter)
     if (filter.kind === "literal") return this.compileNode(filter)
     return sql`(${this.compileNode(filter)})`
   }
@@ -496,6 +544,17 @@ export class DrizzlePredicateCompiler implements PredicateCompiler<SQL<unknown>>
         throw new Error(`Unsupported predicate node kind: ${(filter as PredicateNode).kind}`)
     }
   }
+}
+
+/**
+ * A predicate compiler a repository accepts: anything with `compile`; when it
+ * also offers `compileWhere` (as {@link DrizzlePredicateCompiler} does), WHERE
+ * clauses use that index-usable form.
+ */
+export type DrizzleWhereCompiler = PredicateCompiler<SQL<unknown>> & { compileWhere?: (filter: PredicateNode) => SQL<unknown> }
+
+export function compileWhereClause(compiler: DrizzleWhereCompiler, filter: PredicateNode): SQL<unknown> {
+  return typeof compiler.compileWhere === "function" ? compiler.compileWhere(filter) : compiler.compile(filter)
 }
 
 export function compileDrizzlePredicate(filter: PredicateNode, columnMap: DrizzleColumnMap, options: PredicateCompilerOptions = {}): SQL<unknown> {

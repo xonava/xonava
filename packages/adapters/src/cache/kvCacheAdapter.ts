@@ -25,23 +25,22 @@ const GENERATION_NS_PREFIX = "__cachegen__:"
 /**
  * Previous layout: counters at `__cache__:__generation__:<tag>`, sharing a
  * prefix with tagged values. During a rolling deploy, instances on the previous
- * release read and advance only this key, so this release reads the newer of
- * both counters and advances both. Remove the legacy counter (reads, writes and
- * the clear() exemption) one release after every instance runs this layout.
+ * release read and advance only this key, so this release observes both
+ * counters (see compositeGeneration) and advances both. Remove the legacy
+ * counter (reads, writes and the clear() exemption) one release after every
+ * instance runs this layout.
  */
 const LEGACY_GENERATION_PREFIX = "__generation__:"
 
-/** Orders `${epochMs}:${uuid}` generations; an unparseable value sorts first. */
-function generationTime(generation: string): number {
-  const millis = Number(generation.slice(0, generation.indexOf(":")))
-  return generation.includes(":") && Number.isSafeInteger(millis) ? millis : -1
-}
-
-function newerGeneration(current: string | undefined, legacy: string | undefined): string | undefined {
-  if (current === undefined) return legacy
-  if (legacy === undefined) return current
-  const difference = generationTime(legacy) - generationTime(current)
-  return difference > 0 || (difference === 0 && legacy > current) ? legacy : current
+/**
+ * The observed generation of a tag is the pair of both counters, so a change
+ * to EITHER key fences previously cached values. CacheService compares
+ * generations only by equality and keys values by them; nothing here orders
+ * generations by time, so clock skew between instances cannot hide an advance.
+ * JSON keeps the pair injective; "0" means neither counter exists yet.
+ */
+function compositeGeneration(current: string | undefined, legacy: string | undefined): string {
+  return current === undefined && legacy === undefined ? "0" : JSON.stringify([current ?? null, legacy ?? null])
 }
 const REVISION_PREFIX = "__revision__:"
 /** Cloudflare KV rejects an expirationTtl below 60 seconds. */
@@ -245,7 +244,7 @@ export class KvCacheAdapter implements CacheAdapter {
       // Also read the previous layout: an upgrade must never reset a generation,
       // and an instance still on the previous release advances only that key.
       const legacy = await this.kv.get<unknown>(legacyGenerationKey(tag), { type: "json" })
-      return newerGeneration(typeof current === "string" ? current : undefined, typeof legacy === "string" ? legacy : undefined) ?? "0"
+      return compositeGeneration(typeof current === "string" ? current : undefined, typeof legacy === "string" ? legacy : undefined)
     } catch (error) {
       throw this.failure("getTagGeneration", error)
     }
@@ -256,10 +255,11 @@ export class KvCacheAdapter implements CacheAdapter {
     // suitable for correctness-critical cache reads.
     try {
       const generation = `${Date.now()}:${crypto.randomUUID()}`
-      await this.kv.put(generationKey(tag), JSON.stringify(generation))
-      // Keep instances on the previous release fenced during a rolling deploy.
+      // Legacy first: instances on the previous release read only that key, and
+      // a reader between the two writes already observes a changed pair.
       await this.kv.put(legacyGenerationKey(tag), JSON.stringify(generation))
-      return generation
+      await this.kv.put(generationKey(tag), JSON.stringify(generation))
+      return compositeGeneration(generation, generation)
     } catch (error) {
       throw this.failure("advanceTagGeneration", error)
     }
