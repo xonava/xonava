@@ -1,0 +1,7 @@
+{"property":"workflow state machine table","seed":1299113930,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:18.422Z"}
+{"property":"workflow state machine invariants","seed":1299113930,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:20.226Z"}
+{"property":"workflow state machine determinism","seed":1299113930,"scale":5,"baseRuns":150,"runs":750,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:21.074Z"}
+{"property":"workflow failure record","seed":1299113930,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:21.352Z"}
+{"property":"workflow stalled attempt predicate","seed":1299113930,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:21.372Z"}
+{"property":"workflow durable size boundary","seed":1299113930,"scale":5,"baseRuns":100,"runs":500,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:21.798Z"}
+{"property":"workflow step result shape","seed":1299113930,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:21.897Z"}

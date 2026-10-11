@@ -1,0 +1,13 @@
+{"property":"cron parse accepts exactly the oracle's expressions with identical field sets","seed":1299113930,"scale":5,"baseRuns":800,"runs":4000,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:00.139Z"}
+{"property":"cron whitespace padding changes neither validity nor the next occurrence","seed":1299113930,"scale":5,"baseRuns":100,"runs":500,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:01.422Z"}
+{"property":"matchesCron equals oracle wall-clock matching in the process zone","seed":1299113930,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:01.491Z"}
+{"property":"getNextOccurrence equals the minute-by-minute oracle","seed":1299113930,"scale":5,"baseRuns":600,"runs":3000,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:01.917Z"}
+{"property":"getNextOccurrence with reject disambiguation throws exactly like the oracle","seed":1299113930,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:02.207Z"}
+{"property":"next occurrence is a right-continuous step function with minute-aligned results","seed":1299113930,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:03.134Z"}
+{"property":"repeated next equals oracle enumeration of a window","seed":1299113930,"scale":5,"baseRuns":150,"runs":750,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:04.280Z"}
+{"property":"computeScheduleOccurrences equals nextRunAt plus oracle matches","seed":1299113930,"scale":5,"baseRuns":250,"runs":1250,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:04.729Z"}
+{"property":"computeScheduleOccurrences guards","seed":1299113930,"scale":5,"baseRuns":100,"runs":500,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:04.760Z"}
+{"property":"adapter toLocalDateTimeParts equals oracle wall clock","seed":1299113930,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:04.849Z"}
+{"property":"adapter localToUtc equals oracle wall-minute inversion","seed":1299113930,"scale":5,"baseRuns":500,"runs":2500,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:05.084Z"}
+{"property":"schedule calculator rejects Invalid Date inputs","seed":1299113930,"scale":5,"baseRuns":60,"runs":300,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:05.111Z"}
+{"property":"shouldFireSchedule decision table","seed":1299113930,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:05.157Z"}
