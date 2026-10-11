@@ -52,8 +52,28 @@ export const SENSITIVE_TELEMETRY_KEY_PATTERNS: readonly string[] = Object.freeze
  */
 export const SENSITIVE_TELEMETRY_KEY_SEGMENTS: readonly string[] = Object.freeze(["auth", "otp"])
 
+/**
+ * Splits a key into lower-case words at camelCase boundaries and at whitespace, `_`, `.` and `-`. A single pass: the equivalent
+ * `/([A-Z]+)([A-Z][a-z])/g` replacement backtracks quadratically on a long run of capitals (200 kB took ~17 s), and keys passed to
+ * the exported isSensitiveTelemetryKey are not length-bounded.
+ */
 function telemetryKeySegments(key: string): string[] {
-  return key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2").toLowerCase().split(/[\s_.-]+/)
+  const upper = (c: string): boolean => c >= "A" && c <= "Z"
+  const lower = (c: string): boolean => c >= "a" && c <= "z"
+  let spaced = ""
+  let copied = 0
+  for (let i = 1; i < key.length; i += 1) {
+    const current = key[i]!
+    if (!upper(current)) continue
+    const previous = key[i - 1]!
+    // "orderID" -> "order ID", "XMLHttp" -> "XML Http": split before a capital that follows a lower-case letter or digit, or that
+    // starts a capitalised word right after another capital.
+    if (lower(previous) || (previous >= "0" && previous <= "9") || (upper(previous) && i + 1 < key.length && lower(key[i + 1]!))) {
+      spaced += key.slice(copied, i) + " "
+      copied = i
+    }
+  }
+  return (spaced + key.slice(copied)).toLowerCase().split(/[\s_.-]+/)
 }
 
 /** Whether a telemetry attribute key names a secret (see SENSITIVE_TELEMETRY_KEY_PATTERNS and SENSITIVE_TELEMETRY_KEY_SEGMENTS). */

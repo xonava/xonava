@@ -22,6 +22,8 @@ function dropCutToken(text: string): string {
   while (end > 0 && !/\s/.test(text[end - 1]!)) end--
   return text.slice(0, end)
 }
+/** Stored when the capped text was one long token that had to be dropped whole, so the failure does not read as an empty message. */
+const TRUNCATED_WORKFLOW_FAILURE_MESSAGE = "Workflow step failed (message truncated)"
 const FAILURE_CODE = /^[A-Z][A-Z0-9_.:-]{0,63}$/
 
 function seal(instance: WorkflowInstance): WorkflowInstance {
@@ -43,7 +45,8 @@ export function createWorkflowFailure(args: { code: string; message: unknown; st
   // step can throw arbitrarily large messages. Only a bounded prefix is ever stored, so only a bounded prefix is sanitized.
   const capped = raw.length > MAX_SANITIZED_INPUT
   const redacted = String(defaultAuditSanitizer(capped ? raw.slice(0, MAX_SANITIZED_INPUT) : raw))
-  const sanitized = capped ? dropCutToken(redacted) : redacted
+  const trimmed = capped ? dropCutToken(redacted) : redacted
+  const sanitized = capped && trimmed.trim() === "" ? TRUNCATED_WORKFLOW_FAILURE_MESSAGE : trimmed
   const characters = Array.from(sanitized)
   const message = characters.length > MAX_WORKFLOW_FAILURE_MESSAGE_LENGTH ? characters.slice(0, MAX_WORKFLOW_FAILURE_MESSAGE_LENGTH).join("") : sanitized
   const attempt = Number.isSafeInteger(args.attempt) && args.attempt >= 0 ? args.attempt : 0

@@ -1,12 +1,12 @@
 import type { Principal } from "../../domain/principal"
 import type { PersistenceProvider } from "../../persistence/provider"
+import { redactSensitiveText } from "./auditRedaction"
 
 export type AuditSanitizer = (value: unknown) => unknown
 export type AuditFieldClassification = "include" | "mask" | "omit"
 export type AuditFieldClassifications = Record<string, AuditFieldClassification>
 
 const SENSITIVE_AUDIT_KEYS = /(?:address|api.?key|auth|birth|card|clinical|diagnos|email|name|note|password|patient|phone|secret|ssn|symptom|token|medical|\bmrn\b)/i
-const SENSITIVE_AUDIT_VALUE = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b|\b(?:\+?\d[ -.]*){10,}\b|\b\d{4}-\d{2}-\d{2}\b/g
 export const MAX_AUDIT_VALUE_DEPTH = 64
 export const MAX_AUDIT_VALUE_NODES = 10_000
 
@@ -22,7 +22,7 @@ function boundedAuditTransform(
 
   const transform = (current: unknown, depth: number): unknown => {
     if (depth > MAX_AUDIT_VALUE_DEPTH || ++nodes > MAX_AUDIT_VALUE_NODES) return "[truncated]"
-    if (typeof current === "string") return mode === "sanitize" ? current.replace(SENSITIVE_AUDIT_VALUE, "[redacted]") : current
+    if (typeof current === "string") return mode === "sanitize" ? redactSensitiveText(current) : current
     if (current === null || typeof current !== "object") return current
     if (ancestors.has(current)) return "[circular]"
 
