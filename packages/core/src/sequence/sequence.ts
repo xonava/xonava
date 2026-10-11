@@ -29,11 +29,12 @@ function zonedFormatter(timeZone: string): Intl.DateTimeFormat {
 }
 
 export function validateSequenceDefinition(value: SequenceDefinition): ValidatedSequenceDefinition {
-  if (!value || !KEY.test(value.name)) throw new ConfigurationError("Sequence name is invalid")
+  if (!value || typeof value.name !== "string" || !KEY.test(value.name)) throw new ConfigurationError("Sequence name is invalid")
   const padding = value.padding ?? 0, reset = value.reset ?? "never"
   if (!Number.isSafeInteger(padding) || padding < 0 || padding > 32) throw new ConfigurationError("Sequence padding must be an integer from 0 to 32")
   if (!periods.includes(reset)) throw new ConfigurationError("Sequence reset period is invalid")
-  if (value.prefix !== undefined && !PREFIX.test(value.prefix)) throw new ConfigurationError("Sequence prefix is invalid")
+  // RegExp#test coerces its argument, so a non-string (an array, null, a number) must be rejected before matching.
+  if (value.prefix !== undefined && (typeof value.prefix !== "string" || !PREFIX.test(value.prefix))) throw new ConfigurationError("Sequence prefix is invalid")
   const timeZone = value.timeZone ?? "UTC"
   if (typeof timeZone !== "string" || timeZone.length > 64) throw new ConfigurationError("Sequence time zone is invalid")
   zonedFormatter(timeZone)
