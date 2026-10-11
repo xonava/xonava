@@ -22,6 +22,24 @@ import { createTelemetryLogger, type TelemetryLogger, type TelemetryPort } from 
 export const MAX_STORED_JOB_PAYLOAD_BYTES = 1024 * 1024
 
 /**
+ * Upper bound, in UTF-8 bytes, of the failure text handed to a store as a job's last error. Handler error messages
+ * are unbounded (an HTTP body, a stack), and a store rejecting an over-long value (MySQL TEXT holds 65,535 bytes)
+ * would leave the failed job running until its lease lapses and then re-run its handler without any backoff.
+ */
+export const MAX_JOB_ERROR_BYTES = 16 * 1024
+const JOB_ERROR_TRUNCATION_MARKER = "... [truncated]"
+
+/** Cuts `message` to at most MAX_JOB_ERROR_BYTES UTF-8 bytes (marker included) without splitting a character. */
+export function boundJobErrorMessage(message: string): string {
+  const encoder = new TextEncoder()
+  const bytes = encoder.encode(message)
+  if (bytes.byteLength <= MAX_JOB_ERROR_BYTES) return message
+  let cut = MAX_JOB_ERROR_BYTES - encoder.encode(JOB_ERROR_TRUNCATION_MARKER).byteLength
+  while (cut > 0 && (bytes[cut]! & 0xc0) === 0x80) cut--
+  return `${new TextDecoder().decode(bytes.subarray(0, cut))}${JOB_ERROR_TRUNCATION_MARKER}`
+}
+
+/**
  * How long a job that no registered definition can run is handed back for
  * another worker (rolling deploys) before it is dead-lettered with
  * UNKNOWN_JOB_DEFINITION. Measured from the job's first consecutive deferral
@@ -329,6 +347,9 @@ async function executeJob(args: DispatcherConfig & { job: StoredJob; log: Dispat
   let renewalInFlight: Promise<void> | undefined
   let resolveLeaseLost: (() => void) | undefined
   const leaseLostPromise = new Promise<never>((_, reject) => { resolveLeaseLost = () => reject(new Error("Job lease was lost")) })
+  // The race below is the only consumer. When execute() throws before the race starts, a lease lost while the failure is
+  // being recorded would otherwise reject with no handler attached and surface as an unhandled rejection.
+  leaseLostPromise.catch(() => undefined)
   const markLeaseLost = (error: unknown): void => {
     if (leaseLost) return
     leaseLost = true
@@ -425,6 +446,7 @@ async function executeJob(args: DispatcherConfig & { job: StoredJob; log: Dispat
       timeoutId = clock.setTimeout?.(callback, timeoutMs)
       if (timeoutId === undefined) timeoutId = setTimeout(callback, timeoutMs)
     })
+    timeoutPromise.catch(() => undefined)
     heartbeatPromise = heartbeat()
     executionPromise = def.execute(execution)
     const executionResult = await Promise.race([executionPromise, timeoutPromise, leaseLostPromise])
@@ -443,7 +465,17 @@ async function executeJob(args: DispatcherConfig & { job: StoredJob; log: Dispat
       return await handleJobError({ job, store, def, retryPolicy, workerId, claimToken: job.claimToken, execution, error: errorMessage(error), failureKind: classifyFailure(error), now: () => clock.now(), log, onTransitionSettled: stopHeartbeat })
     }
     const completeArgs: CompleteJobArgs = { jobId: job.id, workerId, claimToken, attempt: job.currentAttempt }
-    if (executionResult.data) completeArgs.result = executionResult.data
+    if (executionResult.data) {
+      // Stores persist the result as JSON. A result that cannot be serialized would make markSucceeded throw after the
+      // handler already ran, leaving the job running until its lease lapses and then re-executing the handler on every
+      // later attempt. Fail it permanently here instead, once.
+      try {
+        JSON.stringify(executionResult.data)
+      } catch (serializationError) {
+        return await handleJobError({ job, store, def, retryPolicy, workerId, claimToken: job.claimToken, execution, error: `Job result is not JSON-serializable: ${errorMessage(serializationError)}`, failureKind: "permanent", now: () => clock.now(), log, onTransitionSettled: stopHeartbeat })
+      }
+      completeArgs.result = executionResult.data
+    }
     let status: Awaited<ReturnType<JobStore["markSucceeded"]>>
     try {
       status = await store.markSucceeded(completeArgs)
@@ -598,7 +630,8 @@ async function handleJobError(args: {
   /** Called once the durable transition has settled, before any lifecycle hook runs. */
   onTransitionSettled?: () => Promise<void>
 }): Promise<JobOutcome> {
-  const { job, store, def, retryPolicy, workerId, claimToken, execution, error, failureKind, now, log } = args
+  const { job, store, def, retryPolicy, workerId, claimToken, execution, failureKind, now, log } = args
+  const error = boundJobErrorMessage(args.error)
   const settled = async (): Promise<void> => { await args.onTransitionSettled?.() }
   if (failureKind === "cancelled") {
     const status = await markFailedState({ jobId: job.id, workerId, claimToken, error, status: "cancelled", attempt: job.attemptsCompleted + 1 }, store)
