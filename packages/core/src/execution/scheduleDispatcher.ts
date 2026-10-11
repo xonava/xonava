@@ -143,7 +143,7 @@ export async function materializeDueSchedules(args: {
           overlapPolicy: claim.overlapPolicy,
           nextRunAt: claim.nextRunAt,
           lastRunAt: claim.lastRunAt,
-          lastStatus: claim.lastStatus,
+          lastStatus: observedExecutionStatus(claim.lastStatus),
         },
         now,
         priorExecutionStatus: groupPriorExecutionStatus,
@@ -245,7 +245,7 @@ export async function materializeDueSchedules(args: {
             overlapPolicy: claim.overlapPolicy,
             nextRunAt: claim.nextRunAt,
             lastRunAt: claim.lastRunAt,
-            lastStatus: claim.lastStatus,
+            lastStatus: observedExecutionStatus(claim.lastStatus),
           },
           now,
           priorExecutionStatus: lastJobStatus ?? groupPriorExecutionStatus,
@@ -375,6 +375,17 @@ function scheduleFailureRetryAt(claim: FencedScheduleClaim, now: Date, backoff: 
   const sincePreviousFailure = claim.lastStatus === "failed" && claim.lastRunAt ? Math.max(0, now.getTime() - claim.lastRunAt.getTime()) : 0
   const delay = Math.min(backoff.maxDelayMs, Math.max(backoff.initialDelayMs, sincePreviousFailure * 2))
   return new Date(now.getTime() + delay)
+}
+
+/**
+ * Schedule stores mark a claimed schedule `running` as the claim lease marker
+ * and return the status observed BEFORE the claim, so a worker that crashed
+ * while holding the claim makes the next claim observe "running". That marker
+ * is not execution state: whether the previous occurrence is still busy is
+ * decided by the (mandatory) prior-job lookup, never by the lease marker.
+ */
+function observedExecutionStatus(lastStatus: string | null): string | null {
+  return lastStatus === "running" ? null : lastStatus
 }
 
 async function getPriorExecutionStatus(args: {

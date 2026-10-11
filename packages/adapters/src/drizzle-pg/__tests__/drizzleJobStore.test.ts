@@ -127,7 +127,7 @@ describe("PostgreSQL job-store idempotency lookup", () => {
     const runAt = new Date("2026-01-01T00:00:00.000Z")
     const job = { executionScope: { kind: "platform" as const, platformKey: "default" }, jobType: "test.job", jobVersion: 1, payload: { "10": 1, "9": 2 }, idempotencyKey: "job-1", runAt }
     const storedV3 = async (payload: Record<string, unknown>): Promise<string> => {
-      const text = JSON.stringify(canonicalizeValue({ version: 3, job: { ...buildJobFingerprintInput({ ...job, payload }, runAt), runAt: runAt.toISOString() } }))
+      const text = JSON.stringify(canonicalizeValue({ version: 3, job: { ...buildJobFingerprintInput({ ...job, payload }, runAt), maxAttempts: 3, runAt: runAt.toISOString() } }))
       return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))), (byte) => byte.toString(16).padStart(2, "0")).join("")
     }
     const storeWithExisting = (fingerprint: string) => createDrizzleJobStore({

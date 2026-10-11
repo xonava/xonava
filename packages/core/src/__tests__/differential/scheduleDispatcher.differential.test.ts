@@ -23,8 +23,8 @@ import type { JobRequester, JobStatus } from "../../execution/types"
  *  - misfire "fire_now": one run (runAt = now) for the oldest due occurrence, then next occurrence after now
  *  - misfire "queue_all": every due occurrence (oldest first, at most maxQueueAllOccurrences per tick)
  *    runs at its own slot; the schedule stays due while backlog remains
- *  - overlap "skip": busy when the latest earlier job is queued/running (or, without any earlier job,
- *    when the schedule was left "running"); busy drops the run, and within a backlog only the first
+ *  - overlap "skip": busy when the latest earlier job is queued/running (the prior-job lookup alone decides:
+ *    a claim's lastStatus "running" is the store's lease marker, e.g. left by a crashed worker, never execution state); busy drops the run, and within a backlog only the first
  *    occurrence of an idle schedule fires; "allow"/"queue" never drop
  *  - at most one enqueue per idempotency key `schedule:<id>:<occurrence ISO>`; an existing job counts
  *    as that occurrence's run without a second enqueue
@@ -280,7 +280,7 @@ function modelClaim(record: ClaimRecord, ctx: TickContext, faults: StoreFault[])
 
   const lag = now - first
   const dropsBacklog = claim.misfirePolicy.type === "skip" && lag > HOUR
-  const busyOf = (prior: Prior | null): boolean => (prior === null ? claim.lastStatus === "running" : prior === "queued" || prior === "running")
+  const busyOf = (prior: Prior | null): boolean => prior === "queued" || prior === "running"
   const skipsOverlap = claim.overlapPolicy.type === "skip"
   if (dropsBacklog || (skipsOverlap && busyOf(groupPrior))) return skipTo()
 

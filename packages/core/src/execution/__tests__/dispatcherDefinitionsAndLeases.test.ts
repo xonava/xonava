@@ -130,8 +130,8 @@ describe("job definition maxAttempts", () => {
     expect(decodeStoredJobMaxAttempts(JOB_MAX_ATTEMPTS_FROM_DEFINITION)).toBeUndefined()
     expect(decodeStoredJobMaxAttempts(4)).toBe(4)
     expect(decodeStoredJobMaxAttempts("7")).toBe(7)
-    // Fingerprint v3 has always treated an omitted budget as 3; idempotent replays must keep matching.
-    expect(buildJobFingerprintInput({ executionScope: { kind: "system", systemKey: "framework" }, jobType: "x", jobVersion: 1, payload: {} }, now).maxAttempts).toBe(3)
+    // Fingerprint v5 keeps an omitted budget distinct from every explicit number (v3/v4 treated it as 3).
+    expect(buildJobFingerprintInput({ executionScope: { kind: "system", systemKey: "framework" }, jobType: "x", jobVersion: 1, payload: {} }, now).maxAttempts).toBeNull()
   })
 })
 

@@ -218,7 +218,12 @@ export async function dispatchDueJobs(config: DispatcherConfig): Promise<Dispatc
   if (jobs.length === 0) log.debug?.("No jobs to dispatch", { workerId: config.workerId })
 
   for (const job of jobs) {
-    const outcome = await executeJob({ ...config, job, log, clock })
+    // One job's failure outside executeJob's own error paths (a throwing idGenerator or clock, a context that cannot be
+    // built) must stay with that job: rejecting here would strand the other claimed jobs until their leases lapse.
+    const outcome = await executeJob({ ...config, job, log, clock }).catch((error: unknown): JobOutcome => {
+      log.error("Job execution setup failed", { jobId: job.id, jobType: job.jobType, error: errorMessage(error) })
+      return { kind: "lease_lost", error: `Job execution failed before the handler ran: ${errorMessage(error)}` }
+    })
     if (outcome.kind === "succeeded") result.succeeded++
     else if (outcome.kind === "failed") result.failed++
     else if (outcome.kind === "retried") result.retried++

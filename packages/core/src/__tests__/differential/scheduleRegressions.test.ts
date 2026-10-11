@@ -107,6 +107,59 @@ describe("schedule regressions", () => {
     })
   })
 
+  describe("a crashed claim's lease marker is not execution state", () => {
+    // Stores mark a claimed schedule lastStatus "running" as the lease marker and return the status observed BEFORE the
+    // claim, so a reclaim after a worker crash observes "running" even though no job was ever enqueued.
+    function reclaimed(overlap: "skip" | "allow" | "queue", misfire: "skip" | "fire_now" | "queue_all", lastStatus: string | null): FencedScheduleClaim {
+      return {
+        scheduleId: "s1", scope: "platform", executionScope: { kind: "platform", platformKey: "default" }, jobType: "test.job", jobVersion: 1, tenantId: null, payload: "{}",
+        cronExpression: "*/5 * * * *", timezone: "UTC", overlapPolicy: { type: overlap }, misfirePolicy: { type: misfire },
+        nextRunAt: new Date("2026-08-01T10:00:00Z"), lastRunAt: null, lastStatus, claimToken: "claim-2",
+      }
+    }
+    function run(claim: FencedScheduleClaim, jobs: { prior?: Partial<StoredJob> | null; existing?: Partial<StoredJob> | null } = {}) {
+      const advance = vi.fn(async () => true)
+      const scheduleStore: ScheduleStore = { claimDueSchedules: vi.fn(async () => [claim]), advanceSchedule: advance, releaseSchedule: vi.fn(async () => true), renewScheduleLease: vi.fn(async () => true) }
+      const enqueue = vi.fn(async ({ job }: Parameters<JobStore["enqueue"]>[0]) => ({ id: "job-new", idempotencyKey: job.idempotencyKey }) as StoredJob)
+      const jobStore = {
+        getLatestPriorScheduleExecution: vi.fn(async () => (jobs.prior ?? null) as StoredJob | null),
+        getByIdempotencyKey: vi.fn(async () => (jobs.existing ?? null) as StoredJob | null),
+        enqueue,
+      } as unknown as JobStore
+      const result = materializeDueSchedules({ scheduleStore, jobStore, workerId: "w", now: new Date("2026-08-01T10:00:30Z") })
+      return { advance, enqueue, result }
+    }
+
+    it.each(["skip", "fire_now", "queue_all"] as const)("fires the due occurrence of an overlap-skip schedule reclaimed after a crash (misfire %s, no job exists)", async (misfire) => {
+      const { advance, enqueue, result } = run(reclaimed("skip", misfire, "running"))
+      expect((await result).errors).toEqual([])
+      // Before the fix the leftover "running" marker made shouldFireSchedule skip the occurrence: nothing enqueued, advanced as "skipped".
+      expect(enqueue).toHaveBeenCalledTimes(1)
+      expect(advance).toHaveBeenCalledWith(expect.objectContaining({ lastStatus: "fired" }))
+    })
+
+    it("still skips when the prior-job lookup finds a pending, retrying or running job", async () => {
+      for (const status of ["pending", "retrying", "running"] as const) {
+        const { advance, enqueue, result } = run(reclaimed("skip", "fire_now", "running"), { prior: { status } })
+        await result
+        expect(enqueue).not.toHaveBeenCalled()
+        expect(advance).toHaveBeenCalledWith(expect.objectContaining({ lastStatus: "skipped" }))
+      }
+    })
+
+    it("after a crash that followed the enqueue, counts the existing job without enqueueing it twice", async () => {
+      const { advance, enqueue, result } = run(reclaimed("skip", "fire_now", "running"), { existing: { status: "pending" } })
+      await result
+      expect(enqueue).not.toHaveBeenCalled()
+      expect(advance).toHaveBeenCalledWith(expect.objectContaining({ lastStatus: "fired", occurrencesFired: 1 }))
+    })
+
+    it("shouldFireSchedule keeps its public fallback for direct callers", () => {
+      const schedule = { cronExpression: "*/5 * * * *", timezone: "UTC", enabled: true, misfirePolicy: { type: "fire_now" as const }, overlapPolicy: { type: "skip" as const }, nextRunAt: new Date("2026-08-01T10:00:00Z"), lastRunAt: null, lastStatus: "running" }
+      expect(shouldFireSchedule({ schedule, now: new Date("2026-08-01T10:00:30Z") })).toBe("skip")
+    })
+  })
+
   describe("schedule lifecycle windows are strict ISO-8601", () => {
     it.each(["1", "2026", "foo 5", "March 7, 2026", "12/31/2026", "2026-02-30", "2026-02-30T00:00:00Z", "2026-03-07 10:00:00Z", "2026-03-07T10:00:00", "2026-03-07T24:00:00Z", "2026-03-07T10:00:00+25:00", " 2026-03-07"])("rejects %j", (text) => {
       expect(() => compileScheduleLifecycle({ effectiveFrom: text })).toThrow(/effectiveFrom must be an ISO timestamp/)

@@ -6,7 +6,8 @@ import type { JobExecutionScope } from "../../execution/types"
 
 /**
  * Differential test of the job fingerprint against an independent RFC 8785 serializer written here, plus the
- * documented version-3 compatibility (integer-like object keys in JavaScript property order).
+ * documented version-4 (omitted maxAttempts was written as 3) and version-3 (also integer-like object keys in
+ * JavaScript property order) compatibility.
  */
 
 const KEYS = ["0", "1", "2", "9", "10", "11", "100", "4294967294", "4294967295", "-1", "01", "a", "b", "ab", "", "é", "\u{1F600}", "～", "z", "A"]
@@ -41,7 +42,7 @@ function scope(rng: Rng): JobExecutionScope {
 function generateInput(rng: Rng): JobFingerprintInput {
   return {
     executionScope: scope(rng), jobType: rng.pick(["job", "billing.sync", "é", "a:b"]), jobVersion: 1 + rng.int(3), payload: object(rng, 2),
-    runAt: new Date(Date.UTC(2030, 0, 1) + rng.int(5) * 1000 + rng.pick([0, 1, 999])), maxAttempts: rng.pick([1, 3, 5, 2_147_483_647]), priority: rng.pick([0, 1, -1]),
+    runAt: new Date(Date.UTC(2030, 0, 1) + rng.int(5) * 1000 + rng.pick([0, 1, 999])), maxAttempts: rng.pick([null, 1, 3, 5, 2_147_483_647]), priority: rng.pick([0, 1, -1]),
     correlationId: rng.pick([null, "c", "null", ""]), partitionKey: rng.pick([null, "p", ""]), metadata: rng.bool() ? null : object(rng, 1),
   }
 }
@@ -81,8 +82,11 @@ function legacyOrder(value: unknown): string {
 
 const sha256 = (text: string): string => createHash("sha256").update(text, "utf8").digest("hex")
 const material = (input: JobFingerprintInput, version: number): unknown => ({ version, job: { ...input, runAt: input.runAt.toISOString() } })
-const referenceV4 = (input: JobFingerprintInput): string => sha256(jcs(material(input, 4)))
-const referenceV3 = (input: JobFingerprintInput): string => sha256(legacyOrder(material(input, 3)))
+/** Versions 3 and 4 had no encoding for an omitted maxAttempts and wrote 3 for it. */
+const legacyInput = (input: JobFingerprintInput): JobFingerprintInput => ({ ...input, maxAttempts: input.maxAttempts ?? 3 })
+const referenceV5 = (input: JobFingerprintInput): string => sha256(jcs(material(input, 5)))
+const referenceV4 = (input: JobFingerprintInput): string => sha256(jcs(material(legacyInput(input), 4)))
+const referenceV3 = (input: JobFingerprintInput): string => sha256(legacyOrder(material(legacyInput(input), 3)))
 
 function mutate(rng: Rng, input: JobFingerprintInput): JobFingerprintInput {
   switch (rng.int(10)) {
@@ -91,7 +95,8 @@ function mutate(rng: Rng, input: JobFingerprintInput): JobFingerprintInput {
     case 2: return { ...input, jobVersion: input.jobVersion + 1 }
     case 3: return { ...input, payload: { ...input.payload, "added": rng.pick(STRINGS) } }
     case 4: return { ...input, runAt: new Date(input.runAt.getTime() + 1) }
-    case 5: return { ...input, maxAttempts: input.maxAttempts + 1 }
+    // never 3 from an omitted budget: the legacy digests deliberately cannot tell those two apart
+    case 5: return { ...input, maxAttempts: input.maxAttempts === null ? 1 : input.maxAttempts + 1 }
     case 6: return { ...input, priority: input.priority + 1 }
     case 7: return { ...input, correlationId: input.correlationId === null ? "" : null }
     case 8: return { ...input, partitionKey: input.partitionKey === null ? "" : null }
@@ -102,8 +107,8 @@ function mutate(rng: Rng, input: JobFingerprintInput): JobFingerprintInput {
 describe("job fingerprint properties", () => {
   it("equals the sha256 of an independent RFC 8785 serialization of the versioned material", async () => {
     await forAllAsync("job fingerprint: digest matches an independent canonical serializer", generateInput, async (input) => {
-      expect(JOB_FINGERPRINT_VERSION).toBe(4)
-      expect(await fingerprintJob(input)).toBe(referenceV4(input))
+      expect(JOB_FINGERPRINT_VERSION).toBe(5)
+      expect(await fingerprintJob(input)).toBe(referenceV5(input))
     }, { runs: 200 })
   })
 
@@ -129,23 +134,30 @@ describe("job fingerprint properties", () => {
       const digests = await Promise.all(all.map((input) => fingerprintJob(input)))
       for (let left = 0; left < all.length; left++) {
         for (let right = left + 1; right < all.length; right++) {
-          const sameMaterial = jcs(material(all[left]!, 4)) === jcs(material(all[right]!, 4))
+          const sameMaterial = jcs(material(all[left]!, 5)) === jcs(material(all[right]!, 5))
           expect(digests[left] === digests[right], `inputs ${left} and ${right} (same material: ${sameMaterial})`).toBe(sameMaterial)
         }
       }
     }, { runs: 150 })
   })
 
-  it("accepts its own digest and a stored version-3 digest of the same job, and nothing else", async () => {
-    await forAllAsync("job fingerprint: current and legacy version-3 digests match only the same job", (rng) => {
+  it("accepts its own digest and stored version-4 and version-3 digests of the same job, and nothing else", async () => {
+    await forAllAsync("job fingerprint: current and legacy version-4 and version-3 digests match only the same job", (rng) => {
       const input = generateInput(rng)
       return { input, other: mutate(rng, input), twin: permute(rng, input) as JobFingerprintInput }
     }, async ({ input, other, twin }) => {
       const current = await fingerprintJob(input)
       const legacy = referenceV3(input)
+      const legacy4 = referenceV4(input)
+      expect(legacy4).not.toBe(legacy)
+      expect(legacy4).not.toBe(current)
       await expect(jobFingerprintMatches(current, input)).resolves.toBe(true)
       await expect(jobFingerprintMatches(legacy, input)).resolves.toBe(true)
+      await expect(jobFingerprintMatches(legacy4, input)).resolves.toBe(true)
       await expect(jobFingerprintMatches(legacy, twin)).resolves.toBe(true)
+      await expect(jobFingerprintMatches(legacy4, twin)).resolves.toBe(true)
+      await expect(jobFingerprintMatches(legacy4, other)).resolves.toBe(false)
+      await expect(jobFingerprintMatches(referenceV4(other), input)).resolves.toBe(false)
       await expect(jobFingerprintMatches(current, other)).resolves.toBe(false)
       await expect(jobFingerprintMatches(legacy, other)).resolves.toBe(false)
       await expect(jobFingerprintMatches(referenceV3(other), input)).resolves.toBe(false)
@@ -153,5 +165,20 @@ describe("job fingerprint properties", () => {
       await expect(jobFingerprintMatches(current.toUpperCase(), input)).resolves.toBe(false)
       await expect(jobFingerprintMatches(current.slice(1), input)).resolves.toBe(false)
     }, { runs: 200 })
+  })
+})
+
+describe("job fingerprint: omitted attempt budget", () => {
+  it("never confuses an omitted maxAttempts with an explicit number, while legacy digests accept both", async () => {
+    await forAllAsync("job fingerprint: omitted maxAttempts is distinct from every explicit number", (rng) => ({ input: { ...generateInput(rng), maxAttempts: null }, explicit: rng.pick([1, 2, 3, 5, 2_147_483_647]) }), async ({ input, explicit }) => {
+      const omitted = await fingerprintJob(input)
+      const withNumber = { ...input, maxAttempts: explicit }
+      expect(await fingerprintJob(withNumber)).not.toBe(omitted)
+      await expect(jobFingerprintMatches(omitted, withNumber)).resolves.toBe(false)
+      await expect(jobFingerprintMatches(await fingerprintJob(withNumber), input)).resolves.toBe(false)
+      // A stored version-4 digest carries no such distinction for the budget 3 it wrote for an omitted value.
+      await expect(jobFingerprintMatches(referenceV4(input), { ...input, maxAttempts: 3 })).resolves.toBe(true)
+      await expect(jobFingerprintMatches(referenceV4(input), withNumber)).resolves.toBe(explicit === 3)
+    }, { runs: 100 })
   })
 })

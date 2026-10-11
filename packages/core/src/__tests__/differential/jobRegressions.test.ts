@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { DEFAULT_UNKNOWN_DEFINITION_MAX_DEFERRAL_MS, MAX_JOB_ERROR_BYTES, boundJobErrorMessage, dispatchDueJobs } from "../../execution/dispatcher"
-import { buildJobFingerprintInput, fingerprintJob } from "../../execution/jobFingerprint"
+import { buildJobFingerprintInput, fingerprintJob, jobFingerprintMatches } from "../../execution/jobFingerprint"
+import { canonicalJsonString } from "../../serialization/canonicalJson"
 import { createJobRegistry } from "../../execution/jobRegistry"
 import type { JobDefinition, JobStore, NewJob, StoredJob } from "../../execution/types"
 
@@ -112,15 +113,30 @@ describe("unknown-definition deferral window", () => {
 describe("job fingerprint and the attempt budget", () => {
   const job: NewJob = { executionScope: { kind: "system", systemKey: "framework" }, jobType: "job", jobVersion: 1, payload: { a: 1 }, runAt: NOW, idempotencyKey: "k" }
 
-  // NOT FIXED (needs a decision): buildJobFingerprintInput maps an omitted maxAttempts to 3, but the stores persist an
-  // omitted maxAttempts as JOB_MAX_ATTEMPTS_FROM_DEFINITION, i.e. "use the definition's budget". An idempotent re-enqueue
-  // that explicitly asks for 3 attempts therefore matches (and replays) a job whose real budget is the definition's, and
-  // the reverse. Fixing it means a fingerprint version bump plus a compatibility match for stored version-4 values; the
-  // encoding suite (encodingIdentity.test.ts, "documented defaults") currently asserts the old equivalence.
-  it.fails("distinguishes an omitted maxAttempts (definition budget) from an explicit maxAttempts of 3", async () => {
+  // buildJobFingerprintInput used to map an omitted maxAttempts to 3, but the stores persist it as
+  // JOB_MAX_ATTEMPTS_FROM_DEFINITION ("use the definition's budget"), so an idempotent re-enqueue that explicitly
+  // asked for 3 attempts replayed a job whose real budget was the definition's, and the reverse. Fingerprint
+  // version 5 encodes an omitted budget as null; stored version-4 digests are still recognised.
+  it("distinguishes an omitted maxAttempts (definition budget) from an explicit maxAttempts of 3", async () => {
     const omitted = await fingerprintJob(buildJobFingerprintInput(job, NOW))
     const explicit = await fingerprintJob(buildJobFingerprintInput({ ...job, maxAttempts: 3 }, NOW))
     expect(explicit).not.toBe(omitted)
+    expect(buildJobFingerprintInput(job, NOW).maxAttempts).toBeNull()
+    await expect(jobFingerprintMatches(omitted, buildJobFingerprintInput({ ...job, maxAttempts: 3 }, NOW))).resolves.toBe(false)
+    await expect(jobFingerprintMatches(explicit, buildJobFingerprintInput(job, NOW))).resolves.toBe(false)
+  })
+
+  it("still replays against a stored version-4 digest (which wrote 3 for an omitted budget)", async () => {
+    const v4 = async (maxAttempts: number): Promise<string> => {
+      const { runAt, ...rest } = buildJobFingerprintInput(job, NOW)
+      const text = canonicalJsonString({ version: 4, job: { ...rest, maxAttempts, runAt: runAt.toISOString() } })
+      return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))), (byte) => byte.toString(16).padStart(2, "0")).join("")
+    }
+    const stored = await v4(3)
+    await expect(jobFingerprintMatches(stored, buildJobFingerprintInput(job, NOW))).resolves.toBe(true)
+    await expect(jobFingerprintMatches(stored, buildJobFingerprintInput({ ...job, maxAttempts: 3 }, NOW))).resolves.toBe(true)
+    await expect(jobFingerprintMatches(stored, buildJobFingerprintInput({ ...job, maxAttempts: 4 }, NOW))).resolves.toBe(false)
+    await expect(jobFingerprintMatches(await v4(4), buildJobFingerprintInput({ ...job, maxAttempts: 4 }, NOW))).resolves.toBe(true)
   })
 })
 
@@ -142,5 +158,49 @@ describe("lease loss while a synchronous handler failure is being recorded", () 
     } finally {
       process.off("unhandledRejection", listener)
     }
+  })
+})
+
+describe("one claimed job's setup failure stays with that job", () => {
+  function batch(extra: Partial<Parameters<typeof dispatchDueJobs>[0]>, clockOverride = clock) {
+    const jobs = [claimed({ id: "job-1", claimToken: "tok-1" }), claimed({ id: "job-2", claimToken: "tok-2" })]
+    const store = {
+      claimDue: vi.fn(async () => jobs),
+      renewLease: vi.fn(async () => true),
+      markSucceeded: vi.fn(async () => ({ applied: true as const })),
+      markRetrying: vi.fn(async () => ({ applied: true as const })),
+      markFailed: vi.fn(async () => ({ applied: true as const })),
+      release: vi.fn(async () => ({ applied: true as const })),
+    }
+    const ran: string[] = []
+    const registry = createJobRegistry()
+    registry.register({ type: "job", version: 1, scope: "system", maxAttempts: 3, retryDelayMs: 10, retryBackoffMultiplier: 2, decodePayload: (input) => input as Record<string, unknown>, execute: async (ctx) => { ran.push(ctx.jobId); return { success: true as const } } })
+    const dispatch = () => dispatchDueJobs({ store: store as unknown as JobStore, registry, workerId: "w", leaseDurationMs: 60_000, claimLimit: 2, requester: { scope: "system" }, clock: clockOverride, ...extra })
+    return { store, dispatch, ran }
+  }
+
+  it("still runs the remaining claimed jobs when the idGenerator throws for one of them", async () => {
+    let calls = 0
+    const { store, dispatch, ran } = batch({ idGenerator: () => { if (++calls === 1) throw new Error("id source down"); return `exec-${calls}` } })
+    // Before the fix the throw rejected dispatchDueJobs, so job-2 was never run and stayed claimed until its lease lapsed.
+    const result = await dispatch()
+    expect(ran).toEqual(["job-2"])
+    expect(result).toMatchObject({ claimed: 2, succeeded: 1, leaseLost: 1 })
+    expect(result.errors).toEqual([expect.objectContaining({ jobId: "job-1", action: "lease_lost", error: expect.stringContaining("id source down") as string })])
+    expect(store.markSucceeded).toHaveBeenCalledTimes(1)
+  })
+
+  it("still runs the remaining claimed jobs when the clock throws while one job starts", async () => {
+    let armed = false
+    let thrown = 0
+    const throwingClock = { now: () => { if (armed) { armed = false; thrown++; throw new Error("clock unavailable") } return NOW }, sleep: async () => undefined }
+    const { store, dispatch, ran } = batch({}, throwingClock)
+    // Arm the clock when job-1 is re-fenced: the next clock read (while building its execution) throws once.
+    store.renewLease.mockImplementationOnce(async () => { armed = true; return true })
+    const result = await dispatch()
+    expect(thrown).toBe(1)
+    expect(ran).toContain("job-2")
+    expect(result.claimed).toBe(2)
+    expect(result.succeeded + result.leaseLost + result.retried + result.deadLettered).toBe(2)
   })
 })
