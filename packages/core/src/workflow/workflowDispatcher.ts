@@ -280,7 +280,13 @@ async function runClaim(args: WorkflowDispatchOptions, instance: WorkflowInstanc
     // Step output was produced against the decoded variables of the running
     // definition; persist them together with that definition's version so a
     // later claim never re-upcasts a mix of old and new shapes.
-    return await commit(applyWorkflowStep(current, result, validNow(now)), "advanced")
+    let next: WorkflowInstance
+    try { next = applyWorkflowStep(current, result, validNow(now)) } catch (error) {
+      // A result with an impossible shape (e.g. a sleep without a wake time) is a step bug, not a lost lease.
+      if (error instanceof WorkflowStateError) return await failOrRetry(false, "INVALID_STEP_RESULT", error.message)
+      throw error
+    }
+    return await commit(next, "advanced")
   }
 
   try {
@@ -300,7 +306,8 @@ async function runClaim(args: WorkflowDispatchOptions, instance: WorkflowInstanc
       return await failOrRetry(false, "DECODE_FAILED", error)
     }
     current = { ...instance, workflowVersion: definition.version, variables }
-    step = definition.steps[stepName]
+    // Own properties only: a step named "constructor" or "__proto__" must not resolve to something inherited from Object.prototype.
+    step = Object.hasOwn(definition.steps, stepName) ? definition.steps[stepName] : undefined
     if (!step || (phase === "compensate" && typeof step.compensate !== "function")) {
       return await failOrRetry(false, "STEP_NOT_DEFINED", `Workflow ${phase === "compensate" ? "compensation " : ""}step is not defined: ${stepName}`)
     }
@@ -346,7 +353,9 @@ async function runClaim(args: WorkflowDispatchOptions, instance: WorkflowInstanc
           const failure = createWorkflowFailure({ code: "TIMEOUT", message: "Workflow step deadline exceeded and the step ignored cancellation", step: stepName, phase, attempt, at })
           return await commit(markWorkflowAttemptStalled(instance, failure, new Date(at.getTime() + args.leaseDurationMs), at), "stalled")
         }
-        const retryable = step?.idempotent === true || phase === "compensate"
+        // A deadline that expired before the step was even started (slow lease renewal or signal read) cannot have
+        // produced an external effect, so it is always safe to retry, idempotent or not.
+        const retryable = work === undefined || step?.idempotent === true || phase === "compensate"
         return await failOrRetry(retryable, "TIMEOUT", "Workflow step deadline exceeded")
       }
       if (parent?.aborted) {
