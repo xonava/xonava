@@ -9,6 +9,11 @@ import { ConfigurationError, ValidationError } from "../domain"
 
 const MAX_ITERATIONS = 5256000
 
+/** An Invalid Date compares false with everything, which would read as "not yet due" or "always due" depending on the comparison. */
+function assertValidDate(value: unknown, label: string): asserts value is Date {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) throw new ValidationError(`${label} must be a valid Date`, { label })
+}
+
 function parseField(field: string, min: number, max: number, normalize?: (value: number) => number): Set<number> {
   const values = new Set<number>()
 
@@ -54,10 +59,10 @@ export function parseCronExpression(expression: string): ParsedCron {
     minutes: parseField(fields[0]!, 0, 59),
     hours: parseField(fields[1]!, 0, 23),
     daysOfMonth: parseField(fields[2]!, 1, 31),
-    daysOfMonthWildcard: fields[2]!.split(",").some((part) => part.startsWith("*")),
+    daysOfMonthWildcard: fields[2]!.startsWith("*"),
     months: parseField(fields[3]!, 1, 12),
     daysOfWeek: parseField(fields[4]!, 0, 7, (value) => value === 7 ? 0 : value),
-    daysOfWeekWildcard: fields[4]!.split(",").some((part) => part.startsWith("*")),
+    daysOfWeekWildcard: fields[4]!.startsWith("*"),
   }
 }
 
@@ -112,6 +117,35 @@ function nextLocalMinute(local: LocalDateTime): LocalDateTime {
   }
 }
 
+function previousLocalMinute(local: LocalDateTime): LocalDateTime {
+  const date = new Date(Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute - 1))
+  return {
+    year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate(),
+    hour: date.getUTCHours(), minute: date.getUTCMinutes(), dayOfWeek: date.getUTCDay(),
+  }
+}
+
+/**
+ * First wall-clock minute to examine after `afterUtc`. Normally that is the minute following the
+ * wall clock of `afterUtc`. With "later" disambiguation a repeated wall-clock minute fires at its
+ * second occurrence, so when `afterUtc` lies in the first pass of a fall-back overlap the repeated
+ * minutes at or before afterUtc's own wall clock still have a later occurrence after afterUtc;
+ * the search then starts at the beginning of that overlap.
+ */
+function firstLocalMinuteToExamine(afterUtc: Date, timezone: string, adapter: CronTimezoneAdapter, disambiguation: CronDisambiguation): LocalDateTime {
+  const current = adapter.toLocalDateTimeParts(afterUtc, timezone)
+  if (disambiguation !== "later") return nextLocalMinute(current)
+  let start: LocalDateTime | undefined
+  let probe = current
+  for (let i = 0; i < 1440; i++) {
+    const instant = adapter.localToUtc(probe, timezone, "later")
+    if (!(instant > afterUtc)) break
+    start = probe
+    probe = previousLocalMinute(probe)
+  }
+  return start ?? nextLocalMinute(current)
+}
+
 function nextLocalDay(local: LocalDateTime): LocalDateTime {
   const date = localDateIsValid(local)
     ? new Date(Date.UTC(local.year, local.month - 1, local.day + 1))
@@ -139,16 +173,26 @@ function getOffset(date: Date, timezone: string, parts: (date: Date) => LocalDat
   return Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute) - date.getTime()
 }
 
+// Constructing an Intl.DateTimeFormat is far more expensive than formatting with one, and every
+// occurrence search formats many instants; cache one formatter per zone name (invalid zones are
+// never cached; the cache is bounded because zone names come from callers).
+const MAX_CACHED_FORMATTERS = 256
+const formatters = new Map<string, Intl.DateTimeFormat>()
+
 export function createIntlCronTimezoneAdapter(): CronTimezoneAdapter {
   function toLocalDateTimeParts(utcDate: Date, timezone: string): LocalDateTime {
-    let formatter: Intl.DateTimeFormat
-    try {
-      formatter = new Intl.DateTimeFormat("en-US", {
-        timeZone: timezone, year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric",
-        weekday: "short", hourCycle: "h23",
-      })
-    } catch (error) {
-      throw new ValidationError(`Invalid timezone: ${timezone}`, { timezone, cause: error })
+    let formatter = formatters.get(timezone)
+    if (formatter === undefined) {
+      try {
+        formatter = new Intl.DateTimeFormat("en-US", {
+          timeZone: timezone, year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric",
+          weekday: "short", hourCycle: "h23",
+        })
+      } catch (error) {
+        throw new ValidationError(`Invalid timezone: ${timezone}`, { timezone, cause: error })
+      }
+      if (formatters.size >= MAX_CACHED_FORMATTERS) formatters.clear()
+      formatters.set(timezone, formatter)
     }
     const parts = Object.fromEntries(formatter.formatToParts(utcDate).map((part) => [part.type, part.value]))
     const dayOfWeek = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 }[parts.weekday?.toLowerCase().slice(0, 3) ?? ""] ?? 0
@@ -195,7 +239,7 @@ function getNextLocalOccurrence(
   disambiguation: CronDisambiguation,
 ): Date | null {
   if (!hasPossibleCalendarDate(cron)) return null
-  let local = nextLocalMinute(adapter.toLocalDateTimeParts(afterUtc, timezone))
+  let local = firstLocalMinuteToExamine(afterUtc, timezone, adapter, disambiguation)
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     if (!localDateIsValid(local)) {
       local = nextLocalDay(local)
@@ -240,6 +284,7 @@ export function getNextOccurrence(
   options: ScheduleCalculationOptions = {},
 ): Date | null {
   const cron = parseCronExpression(expression)
+  assertValidDate(after, "Schedule occurrence search start")
   const adapter = tzAdapter ?? (timezone === undefined ? createUtcCronTimezoneAdapter() : createIntlCronTimezoneAdapter())
   const zone = timezone ?? "UTC"
   return getNextLocalOccurrence(cron, after, zone, adapter, options.disambiguation ?? "skip")
@@ -251,7 +296,10 @@ export function shouldFireSchedule(args: {
   priorExecutionStatus?: PriorScheduleExecutionStatus | null
   tzAdapter?: CronTimezoneAdapter
 }): "fire" | "skip" | "queue" | "ignore" {
-  if (!args.schedule.enabled || !args.schedule.nextRunAt || args.now < args.schedule.nextRunAt) return "ignore"
+  if (!args.schedule.enabled || !args.schedule.nextRunAt) return "ignore"
+  assertValidDate(args.now, "Schedule fire time")
+  assertValidDate(args.schedule.nextRunAt, "Schedule nextRunAt")
+  if (args.now < args.schedule.nextRunAt) return "ignore"
   if ((args.now.getTime() - args.schedule.nextRunAt.getTime()) / 60000 > 60 && args.schedule.misfirePolicy.type === "skip") return "skip"
   switch (args.schedule.overlapPolicy.type) {
     case "skip":
@@ -276,6 +324,8 @@ export function computeScheduleOccurrences(args: {
 }): Date[] {
   if (!Number.isSafeInteger(args.maxCount) || args.maxCount < 1) throw new ConfigurationError("Schedule occurrence maxCount must be a positive safe integer.")
   if (!args.schedule.enabled || !args.schedule.nextRunAt) return []
+  assertValidDate(args.now, "Schedule occurrence window end")
+  assertValidDate(args.schedule.nextRunAt, "Schedule nextRunAt")
   const results: Date[] = []
   let current = args.schedule.nextRunAt
   if (current <= args.now) results.push(current)

@@ -75,6 +75,7 @@ export async function materializeDueSchedules(args: {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_SCHEDULE_CLAIM_LIMIT) throw new ConfigurationError(`Schedule claim limit must be an integer between 1 and ${MAX_SCHEDULE_CLAIM_LIMIT}.`)
   const result: MaterializeResult = { schedulesProcessed: 0, jobsEnqueued: 0, errors: [] }
   const now = args.now ?? new Date()
+  if (!(now instanceof Date) || Number.isNaN(now.getTime())) throw new ConfigurationError("Schedule materialization time must be a valid Date.")
   const log = createTelemetryLogger(args.telemetry, "execution.schedule", () => new Date())
   const leaseDurationMs = args.leaseDurationMs ?? 30_000
   if (!Number.isFinite(leaseDurationMs) || leaseDurationMs <= 0) throw new ValidationError("Schedule lease duration must be finite and positive.")
@@ -175,7 +176,8 @@ export async function materializeDueSchedules(args: {
             },
             now,
             // Request one extra occurrence so a configured limit never discards work.
-            maxCount: queueAllLimit + 1,
+            // (clamped: an integer limit at or beyond Number.MAX_SAFE_INTEGER would make the count unsafe)
+            maxCount: Math.min(queueAllLimit + 1, Number.MAX_SAFE_INTEGER),
             timezone: scheduleTz,
             ...(args.tzAdapter ? { tzAdapter: args.tzAdapter } : {}),
           })
