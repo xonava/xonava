@@ -13,11 +13,13 @@ export interface QuotaPort { consume(request: QuotaRequest): Promise<QuotaDecisi
 
 export function encodeQuotaSubject(subject: QuotaSubject): string {
   if(!subject||typeof subject!=="object") throw new ValidationError("Quota subject must be valid.")
-  const scope=validateExecutionScope(subject.scope)
+  // An invalid or oversized scope is the caller's input problem (a ValidationError), not a raw canonical-JSON error.
+  let scopeId:string
+  try{scopeId=encodeExecutionScopeId(validateExecutionScope(subject.scope))}catch(error){throw new ValidationError("Quota scope must be valid.",error)}
   if(subject.principal!==undefined && (subject.principal===null||typeof subject.principal!=="object"||typeof subject.principal.id!=="string"||!subject.principal.id.trim()||LONE_SURROGATE.test(subject.principal.id)||typeof subject.principal.kind!=="string"||!principalKinds.has(subject.principal.kind))) throw new ValidationError("Quota principal must be valid.")
   // encodeURIComponent throws a raw URIError on lone surrogates; reject them as invalid input first.
   if(subject.planKey!==undefined&&(typeof subject.planKey!=="string"||!subject.planKey.trim()||LONE_SURROGATE.test(subject.planKey))) throw new ValidationError("Quota plan key must be non-empty well-formed text.")
-  return [encodeExecutionScopeId(scope),subject.principal?`${encodeURIComponent(subject.principal.kind)}:${encodeURIComponent(subject.principal.id)}`:"all-principals",subject.planKey?`plan:${encodeURIComponent(subject.planKey)}`:"all-plans"].join(":")
+  return [scopeId,subject.principal?`${encodeURIComponent(subject.principal.kind)}:${encodeURIComponent(subject.principal.id)}`:"all-principals",subject.planKey?`plan:${encodeURIComponent(subject.planKey)}`:"all-plans"].join(":")
 }
 
 export function validateQuotaRequest(request: QuotaRequest): QuotaRequest {
@@ -33,7 +35,7 @@ export function validateQuotaRequest(request: QuotaRequest): QuotaRequest {
 export function validateQuotaDecision(request:QuotaRequest,decision:QuotaDecision):QuotaDecision{
   if(!decision||typeof decision!=="object"||typeof decision.allowed!=="boolean"||!Number.isSafeInteger(decision.used)||decision.used<0||!Number.isSafeInteger(decision.remaining)||decision.remaining<0||!Number.isFinite(decision.resetAt))throw new ValidationError("Quota provider returned an invalid decision.")
   const consistent=decision.allowed
-    ?decision.used<=request.limit&&decision.used+decision.remaining===request.limit
+    ?decision.used<=request.limit&&decision.used>=request.amount&&decision.used+decision.remaining===request.limit
     :decision.used+request.amount>request.limit&&decision.remaining===Math.max(request.limit-decision.used,0)
   if(!consistent)throw new ValidationError("Quota provider returned an inconsistent decision.")
   return Object.freeze({...decision})

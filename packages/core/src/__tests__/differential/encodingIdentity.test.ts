@@ -466,7 +466,7 @@ describe("job fingerprint (execution/jobFingerprint.ts)", () => {
     ...(rng.bool() ? { metadata: { m: jsonValue(rng) } } : {}),
   }) as NewJob
 
-  it("is stable for semantically equal jobs: key order, -0, equal Dates, documented defaults", async () => {
+  it("is stable for semantically equal jobs: key order, -0, equal Dates, documented defaults (priority 0)", async () => {
     await forAllAsync("job fingerprint stable", (rng) => {
       const job = newJob(rng)
       const runAt = new Date(1_800_000_000_000 + rng.int(1000))
@@ -475,8 +475,7 @@ describe("job fingerprint (execution/jobFingerprint.ts)", () => {
         payload: flipZeroSigns(permuteKeys(rng, job.payload)) as Record<string, unknown>,
         executionScope: permuteKeys(rng, job.executionScope) as JobExecutionScope,
         ...(job.metadata ? { metadata: permuteKeys(rng, job.metadata) as Record<string, unknown> } : {}),
-        ...(job.maxAttempts === 3 && rng.bool() ? { maxAttempts: undefined } : {}),
-        ...(job.priority === 0 && rng.bool() ? { priority: undefined } : {}),
+                ...(job.priority === 0 && rng.bool() ? { priority: undefined } : {}),
       }
       return { job, twin, runAt }
     }, async ({ job, twin, runAt }) => {
@@ -499,7 +498,7 @@ describe("job fingerprint (execution/jobFingerprint.ts)", () => {
         case "jobVersion": changed.jobVersion = input.jobVersion + 1; break
         case "payload": changed.payload = mutateJson(rng, input.payload) as Record<string, unknown>; break
         case "runAt": changed.runAt = new Date(input.runAt.getTime() + rng.pick([1, -1, 3_600_000])); break
-        case "maxAttempts": changed.maxAttempts = input.maxAttempts + 1; break
+        case "maxAttempts": changed.maxAttempts = input.maxAttempts === null ? rng.pick([1, 3, 5]) : rng.bool() ? input.maxAttempts + 1 : null; break
         case "priority": changed.priority = input.priority + 1; break
         case "correlationId": changed.correlationId = input.correlationId === null ? "null" : null; break
         case "partitionKey": changed.partitionKey = input.partitionKey === null ? "" : null; break

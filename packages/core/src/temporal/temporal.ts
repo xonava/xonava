@@ -3,9 +3,11 @@ import { assertEntityVersion } from "../serialization"
 import { snapshotData } from "../kernel/snapshotData"
 import type { TemporalHistoryStore, TemporalReconstruction, TemporalResource, TemporalRevision, TemporalSnapshot } from "./types"
 
-const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/
+const KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/
+// RegExp#test coerces its argument (["a"] and 5 would match), so identities must be checked as strings first.
+const isKey = (value: unknown): boolean => typeof value === "string" && KEY_PATTERN.test(value)
 function validDate(value: unknown): value is Date { return value instanceof Date && !Number.isNaN(value.getTime()) }
-function resource(value: TemporalResource): void { if (!value || typeof value.scopeId !== "string" || !value.scopeId || value.scopeId.length > 1024 || /[\0\r\n]/.test(value.scopeId) || !KEY.test(value.entityType) || !KEY.test(value.entityId)) throw new ConfigurationError("Temporal resource identity is invalid") }
+function resource(value: TemporalResource): void { if (!value || typeof value.scopeId !== "string" || !value.scopeId || value.scopeId.length > 1024 || /[\0\r\n]/.test(value.scopeId) || !isKey(value.entityType) || !isKey(value.entityId)) throw new ConfigurationError("Temporal resource identity is invalid") }
 function revision(value: number, allowZero = false): void { if (!Number.isSafeInteger(value) || value < (allowZero ? 0 : 1)) throw new ConfigurationError("Temporal revision must be a positive safe integer") }
 function state(value: unknown): void { if (value !== null && (!value || typeof value !== "object" || Array.isArray(value))) throw new ConfigurationError("Temporal state must be a record or null") }
 
@@ -16,7 +18,7 @@ export function validateTemporalRevision<TState extends Readonly<Record<string, 
   if (value.kind === "deleted" && value.state !== null) throw new ConfigurationError("Deleted temporal revision must have null state")
   if (value.kind !== "deleted" && value.state === null) throw new ConfigurationError("Non-deleted temporal revision must have state")
   if (value.entityVersion !== undefined) assertEntityVersion(value.entityVersion)
-  for (const [name, id] of [["event", value.eventId], ["audit", value.auditId]] as const) if (id !== undefined && !KEY.test(id)) throw new ConfigurationError(`Temporal ${name} identity is invalid`)
+  for (const [name, id] of [["event", value.eventId], ["audit", value.auditId]] as const) if (id !== undefined && !isKey(id)) throw new ConfigurationError(`Temporal ${name} identity is invalid`)
   return snapshotData(value, { label: "Temporal revision" })
 }
 

@@ -12,11 +12,16 @@ export function assertWorkflowDurableValue(value: Readonly<Record<string, unknow
 }
 
 export function defineWorkflow(definition: WorkflowDefinition): WorkflowDefinition {
-  if (!definition.type.trim()) throw new WorkflowDefinitionError("Workflow type must be non-empty")
+  // Definitions often come from untyped JavaScript: every malformed field is a WorkflowDefinitionError, never a TypeError.
+  if (!definition || typeof definition !== "object") throw new WorkflowDefinitionError("Workflow definition must be an object")
+  if (typeof definition.type !== "string" || !definition.type.trim()) throw new WorkflowDefinitionError("Workflow type must be non-empty")
   if (!Number.isSafeInteger(definition.version) || definition.version < 1) throw new WorkflowDefinitionError("Workflow version must be a positive integer")
-  if (!definition.steps[definition.initialStep]) throw new WorkflowDefinitionError("Workflow initial step is not defined")
+  if (!definition.steps || typeof definition.steps !== "object" || Array.isArray(definition.steps)) throw new WorkflowDefinitionError("Workflow steps must be an object")
+  // Own properties only: "constructor" or "toString" are not steps.
+  if (typeof definition.initialStep !== "string" || !Object.hasOwn(definition.steps, definition.initialStep) || !definition.steps[definition.initialStep]) throw new WorkflowDefinitionError("Workflow initial step is not defined")
+  if (typeof definition.decodeVariables !== "function") throw new WorkflowDefinitionError("Workflow decodeVariables must be a function")
   for (const [key, step] of Object.entries(definition.steps)) {
-    if (key !== step.name || !step.datasource.trim()) throw new WorkflowDefinitionError(`Invalid workflow step: ${key}`)
+    if (!step || typeof step !== "object" || key !== step.name || typeof step.datasource !== "string" || !step.datasource.trim()) throw new WorkflowDefinitionError(`Invalid workflow step: ${key}`)
     if (typeof step.execute !== "function" || (step.compensate !== undefined && typeof step.compensate !== "function")) throw new WorkflowDefinitionError(`Workflow step ${key} handlers must be functions`)
     if (step.idempotent !== undefined && typeof step.idempotent !== "boolean") throw new WorkflowDefinitionError(`Workflow step ${key} idempotent must be a boolean`)
     try {

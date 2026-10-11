@@ -8,6 +8,22 @@ const terminal = new Set(["succeeded", "failed", "cancelled", "compensation_fail
 export function isWorkflowTerminal(instance: WorkflowInstance): boolean { return terminal.has(instance.status) }
 
 export const MAX_WORKFLOW_FAILURE_MESSAGE_LENGTH = 512
+/** Longest raw failure text handed to the sanitizer. */
+const MAX_SANITIZED_INPUT = 4096
+
+/**
+ * When the raw text was cut, its last token may be the head of a contact detail whose tail was cut away: it no longer matches any
+ * redaction pattern and would survive. Drop the trailing run of digit/separator characters (a phone number in progress) and then the
+ * trailing non-space token (an email address or date in progress).
+ */
+function dropCutToken(text: string): string {
+  let end = text.length
+  while (end > 0 && /[\d\s+().-]/.test(text[end - 1]!)) end--
+  while (end > 0 && !/\s/.test(text[end - 1]!)) end--
+  return text.slice(0, end)
+}
+/** Stored when the capped text was one long token that had to be dropped whole, so the failure does not read as an empty message. */
+const TRUNCATED_WORKFLOW_FAILURE_MESSAGE = "Workflow step failed (message truncated)"
 const FAILURE_CODE = /^[A-Z][A-Z0-9_.:-]{0,63}$/
 
 function seal(instance: WorkflowInstance): WorkflowInstance {
@@ -25,7 +41,12 @@ const released = { leaseOwner: null, claimToken: null, leaseExpiresAt: null } as
 export function createWorkflowFailure(args: { code: string; message: unknown; step: string; phase: WorkflowFailure["phase"]; attempt: number; at: Date }): WorkflowFailure {
   const code = typeof args.code === "string" && FAILURE_CODE.test(args.code) ? args.code : "STEP_ERROR"
   const raw = typeof args.message === "string" ? args.message : args.message instanceof Error ? args.message.message : "Workflow step failed"
-  const sanitized = String(defaultAuditSanitizer(raw))
+  // The audit sanitizer's patterns backtrack quadratically on adversarial text (a 100 kB run of "a.a.a." takes tens of seconds), and a
+  // step can throw arbitrarily large messages. Only a bounded prefix is ever stored, so only a bounded prefix is sanitized.
+  const capped = raw.length > MAX_SANITIZED_INPUT
+  const redacted = String(defaultAuditSanitizer(capped ? raw.slice(0, MAX_SANITIZED_INPUT) : raw))
+  const trimmed = capped ? dropCutToken(redacted) : redacted
+  const sanitized = capped && trimmed.trim() === "" ? TRUNCATED_WORKFLOW_FAILURE_MESSAGE : trimmed
   const characters = Array.from(sanitized)
   const message = characters.length > MAX_WORKFLOW_FAILURE_MESSAGE_LENGTH ? characters.slice(0, MAX_WORKFLOW_FAILURE_MESSAGE_LENGTH).join("") : sanitized
   const attempt = Number.isSafeInteger(args.attempt) && args.attempt >= 0 ? args.attempt : 0
@@ -44,6 +65,27 @@ function enterFailure(instance: WorkflowInstance, failure: WorkflowFailure, now:
   })
 }
 
+function isDataObject(value: unknown): boolean { return typeof value === "object" && value !== null && !Array.isArray(value) }
+const nonEmptyString = (value: unknown): value is string => typeof value === "string" && value.length > 0
+
+/**
+ * A malformed result must never reach durable state: a sleep without a valid
+ * wake time or a wait without a signal name would leave the instance waiting
+ * for a wake-up that can never come (and no store would ever claim it again).
+ */
+function assertWellFormedResult(result: WorkflowStepResult): void {
+  const invalid = (reason: string): never => { throw new WorkflowStateError(`Workflow step returned a malformed ${result.kind} result: ${reason}`) }
+  if ("variables" in result && result.variables !== undefined && result.variables !== null && !isDataObject(result.variables)) invalid("variables must be an object")
+  if (result.kind === "next") {
+    if (!nonEmptyString(result.step)) invalid("step must be a non-empty string")
+    if (result.compensation !== undefined && !nonEmptyString(result.compensation)) invalid("compensation must be a non-empty string")
+  } else if (result.kind === "wait") {
+    if (!nonEmptyString(result.signal)) invalid("signal must be a non-empty string")
+  } else if (result.kind === "sleep") {
+    if (!(result.wakeAt instanceof Date) || Number.isNaN(result.wakeAt.getTime())) invalid("wakeAt must be a valid Date")
+  }
+}
+
 export function applyWorkflowStep(instance: WorkflowInstance, result: WorkflowStepResult, now: Date): WorkflowInstance {
   if (isWorkflowTerminal(instance)) throw new WorkflowStateError("Terminal workflow cannot transition")
   if (result.kind === "fail") {
@@ -52,6 +94,10 @@ export function applyWorkflowStep(instance: WorkflowInstance, result: WorkflowSt
     const failure = createWorkflowFailure({ code: "STEP_FAILED", message: result.error, step, phase, attempt: instance.stepAttempt, at: now })
     return phase === "compensate" ? failCompensation(instance, failure, now) : enterFailure(instance, failure, now)
   }
+  assertWellFormedResult(result)
+  // Compensation only ever fails or retries (completeCompensation finishes a step): a forward result must never
+  // resurrect an instance that is undoing its work.
+  if (instance.status === "compensating" && result.kind !== "retry") throw new WorkflowStateError(`Compensating workflow cannot apply a ${result.kind} result`)
   const variables = Object.freeze({ ...instance.variables, ...(result.kind === "retry" ? {} : result.variables ?? {}) })
   assertWorkflowDurableValue(variables)
   const base = { ...instance, ...released, variables, revision: instance.revision + 1, updatedAt: now }

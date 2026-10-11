@@ -58,8 +58,11 @@ describe("remainingOccurrences during catch-up", () => {
   })
 
   it("counts no occurrence when overlap declines the run", async () => {
-    const s = stores([claim({ overlapPolicy: { type: "skip" }, lastStatus: "running" })])
+    // The earlier occurrence is still running: reported by the prior-job lookup (a claim's lastStatus "running" is only the lease marker).
+    const s = stores([claim({ overlapPolicy: { type: "skip" } })])
+    vi.mocked(s.jobStore.getLatestPriorScheduleExecution).mockResolvedValue({ id: "earlier", status: "running" } as StoredJob)
     await materializeDueSchedules({ ...s, workerId: "w", now })
+    expect(s.enqueue).not.toHaveBeenCalled()
     expect(s.advanceSchedule).toHaveBeenCalledWith(expect.not.objectContaining({ occurrencesFired: expect.any(Number) as number }))
   })
 })

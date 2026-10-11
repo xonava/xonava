@@ -81,10 +81,20 @@ describe("fingerprint compatibility across the RFC 8785 key-order fix", () => {
     return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))), (byte) => byte.toString(16).padStart(2, "0")).join("")
   }
 
-  it("bumps the job fingerprint version and still matches a version-3 fingerprint of the same job", async () => {
-    expect(JOB_FINGERPRINT_VERSION).toBe(4)
+  /** What version 4 persisted: sha256 of the canonical (RFC 8785) serialization of { version: 4, job }. */
+  const storedV4 = async (job: JobFingerprintInput): Promise<string> => {
+    const text = canonicalJsonString({ version: 4, job: { ...job, runAt: job.runAt.toISOString() } })
+    return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))), (byte) => byte.toString(16).padStart(2, "0")).join("")
+  }
+
+  it("bumps the job fingerprint version and still matches version-4 and version-3 fingerprints of the same job", async () => {
+    expect(JOB_FINGERPRINT_VERSION).toBe(5)
     const legacy = await storedV3(input)
     expect(await fingerprintJob(input)).not.toBe(legacy)
+    expect(await fingerprintJob(input)).not.toBe(await storedV4(input))
+    await expect(jobFingerprintMatches(await storedV4(input), input)).resolves.toBe(true)
+    await expect(jobFingerprintMatches(await storedV4(input), { ...input, maxAttempts: null })).resolves.toBe(true)
+    await expect(jobFingerprintMatches(await storedV4({ ...input, jobType: "billing.other" }), input)).resolves.toBe(false)
     await expect(jobFingerprintMatches(await fingerprintJob(input), input)).resolves.toBe(true)
     await expect(jobFingerprintMatches(legacy, input)).resolves.toBe(true)
     await expect(jobFingerprintMatches(await storedV3({ ...input, jobType: "billing.other" }), input)).resolves.toBe(false)

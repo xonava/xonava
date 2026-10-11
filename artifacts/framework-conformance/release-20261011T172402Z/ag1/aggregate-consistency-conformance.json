@@ -1,0 +1,101 @@
+{
+  "phase": "AG1",
+  "status": "proven",
+  "runId": "release-20261011T172402Z",
+  "scenarios": [
+    {
+      "id": "compiled-boundary",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/aggregate/__tests__/aggregate.test.ts",
+        "testName": "compiles an immutable named boundary"
+      }
+    },
+    {
+      "id": "atomic-transition",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/aggregate/__tests__/aggregate.test.ts",
+        "testName": "validates both sides of an atomic-batch transition"
+      }
+    },
+    {
+      "id": "precommit-refusal",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/aggregate/__tests__/aggregate.test.ts",
+        "testName": "rejects an invalid proposed transition before commit"
+      }
+    },
+    {
+      "id": "transaction-scope",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/aggregate/__tests__/aggregate.test.ts",
+        "testName": "runs both loads and mutation inside the same serializable transaction"
+      }
+    },
+    {
+      "id": "rollback",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/aggregate/__tests__/aggregate.test.ts",
+        "testName": "throws inside the transaction so the provider can roll back"
+      }
+    },
+    {
+      "id": "phase-specific",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/aggregate/__tests__/aggregate.test.ts",
+        "testName": "supports phase-specific invariants"
+      }
+    },
+    {
+      "id": "exact-membership",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/aggregate/__tests__/aggregate.test.ts",
+        "testName": "requires exact declared snapshot membership"
+      }
+    },
+    {
+      "id": "capability-refusal",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/aggregate/__tests__/aggregate.test.ts",
+        "testName": "rejects uncompiled definitions and providers without transactions"
+      }
+    },
+    {
+      "id": "exception-normalization",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/aggregate/__tests__/aggregate.test.ts",
+        "testName": "normalizes invariant exceptions as configuration failures"
+      }
+    }
+  ],
+  "sourceManifest": [
+    {
+      "path": "packages/core/src/aggregate/types.ts",
+      "sha256": "d8c57fc68e22cd8fe5103fce77202af0b846d4ed195029311a90af3ecaa2788e"
+    },
+    {
+      "path": "packages/core/src/aggregate/aggregate.ts",
+      "sha256": "7795130567a4c28a4297a05fcc023796731529d1dcf8ba63d40c03dff98ab582"
+    },
+    {
+      "path": "packages/core/src/aggregate/index.ts",
+      "sha256": "38851ec019f5780a37ff65c31fc9e1138ba7c3c84cdb7f916973fa2bd832f4b8"
+    },
+    {
+      "path": "packages/core/src/aggregate/__tests__/aggregate.test.ts",
+      "sha256": "9447e91a810d37f5f9c3f5180513d230fcbf73a35b6f8bda2f885c5afbc5f636"
+    },
+    {
+      "path": "docs/spec/aggregate.md",
+      "sha256": "e4569b5670e4e7745d0c44682114137a9af87532972829b2f18a6942bf7c39de"
+    }
+  ]
+}
