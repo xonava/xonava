@@ -23,6 +23,8 @@ export interface SignalBufferingHarness {
   readonly store: WorkflowStore
   /** Race iterations at scale 1 (default 60). */
   readonly raceRuns?: number
+  /** Lapses the lease of this instance by rewriting its lease column (the claim token and revision stay as they are). */
+  expireLease(instanceId: string): Promise<void>
   /** The receipts of these instances in delivery (seq) order, read straight from the database. */
   receipts(instanceIds: readonly string[]): Promise<DbReceipt[]>
 }
@@ -235,6 +237,27 @@ export function registerWorkflowSignalBufferingTests(getHarness: () => SignalBuf
     expect(await store.get(id)).toMatchObject({ status: "pending", resumeSignalId: `${id}-sig` })
   })
 
+  it("consumes nothing when the lease has lapsed before the commit of a wait, and the receipt feeds the next claim's wait", async () => {
+    const harness = getHarness()
+    const { store } = harness
+    const id = `${prefix}-lapsed`
+    await startInstance(store, id)
+    const { claim: running, fence } = await claim(store, id)
+    await store.deliverSignal({ id: `${id}-sig`, instanceId: id, name: "go", payload: {} })
+    await harness.expireLease(id)
+    const expired = await store.get(id)
+    expect(await store.assertLease(fence)).toBe(false)
+    expect(await store.commit(fence, waitFor(running.instance, "go"))).toBe(false)
+    expect(await store.get(id)).toEqual(expired)
+    expect((await harness.receipts([id]))[0]).toMatchObject({ id: `${id}-sig`, consumed: false, consumedRevision: null })
+    // The lapsed instance is claimable again; its wait then consumes the receipt that is still pending.
+    const again = await claim(store, id, "signals-2")
+    expect(await store.commit(again.fence, waitFor(again.claim.instance, "go"))).toBe(true)
+    expect(await store.get(id)).toMatchObject({ status: "pending", resumeSignalId: `${id}-sig` })
+    expect((await harness.receipts([id]))[0]).toMatchObject({ consumed: true, consumedRevision: again.fence.revision + 1 })
+    expect(await ledgerViolations(harness, [id])).toEqual([])
+  })
+
   it("never loses a wake nor consumes a receipt twice when deliveries race the fenced commit of a wait on separate connections", async () => {
     const harness = getHarness()
     const { store } = harness
@@ -243,6 +266,10 @@ export function registerWorkflowSignalBufferingTests(getHarness: () => SignalBuf
     // 0 ms means "issue immediately"; a small random head start for either side varies which statement reaches the database first.
     const after = (ms: number): Promise<void> => (ms === 0 ? Promise.resolve() : new Promise((resolve) => setTimeout(resolve, ms)))
     const ids: string[] = []
+    // Which side consumed the oldest receipt: the wait's commit (the receipt was buffered first: final revision = fence + 1) or the
+    // delivery (the instance was already parked: final revision = fence + 2). The test proves nothing unless both interleavings occurred.
+    let consumedByCommit = 0
+    let consumedByDelivery = 0
     for (let index = 0; index < iterations; index++) {
       const id = `${prefix}-race-${index}`
       ids.push(id)
@@ -265,8 +292,14 @@ export function registerWorkflowSignalBufferingTests(getHarness: () => SignalBuf
       expect(receipts.filter((receipt) => receipt.consumed).map((receipt) => receipt.id), id).toEqual([receipts[0]!.id])
       expect(final!.resumeSignalId, id).toBe(receipts[0]!.id)
       expect(receipts[0]!.consumedRevision, id).toBe(final!.revision)
+      if (final!.revision === fence.revision + 1) consumedByCommit++
+      else if (final!.revision === fence.revision + 2) consumedByDelivery++
+      else expect.fail(`${id}: unexpected final revision ${final!.revision} for fence revision ${fence.revision}`)
       await store.cancel(id)
     }
+    expect(consumedByCommit, "iterations where the commit consumed the buffered receipt").toBeGreaterThan(0)
+    expect(consumedByDelivery, "iterations where the delivery consumed the receipt of the parked instance").toBeGreaterThan(0)
+    process.stderr.write(`[${prefix}] race interleavings: commit-consumed=${consumedByCommit} delivery-consumed=${consumedByDelivery} of ${iterations}\n`)
     expect(await ledgerViolations(harness, ids)).toEqual([])
   }, 120_000)
 }

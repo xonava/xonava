@@ -1,2 +1,2 @@
-export const D1_FIXTURE_MIGRATIONS = ["0001_framework.sql", "0002_workflow_signal_buffering.sql"] as const
+export const D1_FIXTURE_MIGRATIONS = ["0001_framework.sql", "0002_workflow_signal_buffering.sql", "0003_job_partition_head_index.sql"] as const
 export interface D1FixtureDatabase { exec(sql: string): Promise<unknown> }

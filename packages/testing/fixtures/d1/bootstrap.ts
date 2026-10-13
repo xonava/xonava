@@ -25,12 +25,18 @@ export async function bootstrapD1Fixture(database: D1FixtureDatabase): Promise<v
   for (const name of later) await applyD1Migration(database, name)
 }
 
-/** Applies one D1 fixture migration statement by statement; returns false when it was already applied. */
+const isMissingTable = (error: unknown): boolean => /no such table/i.test(String((error as { message?: unknown } | null)?.message ?? error)) || /no such table/i.test(String(((error as { cause?: { message?: unknown } } | null)?.cause)?.message ?? ""))
+
+/**
+ * Applies one D1 fixture migration statement by statement; returns false when it was already applied (or, for an index
+ * on a deployment-owned table such as `jobs`, when that table does not exist in the fixture database).
+ */
 export async function applyD1Migration(database: D1FixtureDatabase, name: (typeof D1_FIXTURE_MIGRATIONS)[number]): Promise<boolean> {
   const statements = d1MigrationStatements(await readD1Migration(name))
   for (const [index, statement] of statements.entries()) {
     try { await database.exec(statement) } catch (error) {
       if (index === 0 && isDuplicateColumn(error)) return false
+      if (/^CREATE (UNIQUE )?INDEX /i.test(statement) && isMissingTable(error)) return false
       throw error
     }
   }

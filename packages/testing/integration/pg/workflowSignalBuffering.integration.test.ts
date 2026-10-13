@@ -11,6 +11,7 @@ describe("PostgreSQL buffered workflow signals", () => {
   const pool = new pg.Pool({ connectionString: pgCertificationUrl(), max: 8 })
   const harness: SignalBufferingHarness = {
     store: new DrizzlePgWorkflowStore(pool, { schema: "framework_test" }),
+    expireLease: async (id) => { await pool.query("UPDATE framework_test.workflows SET lease_expires_at = now() - interval '1 minute' WHERE id = $1", [id]) },
     receipts: async (ids) => toReceipts((await pool.query("SELECT id,instance_id,name,seq,consumed_at,consumed_revision FROM framework_test.workflow_signals WHERE instance_id = ANY($1) ORDER BY seq", [ids])).rows),
   }
   beforeAll(async () => { const fixture = await openPgFixture(); await fixture.end() })

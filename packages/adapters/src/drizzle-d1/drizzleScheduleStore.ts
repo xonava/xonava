@@ -59,6 +59,9 @@ export class DrizzleScheduleStore implements ScheduleStore {
 
   async claimDueSchedules(args: ClaimDueSchedulesArgs): Promise<FencedScheduleClaim[]> {
     assertDurableIdentifier(args.workerId, "workerId", 100)
+    // Same guard as the job stores: a non-positive or non-integer limit claims nothing (D1 would read LIMIT -1 as unbounded),
+    // and a lease duration that is not a finite, non-negative number would bind NULL / NaN into the lease expiry (0 stays valid: an already-expired claim).
+    if (!Number.isSafeInteger(args.limit) || args.limit <= 0 || !Number.isFinite(args.leaseDurationMs) || args.leaseDurationMs < 0) return []
     const schedules = this.config.columnMap.schedules
     const now = args.now ?? new Date()
     const leaseExpiresAt = d1EpochMillisecondsAfter(args.leaseDurationMs)

@@ -16,6 +16,7 @@ describe("MySQL buffered workflow signals", () => {
     pool = (await openMySqlFixture()).pool
     harness = {
       store: new DrizzleMySqlWorkflowStore(pool),
+      expireLease: async (id) => { await pool.query("UPDATE workflows SET lease_expires_at = CURRENT_TIMESTAMP(3) - INTERVAL 1 MINUTE WHERE id = ?", [id]) },
       receipts: async (ids) => toReceipts((await pool.query<RowDataPacket[]>("SELECT id,instance_id,name,seq,consumed_at,consumed_revision FROM workflow_signals WHERE instance_id IN (?) ORDER BY seq", [ids]))[0]),
     }
   })

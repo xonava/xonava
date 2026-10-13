@@ -227,6 +227,9 @@ Apply the migrations before running the new code.
 - **D1 claims are partition-scoped.** A job's partition key now serializes jobs only within the same scope and tenant (it was global), and a busy or backlogged partition no longer occupies the claim limit. After the upgrade, jobs of different tenants that share a partition key can run at the same time.
 - **Invalid claim limits are rejected.** `claimDue` with a limit that is not a positive safe integer (zero, negative, fractional, `NaN`, `Infinity`) claims nothing; D1 used to claim everything and MySQL raised a SQL error.
 - **Job partition-head index.** The partition-head check of the job claim needs an index on `(partition_key, scope, tenant_id, status)` (partial on `partition_key IS NOT NULL` for PostgreSQL and D1); without it each claim candidate rescans the jobs table.
+- **Workflow and schedule store input checks.** Workflow `claimDue` and schedule `claimDueSchedules` claim nothing for a limit that is not a positive safe integer or a lease duration that is negative or not finite; workflow `renewLease` refuses an extension that is not positive and finite (D1 used to clear the lease). This matches the job stores.
+- **PostgreSQL timestamps keep milliseconds.** The PostgreSQL workflow and temporal-history stores read `timestamptz` values without dropping milliseconds (they used to truncate to whole seconds).
+- **D1 fenced signal-wait commit.** SQLite reads the clock once per statement, so a lease could be valid for the receipt consume and expired for the workflow update, which lost the signal. The batch now undoes that consumption when the update is rejected.
 - **Schedules.** Claims are returned oldest-due first, and a schedule held by a live claim no longer uses up another worker's claim limit (PostgreSQL and D1).
 
 Accepted divergences (the differential suites tolerate exactly these):
