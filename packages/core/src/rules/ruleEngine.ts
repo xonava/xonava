@@ -53,11 +53,11 @@ function validatePredicate(root: PredicateNode): void {
 }
 
 function validateRule<TAction extends RuleAction>(rule: RuleDefinition<TAction>): void {
-  if (!KEY.test(rule.key)) throw new ConfigurationError("Rule key is invalid")
+  if (typeof rule.key !== "string" || !KEY.test(rule.key)) throw new ConfigurationError("Rule key is invalid")
   if (!Number.isSafeInteger(rule.version) || rule.version < 1) throw new ConfigurationError(`Rule "${rule.key}" version must be a positive safe integer`)
   if (!Number.isSafeInteger(rule.priority)) throw new ConfigurationError(`Rule "${rule.key}" priority must be a safe integer`)
   if (!Array.isArray(rule.actions) || rule.actions.length === 0 || rule.actions.length > 100) throw new ConfigurationError(`Rule "${rule.key}" must declare between 1 and 100 actions`)
-  if (rule.conflictKey !== undefined && !KEY.test(rule.conflictKey)) throw new ConfigurationError(`Rule "${rule.key}" conflict key is invalid`)
+  if (rule.conflictKey !== undefined && (typeof rule.conflictKey !== "string" || !KEY.test(rule.conflictKey))) throw new ConfigurationError(`Rule "${rule.key}" conflict key is invalid`)
   if (rule.description !== undefined && (!rule.description.trim() || rule.description.length > 500)) throw new ConfigurationError(`Rule "${rule.key}" description is invalid`)
   const from = instant(rule.effectiveFrom, `Rule "${rule.key}" effectiveFrom`)
   const until = instant(rule.effectiveUntil, `Rule "${rule.key}" effectiveUntil`)
@@ -67,7 +67,7 @@ function validateRule<TAction extends RuleAction>(rule: RuleDefinition<TAction>)
 }
 
 export function compileRuleSet<TAction extends RuleAction>(definition: RuleSetDefinition<TAction>): CompiledRuleSet<TAction> {
-  if (!definition || typeof definition !== "object" || !KEY.test(definition.key)) throw new ConfigurationError("Rule-set key is invalid")
+  if (!definition || typeof definition !== "object" || typeof definition.key !== "string" || !KEY.test(definition.key)) throw new ConfigurationError("Rule-set key is invalid")
   if (!Number.isSafeInteger(definition.version) || definition.version < 1) throw new ConfigurationError("Rule-set version must be a positive safe integer")
   if (!Array.isArray(definition.rules) || definition.rules.length > MAX_RULE_SET_RULES) throw new ConfigurationError("Rule-set rules are invalid")
   if (!definition.conflictResolution || !["all-matches", "highest-priority", "highest-priority-per-key"].includes(definition.conflictResolution.kind)) throw new ConfigurationError("Rule-set conflict resolution is invalid")

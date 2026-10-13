@@ -70,6 +70,16 @@ describe("regressions found by the workflow differentials", () => {
     expect(row).toMatchObject({ status: "failed", outcome: "failed", failure: { code: "INVALID_STEP_RESULT", step: "a" } })
   })
 
+  it("a null, undefined or empty compensation means none; a non-string truthy compensation stays malformed", () => {
+    // Before the fix { kind: "next", compensation: null | "" } failed the workflow with INVALID_STEP_RESULT; a falsy compensation used to mean "none".
+    for (const compensation of [null, undefined, ""]) {
+      const next = applyWorkflowStep(instance(), { kind: "next", step: "b", compensation } as unknown as WorkflowStepResult, at)
+      expect(next, String(compensation)).toMatchObject({ status: "pending", currentStep: "b", compensationStack: [] })
+    }
+    expect(applyWorkflowStep(instance(), { kind: "next", step: "b", compensation: "undo" }, at)).toMatchObject({ compensationStack: ["undo"] })
+    for (const compensation of [5, true, {}, ["undo"]]) expect(() => applyWorkflowStep(instance(), { kind: "next", step: "b", compensation } as unknown as WorkflowStepResult, at)).toThrow(WorkflowStateError)
+  })
+
   it("a step named like an Object.prototype member is undefined, not inherited", async () => {
     // Found by "workflow dispatcher model equivalence": next -> "constructor" ran Object.execute (TypeError: not a function)
     // and recorded STEP_ERROR; defineWorkflow({ initialStep: "toString" }) was accepted.

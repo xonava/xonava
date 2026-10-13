@@ -48,6 +48,7 @@ describe("validateEntity", () => {
 
   it.each([
     ["invalid module key", { moduleKey: "tenant/people" }],
+    ["non-string module key that coerces to a valid one", { moduleKey: ["tenant"] }],
     ["unknown primary key", { entity: { primaryKey: "missing" } }],
     ["missing tenant acknowledgement", { entityScope: { kind: "platform" } }],
     ["tenant field without tenant scope", { entityScope: { kind: "platform", acknowledged: true } }],

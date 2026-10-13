@@ -78,7 +78,9 @@ function assertWellFormedResult(result: WorkflowStepResult): void {
   if ("variables" in result && result.variables !== undefined && result.variables !== null && !isDataObject(result.variables)) invalid("variables must be an object")
   if (result.kind === "next") {
     if (!nonEmptyString(result.step)) invalid("step must be a non-empty string")
-    if (result.compensation !== undefined && !nonEmptyString(result.compensation)) invalid("compensation must be a non-empty string")
+    // null/undefined/"" mean "no compensation" (the pre-validation behaviour); only a non-string truthy value is malformed.
+    const compensation: unknown = result.compensation
+    if (compensation !== undefined && compensation !== null && compensation !== "" && typeof compensation !== "string") invalid("compensation must be a string")
   } else if (result.kind === "wait") {
     if (!nonEmptyString(result.signal)) invalid("signal must be a non-empty string")
   } else if (result.kind === "sleep") {

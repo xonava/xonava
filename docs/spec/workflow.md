@@ -32,10 +32,13 @@ Traceability: `packages/core/src/workflow`; workflow unit and provider integrati
 | `fail` result | fail immediately (`STEP_FAILED`) | `compensation_failed` |
 | error with `retryable: true` or `kind: "retryable"` | retry under policy | retry under policy |
 | any other error | fail immediately (error code) | retry under policy |
-| deadline exceeded, step stopped within the grace period | retry only if `idempotent: true`, else fail (`TIMEOUT`) | retry under policy |
+| deadline exceeded after the step started, step stopped within the grace period | retry only if `idempotent: true`, else fail (`TIMEOUT`) | retry under policy |
+| deadline exceeded before the step was started (slow lease renewal or signal read) | retry under policy (the step cannot have had an external effect, so `idempotent` is irrelevant) | same |
 | deadline exceeded, step ignored cancellation | nothing is committed (`stalled`); the lease lapses and the next claim counts the attempt | same |
 | attempt counter already above `maxAttempts` at claim | fail without running (`ATTEMPTS_EXHAUSTED`) | `compensation_failed` |
 | definition version unknown to this worker | hand back without consuming an attempt (`deferred`) | same |
+
+A `next` result's `compensation` of `null`, `undefined`, or `""` means no compensation step; any other non-string value is malformed (`INVALID_STEP_RESULT`).
 
 A failed execution step enters `compensating` when the compensation stack is non-empty, otherwise `failed`. Compensation runs the stack in reverse order; a compensation step that exhausts its policy stops the instance in the terminal state `compensation_failed`, keeping the remaining stack for manual intervention. A dispatcher MUST NOT record a failure (and so start compensation) while a timed-out step may still be running.
 

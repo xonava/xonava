@@ -47,7 +47,7 @@ function assertCertification(cert: GuaranteeCertificationV1, options: CompileFra
   if (cert.status === "proven") {
     const evidence = cert.evidence
     if (!evidence) fail(`proven certification ${cert.guarantee} has no evidence`)
-    if (!Number.isSafeInteger(evidence.suiteVersion) || evidence.suiteVersion < 1 || !HEX_256.test(evidence.artifactSha256)) fail(`invalid evidence for ${cert.guarantee}`)
+    if (!Number.isSafeInteger(evidence.suiteVersion) || evidence.suiteVersion < 1 || typeof evidence.artifactSha256 !== "string" || !HEX_256.test(evidence.artifactSha256)) fail(`invalid evidence for ${cert.guarantee}`)
     nonEmpty(evidence.suiteId, "evidence.suiteId"); nonEmpty(evidence.artifactPath, "evidence.artifactPath")
     if (evidence.sourceRevision !== options.sourceRevision || evidence.frameworkVersion !== options.frameworkVersion) fail(`stale evidence for ${cert.guarantee}`)
     if (!Number.isFinite(Date.parse(evidence.executedAt))) fail(`invalid evidence timestamp for ${cert.guarantee}`)

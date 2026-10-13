@@ -70,7 +70,7 @@ export function validateEntity<
   if (input.cache && Object.hasOwn(input.cache, "enabled")) throw new ConfigurationError(`Entity "${entityName}" cache must use false or a configuration object without enabled.`)
   if (input.idempotency && Object.hasOwn(input.idempotency, "required")) throw new ConfigurationError(`Entity "${entityName}" idempotency must use false or a configuration object without required.`)
 
-  if (!/^[a-zA-Z][a-zA-Z0-9]*(?:\.[a-zA-Z][a-zA-Z0-9]*)*$/.test(input.moduleKey)) {
+  if (typeof input.moduleKey !== "string" || !/^[a-zA-Z][a-zA-Z0-9]*(?:\.[a-zA-Z][a-zA-Z0-9]*)*$/.test(input.moduleKey)) {
     throw new ConfigurationError(`Entity "${entityName}" has an invalid module key.`)
   }
 

@@ -194,7 +194,7 @@ async function renewWithDeadline(operation: Promise<boolean>, leaseDurationMs: n
 
 async function markFailedState(args: Parameters<JobStore["markFailed"]>[0], store: JobStore): Promise<{ applied: boolean; error?: string }> {
   try {
-    const status = await store.markFailed(args)
+    const status = await store.markFailed({ ...args, error: boundJobErrorMessage(args.error) })
     return status.applied ? status : { applied: false, error: status.reason === "HISTORY_FAILED" ? status.historyError ?? "Required execution history could not be persisted" : "Job lease was lost" }
   } catch (error) {
     return { applied: false, error: errorMessage(error) }
@@ -280,7 +280,7 @@ async function releaseAfterSetupFailure(args: DispatcherConfig & { job: StoredJo
       at = new Date()
     }
     if (!(at instanceof Date) || Number.isNaN(at.getTime())) at = new Date()
-    const released = await store.release({ jobId: job.id, workerId, claimToken: job.claimToken, nextAttemptAt: new Date(at.getTime() + leaseDurationMs), reason: error })
+    const released = await store.release({ jobId: job.id, workerId, claimToken: job.claimToken, nextAttemptAt: new Date(at.getTime() + leaseDurationMs), reason: boundJobErrorMessage(error) })
     if (released.applied) {
       log.warn("Job released: setup failed", { jobId: job.id, jobType: job.jobType, error })
       return { kind: "retried", error }
@@ -605,7 +605,7 @@ async function deferUnrunnableJob(args: DispatcherConfig & { job: StoredJob; log
     // job with a small budget must not be dead-lettered inside its deferral window by one store hiccup.
     for (let tries = 1; tries <= 2; tries++) {
       try {
-        const released = await store.release({ jobId: job.id, workerId, claimToken, nextAttemptAt, reason: error })
+        const released = await store.release({ jobId: job.id, workerId, claimToken, nextAttemptAt, reason: boundJobErrorMessage(error) })
         if (released.applied) {
           log.warn("Job released: unknown definition", { jobId: job.id, jobType: job.jobType, jobVersion: job.jobVersion })
           return { kind: "retried", error }
@@ -619,7 +619,7 @@ async function deferUnrunnableJob(args: DispatcherConfig & { job: StoredJob; log
     }
   }
   try {
-    const deferred = await store.markRetrying({ jobId: job.id, workerId, claimToken, nextAttemptAt, error, attempt })
+    const deferred = await store.markRetrying({ jobId: job.id, workerId, claimToken, nextAttemptAt, error: boundJobErrorMessage(error), attempt })
     if (deferred.applied) {
       log.warn("Job deferred: unknown definition", { jobId: job.id, jobType: job.jobType, jobVersion: job.jobVersion, attempt })
       return { kind: "retried", error }

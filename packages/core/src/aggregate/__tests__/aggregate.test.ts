@@ -11,6 +11,18 @@ const definition = () => compileAggregate<State>({
   ],
 })
 
+describe("aggregate key validation", () => {
+  const base = { key: "orders", version: 1, members: ["order"], invariants: [{ key: "inv", phase: "both", check: () => true }] }
+  it.each([
+    ["key", { key: ["orders"] }],
+    ["member", { members: [["order"]] }],
+    ["invariant key", { invariants: [{ key: ["inv"], phase: "both", check: () => true }] }],
+  ])("rejects a non-string %s that a regular expression would coerce to a valid key", (_name, override) => {
+    // Before the fix KEY.test(["orders"]) coerced the array to "orders" and compilation succeeded.
+    expect(() => compileAggregate({ ...base, ...override } as never)).toThrow(/invalid|unique valid keys/)
+  })
+})
+
 describe("aggregate consistency boundaries", () => {
   it("compiles an immutable named boundary", () => {
     const compiled = definition()

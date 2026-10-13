@@ -46,15 +46,15 @@ function snapshot<TSnapshot extends AggregateSnapshot>(value: TSnapshot, members
 }
 
 export function compileAggregate<TSnapshot extends AggregateSnapshot>(definition: AggregateDefinition<TSnapshot>): CompiledAggregateDefinition<TSnapshot> {
-  if (!definition || typeof definition !== "object" || !KEY.test(definition.key)) throw new ConfigurationError("Aggregate key is invalid")
+  if (!definition || typeof definition !== "object" || typeof definition.key !== "string" || !KEY.test(definition.key)) throw new ConfigurationError("Aggregate key is invalid")
   if (!Number.isSafeInteger(definition.version) || definition.version < 1) throw new ConfigurationError("Aggregate version must be a positive safe integer")
   if (!Array.isArray(definition.members) || definition.members.length < 1 || definition.members.length > 100) throw new ConfigurationError("Aggregate must declare between 1 and 100 members")
   const members = [...definition.members]
-  if (members.some(member => !KEY.test(member)) || new Set(members).size !== members.length) throw new ConfigurationError("Aggregate members must be unique valid keys")
+  if (members.some(member => typeof member !== "string" || !KEY.test(member)) || new Set(members).size !== members.length) throw new ConfigurationError("Aggregate members must be unique valid keys")
   if (!Array.isArray(definition.invariants) || definition.invariants.length < 1 || definition.invariants.length > 100) throw new ConfigurationError("Aggregate must declare between 1 and 100 invariants")
   const invariantKeys = new Set<string>()
   const invariants = definition.invariants.map(invariant => {
-    if (!invariant || !KEY.test(invariant.key) || invariantKeys.has(invariant.key)) throw new ConfigurationError("Aggregate invariant keys must be unique valid keys")
+    if (!invariant || typeof invariant.key !== "string" || !KEY.test(invariant.key) || invariantKeys.has(invariant.key)) throw new ConfigurationError("Aggregate invariant keys must be unique valid keys")
     if (!["before", "after", "both"].includes(invariant.phase) || typeof invariant.check !== "function") throw new ConfigurationError(`Aggregate invariant "${invariant.key}" is invalid`)
     invariantKeys.add(invariant.key)
     return Object.freeze({ key: invariant.key, phase: invariant.phase, check: invariant.check })

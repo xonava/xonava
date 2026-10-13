@@ -278,3 +278,47 @@ describe("one claimed job's setup failure stays with that job", () => {
     expect(store.release).toHaveBeenCalledTimes(1)
   })
 })
+
+describe("job failure text is bounded on every store write", () => {
+  const LONG = 200_000
+  const over = (text: string | undefined) => new TextEncoder().encode(text ?? "").byteLength > 65_535
+  const reject = (what: string) => new Error(`Data too long for column '${what}'`)
+  function strictSetup(job: StoredJob, definition: Partial<JobDefinition> = {}) {
+    const s = setup(async () => ({ success: true }), job, definition)
+    const release = s.store.release as unknown as { mockImplementation: (fn: (args: { reason?: string }) => Promise<{ applied: true }>) => void }
+    release.mockImplementation(async (args) => { if (over(args.reason)) throw reject("reason"); return { applied: true as const } })
+    return s
+  }
+  const stored = (text: string) => expect(new TextEncoder().encode(text).byteLength).toBeLessThanOrEqual(MAX_JOB_ERROR_BYTES)
+
+  it("dead-letters a payload that fails to decode with an oversized message instead of leaving the job running", async () => {
+    const { store, dispatch } = strictSetup(claimed(), { decodePayload: () => { throw new Error(`invalid payload: ${"x".repeat(LONG)}`) } })
+    // Before the fix markFailed received the raw 200 KB message, the store rejected it and the outcome was lease_lost.
+    expect(await dispatch()).toMatchObject({ deadLettered: 1, leaseLost: 0 })
+    stored(store.markFailed.mock.calls[0]![0].error)
+  })
+
+  it("dead-letters a scope mismatch whose validation error is oversized", async () => {
+    const scope = { kind: "system", get systemKey(): string { throw new Error(`corrupt scope: ${"x".repeat(LONG)}`) } } as unknown as StoredJob["executionScope"]
+    const { store, dispatch } = strictSetup(claimed({ executionScope: scope }))
+    expect(await dispatch()).toMatchObject({ deadLettered: 1, leaseLost: 0 })
+    stored(store.markFailed.mock.calls[0]![0].error)
+  })
+
+  it("dead-letters an expired unknown definition whose job type is oversized", async () => {
+    const { store, dispatch } = strictSetup(claimed({ jobType: "g".repeat(LONG), lastError: `Unknown job definition: g@1 (unrunnable since ${new Date(NOW.getTime() - DEFAULT_UNKNOWN_DEFINITION_MAX_DEFERRAL_MS - 1).toISOString()})` }))
+    expect(await dispatch()).toMatchObject({ deadLettered: 1, leaseLost: 0 })
+    stored(store.markFailed.mock.calls[0]![0].error)
+  })
+
+  it("bounds the release reason and the markRetrying fallback of a deferred unknown definition", async () => {
+    const released = strictSetup(claimed({ jobType: "g".repeat(LONG), lastError: null }))
+    expect(await released.dispatch()).toMatchObject({ retried: 1, leaseLost: 0 })
+    stored((released.store.release.mock.calls as unknown as Array<[{ reason: string }]>)[0]![0].reason)
+
+    const retrying = strictSetup(claimed({ jobType: "g".repeat(LONG), lastError: null }))
+    retrying.store.release.mockRejectedValue(new Error("down"))
+    expect(await retrying.dispatch()).toMatchObject({ retried: 1, leaseLost: 0 })
+    stored(retrying.store.markRetrying.mock.calls[0]![0].error)
+  })
+})
