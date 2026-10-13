@@ -5,6 +5,7 @@ import type { EntityDescriptor, UnversionedEntityDescriptor, UnversionedReposito
 import type { DrizzleSessionLike } from "./drizzleRepository"
 import { createDrizzleRepository } from "./drizzleRepository"
 import type { DrizzleColumnMap } from "../drizzle-shared/predicateCompiler"
+import { CachePrefixLedger, resolveRegistration, type RegistrableEntity } from "../drizzle-shared/entityRegistration"
 import { ConfigurationError } from "core/domain"
 import { sql } from "drizzle-orm"
 import { classifyTransactionFailure, statementTimeoutMs } from "../drizzle-shared/transactionOutcome"
@@ -25,13 +26,21 @@ export interface EntityMapping {
 
 export class DrizzleEntityRegistry {
   private mappings = new Map<string, EntityMapping>()
+  private cachePrefixes = new CachePrefixLedger()
 
-  register<T>(entity: EntityDescriptor<T>, table: AnyPgTable, columnMap: DrizzleColumnMap, namespace?: string): this {
+  /**
+   * Accepts a persistence descriptor or a compiled `defineEntity()` definition.
+   * A compiled entity's resolved cache key prefix must be unique across the registry.
+   */
+  register<T>(input: RegistrableEntity<T>, table: AnyPgTable, columnMap: DrizzleColumnMap, namespace?: string): this {
+    const { descriptor: entity, cachePrefix } = resolveRegistration(input)
     const key = namespace ? `${namespace}:${entity.name}` : entity.name
     validateEntityRegistration(entity, columnMap, key)
     if (this.mappings.has(key)) {
       throw new ConfigurationError(`Entity "${key}" is already registered in the Drizzle entity registry.`)
     }
+    this.cachePrefixes.assertAvailable(cachePrefix)
+    this.cachePrefixes.claim(cachePrefix)
     this.mappings.set(key, { table, columnMap })
     return this
   }
