@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, gte, inArray, isNull, lte, lt, ne, or, sql, type AnyColumn } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lte, lt, ne, or, sql, type AnyColumn, type SQL } from "drizzle-orm"
 import { ConfigurationError, ConflictError } from "core/domain"
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core"
 import type {
@@ -24,7 +24,7 @@ import { decodePersistedJobFingerprint, decodePersistedJobScope, encodeJobScope 
 import { uuidv7 } from "uuidv7"
 import type { DrizzleColumnMap } from "../drizzle-shared/predicateCompiler"
 import type { DrizzleSessionLike } from "./drizzleRepository"
-import { d1ColumnInputValue, d1ColumnKey, d1CurrentEpochMilliseconds, d1EpochMillisecondsAfter, getAffectedRows } from "./d1Utils"
+import { d1ColumnInputValue, d1ColumnKey, d1CurrentEpochMilliseconds, d1DriverValue, d1EpochMillisecondsAfter, getAffectedRows } from "./d1Utils"
 import { isUniqueViolation, normalizeDrizzleError } from "../drizzle-shared/errors"
 
 export interface DrizzleJobStoreConfig {
@@ -127,10 +127,6 @@ export class DrizzleJobStore implements JobStore {
         throw new ConfigurationError(`Job store is missing the required '${column}' column in its column map`)
       }
     }
-    this.partitionKeyColumnName = (this.jobs.partitionKey as unknown as { name?: string }).name ?? "partition_key"
-    this.leaseExpiresAtColumnName = (this.jobs.leaseExpiresAt as unknown as { name?: string } | undefined)?.name ?? "lease_expires_at"
-    this.physicalIdColumn = (this.jobs.id as unknown as { name?: string }).name ?? "id"
-    this.physicalStatusColumn = (this.jobs.status as unknown as { name?: string }).name ?? "status"
 
     // Validate and store required execution-history column objects from the map.
     const REQUIRED_EXEC_COLUMNS = ["id", "jobId", "attempt", "workerId", "status", "errorMessage", "startedAt", "finishedAt"] as const
@@ -152,10 +148,6 @@ export class DrizzleJobStore implements JobStore {
   private readonly jobsTable: AnySQLiteTable
   private readonly executionsTable: AnySQLiteTable
   private readonly executionHistory: "best_effort" | "required"
-  private readonly partitionKeyColumnName: string
-  private readonly leaseExpiresAtColumnName: string
-  private readonly physicalIdColumn: string
-  private readonly physicalStatusColumn: string
 
   // Required execution-history column objects derived from the column map.
   // Used as keys in .values() inserts so Drizzle maps them to the correct
@@ -276,10 +268,24 @@ export class DrizzleJobStore implements JobStore {
     return rows[0] ? toStoredJob(rows[0] as Record<string, unknown>) : null
   }
 
+  /** Column of the jobs table qualified by a subquery alias, using its physical name. */
+  private aliased(alias: string, column: AnyColumn): SQL {
+    return sql`${sql.identifier(alias)}.${sql.identifier(column.name)}`
+  }
+
+  /** Same scope, tenant and partition as the outer job row, excluding the row itself. */
+  private samePartition(alias: string): SQL {
+    const j = this.jobs
+    return sql`${this.aliased(alias, j.partitionKey!)} = ${j.partitionKey!} AND ${this.aliased(alias, j.scope!)} = ${j.scope!} AND ${this.aliased(alias, j.tenantId!)} IS ${j.tenantId!} AND ${this.aliased(alias, j.id!)} <> ${j.id!}`
+  }
+
   async claimDue(args: ClaimDueJobsArgs): Promise<StoredJob[]> {
     assertDurableIdentifier(args.workerId, "workerId", 100)
+    // A non-positive or non-integral limit claims nothing (SQLite would treat LIMIT -1 or NULL as unbounded).
+    if (!Number.isSafeInteger(args.limit) || args.limit <= 0) return []
     const now = args.now ?? new Date()
     const leaseExpiresAt = d1EpochMillisecondsAfter(args.leaseDurationMs)
+    const j = this.jobs
      const due = or(
        and(inArray(this.jobs.status!, ["pending", "retrying"]), lte(this.jobs.nextAttemptAt ?? this.jobs.runAt!, now), lt(this.jobs.attempts!, this.jobs.maxAttempts!)),
         and(eq(this.jobs.status!, "running"), lt(this.jobs.attempts!, this.jobs.maxAttempts!), lt(this.jobs.leaseExpiresAt!, d1CurrentEpochMilliseconds())),
@@ -295,14 +301,21 @@ export class DrizzleJobStore implements JobStore {
       eq(this.jobs.status!, "running"), lt(this.jobs.leaseExpiresAt!, d1CurrentEpochMilliseconds()), gte(this.jobs.attempts!, this.jobs.maxAttempts!),
       ...(scope ? [scope] : []),
     ))
-     const eligible = await this.db.select({ id: this.jobs.id! }).from(this.jobsTable).where(scope ? and(due, scope) : due)
-       .orderBy(sql`${asc(this.jobs.priority!)}, ${asc(this.jobs.runAt!)}`).limit(args.limit).offset(0)
+    // queue-overlap serialization: at most one job of the same partition (within the same scope and tenant) may be
+    // running at a time. The NOT EXISTS is evaluated inside the claim UPDATE, so it atomically fences two workers
+    // racing to claim the same partition.
+    const noRunningSibling = sql`NOT EXISTS (SELECT 1 FROM ${this.jobsTable} sibling WHERE ${this.samePartition("sibling")} AND ${this.aliased("sibling", j.status!)} = 'running' AND ${this.aliased("sibling", j.leaseExpiresAt!)} > ${d1CurrentEpochMilliseconds()})`
+    const dueNow = d1DriverValue(j.nextAttemptAt ?? j.runAt!, now)
+    const dueFor = (alias: string) => sql`((${this.aliased(alias, j.status!)} IN ('pending', 'retrying') AND ${this.aliased(alias, j.attempts!)} < ${this.aliased(alias, j.maxAttempts!)} AND ${this.aliased(alias, j.nextAttemptAt ?? j.runAt!)} <= ${dueNow})
+      OR (${this.aliased(alias, j.status!)} = 'running' AND ${this.aliased(alias, j.attempts!)} < ${this.aliased(alias, j.maxAttempts!)} AND ${this.aliased(alias, j.leaseExpiresAt!)} < ${d1CurrentEpochMilliseconds()}))`
+    // Only the head of each partition is a candidate, so a busy partition can neither fill the LIMIT (starving jobs
+    // of other partitions behind it) nor have two of its jobs selected in one batch.
+    const isPartitionHead = sql`NOT EXISTS (SELECT 1 FROM ${this.jobsTable} ahead WHERE ${this.samePartition("ahead")} AND ${dueFor("ahead")}
+      AND (${this.aliased("ahead", j.priority!)}, ${this.aliased("ahead", j.runAt!)}, ${this.aliased("ahead", j.id!)}) < (${j.priority!}, ${j.runAt!}, ${j.id!}))`
+    const eligible = await this.db.select({ id: this.jobs.id! }).from(this.jobsTable).where(and(due, ...(scope ? [scope] : []), noRunningSibling, isPartitionHead))
+       .orderBy(sql`${asc(this.jobs.priority!)}, ${asc(this.jobs.runAt!)}, ${asc(this.jobs.id!)}`).limit(args.limit).offset(0)
     const claimedIds: string[] = []
     const claimTokens = new Map<string, string>()
-    // queue-overlap serialization: at most one job of the same partition may be
-    // running at a time. The NOT EXISTS is evaluated inside the claim UPDATE,
-    // so it atomically fences two workers racing to claim the same partition.
-     const noRunningSibling = sql`NOT EXISTS (SELECT 1 FROM ${this.jobsTable} sibling WHERE sibling.${sql.identifier(this.partitionKeyColumnName)} = ${this.jobs.partitionKey} AND sibling.${sql.identifier(this.physicalStatusColumn)} = 'running' AND sibling.${sql.identifier(this.leaseExpiresAtColumnName)} > ${d1CurrentEpochMilliseconds()} AND sibling.${sql.identifier(this.physicalIdColumn)} <> ${this.jobs.id})`
     for (const row of eligible as { id: string }[]) {
       const claimToken = uuidv7()
       const result = await this.db.update(this.jobsTable).set({
@@ -328,7 +341,8 @@ export class DrizzleJobStore implements JobStore {
     assertDurableIdentifier(args.workerId, "workerId", 100)
     const durationMs = args.extendByMs
     if (!Number.isFinite(durationMs) || durationMs <= 0) return false
-    const leaseExpiresAt = d1EpochMillisecondsAfter(durationMs)
+    // Renewal only ever moves the expiry forward: a shorter extension than the time left must not shorten the lease.
+    const leaseExpiresAt = sql`MAX(${this.jobs.leaseExpiresAt!}, ${d1EpochMillisecondsAfter(durationMs)})`
     const result = await this.db.update(this.jobsTable).set({ leaseExpiresAt }).where(and(
          eq(this.jobs.id!, args.jobId), eq(this.jobs.leaseOwner!, args.workerId), eq(this.jobs.claimToken!, args.claimToken), eq(this.jobs.status!, "running"), gt(this.jobs.leaseExpiresAt!, d1CurrentEpochMilliseconds()),
     ))
@@ -379,7 +393,7 @@ export class DrizzleJobStore implements JobStore {
   }
 
     async cancel(args: CancelJobArgs): Promise<JobTransitionResult> {
-     const conditions = [eq(this.jobs.id!, args.jobId), ne(this.jobs.status!, "succeeded"), ne(this.jobs.status!, "cancelled"), ne(this.jobs.status!, "dead_letter")]
+     const conditions = [eq(this.jobs.id!, args.jobId), ne(this.jobs.status!, "succeeded"), ne(this.jobs.status!, "cancelled"), ne(this.jobs.status!, "dead_letter"), ne(this.jobs.status!, "failed")]
       conditions.push(...this.requesterFilters(args.requester))
        const now = new Date()
        if (this.executionHistory === "required") {

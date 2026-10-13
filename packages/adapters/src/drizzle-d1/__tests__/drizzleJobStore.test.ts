@@ -366,3 +366,26 @@ describe("job release without consuming an attempt", () => {
     await expect(store.release({ jobId: "j1", workerId: "w", claimToken: "stale", nextAttemptAt: new Date(), reason: "x" })).resolves.toEqual({ applied: false, reason: "LEASE_LOST" })
   })
 })
+
+describe("job store guards found by the real-database differential", () => {
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])("claimDue with limit %s claims nothing and issues no statement (SQLite treats LIMIT -1 as unbounded)", async (limit) => {
+    const { store, update } = createStore()
+    await expect(store.claimDue({ requester: { scope: "system" }, workerId: "w", leaseDurationMs: 1_000, limit })).resolves.toEqual([])
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it("cancel only touches jobs that are not already terminal (succeeded, failed, cancelled, dead_letter)", async () => {
+    const { store, getWhere } = createStore()
+    await store.cancel({ jobId: "j1", requester: { scope: "system" } })
+    const { params } = new SQLiteSyncDialect().sqlToQuery(getWhere()!)
+    for (const status of ["succeeded", "failed", "cancelled", "dead_letter"]) expect(params).toContain(status)
+  })
+
+  it("renewLease keeps the later of the current and the renewed expiry, so a renewal never shortens a lease", async () => {
+    let captured: Record<string, unknown> | undefined
+    const db = { insert: vi.fn(), update: vi.fn(() => ({ set: (values: Record<string, unknown>) => { captured = values; return { where: async () => ({ rowsAffected: 1 }) } } })) } as unknown as DrizzleSessionLike
+    const store = createDrizzleJobStore(db, { jobsTable, executionsTable, columnMap })
+    await store.renewLease({ jobId: "j", workerId: "w", claimToken: "t", extendByMs: 1_000 })
+    expect(new SQLiteSyncDialect().sqlToQuery(captured!.leaseExpiresAt as SQL<unknown>).sql).toMatch(/MAX\(/)
+  })
+})
