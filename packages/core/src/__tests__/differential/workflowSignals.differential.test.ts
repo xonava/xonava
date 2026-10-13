@@ -87,67 +87,91 @@ function projectModel(row: ModelRow): unknown {
   }
 }
 
+/**
+ * Replays one case against the in-memory store and the reference model, comparing after every op. Receipts are compared in global
+ * delivery order until a concurrent batch (two or more claims running at once) has run: the order in which concurrent steps deliver
+ * their own signals to different instances is not specified (a resumed step awaits its receipt lookup before it starts, so it can
+ * start later than a sibling that has no receipt), so from then on the delivery order is compared per instance, which is the only
+ * order the spec defines ("oldest" means smallest delivery order among one instance's receipts of a name).
+ */
+async function checkSignalCase(value: SignalCase): Promise<void> {
+  const clock = new ManualClock()
+  const store = new MemoryWorkflowStore(clock)
+  const world: World = buildWorld(value.world, clock, store)
+  const model = new ModelDispatcher(value.world, clock.current, [0.5])
+  let concurrent = false
+  for (const [index, op] of value.ops.entries()) {
+    const label = `op #${index} ${op.t}`
+    switch (op.t) {
+      case "start": {
+        if (store.rows.has(op.id)) break
+        await startInstance(store, op.id)
+        model.start(op.id, "order", 1, {})
+        break
+      }
+      case "advance": await clock.jumpTo(clock.current + op.ms); model.time += op.ms; break
+      case "signal": {
+        const row = model.rows.get(op.id)
+        const known = model.receipts.some((receipt) => receipt.id === op.sid)
+        const expected = !row ? { delivered: false, duplicate: false } : known ? { delivered: false, duplicate: true } : ["succeeded", "failed", "cancelled", "compensation_failed"].includes(row.status) ? { delivered: false, duplicate: false } : { delivered: true, duplicate: false }
+        const before = store.receipts.length
+        expect(await store.deliverSignal({ id: op.sid, instanceId: op.id, name: op.name, payload: { n: index } }), `${label}: delivery result`).toEqual(expected)
+        expect(store.receipts.length - before, `${label}: stored receipts`).toBe(expected.delivered ? 1 : 0)
+        if (expected.duplicate) coverage.duplicates++
+        if (row && !expected.delivered && !expected.duplicate) coverage.afterTerminal++
+        if (row?.status === "compensating") coverage.compensating++
+        model.signal(op.id, op.name, op.sid)
+        break
+      }
+      case "cancel": expect(await store.cancel(op.id), `${label}: cancel`).toBe(model.cancel(op.id)); break
+      case "dispatch": {
+        const result = await drive(dispatchWorkflows(dispatchOptions(world, store, clock, { workerId: op.worker, claimLimit: op.limit, ...(op.parallel ? { concurrency: op.limit } : {}) })), clock)
+        const expected = model.dispatch(op.limit, op.parallel)
+        if (op.parallel && expected.claimed >= 2) concurrent = true
+        expect({ ...result }, `${label}: dispatch result`).toEqual({ ...expected })
+        expect(clock.current, `${label}: clock`).toBe(model.time)
+        const perInstance = (log: typeof world.log): Record<string, unknown[]> => log.reduce<Record<string, unknown[]>>((acc, entry) => { (acc[entry.id] ??= []).push(entry); return acc }, {})
+        expect(perInstance(world.log), `${label}: step invocations (including the receipt each resumed step saw)`).toEqual(perInstance(model.log))
+        break
+      }
+    }
+    expect([...store.rows.keys()].sort(), `${label}: instances`).toEqual([...model.rows.keys()].sort())
+    for (const [id, expectedRow] of model.rows) expect(projectRow(store.rows.get(id)!), `${label}: ${id}`).toEqual(projectModel(expectedRow))
+    if (concurrent) {
+      const perInstanceReceipts = (receipts: readonly { id: string; instanceId: string }[]): Record<string, string[]> => receipts.reduce<Record<string, string[]>>((acc, receipt) => { (acc[receipt.instanceId] ??= []).push(receipt.id); return acc }, {})
+      expect(perInstanceReceipts(store.receipts), `${label}: receipts in delivery order, per instance`).toEqual(perInstanceReceipts(model.receipts))
+    } else {
+      expect(store.receipts.map((receipt) => receipt.id), `${label}: receipts in delivery order`).toEqual(model.receipts.map((receipt) => receipt.id))
+    }
+    expect([...store.consumed.keys()].sort(), `${label}: consumed receipts`).toEqual(model.receipts.filter((receipt) => receipt.consumed).map((receipt) => receipt.id).sort())
+    expectNoViolations(store, label)
+  }
+  // The resumed step saw exactly the receipt that resumed it: a claim's resume id is the latest consumption of that instance before the claim.
+  for (const claim of store.claims) {
+    if (claim.resumeSignalId === null) continue
+    const earlier = store.consumptions.slice(0, claim.consumedBefore).filter((record) => record.instanceId === claim.instanceId)
+    expect(claim.resumeSignalId, `claim ${claim.claimToken}: resume receipt`).toBe(earlier.at(-1)?.signalId)
+  }
+  for (const entry of world.log) if (entry.signalId !== null) {
+    coverage.resumedWithSignal++
+    expect(store.receipts.find((receipt) => receipt.id === entry.signalId)?.instanceId, "a step only sees receipts of its own instance").toBe(entry.id)
+    expect(store.consumed.has(entry.signalId), "a step only sees consumed receipts").toBe(true)
+  }
+  for (const record of store.consumptions) coverage[record.via === "commit" ? "viaCommit" : "viaDeliver"]++
+  coverage.leftPending += store.receipts.filter((receipt) => !store.consumed.has(receipt.id)).length
+}
+
 describe("workflow signal buffering — model equivalence", () => {
   it("rows, receipts, consumption order and resumed signals match the reference model under random signal-heavy interleavings", async () => {
-    await forAllAsync("workflow signal buffering model equivalence", generateSignalCase, async (value) => {
-      const clock = new ManualClock()
-      const store = new MemoryWorkflowStore(clock)
-      const world: World = buildWorld(value.world, clock, store)
-      const model = new ModelDispatcher(value.world, clock.current, [0.5])
-      for (const [index, op] of value.ops.entries()) {
-        const label = `op #${index} ${op.t}`
-        switch (op.t) {
-          case "start": {
-            if (store.rows.has(op.id)) break
-            await startInstance(store, op.id)
-            model.start(op.id, "order", 1, {})
-            break
-          }
-          case "advance": await clock.jumpTo(clock.current + op.ms); model.time += op.ms; break
-          case "signal": {
-            const row = model.rows.get(op.id)
-            const known = model.receipts.some((receipt) => receipt.id === op.sid)
-            const expected = !row ? { delivered: false, duplicate: false } : known ? { delivered: false, duplicate: true } : ["succeeded", "failed", "cancelled", "compensation_failed"].includes(row.status) ? { delivered: false, duplicate: false } : { delivered: true, duplicate: false }
-            const before = store.receipts.length
-            expect(await store.deliverSignal({ id: op.sid, instanceId: op.id, name: op.name, payload: { n: index } }), `${label}: delivery result`).toEqual(expected)
-            expect(store.receipts.length - before, `${label}: stored receipts`).toBe(expected.delivered ? 1 : 0)
-            if (expected.duplicate) coverage.duplicates++
-            if (row && !expected.delivered && !expected.duplicate) coverage.afterTerminal++
-            if (row?.status === "compensating") coverage.compensating++
-            model.signal(op.id, op.name, op.sid)
-            break
-          }
-          case "cancel": expect(await store.cancel(op.id), `${label}: cancel`).toBe(model.cancel(op.id)); break
-          case "dispatch": {
-            const result = await drive(dispatchWorkflows(dispatchOptions(world, store, clock, { workerId: op.worker, claimLimit: op.limit, ...(op.parallel ? { concurrency: op.limit } : {}) })), clock)
-            const expected = model.dispatch(op.limit, op.parallel)
-            expect({ ...result }, `${label}: dispatch result`).toEqual({ ...expected })
-            expect(clock.current, `${label}: clock`).toBe(model.time)
-            const perInstance = (log: typeof world.log): Record<string, unknown[]> => log.reduce<Record<string, unknown[]>>((acc, entry) => { (acc[entry.id] ??= []).push(entry); return acc }, {})
-            expect(perInstance(world.log), `${label}: step invocations (including the receipt each resumed step saw)`).toEqual(perInstance(model.log))
-            break
-          }
-        }
-        expect([...store.rows.keys()].sort(), `${label}: instances`).toEqual([...model.rows.keys()].sort())
-        for (const [id, expectedRow] of model.rows) expect(projectRow(store.rows.get(id)!), `${label}: ${id}`).toEqual(projectModel(expectedRow))
-        expect(store.receipts.map((receipt) => receipt.id), `${label}: receipts in delivery order`).toEqual(model.receipts.map((receipt) => receipt.id))
-        expect([...store.consumed.keys()].sort(), `${label}: consumed receipts`).toEqual(model.receipts.filter((receipt) => receipt.consumed).map((receipt) => receipt.id).sort())
-        expectNoViolations(store, label)
-      }
-      // The resumed step saw exactly the receipt that resumed it: a claim's resume id is the latest consumption of that instance before the claim.
-      for (const claim of store.claims) {
-        if (claim.resumeSignalId === null) continue
-        const earlier = store.consumptions.slice(0, claim.consumedBefore).filter((record) => record.instanceId === claim.instanceId)
-        expect(claim.resumeSignalId, `claim ${claim.claimToken}: resume receipt`).toBe(earlier.at(-1)?.signalId)
-      }
-      for (const entry of world.log) if (entry.signalId !== null) {
-        coverage.resumedWithSignal++
-        expect(store.receipts.find((receipt) => receipt.id === entry.signalId)?.instanceId, "a step only sees receipts of its own instance").toBe(entry.id)
-        expect(store.consumed.has(entry.signalId), "a step only sees consumed receipts").toBe(true)
-      }
-      for (const record of store.consumptions) coverage[record.via === "commit" ? "viaCommit" : "viaDeliver"]++
-      coverage.leftPending += store.receipts.filter((receipt) => !store.consumed.has(receipt.id)).length
-    }, { runs: 300, shrink: shrinkCase, describe: (value) => JSON.stringify(value) })
+    await forAllAsync("workflow signal buffering model equivalence", generateSignalCase, checkSignalCase, { runs: 300, shrink: shrinkCase, describe: (value) => JSON.stringify(value) })
+  })
+})
+
+describe("workflow signal buffering — concurrent batches", () => {
+  // DIFFERENTIAL_SEED=3891431427 DIFFERENTIAL_RUN=132: in one concurrent batch, i0 is resumed from a buffered receipt (its step starts only after the
+  // receipt lookup resolves) while i2 starts at once, so i2 delivers its own signal before i0 does. The spec orders receipts only within an instance.
+  it("a concurrent batch may deliver the self-signals of different instances in either order; each instance's receipts keep their delivery order (fixed counterexample)", async () => {
+    await checkSignalCase(JSON.parse(String.raw`{"world":{"graceMs":20,"steps":{"a":{"retry":{"maxAttempts":4,"initialDelayMs":10,"backoffMultiplier":2,"maxDelayMs":400,"jitter":"none"},"idempotent":true,"hasCompensate":true,"exec":[{"k":"signalSelf","name":"stop","then":{"k":"wait","sig":"go"}},{"k":"wait","sig":"go","vars":{"k2":1,"poison":true}},{"k":"signalSelf","name":"go","then":{"k":"wait","sig":"stop"}},{"k":"next","to":"d","comp":"c"}],"comp":[{"k":"complete"}]},"b":{"retry":{"maxAttempts":3,"initialDelayMs":10,"backoffMultiplier":2,"maxDelayMs":400,"jitter":"none"},"hasCompensate":true,"exec":[{"k":"wait","sig":"go"},{"k":"wait","sig":"go"},{"k":"complete"}],"comp":[{"k":"complete"}]},"c":{"retry":{"maxAttempts":3,"initialDelayMs":100,"backoffMultiplier":2,"maxDelayMs":400,"jitter":"none"},"idempotent":true,"hasCompensate":true,"exec":[{"k":"signalSelf","name":"go","then":{"k":"complete"}},{"k":"fail"},{"k":"next","to":"a"}],"comp":[{"k":"complete"}]},"d":{"retry":{"maxAttempts":4,"initialDelayMs":10,"backoffMultiplier":2,"maxDelayMs":400,"jitter":"none"},"idempotent":true,"hasCompensate":true,"exec":[{"k":"wait","sig":"stop"},{"k":"next","to":"a"},{"k":"next","to":"b","comp":"d"}],"comp":[{"k":"complete"}]}},"v2":null},"ops":[{"t":"start","id":"i0"},{"t":"signal","id":"i0","name":"go","sid":"sig-10"},{"t":"dispatch","limit":1,"worker":"w2","parallel":false},{"t":"dispatch","limit":2,"worker":"w1","parallel":false},{"t":"signal","id":"i0","name":"go","sid":"sig-20"},{"t":"start","id":"i2"},{"t":"dispatch","limit":2,"worker":"w1","parallel":true}]}`) as SignalCase)
   })
 })
 
