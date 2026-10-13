@@ -1,0 +1,53 @@
+{
+  "phase": "N1",
+  "status": "proven",
+  "runId": "release-20261013T190044Z",
+  "scenarios": [
+    {
+      "id": "formatting",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/sequence/__tests__/sequence.test.ts",
+        "testName": "allocates scoped values and formats without changing the stored number"
+      }
+    },
+    {
+      "id": "utc-reset",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/sequence/__tests__/sequence.test.ts",
+        "testName": "derives reset buckets in UTC"
+      }
+    },
+    {
+      "id": "provider-validation",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/sequence/__tests__/sequence.test.ts",
+        "testName": "rejects invalid provider output"
+      }
+    }
+  ],
+  "sourceManifest": [
+    {
+      "path": "packages/core/src/sequence/types.ts",
+      "sha256": "adbb40d85589321d7a5ff3864a258510619c60df65b4cac21f97b00245cfa277"
+    },
+    {
+      "path": "packages/core/src/sequence/sequence.ts",
+      "sha256": "3664468532cffebf7a6e61db5137184156bdd0958b57f0ce816d8fd0dbf5208c"
+    },
+    {
+      "path": "packages/core/src/sequence/index.ts",
+      "sha256": "d80b6bd74d79d34dbb2179f370398d48c3ba026febefe474abf174ce2ff67ce9"
+    },
+    {
+      "path": "packages/core/src/sequence/__tests__/sequence.test.ts",
+      "sha256": "7bde7af67facee04f1266885c24ecd590e86ba5cf9866a7fb90ffb25ad5c2546"
+    },
+    {
+      "path": "docs/spec/sequence.md",
+      "sha256": "85a06041f9b8bcd6490c584a6b34626f87d237b8250da8af64bfa63f1ea1915b"
+    }
+  ]
+}

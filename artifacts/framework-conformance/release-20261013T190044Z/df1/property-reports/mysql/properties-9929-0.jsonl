@@ -1,0 +1,6 @@
+{"property":"job store lifecycle differential (mysql/required)","seed":819824981,"scale":2,"baseRuns":60,"runs":120,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:37:37.829Z"}
+{"property":"job store lifecycle differential (mysql/best_effort)","seed":819824981,"scale":2,"baseRuns":60,"runs":120,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:38:01.140Z"}
+{"property":"job store concurrent transitions are linearizable (mysql/required)","seed":819824981,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:38:11.595Z"}
+{"property":"job store concurrent transitions are linearizable (mysql/best_effort)","seed":819824981,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:38:21.649Z"}
+{"property":"job store concurrent claim and transition storm (mysql/required)","seed":819824981,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:38:33.591Z"}
+{"property":"core job dispatcher against the real job store (mysql/required)","seed":819824981,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:38:45.227Z"}

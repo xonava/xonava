@@ -1,13 +1,13 @@
 {
   "schema": "framework.release-evidence",
   "schemaVersion": 1,
-  "generatedAt": "2026-10-13T11:18:21.482Z",
+  "generatedAt": "2026-10-13T19:00:46.364Z",
   "frameworkLine": "2.0",
   "certificationScope": "framework-only",
   "applicationPackageVersionsConsidered": false,
   "sourceRevision": {
     "kind": "git",
-    "value": "77de38b5bee1a8f546f68b23d9a9d8e84ea7a656"
+    "value": "77fbe157800996eba53e106048252629ddd1ee5e"
   },
   "lockfile": {
     "path": "package-lock.json",

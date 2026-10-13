@@ -1,0 +1,69 @@
+{
+  "phase": "TH1",
+  "status": "proven",
+  "runId": "release-20261013T190044Z",
+  "scenarios": [
+    {
+      "id": "as-of",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/temporal/__tests__/temporal.test.ts",
+        "testName": "reconstructs state at exact historical instants"
+      }
+    },
+    {
+      "id": "snapshot",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/temporal/__tests__/temporal.test.ts",
+        "testName": "starts from a snapshot and replays only later revisions"
+      }
+    },
+    {
+      "id": "lifecycle",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/temporal/__tests__/temporal.test.ts",
+        "testName": "represents deletion and restoration explicitly"
+      }
+    },
+    {
+      "id": "contiguity",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/temporal/__tests__/temporal.test.ts",
+        "testName": "rejects gaps, foreign resources, future records, and empty continuing pages"
+      }
+    },
+    {
+      "id": "bounded-replay",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/temporal/__tests__/temporal.test.ts",
+        "testName": "bounds replay across pages"
+      }
+    }
+  ],
+  "sourceManifest": [
+    {
+      "path": "packages/core/src/temporal/types.ts",
+      "sha256": "3b17822ebd2c96fd5389a9e86ae6a5cb5f71e744ff4b4bcdf81d4cb316d1135f"
+    },
+    {
+      "path": "packages/core/src/temporal/temporal.ts",
+      "sha256": "dfa5b7a939eecd0b289a27aa55dfab11d0226cce53e86641171c87b53093c65f"
+    },
+    {
+      "path": "packages/core/src/temporal/index.ts",
+      "sha256": "415aceaa8d862cbc7c2ecb6136fd115bfb7c731fb9d92c79ee4533dfc03d0f4e"
+    },
+    {
+      "path": "packages/core/src/temporal/__tests__/temporal.test.ts",
+      "sha256": "cd80d7bd760a589b0111c020e3b428ede0a021c6f9637c9d276c041c76b9c81f"
+    },
+    {
+      "path": "docs/spec/temporal.md",
+      "sha256": "fe722f2035bd5ae3dc13f0075133b6ca5c6dd5bec6006eacba51729cd4b31a97"
+    }
+  ]
+}
