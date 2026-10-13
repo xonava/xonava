@@ -192,6 +192,11 @@
       "packages/core/src/__tests__/differential/workflowRegistry.differential.test.ts::workflow definition isolation": 1,
       "packages/core/src/__tests__/differential/workflowRegistry.differential.test.ts::workflow registry decode": 1,
       "packages/core/src/__tests__/differential/workflowRegistry.differential.test.ts::workflow registry duplicates": 1,
+      "packages/core/src/__tests__/differential/workflowSignals.differential.test.ts::workflow signal buffering FIFO across waits": 1,
+      "packages/core/src/__tests__/differential/workflowSignals.differential.test.ts::workflow signal buffering model equivalence": 1,
+      "packages/core/src/__tests__/differential/workflowSignals.differential.test.ts::workflow signal delivery contract": 1,
+      "packages/core/src/__tests__/differential/workflowSignals.differential.test.ts::workflow signal delivery versus wait commit interleavings": 1,
+      "packages/core/src/__tests__/differential/workflowSignals.differential.test.ts::workflow signal lease loss between delivery and commit": 1,
       "packages/core/src/__tests__/differential/workflowStateMachine.differential.test.ts::workflow durable size boundary": 1,
       "packages/core/src/__tests__/differential/workflowStateMachine.differential.test.ts::workflow failure record": 1,
       "packages/core/src/__tests__/differential/workflowStateMachine.differential.test.ts::workflow stalled attempt predicate": 1,
@@ -201,16 +206,40 @@
       "packages/core/src/__tests__/differential/workflowStateMachine.differential.test.ts::workflow step result shape": 1
     },
     "pg": {
+      "packages/testing/integration/shared/jobStoreDifferential.ts::job store lifecycle differential (${…})": 2,
+      "packages/testing/integration/shared/jobStoreDifferentialConcurrency.ts::core job dispatcher against the real job store (${…})": 1,
+      "packages/testing/integration/shared/jobStoreDifferentialConcurrency.ts::job store concurrent claim and transition storm (${…})": 1,
+      "packages/testing/integration/shared/jobStoreDifferentialConcurrency.ts::job store concurrent transitions are linearizable (${…})": 2,
       "packages/testing/integration/shared/richParity.ts::real-database ABAC scope parity (${…})": 2,
-      "packages/testing/integration/shared/richParity.ts::real-database predicate parity (${…})": 2
+      "packages/testing/integration/shared/richParity.ts::real-database predicate parity (${…})": 2,
+      "packages/testing/integration/shared/scheduleStoreDifferential.ts::real-database schedule store concurrent claims (${…})": 1,
+      "packages/testing/integration/shared/scheduleStoreDifferential.ts::real-database schedule store lifecycle differential (${…})": 1,
+      "packages/testing/integration/shared/workflowStoreDifferential.ts::workflow store differential lifecycle (${…})": 1,
+      "packages/testing/integration/shared/workflowStoreDifferentialConcurrency.ts::workflow store differential concurrent dispatch (${…})": 1
     },
     "mysql": {
+      "packages/testing/integration/shared/jobStoreDifferential.ts::job store lifecycle differential (${…})": 2,
+      "packages/testing/integration/shared/jobStoreDifferentialConcurrency.ts::core job dispatcher against the real job store (${…})": 1,
+      "packages/testing/integration/shared/jobStoreDifferentialConcurrency.ts::job store concurrent claim and transition storm (${…})": 1,
+      "packages/testing/integration/shared/jobStoreDifferentialConcurrency.ts::job store concurrent transitions are linearizable (${…})": 2,
       "packages/testing/integration/shared/richParity.ts::real-database ABAC scope parity (${…})": 3,
-      "packages/testing/integration/shared/richParity.ts::real-database predicate parity (${…})": 3
+      "packages/testing/integration/shared/richParity.ts::real-database predicate parity (${…})": 3,
+      "packages/testing/integration/shared/scheduleStoreDifferential.ts::real-database schedule store concurrent claims (${…})": 1,
+      "packages/testing/integration/shared/scheduleStoreDifferential.ts::real-database schedule store lifecycle differential (${…})": 1,
+      "packages/testing/integration/shared/workflowStoreDifferential.ts::workflow store differential lifecycle (${…})": 1,
+      "packages/testing/integration/shared/workflowStoreDifferentialConcurrency.ts::workflow store differential concurrent dispatch (${…})": 1
     },
     "d1": {
+      "packages/testing/integration/shared/jobStoreDifferential.ts::job store lifecycle differential (${…})": 2,
+      "packages/testing/integration/shared/jobStoreDifferentialConcurrency.ts::core job dispatcher against the real job store (${…})": 1,
+      "packages/testing/integration/shared/jobStoreDifferentialConcurrency.ts::job store concurrent claim and transition storm (${…})": 1,
+      "packages/testing/integration/shared/jobStoreDifferentialConcurrency.ts::job store concurrent transitions are linearizable (${…})": 1,
       "packages/testing/integration/shared/richParity.ts::real-database ABAC scope parity (${…})": 1,
-      "packages/testing/integration/shared/richParity.ts::real-database predicate parity (${…})": 1
+      "packages/testing/integration/shared/richParity.ts::real-database predicate parity (${…})": 1,
+      "packages/testing/integration/shared/scheduleStoreDifferential.ts::real-database schedule store concurrent claims (${…})": 1,
+      "packages/testing/integration/shared/scheduleStoreDifferential.ts::real-database schedule store lifecycle differential (${…})": 1,
+      "packages/testing/integration/shared/workflowStoreDifferential.ts::workflow store differential lifecycle (${…})": 1,
+      "packages/testing/integration/shared/workflowStoreDifferentialConcurrency.ts::workflow store differential concurrent dispatch (${…})": 1
     }
   }
 }
