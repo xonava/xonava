@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { forAllAsync, type Rng } from "./harness"
+import { forAllAsync, scaledRuns, type Rng } from "./harness"
 import { generateDenseCronExpression, generateInstant, generateZone } from "./scheduleArbitraries"
 import { oracleNext, oracleOccurrences, parseOracleCron, type OracleCron } from "./scheduleOracle"
 import { FAULT_TEXT, ScheduleWorld, type ClaimRecord, type ScheduleScopeKind, type StoreFault, type WorldEvent, type WorldSchedule } from "./scheduleWorld"
@@ -35,7 +35,7 @@ import type { JobRequester, JobStatus } from "../../execution/types"
  *    lease records nothing and never enqueues after the loss
  */
 
-vi.setConfig({ testTimeout: 120_000 })
+vi.setConfig({ testTimeout: 120_000 * Math.max(1, scaledRuns(100) / 100) })
 
 const MINUTE = 60_000
 const HOUR = 3_600_000
@@ -600,7 +600,9 @@ class Runner {
 
   async drain(): Promise<void> {
     const world = this.world
-    world.now = Math.min(CLOCK_CEILING, world.now + 600_001)
+    // Past every lease (<= 600_000 ms) and past the longest default failure backoff: a schedule that failed repeatedly is not
+    // claimable again for DEFAULT_SCHEDULE_FAILURE_BACKOFF.maxDelayMs, and draining must not mistake that wait for lost work.
+    world.now = Math.min(CLOCK_CEILING, world.now + Math.max(600_001, DEFAULT_SCHEDULE_FAILURE_BACKOFF.maxDelayMs + 1))
     for (const row of world.schedules.values()) {
       row.paused = false
       row.enabled = true

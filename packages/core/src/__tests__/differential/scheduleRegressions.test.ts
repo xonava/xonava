@@ -4,6 +4,7 @@ import { materializeDueSchedules } from "../../execution/scheduleDispatcher"
 import { compileScheduleLifecycle } from "../../execution/scheduleLifecycle"
 import type { FencedScheduleClaim, ScheduleStore } from "../../execution/scheduleStore"
 import type { JobStore, StoredJob } from "../../execution/types"
+import { ScheduleWorld, type WorldSchedule } from "./scheduleWorld"
 
 /**
  * Deterministic regressions for bugs found by the schedule differential suites
@@ -231,6 +232,74 @@ describe("schedule regressions", () => {
       await result
       expect(enqueued).toEqual([])
       expect(advance).toHaveBeenCalledWith(expect.objectContaining({ lastStatus: "skipped", nextRunAt: new Date("2026-08-01T10:25:00Z") }))
+    })
+  })
+
+  describe("overlap skip uses the live status of an occurrence's existing job (DF1 seed 2304085779 run 107)", () => {
+    // A committed-but-thrown enqueue leaves occurrence 0's job behind; the schedule keeps its nextRunAt. When that job later
+    // fails (a terminal, non-busy status) the retry must count it as occurrence 0's run and go on to enqueue the rest of the
+    // backlog. The idempotency lookup of the harness' job store used to keep reporting the stale "pending" status, which made
+    // the dispatcher treat the schedule as busy and drop every later slot (the reference model, using the live status, enqueued).
+    const MINUTE = 60_000
+    const start = Date.UTC(2026, 7, 1, 10, 20)
+    function setup(): { world: ScheduleWorld; row: WorldSchedule; first: string } {
+      const world = new ScheduleWorld(start)
+      const row: WorldSchedule = {
+        id: "s1", scope: "platform", payload: "{}", cron: "*/5 * * * *", timezone: "UTC", overlap: "skip", misfire: "queue_all", enabled: true, paused: false,
+        effectiveFrom: null, effectiveUntil: null, remaining: null, calendarKey: null, nextRunAt: start - 20 * MINUTE, lastRunAt: null, lastStatus: null, lastError: null,
+        leaseOwner: null, claimToken: null, leaseExpiresAt: null,
+      }
+      world.put(row)
+      return { world, row, first: `schedule:s1:${new Date(row.nextRunAt!).toISOString()}` }
+    }
+    const tick = (world: ScheduleWorld) => materializeDueSchedules({ scheduleStore: world.scheduleStore, jobStore: world.jobStore, workerId: "w1", now: new Date(world.now), renewalClock: world.renewalClock })
+
+    it.each([["failed", true], ["dead_letter", true], ["cancelled", true], ["succeeded", true], ["pending", false], ["running", false], ["retrying", false]] as const)(
+      "after the first occurrence's job becomes %s the retry enqueues the next slot: %s",
+      async (status, enqueuesNext) => {
+        const { world, row, first } = setup()
+        world.armFault("s1", { kind: "enqueue_throws", index: 0, committed: true, style: "error" })
+        const failedTick = await tick(world)
+        world.clearFaults()
+        expect(failedTick.errors).toEqual(["enqueue failed"])
+        expect([...world.jobs.keys()]).toEqual([first])
+        world.setJobStatus(first, status)
+        expect((await world.jobStore.getByIdempotencyKey({ key: first, requester: { scope: "system" } }))?.status).toBe(status)
+
+        world.now += 10_000 // past the 5 s failure backoff
+        const retry = await tick(world)
+        expect(retry.errors).toEqual([])
+        // Slot 10:00 already has its job; an idle overlap-skip schedule then fires exactly one more slot (10:05), whose job makes it
+        // busy for the rest of the backlog. A busy first job drops every later slot.
+        expect(retry.jobsEnqueued).toBe(enqueuesNext ? 1 : 0)
+        expect(world.violations).toEqual([])
+        expect(row.nextRunAt).toBeGreaterThan(world.now)
+      },
+    )
+  })
+
+  describe("repeated failures back off for up to the default maximum before the schedule is claimable again (DF1 seed 202 run 59)", () => {
+    it("holds a schedule that failed twice, 12 h apart, for 15 minutes, then materializes its whole backlog", async () => {
+      const MINUTE = 60_000
+      const start = Date.UTC(2026, 7, 1, 10, 20)
+      const world = new ScheduleWorld(start)
+      const row: WorldSchedule = {
+        id: "s1", scope: "system", payload: "{}", cron: "*/10 * * * *", timezone: "UTC", overlap: "queue", misfire: "queue_all", enabled: true, paused: false,
+        effectiveFrom: null, effectiveUntil: null, remaining: null, calendarKey: null, nextRunAt: start - 30 * MINUTE, lastRunAt: null, lastStatus: null, lastError: null,
+        leaseOwner: null, claimToken: null, leaseExpiresAt: null,
+      }
+      world.put(row)
+      const tick = (maxQueueAllOccurrences: number) => materializeDueSchedules({ scheduleStore: world.scheduleStore, jobStore: world.jobStore, workerId: "w1", now: new Date(world.now), renewalClock: world.renewalClock, maxQueueAllOccurrences })
+      expect((await tick(-1)).errors).toEqual(["maxQueueAllOccurrences must be a positive integer"])
+      world.now += 12 * 60 * MINUTE
+      expect((await tick(2.5)).errors).toEqual(["maxQueueAllOccurrences must be a positive integer"])
+      // The second failure came 12 h after the first, so the delay is capped at the 15 minute maximum rather than 10 minutes.
+      world.now += 10 * MINUTE + 1
+      expect(await tick(1000)).toMatchObject({ schedulesProcessed: 0, jobsEnqueued: 0, errors: [] })
+      world.now += 5 * MINUTE
+      expect(await tick(1000)).toMatchObject({ schedulesProcessed: 1, errors: [] })
+      expect(world.jobs.size).toBeGreaterThan(0)
+      expect(row.nextRunAt).toBeGreaterThan(world.now)
     })
   })
 

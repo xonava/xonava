@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { createRng, forAll, type Rng } from "./harness"
+import { createRng, forAll, scaledRuns, type Rng } from "./harness"
 import {
   DISAMBIGUATIONS, describeInstant, generateCronExpression, generateDenseCronExpression, generateInstant,
   generateMaybeInvalidExpression, generateZone, surroundWithWhitespace,
@@ -20,7 +20,7 @@ import type { CronDisambiguation, ScheduleDefinition } from "../../execution/typ
  */
 
 // Release certification runs every property at a multiple of its base run count.
-vi.setConfig({ testTimeout: 120_000 })
+vi.setConfig({ testTimeout: 120_000 * Math.max(1, scaledRuns(100) / 100) })
 
 const MINUTE = 60_000
 const DAY = 86_400_000
