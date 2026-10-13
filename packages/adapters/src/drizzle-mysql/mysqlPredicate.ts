@@ -32,3 +32,20 @@ export async function assertMySqlBinaryCollation(db: CollationQueryable, table: 
     if (row.pad !== "NO PAD") throw new ConfigurationError(`Column ${table}.${column} uses PAD SPACE collation ${collation}; predicates would ignore trailing spaces (use utf8mb4_0900_bin)`)
   }
 }
+
+/**
+ * Verifies that the session (the connection this runs on) is in UTC. Temporal literals are bound as UTC, but
+ * MySQL compares a TIMESTAMP column in the session `time_zone`: in any other zone every instant is shifted
+ * (`ts = '2024-01-01T10:00:00Z'` finds nothing). DATE/DATETIME columns are not affected. The adapter cannot
+ * set the session of a pool it is given, so configure it (server `default-time-zone='+00:00'`, or
+ * `SET time_zone='+00:00'` on each new connection) and call this at startup for repositories with TIMESTAMP
+ * columns. Two instants either side of a daylight-saving change are checked, so a named zone that is
+ * UTC only part of the year is rejected.
+ */
+export async function assertMySqlUtcSession(db: CollationQueryable): Promise<void> {
+  const [rows] = await db.query("SELECT UNIX_TIMESTAMP('2024-01-01 00:00:00') AS winter, UNIX_TIMESTAMP('2024-07-01 00:00:00') AS summer")
+  const row = (rows as { winter: unknown; summer: unknown }[])[0]
+  if (Number(row?.winter) !== 1704067200 || Number(row?.summer) !== 1719792000) {
+    throw new ConfigurationError("MySQL session time_zone is not UTC; TIMESTAMP predicates compare in the session zone (set time_zone='+00:00')")
+  }
+}

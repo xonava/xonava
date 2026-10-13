@@ -224,10 +224,33 @@ describe("temporal literals outside the engine's input range never reach the ser
     const tooEarly = new Date(0)
     tooEarly.setUTCFullYear(-4713, 10, 23)
     expect(temporalSql(Predicate.eq("at", tooEarly))).toMatchObject({ sql: 'COALESCE(("temporal_rows"."at" is null and null), FALSE)', params: [] })
-    expect(temporalSql(Predicate.gt("day", tooEarly))).toMatchObject({ sql: 'COALESCE(("temporal_rows"."day" is not null or null), FALSE)', params: [] })
+    // PostgreSQL also stores -infinity, which is not above a literal below the range: compare against it, never a constant.
+    expect(temporalSql(Predicate.gt("day", tooEarly))).toMatchObject({ sql: 'COALESCE("temporal_rows"."day" > $1, FALSE)', params: ["-infinity"] })
+    expect(temporalSql(Predicate.gte("at", tooEarly))).toMatchObject({ sql: 'COALESCE("temporal_rows"."at" > $1, FALSE)', params: ["-infinity"] })
+    expect(temporalSql(Predicate.lt("at", tooEarly))).toMatchObject({ sql: 'COALESCE("temporal_rows"."at" = $1, FALSE)', params: ["-infinity"] })
+    expect(temporalSql(Predicate.lte("day", tooEarly))).toMatchObject({ sql: 'COALESCE("temporal_rows"."day" = $1, FALSE)', params: ["-infinity"] })
+    expect(temporalSql(Predicate.neq("at", tooEarly))).toMatchObject({ sql: 'COALESCE(("temporal_rows"."at" is not null or null), FALSE)', params: [] })
     const earliest = new Date(0)
     earliest.setUTCFullYear(-4713, 10, 24)
     expect(temporalSql(Predicate.gte("at", earliest)).params).toEqual(["4714-11-24 00:00:00.000+00 BC"])
+  })
+
+  // Regression (fourth review): string-mode BC / five-digit-year rows produce cursor values the regex rejected,
+  // so keyset predicates compared them as text and skipped rows.
+  it("PostgreSQL: its own BC and five-digit-year output forms bind natively", () => {
+    for (const literal of ["0044-03-15 12:00:00 BC", "12000-01-01 00:00:00", "0044-03-15 12:00:00.5+00:53:28 BC", "2024-01-01 10:00:00+00"]) {
+      expect(temporalSql(Predicate.gt("at", literal))).toMatchObject({ sql: 'COALESCE("temporal_rows"."at" > $1, FALSE)', params: [literal] })
+    }
+    expect(temporalSql(Predicate.gt("day", "0044-03-15 BC"))).toMatchObject({ sql: 'COALESCE("temporal_rows"."day" > $1, FALSE)', params: ["0044-03-15 BC"] })
+    // Before the lower limit (4714-11-24 BC) it is the same out-of-range comparison as a Date.
+    expect(temporalSql(Predicate.gt("at", "9000-01-01 00:00:00 BC"))).toMatchObject({ sql: 'COALESCE("temporal_rows"."at" > $1, FALSE)', params: ["-infinity"] })
+    expect(temporalSql(Predicate.lt("day", "9000-01-01 BC"))).toMatchObject({ sql: 'COALESCE("temporal_rows"."day" = $1, FALSE)', params: ["-infinity"] })
+    expect(temporalSql(Predicate.eq("at", "9000-01-01 00:00:00 BC"))).toMatchObject({ params: [] })
+    // The engine rejects these: they stay text comparisons.
+    const textForm = '(CASE WHEN "temporal_rows"."at" IS NULL THEN NULL ELSE format(\'%s\', "temporal_rows"."at") END COLLATE "C")'
+    for (const literal of ["0000-01-01 00:00:00 BC", "2024-02-30 00:00:00", "2024-01-01 25:00:00", "999999-01-01 00:00:00", "2024-01-01 10:00:00 BC AD"]) {
+      expect(temporalSql(Predicate.gt("at", literal)).sql, literal).toBe(`COALESCE(${textForm} > $1, FALSE)`)
+    }
   })
 
   it("PostgreSQL: engine-text literals outside its input range compare through the text form", () => {
@@ -254,6 +277,9 @@ describe("temporal literals outside the engine's input range never reach the ser
     // A driver-form literal with an offset is not passed to the server: it compares as text.
     expect(query(Predicate.eq("at", "2024-01-01 10:00:00+01:00")).sql).toBe("COALESCE((CONVERT(`rows`.`at` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)")
     expect(query(Predicate.eq("at", "2024-01-01 10:00:00.000")).sql).toBe("COALESCE(`rows`.`at` = ?, FALSE)")
+    // Regression (fourth review): the driver's text form for years 0000-0999 binds natively too.
+    expect(query(Predicate.eq("at", "0500-01-01 10:00:00"))).toMatchObject({ sql: "COALESCE(`rows`.`at` = ?, FALSE)", params: ["0500-01-01 10:00:00"] })
+    expect(query(Predicate.eq("at", "0000-06-15 12:00:00.000"))).toMatchObject({ sql: "COALESCE(`rows`.`at` = ?, FALSE)", params: ["0000-06-15 12:00:00.000"] })
   })
 })
 

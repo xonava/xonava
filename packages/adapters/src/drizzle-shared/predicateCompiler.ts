@@ -50,9 +50,14 @@ export type DrizzleColumnMap = Record<string, AnyColumn>
  *   driver's local-time Date serialization): PostgreSQL's own input form
  *   (BC and five-digit years included); on MySQL a UTC literal, or a constant
  *   comparison for instants outside DATE/DATETIME's stored 0000-9999 range (every
- *   stored value lies inside it). Engine-text literals are passed through only
- *   when the engine accepts them (PostgreSQL years 0001-9999 and offsets up
- *   to ±15:59; on MySQL no offset at all). Any other string compares with
+ *   stored value lies inside it). PostgreSQL compares an instant before its
+ *   lower limit against -infinity (rows may hold ±infinity, which a constant
+ *   would mis-order). A MySQL TIMESTAMP column compares in the session time
+ *   zone, so it needs a UTC session ({@link assertMySqlUtcSession}).
+ *   Engine-text literals are passed through only
+ *   when the engine accepts them (PostgreSQL: its date/timestamp output form,
+ *   BC and five-digit years included, offsets up to ±15:59; on MySQL years
+ *   0000-9999 and no offset at all). Any other string compares with
  *   the column's text form when rows hydrate as strings, and is UNKNOWN when
  *   rows hydrate as Dates. A date column compares as a calendar date: compare
  *   it with full-date literals; a date-time literal is cast by the engine.
@@ -132,19 +137,46 @@ function classify(column: AnyColumn, dialect: PredicateDialect): ColumnInfo {
 }
 
 const UUID_TEXT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-/** PostgreSQL/MySQL text output of a timestamp: `YYYY-MM-DD HH:MM:SS[.f][+HH[:MM[:SS]]]`. */
-const ENGINE_TIMESTAMP_TEXT = /^(\d{4})(-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})(\.\d{1,6})?(?:[+-](\d{2})(?::(\d{2}))?(?::(\d{2}))?)?$/
+/** MySQL text output of a DATETIME/TIMESTAMP: `YYYY-MM-DD HH:MM:SS[.f]`. */
+const MYSQL_TIMESTAMP_TEXT = /^(\d{4})(-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})(\.\d{1,6})?$/
+/** PostgreSQL text output of a date or timestamp: `[Y]YYYY-MM-DD[ HH:MM:SS[.f][+HH[:MM[:SS]]]][ BC]` (years past 9999 keep all digits). */
+const POSTGRES_TEMPORAL_TEXT = /^(\d{4,6})-(\d{2})-(\d{2})(?: (\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?(?:([+-])(\d{2})(?::(\d{2}))?(?::(\d{2}))?)?)?( BC)?$/
 const TIME_TEXT = /^([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d{1,6})?$/
 
-/** Whether the engine accepts this text form of a timestamp as input (so it is never a server error). */
-function isEngineTimestampText(value: string, dialect: PredicateDialect): boolean {
-  const match = ENGINE_TIMESTAMP_TEXT.exec(value)
-  if (match === null || parseRfc3339Timestamp(`${match[1]}${match[2]}T${match[3]}Z`) === null) return false
+/**
+ * Whether MySQL accepts this text form of a DATETIME as input (so it is never a server error). It stores
+ * years 0000-9999, which is all the four-digit form can say.
+ */
+function isMySqlTimestampText(value: string): boolean {
+  const match = MYSQL_TIMESTAMP_TEXT.exec(value)
+  return match !== null && parseRfc3339Timestamp(`${match[1]}${match[2]}T${match[3]}Z`) !== null
+}
+
+/**
+ * PostgreSQL's own text form of a date (`date`) or timestamp (`timestamp`), as string-mode columns hydrate it
+ * and cursor values carry it: "native" when the server accepts it as input, BELOW_RANGE when it is a valid
+ * instant before the type's lower limit (4714-11-24 BC), undefined for anything the server would reject
+ * (year 0, impossible dates, displacements beyond ±15:59:59, years JavaScript cannot represent).
+ */
+function postgresTemporalText(value: string, temporal: "date" | "timestamp"): "native" | typeof BELOW_RANGE | undefined {
+  const match = POSTGRES_TEMPORAL_TEXT.exec(value)
+  if (match === null || (match[4] !== undefined) !== (temporal === "timestamp")) return undefined
   const year = Number(match[1])
-  const hasOffset = match[5] !== undefined
-  if (dialect === "mysql") return !hasOffset && year >= 1000
-  // PostgreSQL rejects year 0 in ISO form and displacements beyond ±15:59(:59).
-  return year >= 1 && (!hasOffset || (Number(match[5]) <= 15 && Number(match[6] ?? "0") <= 59 && Number(match[7] ?? "0") <= 59))
+  const month = Number(match[2])
+  const day = Number(match[3])
+  if (year < 1 || month < 1 || month > 12) return undefined
+  const [hour, minute, second] = [Number(match[4] ?? 0), Number(match[5] ?? 0), Number(match[6] ?? 0)]
+  if (hour > 23 || minute > 59 || second > 59) return undefined
+  const local = new Date(0)
+  local.setUTCFullYear(match[11] === undefined ? year : 1 - year, month - 1, day)
+  local.setUTCHours(hour, minute, second, 0)
+  if (Number.isNaN(local.getTime()) || local.getUTCDate() !== day) return undefined
+  let instant = local.getTime()
+  if (match[7] !== undefined) {
+    if (Number(match[8]) > 15 || Number(match[9] ?? 0) > 59 || Number(match[10] ?? 0) > 59) return undefined
+    instant -= (match[7] === "-" ? -1 : 1) * (Number(match[8]) * 3600 + Number(match[9] ?? 0) * 60 + Number(match[10] ?? 0)) * 1000
+  }
+  return Math.min(instant, local.getTime()) < POSTGRES_MIN_TIME ? BELOW_RANGE : "native"
 }
 
 function pad(value: number, width = 2): string {
@@ -311,7 +343,12 @@ class Comparison {
     if (typeof value !== "string") return INCOMPARABLE
     // The engine's own text form (what string-mode rows and their cursor values carry).
     if ((this.dialect === "postgres" || this.dialect === "mysql") && !hydratesDate) {
-      if (temporal === "timestamp" && isEngineTimestampText(value, this.dialect)) return { left: column, right: new Param(value) }
+      if (this.dialect === "postgres" && (temporal === "timestamp" || temporal === "date")) {
+        const text = postgresTemporalText(value, temporal)
+        if (text === BELOW_RANGE) return BELOW_RANGE
+        if (text !== undefined) return { left: column, right: new Param(value) }
+      }
+      if (this.dialect === "mysql" && temporal === "timestamp" && isMySqlTimestampText(value)) return { left: column, right: new Param(value) }
       if (temporal === "time" && TIME_TEXT.test(value)) return { left: column, right: new Param(value) }
     }
     return hydratesDate ? INCOMPARABLE : { left: this.textForm(), right: value }
@@ -414,12 +451,18 @@ function compileCondition(columnMap: DrizzleColumnMap, condition: PredicateCondi
       return unknown()
     }
     if (operand === BELOW_RANGE || operand === ABOVE_RANGE) {
-      // Every stored value is greater than a literal below the range, and smaller than one above it.
-      const valueIsGreater = operand === BELOW_RANGE
+      // A finite stored value is greater than a literal below the range, and smaller than one above it.
+      const below = operand === BELOW_RANGE
       if (operator === eq) return equalsNothing()
       if (operator === ne) return holdsForAll()
-      const holds = operator === gt || operator === gte ? valueIsGreater : !valueIsGreater
-      return holds ? holdsForAll() : equalsNothing()
+      const greater = operator === gt || operator === gte
+      if (dialect === "postgres") {
+        // PostgreSQL also stores -infinity and infinity, which lie beyond the literal on the other side:
+        // let the engine order the rows against the infinity on the literal's side (NULL stays UNKNOWN).
+        if (below) return greater ? gt(column, new Param("-infinity")) : eq(column, new Param("-infinity"))
+        return greater ? eq(column, new Param("infinity")) : lt(column, new Param("infinity"))
+      }
+      return greater === below ? holdsForAll() : equalsNothing()
     }
     return operator(operand.left as AnyColumn, operand.right as never)
   }
