@@ -21,6 +21,8 @@ export interface RefInstance {
   attempt: number
   stack: string[]
   signal: string | null
+  /** Id of the receipt that resumed the current step (null: not resumed by a signal). */
+  resume: string | null
   wakeAt: number | null
   outcome: RefOutcome
   revision: number
@@ -43,7 +45,9 @@ export type RefEvent =
   | { t: "failStep"; failure: RefFailure }
   | { t: "failComp"; failure: RefFailure }
   | { t: "stall"; failure: RefFailure; wakeAt: number | "invalid" }
-  | { t: "signal"; name: string }
+  | { t: "signal"; name: string; id: string }
+  /** A `wait` commit found a pending receipt: the instance is stored resumed (same commit, so no extra revision). */
+  | { t: "buffered"; id: string }
   | { t: "release" }
   | { t: "cancel" }
   | { t: "completeComp" }
@@ -73,12 +77,12 @@ function bump(from: RefInstance, patch: Partial<RefInstance>): RefInstance {
 
 function enterFailure(i: RefInstance, failure: RefFailure): RefInstance {
   const compensate = i.stack.length > 0
-  return bump(i, { status: compensate ? "compensating" : "failed", outcome: compensate ? null : "failed", attempt: 0, signal: null, wakeAt: null, failure })
+  return bump(i, { status: compensate ? "compensating" : "failed", outcome: compensate ? null : "failed", attempt: 0, signal: null, resume: null, wakeAt: null, failure })
 }
 
 function failCompensation(i: RefInstance, failure: RefFailure): RefOutcomeOrError {
   if (i.status !== "compensating") return reject("state")
-  return ok(bump(i, { status: "compensation_failed", outcome: "failed", wakeAt: null, failure }))
+  return ok(bump(i, { status: "compensation_failed", outcome: "failed", wakeAt: null, resume: null, failure }))
 }
 
 function cancel(i: RefInstance, at: number): RefInstance {
@@ -87,7 +91,7 @@ function cancel(i: RefInstance, at: number): RefInstance {
   return bump(i, {
     status: compensate ? "compensating" : "cancelled",
     outcome: compensate ? null : "cancelled",
-    attempt: 0, signal: null, wakeAt: null,
+    attempt: 0, signal: null, resume: null, wakeAt: null,
     failure: { code: "CANCELLED", message: "Workflow was cancelled", step: i.step, phase: "execute", attempt: i.attempt, at },
   })
 }
@@ -116,10 +120,10 @@ export function refApply(i: RefInstance, event: RefEvent, now: number): RefOutco
         if (refDurableBytes(merged) > REF_MAX_DURABLE_BYTES) return reject("definition")
       }
       switch (result.kind) {
-        case "next": return ok(bump(i, { failure: null, status: "pending", step: result.step, attempt: 0, stack: result.compensation ? [...i.stack, result.compensation] : [...i.stack], signal: null, wakeAt: null, vars: { ...i.vars, ...(result.variables ?? {}) } }))
-        case "wait": return ok(bump(i, { failure: null, status: "waiting", attempt: 0, signal: result.signal, wakeAt: null, vars: { ...i.vars, ...(result.variables ?? {}) } }))
-        case "sleep": return ok(bump(i, { failure: null, status: "waiting", attempt: 0, signal: null, wakeAt: result.wakeAt, vars: { ...i.vars, ...(result.variables ?? {}) } }))
-        case "complete": return ok(bump(i, { failure: null, status: "succeeded", outcome: "succeeded", signal: null, wakeAt: null, vars: { ...i.vars, ...(result.variables ?? {}) } }))
+        case "next": return ok(bump(i, { failure: null, resume: null, status: "pending", step: result.step, attempt: 0, stack: result.compensation ? [...i.stack, result.compensation] : [...i.stack], signal: null, wakeAt: null, vars: { ...i.vars, ...(result.variables ?? {}) } }))
+        case "wait": return ok(bump(i, { failure: null, resume: null, status: "waiting", attempt: 0, signal: result.signal, wakeAt: null, vars: { ...i.vars, ...(result.variables ?? {}) } }))
+        case "sleep": return ok(bump(i, { failure: null, resume: null, status: "waiting", attempt: 0, signal: null, wakeAt: result.wakeAt, vars: { ...i.vars, ...(result.variables ?? {}) } }))
+        case "complete": return ok(bump(i, { failure: null, resume: null, status: "succeeded", outcome: "succeeded", signal: null, wakeAt: null, vars: { ...i.vars, ...(result.variables ?? {}) } }))
         case "retry": return ok(bump(i, { status: compensating ? "compensating" : "pending", wakeAt: null }))
       }
       return reject("state")
@@ -140,7 +144,11 @@ export function refApply(i: RefInstance, event: RefEvent, now: number): RefOutco
     }
     case "signal": {
       if (i.status !== "waiting" || i.wakeAt !== null || i.signal !== event.name) return reject("state")
-      return ok(bump(i, { status: "pending", attempt: 0, wakeAt: null }))
+      return ok(bump(i, { status: "pending", attempt: 0, wakeAt: null, resume: event.id }))
+    }
+    case "buffered": {
+      if (i.status !== "waiting" || i.wakeAt !== null || i.signal === null) return reject("state")
+      return ok({ ...i, stack: [...i.stack], vars: { ...i.vars }, leased: false, status: "pending", attempt: 0, wakeAt: null, resume: event.id })
     }
     case "release": {
       if (terminal) return reject("state")
@@ -171,7 +179,7 @@ export function refBackoffDelay(policy: RefPolicy, failedAttempt: number, sample
 
 
 export interface ModelRow extends RefInstance { id: string; type: string; version: number; leaseExpiresAt: number | null }
-export interface ModelReceipt { id: string; instanceId: string; name: string }
+export interface ModelReceipt { id: string; instanceId: string; name: string; consumed: boolean }
 export interface ModelCounts { claimed: number; advanced: number; compensated: number; retried: number; deferred: number; stalled: number; leaseLost: number; failed: number }
 type ClaimOutcome = "advanced" | "compensated" | "retried" | "deferred" | "stalled" | "failed" | "lease-lost"
 
@@ -238,15 +246,25 @@ export class ModelDispatcher {
   }
 
   start(id: string, type: string, version: number, vars: Record<string, unknown>): void {
-    this.rows.set(id, { id, type, version, status: "pending", step: "a", vars, attempt: 0, stack: [], signal: null, wakeAt: null, outcome: null, revision: 0, failure: null, leased: false, leaseExpiresAt: null })
+    this.rows.set(id, { id, type, version, status: "pending", step: "a", vars, attempt: 0, stack: [], signal: null, resume: null, wakeAt: null, outcome: null, revision: 0, failure: null, leased: false, leaseExpiresAt: null })
   }
 
   signal(instanceId: string, name: string, id: string): void {
     const row = this.rows.get(instanceId)
-    if (!row || this.receipts.some((receipt) => receipt.id === id)) return
-    this.receipts.push({ id, instanceId, name })
-    const woken = refApply(row, { t: "signal", name }, this.time)
-    if ("ok" in woken) this.rows.set(instanceId, { ...row, ...woken.ok, leased: row.leased, leaseExpiresAt: row.leaseExpiresAt })
+    if (!row || this.receipts.some((receipt) => receipt.id === id) || isTerminalStatus(row.status)) return
+    this.receipts.push({ id, instanceId, name, consumed: false })
+    // A waiting instance consumes the oldest pending receipt of the awaited name (the new one, unless legacy state left an older one).
+    const oldest = this.pending(instanceId, name)[0]!
+    const woken = refApply(row, { t: "signal", name, id: oldest.id }, this.time)
+    if ("ok" in woken) {
+      oldest.consumed = true
+      this.rows.set(instanceId, { ...row, ...woken.ok, leased: row.leased, leaseExpiresAt: row.leaseExpiresAt })
+    }
+  }
+
+  /** Pending (unconsumed) receipts of an instance, optionally of one name, oldest first. */
+  pending(instanceId: string, name?: string): ModelReceipt[] {
+    return this.receipts.filter((receipt) => receipt.instanceId === instanceId && !receipt.consumed && (name === undefined || receipt.name === name))
   }
 
   cancel(instanceId: string): boolean {
@@ -313,8 +331,17 @@ export class ModelDispatcher {
     const commit = (next: RefInstance & { version?: number }, outcome: ClaimOutcome): ClaimOutcome => {
       if (!holds()) return "lease-lost"
       const row = live()
+      // A `wait` whose signal is already buffered consumes the oldest pending receipt of that name and is stored resumed.
+      if (next.status === "waiting" && next.wakeAt === null && next.signal !== null) {
+        const oldest = this.pending(id, next.signal)[0]
+        if (oldest) {
+          const resumed = refApply(next, { t: "buffered", id: oldest.id }, T) as { ok: RefInstance }
+          oldest.consumed = true
+          next = { ...resumed.ok, ...(next.version !== undefined ? { version: next.version } : {}) }
+        }
+      }
       this.rows.set(id, {
-        ...row, version: next.version ?? snapshot.version, status: next.status, step: next.step, vars: next.vars, attempt: next.attempt, stack: next.stack, signal: next.signal,
+        ...row, version: next.version ?? snapshot.version, status: next.status, step: next.step, vars: next.vars, attempt: next.attempt, stack: next.stack, signal: next.signal, resume: next.resume,
         wakeAt: next.wakeAt, outcome: next.outcome, failure: next.failure, revision: row.revision + 1, leased: false, leaseExpiresAt: null,
       })
       return outcome
@@ -369,8 +396,9 @@ export class ModelDispatcher {
     }
     let signalId: string | null = null
     if (phase === "execute" && snapshot.signal !== null) {
-      const latest = [...this.receipts].reverse().find((receipt) => receipt.instanceId === id && receipt.name === snapshot.signal)
-      signalId = latest?.id ?? null
+      // The step receives the receipt that resumed it; only instances without a recorded resume receipt fall back to the latest by name.
+      const latest = snapshot.resume === null ? [...this.receipts].reverse().find((receipt) => receipt.instanceId === id && receipt.name === snapshot.signal) : undefined
+      signalId = snapshot.resume ?? latest?.id ?? null
     }
 
     // --- invocation

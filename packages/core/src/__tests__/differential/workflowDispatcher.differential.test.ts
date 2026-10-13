@@ -65,7 +65,7 @@ const describeCase = (value: DispatcherCase): string => JSON.stringify(value)
 function projectRow(row: WorkflowInstance): Omit<ModelRow, "id"> & { id: string } {
   return {
     id: row.id, type: row.workflowType, version: row.workflowVersion, status: row.status, step: row.currentStep, vars: JSON.parse(stableJson(row.variables)) as Record<string, unknown>,
-    attempt: row.stepAttempt, stack: [...row.compensationStack], signal: row.waitingSignal, wakeAt: row.wakeAt === null ? null : row.wakeAt.getTime(), outcome: row.outcome, revision: row.revision,
+    attempt: row.stepAttempt, stack: [...row.compensationStack], signal: row.waitingSignal, resume: row.resumeSignalId ?? null, wakeAt: row.wakeAt === null ? null : row.wakeAt.getTime(), outcome: row.outcome, revision: row.revision,
     failure: row.failure ? { code: row.failure.code, step: row.failure.step, phase: row.failure.phase, attempt: row.failure.attempt, at: row.failure.at.getTime(), message: row.failure.message } : null,
     leased: row.leaseOwner !== null, leaseExpiresAt: row.leaseExpiresAt === null ? null : row.leaseExpiresAt.getTime(),
   }

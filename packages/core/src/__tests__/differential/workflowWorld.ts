@@ -241,3 +241,32 @@ export function generateWorld(rng: Rng, options: { quiet?: boolean } = {}): Worl
   }
   return { graceMs, steps, v2: rng.bool(0.4) ? { missing: rng.subset(STEP_NAMES, 0.15).filter((name) => name !== "a"), noCompensate: rng.subset(STEP_NAMES, 0.2) } : null }
 }
+
+/**
+ * A signal-heavy world: most behaviours wait for, or self-deliver, one of two signal names, so receipts are buffered, consumed in
+ * order across successive waits, and left pending for names nobody awaits. The reference model consumes the same script.
+ */
+export function generateSignalWorld(rng: Rng): WorldSpec {
+  const names = [...SIGNAL_NAMES, "go"] as const
+  const exec = (): Behavior[] => Array.from({ length: 2 + rng.int(4) }, (): Behavior => {
+    const roll = rng.int(100)
+    if (roll < 42) return { k: "wait", sig: rng.pick(names), ...optional(generateVars(rng)) }
+    if (roll < 54) return { k: "signalSelf", name: rng.pick(names), then: rng.bool(0.7) ? { k: "wait", sig: rng.pick(names) } : { k: "complete" } }
+    if (roll < 66) return { k: "next", to: rng.pick(STEP_NAMES), ...(rng.bool(0.4) ? { comp: rng.pick(COMPENSATIONS) } : {}) }
+    if (roll < 76) return { k: "complete" }
+    if (roll < 82) return { k: "throw", err: "retryable" }
+    if (roll < 87) return { k: "retry" }
+    if (roll < 92) return { k: "sleep", delay: rng.pick([0, 30, 500]) }
+    if (roll < 95) return { k: "fail" }
+    if (roll < 97) return { k: "cancelSelf" }
+    return { k: "slow", ms: rng.pick([10, 49]), then: { k: "wait", sig: rng.pick(names) } }
+  })
+  const steps: Record<string, StepSpec> = {}
+  for (const name of STEP_NAMES) {
+    steps[name] = {
+      retry: { maxAttempts: rng.pick([2, 3, 4]), initialDelayMs: rng.pick([0, 10, 100]), backoffMultiplier: 2, maxDelayMs: 400, jitter: "none" },
+      compensationRetry: undefined, idempotent: rng.pick([undefined, true]), hasCompensate: true, exec: exec(), comp: [{ k: "complete" }],
+    }
+  }
+  return { graceMs: 20, steps, v2: null }
+}

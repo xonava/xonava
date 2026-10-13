@@ -179,10 +179,10 @@ function errorCode(error: unknown, fallback: string): string {
   return typeof code === "string" ? code : fallback
 }
 
-function isValidSignal(value: unknown, instanceId: string, name: string): value is WorkflowSignal {
+function isValidSignal(value: unknown, instanceId: string, name: string, id?: string): value is WorkflowSignal {
   if (!value || typeof value !== "object") return false
   const signal = value as Partial<WorkflowSignal>
-  return signal.instanceId === instanceId && signal.name === name && typeof signal.id === "string" &&
+  return signal.instanceId === instanceId && signal.name === name && typeof signal.id === "string" && (id === undefined || signal.id === id) &&
     !!signal.payload && typeof signal.payload === "object" && !Array.isArray(signal.payload) &&
     signal.deliveredAt instanceof Date && Number.isFinite(signal.deliveredAt.getTime())
 }
@@ -323,9 +323,18 @@ async function runClaim(args: WorkflowDispatchOptions, instance: WorkflowInstanc
       return await failOrRetry(false, "TIMEOUT", "Workflow step deadline exceeded")
     }
     let signal: WorkflowSignal | undefined
-    if (phase === "execute" && instance.waitingSignal !== null && typeof args.store.getSignal === "function") {
-      const delivered = await bounded(args.store.getSignal(instance.id, instance.waitingSignal))
-      if (isValidSignal(delivered, instance.id, instance.waitingSignal)) signal = delivered
+    if (phase === "execute" && instance.waitingSignal !== null) {
+      const waitingSignal = instance.waitingSignal
+      const resumeId = instance.resumeSignalId
+      if (typeof resumeId === "string" && typeof args.store.getSignalById === "function") {
+        // The step receives exactly the receipt that resumed it, never a later receipt of the same name.
+        const delivered = await bounded(args.store.getSignalById(instance.id, resumeId))
+        if (isValidSignal(delivered, instance.id, waitingSignal, resumeId)) signal = delivered
+      } else if (typeof args.store.getSignal === "function") {
+        // Stores without per-receipt lookup (or instances resumed before resumeSignalId existed): latest receipt by name.
+        const delivered = await bounded(args.store.getSignal(instance.id, waitingSignal))
+        if (isValidSignal(delivered, instance.id, waitingSignal)) signal = delivered
+      }
     }
     const context = createWorkflowContext({
       instanceId: instance.id, executionScope: instance.executionScope, attempt, variables,

@@ -6,7 +6,7 @@ import {
 } from "./workflowModel"
 import {
   applyWorkflowStep, cancelWorkflow, completeCompensation, createWorkflowFailure, deliverWorkflowSignal, failCompensation, failWorkflowStep,
-  isStalledWorkflowAttempt, isWorkflowTerminal, markWorkflowAttemptStalled, MAX_WORKFLOW_FAILURE_MESSAGE_LENGTH, releaseWorkflowClaim, scheduleWorkflowRetry,
+  isStalledWorkflowAttempt, isWorkflowTerminal, markWorkflowAttemptStalled, MAX_WORKFLOW_FAILURE_MESSAGE_LENGTH, releaseWorkflowClaim, resumeWorkflowFromBufferedSignal, scheduleWorkflowRetry,
 } from "../../workflow/workflowStateMachine"
 import { WorkflowDefinitionError, WorkflowStateError } from "../../workflow/workflowErrors"
 import type { WorkflowFailure, WorkflowInstance, WorkflowStepResult } from "../../workflow/types"
@@ -44,6 +44,7 @@ type RawEvent =
   | { t: "failComp"; code: string; dt: number }
   | { t: "stall"; wakeDelta: number | "invalid"; dt: number }
   | { t: "signal"; name: string; dt: number }
+  | { t: "buffered"; dt: number }
   | { t: "release"; dt: number }
   | { t: "cancel"; dt: number }
   | { t: "completeComp"; dt: number }
@@ -92,8 +93,8 @@ function generateEvent(rng: Rng): RawEvent {
     case 12: return { t: "failStep", code: rng.pick(["RETRY_EXHAUSTED", "TIMEOUT", "STEP_ERROR"]), dt }
     case 13: return { t: "failComp", code: rng.pick(["RETRY_EXHAUSTED", "ATTEMPTS_EXHAUSTED"]), dt }
     case 14: return { t: "stall", wakeDelta: rng.bool(0.1) ? "invalid" : rng.int(100), dt }
-    case 15:
-    case 16: return { t: "signal", name: rng.pick(SIGNALS), dt }
+    case 15: return { t: "signal", name: rng.pick(SIGNALS), dt }
+    case 16: return rng.bool(0.5) ? { t: "signal", name: rng.pick(SIGNALS), dt } : { t: "buffered", dt }
     case 17: return rng.bool(0.5) ? { t: "release", dt } : { t: "cancel", dt }
     case 18: return { t: "cancel", dt }
     default: return { t: "completeComp", dt }
@@ -150,7 +151,8 @@ function resolve(raw: RawEvent, vars: Record<string, unknown>, now: number): Ref
     case "failStep": return { t: "failStep", failure: failure(raw.code, "execute") }
     case "failComp": return { t: "failComp", failure: failure(raw.code, "compensate") }
     case "stall": return { t: "stall", failure: failure("TIMEOUT", "execute"), wakeAt: raw.wakeDelta === "invalid" ? "invalid" : now + raw.wakeDelta }
-    case "signal": return { t: "signal", name: raw.name }
+    case "signal": return { t: "signal", name: raw.name, id: `s${now}` }
+    case "buffered": return { t: "buffered", id: `b${now}` }
     case "release": return { t: "release" }
     case "cancel": return { t: "cancel" }
     case "completeComp": return { t: "completeComp" }
@@ -169,7 +171,7 @@ function produce(refStart: RefInstance): WorkflowInstance {
   return {
     id: "wf", workflowType: "order", workflowVersion: 1, executionScope: { kind: "tenant", tenantId: "t1" },
     status: refStart.status, currentStep: refStart.step, variables: refStart.vars, stepAttempt: refStart.attempt, compensationStack: refStart.stack,
-    waitingSignal: refStart.signal, wakeAt: refStart.wakeAt === null ? null : new Date(refStart.wakeAt), outcome: refStart.outcome, revision: refStart.revision,
+    waitingSignal: refStart.signal, resumeSignalId: refStart.resume, wakeAt: refStart.wakeAt === null ? null : new Date(refStart.wakeAt), outcome: refStart.outcome, revision: refStart.revision,
     failure: null, leaseOwner: null, claimToken: null, leaseExpiresAt: null, createdAt: at, updatedAt: at,
   }
 }
@@ -200,7 +202,8 @@ function run(prod: WorkflowInstance, event: RefEvent, now: number): WorkflowInst
     case "failStep": return failWorkflowStep(prod, toFailure(event.failure), at)
     case "failComp": return failCompensation(prod, toFailure(event.failure), at)
     case "stall": return markWorkflowAttemptStalled(prod, toFailure(event.failure), new Date(event.wakeAt === "invalid" ? Number.NaN : event.wakeAt), at)
-    case "signal": return deliverWorkflowSignal(prod, { id: "s", instanceId: "wf", name: event.name, payload: {}, deliveredAt: at }, at)
+    case "signal": return deliverWorkflowSignal(prod, { id: event.id, instanceId: "wf", name: event.name, payload: {}, deliveredAt: at }, at)
+    case "buffered": return resumeWorkflowFromBufferedSignal(prod, { id: event.id, instanceId: "wf", name: prod.waitingSignal ?? "go", payload: {}, deliveredAt: at }, at)
     case "release": return releaseWorkflowClaim(prod, at)
     case "cancel": return cancelWorkflow(prod, at)
     case "completeComp": return completeCompensation(prod, at)
@@ -213,7 +216,7 @@ function project(instance: WorkflowInstance): RefInstance {
   expect([instance.claimToken !== null, instance.leaseExpiresAt !== null], "lease fields are all-or-nothing").toEqual([leased, leased])
   return {
     status: instance.status as RefStatus, step: instance.currentStep, vars: { ...instance.variables }, attempt: instance.stepAttempt, stack: [...instance.compensationStack],
-    signal: instance.waitingSignal, wakeAt: instance.wakeAt === null ? null : instance.wakeAt.getTime(), outcome: instance.outcome, revision: instance.revision,
+    signal: instance.waitingSignal, resume: instance.resumeSignalId ?? null, wakeAt: instance.wakeAt === null ? null : instance.wakeAt.getTime(), outcome: instance.outcome, revision: instance.revision,
     failure: failure === null ? null : { code: failure.code, step: failure.step, phase: failure.phase, attempt: failure.attempt, at: failure.at.getTime(), message: failure.message },
     leased,
   }
@@ -233,7 +236,7 @@ function expectSame(actual: RefInstance, expected: RefInstance, label: string): 
   if (expectedText !== undefined) expect(message, `${label}: failure message`).toBe(expectedMessage(expectedText))
 }
 
-const FRESH = (start: MachineCase["start"]): RefInstance => ({ status: "pending", step: start.step, vars: {}, attempt: 0, stack: [...start.stack], signal: null, wakeAt: null, outcome: null, revision: 0, failure: null, leased: false })
+const FRESH = (start: MachineCase["start"]): RefInstance => ({ status: "pending", step: start.step, vars: {}, attempt: 0, stack: [...start.stack], signal: null, resume: null, wakeAt: null, outcome: null, revision: 0, failure: null, leased: false })
 
 function unwrap(outcome: ReturnType<typeof refApply>): RefInstance {
   if ("err" in outcome) throw new Error("unexpected rejection")
@@ -294,7 +297,12 @@ describe("workflow state machine — differential against the reference transiti
           continue
         }
         if (event.t === "cancel" && before.status === "compensating") { expect(next).toBe(prod); continue }
-        expect(after.revision, `${event.t}: revision`).toBe(before.revision + 1)
+        // A buffered-signal resume is part of the commit that parked the instance: it does not advance the revision again.
+        expect(after.revision, `${event.t}: revision`).toBe(before.revision + (event.t === "buffered" ? 0 : 1))
+        // resumeSignalId: set by consuming a receipt, cleared by forward/failure/cancel transitions, otherwise untouched.
+        if (event.t === "signal" || event.t === "buffered") expect(after.resume, `${event.t}: names the consumed receipt`).toBe(event.id)
+        else if ((event.t === "step" && event.result.kind !== "retry") || event.t === "failStep" || event.t === "failComp" || event.t === "cancel") expect(after.resume, `${event.t}: clears the resume receipt`).toBeNull()
+        else expect(after.resume, `${event.t}: keeps the resume receipt`).toBe(before.resume)
         expect(after.leased, `${event.t}: lease`).toBe(event.t === "claim")
         expect(after.outcome !== null, "outcome is set exactly when the status is terminal").toBe(isTerminalStatus(after.status))
         const expectedOutcome = { succeeded: "succeeded", failed: "failed", cancelled: "cancelled", compensation_failed: "failed" } as const
