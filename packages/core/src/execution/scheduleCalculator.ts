@@ -92,8 +92,19 @@ export function matchesCron(date: Date, cron: ParsedCron): boolean {
   }, cron)
 }
 
+/**
+ * Date.UTC, except that years 0-99 are the years themselves (Date.UTC maps them to 1900-1999). Field overflow carries
+ * like Date.UTC.
+ */
+function utcMs(year: number, monthIndex: number, day = 1, hour = 0, minute = 0): number {
+  const date = new Date(0)
+  date.setUTCFullYear(year, monthIndex, day)
+  date.setUTCHours(hour, minute, 0, 0)
+  return date.getTime()
+}
+
 function localDateIsValid(local: LocalDateTime): boolean {
-  const date = new Date(Date.UTC(local.year, local.month - 1, local.day))
+  const date = new Date(utcMs(local.year, local.month - 1, local.day))
   return date.getUTCFullYear() === local.year && date.getUTCMonth() + 1 === local.month && date.getUTCDate() === local.day
 }
 
@@ -102,7 +113,7 @@ function hasPossibleCalendarDate(cron: ParsedCron): boolean {
   if (!cron.daysOfMonthWildcard && !cron.daysOfWeekWildcard && cron.daysOfWeek.size > 0) return true
   for (let year = 2000; year < 2400; year++) {
     for (const month of cron.months) {
-      const days = new Date(Date.UTC(year, month, 0)).getUTCDate()
+      const days = new Date(utcMs(year, month, 0)).getUTCDate()
       if ([...cron.daysOfMonth].some((day) => day <= days)) return true
     }
   }
@@ -110,7 +121,7 @@ function hasPossibleCalendarDate(cron: ParsedCron): boolean {
 }
 
 function nextLocalMinute(local: LocalDateTime): LocalDateTime {
-  const date = new Date(Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute + 1))
+  const date = new Date(utcMs(local.year, local.month - 1, local.day, local.hour, local.minute + 1))
   return {
     year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate(),
     hour: date.getUTCHours(), minute: date.getUTCMinutes(), dayOfWeek: date.getUTCDay(),
@@ -118,7 +129,7 @@ function nextLocalMinute(local: LocalDateTime): LocalDateTime {
 }
 
 function previousLocalMinute(local: LocalDateTime): LocalDateTime {
-  const date = new Date(Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute - 1))
+  const date = new Date(utcMs(local.year, local.month - 1, local.day, local.hour, local.minute - 1))
   return {
     year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate(),
     hour: date.getUTCHours(), minute: date.getUTCMinutes(), dayOfWeek: date.getUTCDay(),
@@ -148,8 +159,8 @@ function firstLocalMinuteToExamine(afterUtc: Date, timezone: string, adapter: Cr
 
 function nextLocalDay(local: LocalDateTime): LocalDateTime {
   const date = localDateIsValid(local)
-    ? new Date(Date.UTC(local.year, local.month - 1, local.day + 1))
-    : new Date(Date.UTC(local.year, local.month, 1))
+    ? new Date(utcMs(local.year, local.month - 1, local.day + 1))
+    : new Date(utcMs(local.year, local.month, 1))
   return {
     year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate(),
     hour: 0, minute: 0, dayOfWeek: date.getUTCDay(),
@@ -161,7 +172,7 @@ function nextLocalMonth(local: LocalDateTime, months: Set<number>): LocalDateTim
   const next = sorted.find((month) => month > local.month)
   const month = next ?? sorted[0]!
   const year = next === undefined && month <= local.month ? local.year + 1 : local.year
-  return { year, month, day: 1, hour: 0, minute: 0, dayOfWeek: new Date(Date.UTC(year, month - 1, 1)).getUTCDay() }
+  return { year, month, day: 1, hour: 0, minute: 0, dayOfWeek: new Date(utcMs(year, month - 1, 1)).getUTCDay() }
 }
 
 function sameLocal(a: LocalDateTime, b: LocalDateTime): boolean {
@@ -170,7 +181,7 @@ function sameLocal(a: LocalDateTime, b: LocalDateTime): boolean {
 
 function getOffset(date: Date, timezone: string, parts: (date: Date) => LocalDateTime): number {
   const local = parts(date)
-  return Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute) - date.getTime()
+  return utcMs(local.year, local.month - 1, local.day, local.hour, local.minute) - date.getTime()
 }
 
 // Constructing an Intl.DateTimeFormat is far more expensive than formatting with one, and every
@@ -200,7 +211,7 @@ export function createIntlCronTimezoneAdapter(): CronTimezoneAdapter {
   }
 
   function localToUtc(local: LocalDateTime, timezone: string, disambiguation: CronDisambiguation = "skip"): Date {
-    const localMs = Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute)
+    const localMs = utcMs(local.year, local.month - 1, local.day, local.hour, local.minute)
     const offsets = new Set<number>()
     for (const delta of [-2, -1, 0, 1, 2]) offsets.add(getOffset(new Date(localMs + delta * 86400000), timezone, (date) => toLocalDateTimeParts(date, timezone)))
 
@@ -227,7 +238,7 @@ function createUtcCronTimezoneAdapter(): CronTimezoneAdapter {
   })
   return {
     toLocalDateTimeParts,
-    localToUtc: (local) => new Date(Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute)),
+    localToUtc: (local) => new Date(utcMs(local.year, local.month - 1, local.day, local.hour, local.minute)),
   }
 }
 

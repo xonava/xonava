@@ -283,3 +283,18 @@ describe("dispatcher workerId contract", () => {
     expect(empty.store.claimDue).not.toHaveBeenCalled()
   })
 })
+
+describe("dispatcher option contract", () => {
+  it.each([
+    ["claimLimit", { claimLimit: 0 }],
+    ["claimLimit above the maximum", { claimLimit: 101 }],
+    ["leaseDurationMs", { leaseDurationMs: 0 }],
+    ["cancellationGraceMs", { timeoutPolicy: { mode: "cooperative" as const, cancellationGraceMs: -1 } }],
+    ["timeoutMs", { timeoutPolicy: { mode: "cooperative" as const, cancellationGraceMs: 0, timeoutMs: 0 } }],
+    ["unknownDefinitionMaxDeferralMs", { unknownDefinitionMaxDeferralMs: -1 }],
+  ])("rejects an invalid %s as ConfigurationError (worker configuration is never request input) before claiming", async (_name, override) => {
+    const empty = setup(async () => ({ success: true }))
+    await expect(dispatchDueJobs({ store: empty.store, registry: empty.registry, workerId: "w", leaseDurationMs: 1, claimLimit: 1, requester: { scope: "system" }, ...override })).rejects.toBeInstanceOf(ConfigurationError)
+    expect(empty.store.claimDue).not.toHaveBeenCalled()
+  })
+})

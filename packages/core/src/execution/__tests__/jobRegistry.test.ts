@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { ConfigurationError } from "../../domain/errors"
 import { createJobRegistry } from "../jobRegistry"
 import type { JobDefinition } from "../types"
 
@@ -26,6 +27,7 @@ describe("job registry validation", () => {
     [{ timeoutMs: 0 }, "timeoutMs"],
   ])("rejects invalid %s", (overrides, message) => {
     expect(() => createJobRegistry().register(definition(overrides))).toThrow(message)
+    expect(() => createJobRegistry().register(definition(overrides))).toThrow(ConfigurationError)
   })
 
   it("freezes registered definitions and uses the injected clock", () => {

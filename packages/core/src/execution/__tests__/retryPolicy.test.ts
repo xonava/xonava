@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { ConfigurationError } from "../../domain/errors"
 import { computeNextAttemptAt, getNextRetryDelay, shouldRetry, validateRetryPolicy } from "../retryPolicy"
 
 const policy = { maxAttempts: 3, delayMs: 100, backoffMultiplier: 2 }
@@ -18,6 +19,12 @@ describe("retry policy", () => {
     expect(() => validateRetryPolicy({ ...policy, backoffMultiplier: 0 })).toThrow("greater than zero")
     expect(() => validateRetryPolicy({ ...policy, backoffMultiplier: -1 })).toThrow("greater than zero")
     expect(() => validateRetryPolicy({ ...policy, maxDelayMs: Number.NEGATIVE_INFINITY })).toThrow()
+  })
+
+  it("reports an invalid policy definition as ConfigurationError", () => {
+    for (const bad of [{ maxAttempts: 0 }, { delayMs: -1 }, { backoffMultiplier: 0 }, { maxDelayMs: Number.NaN }]) {
+      expect(() => validateRetryPolicy({ ...policy, ...bad })).toThrow(ConfigurationError)
+    }
   })
 
   it("caps retry delay and computes the next attempt", () => {

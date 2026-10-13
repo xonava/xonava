@@ -78,7 +78,7 @@ export async function materializeDueSchedules(args: {
   if (!(now instanceof Date) || Number.isNaN(now.getTime())) throw new ConfigurationError("Schedule materialization time must be a valid Date.")
   const log = createTelemetryLogger(args.telemetry, "execution.schedule", () => new Date())
   const leaseDurationMs = args.leaseDurationMs ?? 30_000
-  if (!Number.isFinite(leaseDurationMs) || leaseDurationMs <= 0) throw new ValidationError("Schedule lease duration must be finite and positive.")
+  if (!Number.isFinite(leaseDurationMs) || leaseDurationMs <= 0) throw new ConfigurationError("Schedule lease duration must be finite and positive.")
   assertTimerDelayWithinLimit("Schedule lease duration", leaseDurationMs)
   const failureBackoff = args.failureBackoff ?? DEFAULT_SCHEDULE_FAILURE_BACKOFF
   if (!Number.isSafeInteger(failureBackoff.initialDelayMs) || failureBackoff.initialDelayMs < 1 || !Number.isSafeInteger(failureBackoff.maxDelayMs) || failureBackoff.maxDelayMs < failureBackoff.initialDelayMs) {
@@ -105,8 +105,12 @@ export async function materializeDueSchedules(args: {
         clock: args.renewalClock ?? systemScheduleRenewalClock,
       })
       const lifecycleExcluded = claim.lifecycle !== undefined && !isScheduleEffective(claim.lifecycle, now)
-      const calendarExcluded = claim.lifecycle?.calendarExclusionKey !== undefined && await args.calendarExclusionProvider?.isExcluded(claim.lifecycle.calendarExclusionKey, claim.nextRunAt) === true
-      if (lifecycleExcluded || calendarExcluded) {
+      // The calendar excludes individual occurrences: a single-run policy has only the claimed one, a queue_all backlog is
+      // filtered occurrence by occurrence below.
+      const calendarKey = claim.lifecycle?.calendarExclusionKey
+      const isCalendarExcluded = async (occurrence: Date): Promise<boolean> => calendarKey !== undefined && await args.calendarExclusionProvider?.isExcluded(calendarKey, occurrence) === true
+      const singleRun = claim.misfirePolicy.type !== "queue_all"
+      if (lifecycleExcluded || (singleRun && await isCalendarExcluded(claim.nextRunAt))) {
         await advanceSchedule(args.scheduleStore, { scheduleId: claim.scheduleId, workerId: args.workerId, claimToken: claim.claimToken, nextRunAt: calculateNextRun(claim.cronExpression, now, claim.timezone, args.tzAdapter), lastRunAt: now, lastStatus: "skipped" })
         result.schedulesProcessed += 1
         continue
@@ -123,7 +127,7 @@ export async function materializeDueSchedules(args: {
 
       const queueAllLimit = args.maxQueueAllOccurrences ?? 50
       if (claim.misfirePolicy.type === "queue_all" && (!Number.isInteger(queueAllLimit) || queueAllLimit <= 0)) {
-        throw new ValidationError("maxQueueAllOccurrences must be a positive integer")
+        throw new ConfigurationError("maxQueueAllOccurrences must be a positive integer")
       }
 
       const groupPriorExecutionStatus = await getPriorExecutionStatus({
@@ -165,7 +169,6 @@ export async function materializeDueSchedules(args: {
 
       // Only queue_all replays missed occurrences. fire_now, and skip within its
       // misfire window, fire a single run for the oldest due occurrence.
-      const singleRun = claim.misfirePolicy.type !== "queue_all"
       const computedOccurrences = singleRun
         ? [claim.nextRunAt]
         : computeScheduleOccurrences({
@@ -212,11 +215,18 @@ export async function materializeDueSchedules(args: {
       // of the schedule's remaining occurrences.
       const remainingOccurrences = claim.lifecycle?.remainingOccurrences
       let occurrencesFired = 0
+      let calendarSkipped = 0
       let lastOccurrence: Date | undefined
       let lastJobStatus: PriorScheduleExecutionStatus | null = null
       for (const occurrence of occurrences) {
         if (remainingOccurrences !== undefined && occurrencesFired >= remainingOccurrences) break
         lastOccurrence = occurrence
+        // An excluded occurrence is consumed without a job (and without using up a remaining occurrence); the rest of the
+        // backlog is unaffected.
+        if (!singleRun && await isCalendarExcluded(occurrence)) {
+          calendarSkipped++
+          continue
+        }
         const idempotencyKey = `schedule:${claim.scheduleId}:${occurrence.toISOString()}`
 
         // P1-08 fencing: validate lease before any idempotency check or durable
@@ -292,6 +302,7 @@ export async function materializeDueSchedules(args: {
       // P1-08 fencing: re-validate lease before final durable advance; prevents
       // a stale worker from advancing after lease expiry.
       await renewal?.assertHeld()
+      const lastStatus = occurrencesFired === 0 && calendarSkipped > 0 ? "skipped" : "fired"
       const nextRun = calculateNextRun(
         claim.cronExpression,
         singleRun ? now : lastOccurrence,
@@ -305,10 +316,10 @@ export async function materializeDueSchedules(args: {
          claimToken: claim.claimToken,
         nextRunAt: nextRun,
         lastRunAt: now,
-        lastStatus: "fired",
+        lastStatus,
         occurrencesFired,
       })
-      log.info("Schedule advanced", { scheduleId: claim.scheduleId, nextRunAt: nextRun.toISOString(), lastStatus: "fired", occurrencesFired })
+      log.info("Schedule advanced", { scheduleId: claim.scheduleId, nextRunAt: nextRun.toISOString(), lastStatus, occurrencesFired })
 
       result.schedulesProcessed++
     } catch (error) {

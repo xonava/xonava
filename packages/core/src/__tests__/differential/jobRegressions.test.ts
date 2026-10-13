@@ -110,6 +110,36 @@ describe("unknown-definition deferral window", () => {
   })
 })
 
+describe("unknown-definition deferral survives a transient release failure", () => {
+  const ghost = () => claimed({ jobType: "ghost", maxAttempts: 1, lastError: null })
+
+  it("retries the release once instead of consuming the attempt budget through markRetrying", async () => {
+    const { store, dispatch } = setup(async () => ({ success: true }), ghost())
+    store.release.mockRejectedValueOnce(new Error("connection reset"))
+    const result = await dispatch()
+    // Before the fix a single failed release fell through to markRetrying (which spends an attempt) and then to markFailed.
+    expect(store.release).toHaveBeenCalledTimes(2)
+    expect(store.markRetrying).not.toHaveBeenCalled()
+    expect(store.markFailed).not.toHaveBeenCalled()
+    expect(result).toMatchObject({ retried: 1, deadLettered: 0, leaseLost: 0 })
+  })
+
+  it("does not retry a release that was answered (not applied): the lease is lost", async () => {
+    const { store, dispatch } = setup(async () => ({ success: true }), ghost())
+    store.release.mockResolvedValue({ applied: false as never })
+    expect(await dispatch()).toMatchObject({ leaseLost: 1, retried: 0 })
+    expect(store.release).toHaveBeenCalledTimes(1)
+  })
+
+  it("still falls back to markRetrying when the release keeps failing", async () => {
+    const { store, dispatch } = setup(async () => ({ success: true }), ghost())
+    store.release.mockRejectedValue(new Error("store down"))
+    expect(await dispatch()).toMatchObject({ retried: 1 })
+    expect(store.release).toHaveBeenCalledTimes(2)
+    expect(store.markRetrying).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe("job fingerprint and the attempt budget", () => {
   const job: NewJob = { executionScope: { kind: "system", systemKey: "framework" }, jobType: "job", jobVersion: 1, payload: { a: 1 }, runAt: NOW, idempotencyKey: "k" }
 
@@ -185,9 +215,52 @@ describe("one claimed job's setup failure stays with that job", () => {
     // Before the fix the throw rejected dispatchDueJobs, so job-2 was never run and stayed claimed until its lease lapsed.
     const result = await dispatch()
     expect(ran).toEqual(["job-2"])
-    expect(result).toMatchObject({ claimed: 2, succeeded: 1, leaseLost: 1 })
-    expect(result.errors).toEqual([expect.objectContaining({ jobId: "job-1", action: "lease_lost", error: expect.stringContaining("id source down") as string })])
+    expect(result).toMatchObject({ claimed: 2, succeeded: 1, retried: 1, leaseLost: 0 })
+    expect(result.errors).toEqual([expect.objectContaining({ jobId: "job-1", action: "retry", error: expect.stringContaining("id source down") as string })])
     expect(store.markSucceeded).toHaveBeenCalledTimes(1)
+  })
+
+  it("releases the job whose setup failed, without consuming an attempt, instead of leaving it claimed until its lease lapses", async () => {
+    let calls = 0
+    const { store, dispatch } = batch({ idGenerator: () => { if (++calls === 1) throw new Error("id source down"); return `exec-${calls}` } })
+    await dispatch()
+    // Before the fix the job was reported lease_lost and never released: it waited out its whole lease.
+    expect(store.release).toHaveBeenCalledTimes(1)
+    expect(store.release).toHaveBeenCalledWith(expect.objectContaining({ jobId: "job-1", workerId: "w", claimToken: "tok-1", nextAttemptAt: new Date(NOW.getTime() + 60_000), reason: expect.stringContaining("id source down") as string }))
+    expect(store.markRetrying).not.toHaveBeenCalled()
+    expect(store.markFailed).not.toHaveBeenCalled()
+  })
+
+  it("reports lease_lost when the store cannot release (not applied, throws, or no release primitive) and still runs the rest", async () => {
+    const failures: Array<(store: ReturnType<typeof batch>["store"]) => void> = [
+      (store) => store.release.mockResolvedValue({ applied: false as never }),
+      (store) => store.release.mockRejectedValue(new Error("store down")),
+      (store) => { delete (store as { release?: unknown }).release },
+    ]
+    for (const breakRelease of failures) {
+      let calls = 0
+      const { store, dispatch, ran } = batch({ idGenerator: () => { if (++calls === 1) throw new Error("id source down"); return `exec-${calls}` } })
+      breakRelease(store)
+      const result = await dispatch()
+      expect(ran).toEqual(["job-2"])
+      expect(result).toMatchObject({ claimed: 2, succeeded: 1, retried: 0, leaseLost: 1 })
+      expect(result.errors).toEqual([expect.objectContaining({ jobId: "job-1", action: "lease_lost" })])
+    }
+  })
+
+  it("releases with a fallback run time when the configured clock keeps throwing", async () => {
+    let throwing = false
+    const brokenClock = { now: () => { if (throwing) throw new Error("clock unavailable"); return NOW }, sleep: async () => undefined }
+    const { store, dispatch, ran } = batch({}, brokenClock)
+    store.renewLease.mockImplementationOnce(async () => { throwing = true; return true })
+    // The clock breaks for job-1's setup (and its release), then recovers for job-2.
+    store.release.mockImplementationOnce(async () => { throwing = false; return { applied: true as const } })
+    const before = Date.now()
+    const result = await dispatch()
+    expect(ran).toEqual(["job-2"])
+    expect(result).toMatchObject({ claimed: 2, succeeded: 1, retried: 1 })
+    const nextAttemptAt = (store.release.mock.calls as unknown as Array<[{ nextAttemptAt: Date }]>)[0]![0].nextAttemptAt
+    expect(nextAttemptAt.getTime()).toBeGreaterThanOrEqual(before + 60_000)
   })
 
   it("still runs the remaining claimed jobs when the clock throws while one job starts", async () => {
@@ -202,5 +275,6 @@ describe("one claimed job's setup failure stays with that job", () => {
     expect(ran).toContain("job-2")
     expect(result.claimed).toBe(2)
     expect(result.succeeded + result.leaseLost + result.retried + result.deadLettered).toBe(2)
+    expect(store.release).toHaveBeenCalledTimes(1)
   })
 })
