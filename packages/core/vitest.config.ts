@@ -1,6 +1,12 @@
 import { defineConfig } from "vitest/config"
+// Release certification multiplies every differential property's case count with
+// DIFFERENTIAL_SCALE, so per-test time budgets scale with it (default 1: unchanged).
+const parsedScale = Number(process.env.DIFFERENTIAL_SCALE)
+const timeoutScale = Number.isFinite(parsedScale) ? Math.max(1, parsedScale) : 1
 export default defineConfig({
   test: {
+    testTimeout: Math.ceil(5_000 * timeoutScale),
+    hookTimeout: Math.ceil(10_000 * timeoutScale),
     include: ["src/**/*.test.ts"],
     coverage: {
       provider: "v8",
