@@ -6,6 +6,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise"
 import { afterAll, beforeAll, describe, it } from "vitest"
 import { DrizzleMySqlJobStore, DrizzleMySqlScheduleStore } from "adapters/drizzle-mysql"
 import { mysqlCertificationUrl } from "./database.js"
+import { applyMySqlScheduleNextRunNullableMigration } from "../../fixtures/mysql/bootstrap.js"
 import { assertConcurrentClaimInvariants, assertScheduleStoreMatchesReference, type ScheduleDriver } from "../shared/scheduleStoreDifferential.js"
 import {
   assertClaimWithoutNowUsesTheClock, assertDispatcherEnqueuesEachOccurrenceOnce, assertElapsedLeaseExpiryFencesOldOwner, assertLiveClaimsDoNotConsumeClaimLimit,
@@ -35,9 +36,11 @@ describe("MySQL schedule store differential", () => {
       const match = /^CREATE TABLE (?:IF NOT EXISTS )?([a-z_]+)/.exec(statement)
       if (match && TABLES.has(match[1]!)) await pool.query(statement)
     }
+    // Later fixture migrations alter these tables (0003 makes schedules.next_run_at nullable).
+    await applyMySqlScheduleNextRunNullableMigration(pool)
     jobStore = new DrizzleMySqlJobStore(pool)
     driver = {
-      label: "mysql", store: new DrizzleMySqlScheduleStore(pool), nullableNextRunAt: false,
+      label: "mysql", store: new DrizzleMySqlScheduleStore(pool), nullableNextRunAt: true,
       dialect: {
         table: "schedules", leaseOwnerColumn: "worker_id", param: () => "?", time: (ms) => (ms === null ? null : new Date(ms)), bool: (value) => value,
         fromTime: (value) => (value === null ? null : value instanceof Date ? value.getTime() : new Date(String(value)).getTime()), fromBool: (value) => Boolean(value),
@@ -54,10 +57,7 @@ describe("MySQL schedule store differential", () => {
   it("never shortens a lease on renewal", async () => { await assertRenewalNeverShortensLease(driver) })
   it("claims by the real clock when no time is given", async () => { await assertClaimWithoutNowUsesTheClock(driver) })
   it("fences the old owner after a lease really runs out", async () => { await assertElapsedLeaseExpiryFencesOldOwner(driver) })
-  // FINDING (fixture schema, not owned here): the MySQL fixture declares next_run_at NOT NULL although AdvanceScheduleArgs.nextRunAt
-  // is `Date | null` (a cron with no future occurrence). The advance throws ER_BAD_NULL_ERROR, the dispatcher turns that into a
-  // failed advance and the schedule retries (with backoff) forever instead of being retired. PostgreSQL and D1 retire it.
-  it.fails("retires a schedule advanced with no next occurrence", async () => { await assertNullNextRunAtRetiresSchedule(driver) })
+  it("retires a schedule advanced with no next occurrence", async () => { await assertNullNextRunAtRetiresSchedule(driver) })
   it("enqueues each materialized occurrence exactly once across workers and crashes", async () => {
     await assertDispatcherEnqueuesEachOccurrenceOnce({
       driver, jobStore,
