@@ -12,6 +12,7 @@
  */
 import { createHash } from "node:crypto"
 import { readFile, readdir, stat } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { join, posix, relative, resolve } from "node:path"
 import ts from "typescript"
 
@@ -330,6 +331,21 @@ export function composeDf1Baseline(siteCounts) {
     description: "DF1 property baseline: distinct passing properties per differential call site (file::name). Lower or remove an entry only with a reviewed removal; regenerate with npm run verify:framework:df1 -- --update-baseline.",
     suites,
   }
+}
+
+/**
+ * Where a DF1 run writes its reports and artifact. Release runs keep the
+ * governed `releaseDirectory`. Any other run is ad hoc and must not write into
+ * the repository (see .gitignore), so it defaults to
+ * `<os tmpdir>/framework-df1-<id>` unless `explicitDirectory`
+ * (FRAMEWORK_DF1_OUTPUT_DIR) is given.
+ */
+export function df1OutputDirectory({ release, releaseDirectory, explicitDirectory, id, tempRoot = tmpdir() }) {
+  if (release) return releaseDirectory
+  const explicit = explicitDirectory?.trim()
+  if (explicit) return resolve(explicit)
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(id ?? "")) refuse("DF1 ad-hoc output id contains unsafe path characters")
+  return join(tempRoot, `framework-df1-${id}`)
 }
 
 /** Seed policy: an explicit `DIFFERENTIAL_SEED`, else a deterministic function of the run ID. */

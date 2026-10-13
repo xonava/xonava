@@ -16,6 +16,8 @@ Lookup MUST return stored value, explicit absence, or failure. Store associates 
 
 Tag addition associates key and tag; tag lookup returns associations; tag deletion removes the tag namespace. Correctness-critical tagged caching MUST require declared linearizable generation consistency, fleet-shared coherence, generation lookup, and atomic generation advancement. A resolver MUST avoid publishing a value when invalidation advanced the observed generation. Process-local fallback generation state MUST be bounded independently of caller-controlled tag cardinality and MUST NOT permit an evicted or forgotten generation to make stale data readable again.
 
+A provider that stores values, tag lists, revisions, or generation counters in one key namespace MUST reject (validation failure, before any storage access) a caller key that collides with an internal key prefix, on every operation that takes a key. The Cloudflare KV adapter reserves `__tag__:`, `__revision__:`, and `__generation__:` (except the service-built tagged form `__generation__:"<generation>":<key>`).
+
 In-flight coalescing MAY combine misses in one service instance. It MUST be bounded and MUST NOT imply cross-process single-flight behavior or provide correctness.
 
 ## Errors

@@ -34,3 +34,5 @@ export type {
 export type { CompiledEntityDefinition, EntityCompilationDependencies, EntityRuntimeRequirements } from "./compileEntity"
 export { defineEntity } from "./defineEntity"
 export { compileEntity, isCompiledEntityDefinition } from "./compileEntity"
+export { assertUniqueEntityCachePrefixes, assertUniqueCacheKeyPrefixes } from "./cachePrefixes"
+export type { CacheKeyPrefixOwner } from "./cachePrefixes"

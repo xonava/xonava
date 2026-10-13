@@ -19,6 +19,7 @@ import {
   composeDf1Artifact,
   createDf1SourceManifest,
   deriveDf1Seed,
+  df1OutputDirectory,
   df1Suites,
   loadAndValidateDf1Evidence,
   readDf1Baseline,
@@ -91,6 +92,26 @@ describe("DF1 property call-site scanning", () => {
     for (const source of ["const check = forAll\ncheck(\"hidden\", gen, p)", "run(forAllAsync)", "export { forAll }", "const table = { forAll }"]) {
       assert.throws(() => scanPropertyCallSites(header + source, file), refused(/other than as a direct call/), source)
     }
+  })
+})
+
+describe("DF1 output directory", () => {
+  const releaseDirectory = resolve("artifacts/framework-conformance/release-a/df1")
+
+  it("keeps the governed artifacts path for release runs, whatever else is set", () => {
+    assert.equal(df1OutputDirectory({ release: true, releaseDirectory, explicitDirectory: "/elsewhere", id: "x" }), releaseDirectory)
+  })
+
+  it("defaults non-release runs to an OS temp directory outside the repository", () => {
+    const directory = df1OutputDirectory({ release: false, releaseDirectory: resolve("artifacts/framework-conformance/local-df1/df1"), id: "ab12cd34" })
+    assert.equal(directory, join(tmpdir(), "framework-df1-ab12cd34"))
+    assert.ok(!resolve(directory).startsWith(resolve("artifacts")))
+    assert.equal(df1OutputDirectory({ release: false, releaseDirectory, id: "r1", tempRoot: "/tmp/t" }), join("/tmp/t", "framework-df1-r1"))
+  })
+
+  it("honours an explicit output path and rejects unsafe ad-hoc ids", () => {
+    assert.equal(df1OutputDirectory({ release: false, releaseDirectory, explicitDirectory: "out/df1", id: "r1" }), resolve("out/df1"))
+    assert.throws(() => df1OutputDirectory({ release: false, releaseDirectory, id: "../escape" }), refused(/unsafe path characters/))
   })
 })
 

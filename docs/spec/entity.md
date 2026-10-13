@@ -6,7 +6,7 @@ An entity definition declares stable name/identity, fields/scalars, scope, lifec
 
 ## Requirements and errors
 
-Runtime MUST execute the compiled plan rather than reinterpret untrusted metadata. Create/update/read projection MUST enforce field rules and scope. Invalid definitions fail before readiness; invalid lifecycle transitions and values fail without partial mutation.
+Default cache key prefixes and tags are namespaced by module and persistence namespace; an explicit cache key prefix MUST be unique across the application (see bootstrap), and a duplicate is a configuration failure naming both entities. Runtime MUST execute the compiled plan rather than reinterpret untrusted metadata. Create/update/read projection MUST enforce field rules and scope. Invalid definitions fail before readiness; invalid lifecycle transitions and values fail without partial mutation.
 
 ## Evolution and conformance
 

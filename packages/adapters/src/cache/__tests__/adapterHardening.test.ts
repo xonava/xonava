@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { CacheService } from "core/cache"
-import { ConfigurationError } from "core/domain"
+import { ConfigurationError, ValidationError } from "core/domain"
 import { CacheBackedRateLimitStore } from "../cacheBackedRateLimitStore"
 import { InMemoryCacheAdapter } from "../inMemoryCacheAdapter"
 import { KvCacheAdapter } from "../kvCacheAdapter"
@@ -93,19 +93,61 @@ describe("defect 1: clear() keeps tag generations monotonic", () => {
     const adapter = new KvCacheAdapter(kv as never)
     const generation = await adapter.advanceTagGeneration("t")
     const counter = kv.store.get("__cachegen__:t")
-    // A value key spelled like the LEGACY counter location of tag "t".
-    await adapter.set("__generation__:t", "not-a-generation")
+    // A value key spelled like the LEGACY counter location of tag "t" is rejected.
+    await expect(adapter.set("__generation__:t", "not-a-generation")).rejects.toBeInstanceOf(ValidationError)
     // The new-layout counter is out of reach of any cache key.
     expect(kv.store.get("__cachegen__:t")).toBe(counter)
-    // The overwritten legacy counter only changes the observed (composite)
-    // generation: a fail-safe extra invalidation, never a value read as a
-    // generation and never a return to the previously observed generation.
+    expect(await adapter.getTagGeneration("t")).toBe(generation)
+    // A legacy counter that is changed out of band only changes the observed
+    // (composite) generation: a fail-safe extra invalidation, never a return to
+    // the previously observed generation.
+    kv.store.set("__cache__:__generation__:t", JSON.stringify("not-a-generation"))
     const afterOverwrite = await adapter.getTagGeneration("t")
     expect(afterOverwrite).not.toBe(generation)
-    expect(afterOverwrite).not.toContain("not-a-generation")
     await adapter.clear()
     expect(kv.store.get("__cachegen__:t")).toBe(counter)
     expect(await adapter.getTagGeneration("t")).toBe(afterOverwrite)
+  })
+
+  describe("reserved internal key prefixes", () => {
+    const reserved = ["__tag__:x", "__revision__:k", "__generation__:t", "__generation__:", "__generation__:0:k"]
+
+    it.each(reserved)("rejects raw key %s on every key-taking operation without touching storage", async (key) => {
+      const kv = createFakeKv()
+      const adapter = new KvCacheAdapter(kv as never)
+      await adapter.advanceTagGeneration("x")
+      await adapter.addToTag("x", "plain")
+      const before = new Map(kv.store)
+      const calls: Array<() => Promise<unknown>> = [
+        () => adapter.get(key),
+        () => adapter.set(key, "v"),
+        () => adapter.has(key),
+        () => adapter.delete(key),
+        () => adapter.addToTag("x", key),
+      ]
+      for (const call of calls) await expect(call()).rejects.toBeInstanceOf(ValidationError)
+      expect(new Map(kv.store)).toEqual(before)
+    })
+
+    it("a raw tag-list key cannot read or overwrite the tag membership list", async () => {
+      const kv = createFakeKv()
+      const adapter = new KvCacheAdapter(kv as never)
+      await adapter.set("member", 1)
+      await adapter.addToTag("x", "member")
+      await expect(adapter.get("__tag__:x")).rejects.toBeInstanceOf(ValidationError)
+      await expect(adapter.set("__tag__:x", "owned")).rejects.toBeInstanceOf(ValidationError)
+      expect(await adapter.getTagKeys("x")).toEqual(["member"])
+    })
+
+    it("still accepts ordinary keys and CacheService generation-qualified storage keys", async () => {
+      const kv = createFakeKv()
+      const adapter = new KvCacheAdapter(kv as never)
+      await adapter.set("__tag_not_reserved", 1)
+      await adapter.set("tag:x", 2)
+      await adapter.set('__generation__:"1:abc":user:1', 3)
+      expect(await adapter.get('__generation__:"1:abc":user:1')).toBe(3)
+      expect(await adapter.get("tag:x")).toBe(2)
+    })
   })
 
   describe("rolling deploy with instances on the previous counter layout", () => {

@@ -5,7 +5,10 @@
  * property reported success with that seed and scale.
  *
  * Environment:
- * - FRAMEWORK_CONFORMANCE_RUN_ID       run directory (default local-df1)
+ * - FRAMEWORK_CONFORMANCE_RUN_ID       run ID (default local-df1); names the run directory
+ * - FRAMEWORK_DF1_OUTPUT_DIR           output directory of a non-release run (default:
+ *                                      <os tmpdir>/framework-df1-<run ID, or a random id>);
+ *                                      ignored by release runs, which use artifacts/framework-conformance/<run ID>/df1
  * - DIFFERENTIAL_SEED                  explicit base seed; default derives from the run ID
  * - FRAMEWORK_DIFFERENTIAL_SCALE       core case multiplier (default 5)
  * - FRAMEWORK_DIFFERENTIAL_DB_SCALE    real-database case multiplier (default 2)
@@ -16,6 +19,7 @@
  * only for a reviewed addition or removal of properties.
  */
 import { spawn, execFileSync } from "node:child_process"
+import { randomBytes } from "node:crypto"
 import { rm, writeFile } from "node:fs/promises"
 import { dirname, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -32,6 +36,7 @@ import {
   composeDf1Baseline,
   createDf1SourceManifest,
   deriveDf1Seed,
+  df1OutputDirectory,
   df1Suites,
   parseScale,
   readDf1Baseline,
@@ -83,7 +88,7 @@ function failingFiles(output, suite) {
 }
 
 async function main() {
-  const { runId, directory } = certificationContext("local-df1", DF1_PHASE)
+  const { runId, directory: releaseDirectory } = certificationContext("local-df1", DF1_PHASE)
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(runId)) refuse("FRAMEWORK_CONFORMANCE_RUN_ID contains unsafe path characters")
   if (process.env.DIFFERENTIAL_RUN?.trim()) refuse("DIFFERENTIAL_RUN is set; single-case replay mode cannot certify")
   if (!process.env.FRAMEWORK_TEST_PG_URL?.trim() && !process.env.DATABASE_URL?.trim()) refuse("FRAMEWORK_TEST_PG_URL (or DATABASE_URL) is required for the PostgreSQL parity suite")
@@ -95,6 +100,13 @@ async function main() {
   // A release run (started by the release runner) must explore new cases: no fixed seed, no baseline rewrite.
   const releaseRun = certificationStartedAt !== undefined || process.env.FRAMEWORK_CONFORMANCE_PHASE?.trim() === "release"
   if (releaseRun && updateBaseline) refuse("--update-baseline cannot run inside a release certification")
+  // Ad-hoc runs (including --update-baseline) write outside the repository.
+  const directory = df1OutputDirectory({
+    release: releaseRun,
+    releaseDirectory,
+    explicitDirectory: process.env.FRAMEWORK_DF1_OUTPUT_DIR,
+    id: process.env.FRAMEWORK_CONFORMANCE_RUN_ID?.trim() || randomBytes(4).toString("hex"),
+  })
   const { seed, seedSource } = deriveDf1Seed(runId, process.env.DIFFERENTIAL_SEED, { release: releaseRun })
   const scales = {
     core: parseScale("FRAMEWORK_DIFFERENTIAL_SCALE", process.env.FRAMEWORK_DIFFERENTIAL_SCALE, DF1_DEFAULT_SCALES.core),

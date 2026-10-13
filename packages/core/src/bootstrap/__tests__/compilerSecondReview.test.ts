@@ -25,6 +25,19 @@ describe("bootstrap compiler second review", () => {
     expect(registry.state).toBe("SEALED")
   })
 
+  it("rejects two entities that resolve to the same explicit cache key prefix, naming both", () => {
+    const entity = (key: string, keyPrefix: string): FrameworkDefinition => ({ kind: "entity", key, definitionVersion: 1, config: { cache: { tag: key, keyPrefix } } })
+    const clash = new FrameworkDefinitionRegistry()
+    clash.register(entity("orders", "shared"))
+    clash.register(entity("invoices", "shared"))
+    expect(() => compileFramework(clash, options)).toThrow(/entity:orders.*entity:invoices.*"shared"/)
+    const ok = new FrameworkDefinitionRegistry()
+    ok.register(entity("orders", "orders"))
+    ok.register(entity("invoices", "invoices"))
+    ok.register({ kind: "entity", key: "uncached", definitionVersion: 1 })
+    expect(compileFramework(ok, options).definitions.entities.size).toBe(3)
+  })
+
   it("rejects ambiguous routes, including parameter renames", () => {
     expect(() => compileFramework(routes({ key: "a", method: "GET", path: "/orders/:id" }, { key: "b", method: "get", path: "/orders/:orderId" }), options)).toThrow(/routes a and b both handle GET/)
     expect(compileFramework(routes({ key: "a", method: "GET", path: "/orders/:id" }, { key: "b", method: "DELETE", path: "/orders/:id" }), options).routes.size).toBe(2)

@@ -10,6 +10,7 @@ import { definitionId, resolveDependencyOrder } from "./dependencyGraph.js"
 import { type FrameworkDefinitionRegistry } from "./definitionRegistry.js"
 import { cloneAndFreezeDefinition } from "../kernel/definitionIntegrity.js"
 import { readonlyMap } from "../kernel/readonlyCollections.js"
+import { assertUniqueCacheKeyPrefixes } from "../entity/cachePrefixes.js"
 
 export interface CompileFrameworkOptions {
   readonly frameworkVersion: string; readonly sourceRevision: string; readonly availableCapabilities?: readonly string[]
@@ -128,6 +129,12 @@ function compileOpenedRegistry(registry: FrameworkDefinitionRegistry, options: C
       for (const capability of definition.requiredCapabilities ?? []) if (!datasource.capabilities.includes(capability)) fail(`datasource ${datasource.key} lacks capability ${capability} required by ${definitionId(definition)}`)
     }
   }
+  // Entities declare their resolved cache key prefix in config.cache.keyPrefix; an
+  // explicit prefix shared by two entities would mix their cached rows.
+  assertUniqueCacheKeyPrefixes(definitions.flatMap(d => {
+    const keyPrefix = d.kind === "entity" ? (d.config?.cache as { keyPrefix?: unknown } | undefined)?.keyPrefix : undefined
+    return typeof keyPrefix === "string" ? [{ owner: definitionId(d), keyPrefix }] : []
+  }))
   const formatSource = options.durableFormats ?? COMPILED_DURABLE_FORMAT_REGISTRY_V1
   validateFormats(formatSource, definitions)
   const durableFormats = sealFormats(formatSource)
