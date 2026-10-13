@@ -67,18 +67,27 @@ export async function assertClaimWithoutNowUsesTheClock(driver: ScheduleDriver):
 }
 
 /**
- * Real elapsed-lease expiry on the database clock (bounded real wait): a lease that runs out is reclaimable, the claim
- * reports the lease marker `running` as the pre-claim status, and the old owner's token is fenced out everywhere.
+ * Real elapsed-lease expiry on the database clock: a lease that runs out is reclaimable, the claim reports the lease
+ * marker `running` as the pre-claim status, and the old owner's token is fenced out everywhere. Liveness is checked on
+ * a ten-minute lease, so no assertion depends on a short lease still being live when a slow machine gets to it; the
+ * lease is then rewritten to run out shortly and only the lapse is waited for, by polling until it is a full second
+ * in the past (never a fixed sleep), so the wait cannot end early however loaded the machine is.
  */
 export async function assertElapsedLeaseExpiryFencesOldOwner(driver: ScheduleDriver): Promise<void> {
   await clearRows(driver)
   await insertRow(driver, scheduleRow("short", { lastStatus: "fired" }))
-  const [old] = await driver.store.claimDueSchedules(claimArgs("old-owner", 1, T0, 400))
+  const [old] = await driver.store.claimDueSchedules(claimArgs("old-owner", 1, T0))
   expect(old!.lastStatus).toBe("fired")
   const fence = { scheduleId: "short", workerId: "old-owner", claimToken: old!.claimToken }
   await expect(driver.store.renewScheduleLease({ ...fence, now: new Date(), extendByMs: 400 })).resolves.toBe(true)
   await expect(driver.store.claimDueSchedules(claimArgs("new-owner", 1, T0)), "a live lease is not claimable").resolves.toEqual([])
-  await sleep(900)
+  const runsOutAt = Date.now() + 200
+  await updateRow(driver, "short", { leaseAt: runsOutAt })
+  const deadline = Date.now() + 60_000
+  while (Date.now() < runsOutAt + 1_000) {
+    if (Date.now() > deadline) throw new Error("the lease did not run out within 60 s")
+    await sleep(25)
+  }
   const advance = { ...fence, nextRunAt: new Date(T0 + 300_000), lastRunAt: new Date(T0), lastStatus: "fired" }
   await expect(driver.store.renewScheduleLease({ ...fence, now: new Date(), extendByMs: 60_000 }), "an expired lease cannot be renewed").resolves.toBe(false)
   const [fresh] = await driver.store.claimDueSchedules(claimArgs("new-owner", 1, T0))

@@ -4,7 +4,7 @@ import { getTableColumns } from "drizzle-orm"
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
 import { createDrizzleD1Adapter, createDrizzleJobStore, createDrizzleScheduleStore } from "adapters/drizzle-d1"
 import { openD1Fixture, type D1Fixture } from "./database.js"
-import { assertConcurrentClaimInvariants, assertScheduleStoreMatchesReference, type ScheduleDriver } from "../shared/scheduleStoreDifferential.js"
+import { assertConcurrentClaimInvariants, assertScheduleStoreMatchesReference, scaledTimeoutMs, type ScheduleDriver } from "../shared/scheduleStoreDifferential.js"
 import {
   assertClaimWithoutNowUsesTheClock, assertDispatcherEnqueuesEachOccurrenceOnce, assertElapsedLeaseExpiryFencesOldOwner, assertLiveClaimsDoNotConsumeClaimLimit,
   assertNullNextRunAtRetiresSchedule, assertRenewalNeverShortensLease, assertTenantTimezoneResolution,
@@ -65,8 +65,8 @@ describe("D1 schedule store differential", () => {
   })
   afterAll(async () => { await fixture?.close() })
 
-  it("matches the reference store over random lifecycle sequences", async () => { await assertScheduleStoreMatchesReference(driver) }, 240_000)
-  it("holds the claim invariants under concurrent workers", async () => { await assertConcurrentClaimInvariants(driver) }, 240_000)
+  it("matches the reference store over random lifecycle sequences", async () => { await assertScheduleStoreMatchesReference(driver) }, scaledTimeoutMs(240_000))
+  it("holds the claim invariants under concurrent workers", async () => { await assertConcurrentClaimInvariants(driver) }, scaledTimeoutMs(240_000))
   it("does not let live claims use up another worker's claim limit", async () => { await assertLiveClaimsDoNotConsumeClaimLimit(driver) })
   it("never shortens a lease on renewal", async () => { await assertRenewalNeverShortensLease(driver) })
   it("claims by the real clock when no time is given", async () => { await assertClaimWithoutNowUsesTheClock(driver) })

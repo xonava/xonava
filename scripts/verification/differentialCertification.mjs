@@ -40,6 +40,17 @@ const HARNESS = `${CORE_DIFFERENTIAL_DIR}/harness.ts`
 const HARNESS_SELF_TEST = `${CORE_DIFFERENTIAL_DIR}/harness.test.ts`
 const SHARED_PARITY = ["packages/testing/integration/shared/richParity.ts", "packages/testing/integration/shared/predicateParity.ts"]
 const DATABASE_ADAPTERS = ["pg", "mysql", "d1"]
+/**
+ * Real-database lifecycle-store differentials (job, schedule, workflow store versus the core reference) and the
+ * workflow signal-buffering suite. Their shared files declare the properties; each adapter has one integration
+ * entry point per area.
+ */
+const SHARED_DIRECTORY = "packages/testing/integration/shared"
+const STORE_DIFFERENTIAL_AREAS = ["job", "schedule", "workflow"]
+const STORE_DIFFERENTIAL_SHARED = name => /^(?:job|schedule|workflow)StoreDifferential[A-Za-z]*\.ts$/.test(name) || name === "workflowSignalBuffering.ts"
+const STORE_DIFFERENTIAL_TESTS = [...STORE_DIFFERENTIAL_AREAS.map(area => `${area}StoreDifferential.integration.test.ts`), "workflowSignalBuffering.integration.test.ts"]
+/** Fixture migration directory per database adapter. */
+const FIXTURE_MIGRATIONS = { pg: "postgres", mysql: "mysql", d1: "d1" }
 /** Roots scanned for harness call sites that are not part of any DF1 suite. */
 const CALL_SITE_SCAN_ROOTS = ["packages/core/src", "packages/adapters/src", "packages/testing"]
 const EXCLUDED_DIRECTORIES = new Set(["node_modules", "dist", "coverage", "artifacts", "ci-artifacts", ".git"])
@@ -70,6 +81,8 @@ const COVERED_SOURCES = [
   "packages/adapters/src/drizzle-mysql/drizzleRepository.ts",
   "packages/adapters/src/drizzle-d1/sqlitePredicate.ts",
   "packages/adapters/src/drizzle-d1/drizzleRepository.ts",
+  ...DATABASE_ADAPTERS.flatMap(adapter => ["Job", "Schedule", "Workflow"].map(store => `packages/adapters/src/drizzle-${adapter}/drizzle${store}Store.ts`)),
+  ...DATABASE_ADAPTERS.map(adapter => [`packages/testing/fixtures/${FIXTURE_MIGRATIONS[adapter]}/migrations`, name => name.endsWith(".sql")]),
   "docs/spec/persistence/predicates.md",
   "docs/spec/query.md",
   "docs/spec/execution.md",
@@ -124,8 +137,13 @@ export async function df1Suites(repositoryRoot) {
     testFiles: coreTests,
     propertySources: differentialFiles.filter(path => path !== HARNESS && path !== HARNESS_SELF_TEST),
   }]
+  const storeDifferentialShared = await listDirectory(repositoryRoot, SHARED_DIRECTORY, STORE_DIFFERENTIAL_SHARED)
   for (const adapter of DATABASE_ADAPTERS) {
-    const testFiles = [`packages/testing/integration/${adapter}/richParity.integration.test.ts`, `packages/testing/integration/${adapter}/predicateParity.integration.test.ts`]
+    const testFiles = [
+      `packages/testing/integration/${adapter}/richParity.integration.test.ts`,
+      `packages/testing/integration/${adapter}/predicateParity.integration.test.ts`,
+      ...STORE_DIFFERENTIAL_TESTS.map(name => `packages/testing/integration/${adapter}/${name}`),
+    ]
     suites.push({
       id: adapter,
       kind: "database",
@@ -133,7 +151,7 @@ export async function df1Suites(repositoryRoot) {
       workspaceDirectory: "packages/testing",
       config: "vitest.integration.config.ts",
       testFiles,
-      propertySources: [...SHARED_PARITY, ...testFiles],
+      propertySources: [...SHARED_PARITY, ...storeDifferentialShared, ...testFiles],
     })
   }
   return suites

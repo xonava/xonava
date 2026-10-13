@@ -21,7 +21,7 @@
  */
 import { expect } from "vitest"
 import { assertDurableIdentifier, scheduleOccurrencesConsumed, type FencedScheduleClaim, type ScheduleStore } from "core/execution"
-import { forAllAsync, type Rng } from "../../../core/src/__tests__/differential/harness.js"
+import { forAllAsync, scaledRuns, type Rng } from "../../../core/src/__tests__/differential/harness.js"
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Driver
@@ -756,6 +756,11 @@ function shrinkOps(ops: Op[]): Iterable<Op[]> {
   for (let size = Math.floor(ops.length / 2); size >= 1; size = Math.floor(size / 2)) out.push(ops.slice(0, ops.length - size))
   for (let index = ops.length - 1; index >= 0; index--) out.push([...ops.slice(0, index), ...ops.slice(index + 1)])
   return out
+}
+
+/** A per-test time budget that grows with DIFFERENTIAL_SCALE like the property case counts do (1 at scale 1). */
+export function scaledTimeoutMs(baseMs: number): number {
+  return Math.ceil(baseMs * Math.max(1, scaledRuns(100) / 100))
 }
 
 /**

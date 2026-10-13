@@ -5,7 +5,7 @@ import { drizzle } from "drizzle-orm/node-postgres"
 import { boolean, integer, pgSchema, text, timestamp } from "drizzle-orm/pg-core"
 import { createDrizzleJobStore, createDrizzleScheduleStore, createPgSession } from "adapters/drizzle-pg"
 import { pgCertificationUrl } from "./database.js"
-import { assertConcurrentClaimInvariants, assertScheduleStoreMatchesReference, type ScheduleDriver } from "../shared/scheduleStoreDifferential.js"
+import { assertConcurrentClaimInvariants, assertScheduleStoreMatchesReference, scaledTimeoutMs, type ScheduleDriver } from "../shared/scheduleStoreDifferential.js"
 import {
   assertClaimWithoutNowUsesTheClock, assertDispatcherEnqueuesEachOccurrenceOnce, assertElapsedLeaseExpiryFencesOldOwner, assertLiveClaimsDoNotConsumeClaimLimit,
   assertNullNextRunAtRetiresSchedule, assertRenewalNeverShortensLease, assertTenantTimezoneResolution,
@@ -58,8 +58,8 @@ describe("PostgreSQL schedule store differential", () => {
   beforeAll(async () => { await pool.query(DDL) })
   afterAll(async () => { await pool.query(`DROP SCHEMA IF EXISTS ${SCHEMA} CASCADE`); await pool.end() })
 
-  it("matches the reference store over random lifecycle sequences", async () => { await assertScheduleStoreMatchesReference(driver) }, 120_000)
-  it("holds the claim invariants under concurrent workers", async () => { await assertConcurrentClaimInvariants(driver) }, 120_000)
+  it("matches the reference store over random lifecycle sequences", async () => { await assertScheduleStoreMatchesReference(driver) }, scaledTimeoutMs(120_000))
+  it("holds the claim invariants under concurrent workers", async () => { await assertConcurrentClaimInvariants(driver) }, scaledTimeoutMs(120_000))
   it("does not let live claims use up another worker's claim limit", async () => { await assertLiveClaimsDoNotConsumeClaimLimit(driver) })
   it("never shortens a lease on renewal", async () => { await assertRenewalNeverShortensLease(driver) })
   it("claims by the real clock when no time is given", async () => { await assertClaimWithoutNowUsesTheClock(driver) })

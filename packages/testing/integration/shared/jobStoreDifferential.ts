@@ -1,7 +1,7 @@
 import { appendFileSync } from "node:fs"
 import { expect, it } from "vitest"
 import type { JobStore, StoredJob, JobTransitionResult } from "core/execution"
-import { forAllAsync } from "../../../core/src/__tests__/differential/harness.js"
+import { forAllAsync, scaledRuns } from "../../../core/src/__tests__/differential/harness.js"
 import {
   BOGUS_TOKEN, HOUR, RefStore, T0, canonicalJson, describeOps, executionScopeOf, generateOps, requesterOf, shrinkOps,
   type EnqueueOutcome, type EnqueueSpec, type Op, type RefConfig, type RefJob, type TransitionOutcome, type ViewReq,
@@ -71,7 +71,10 @@ export interface JobStoreDifferentialDriver {
    * once at the end of a sequence instead of after every step.
    */
   light?: boolean
-  /** Lease length (ms) of the real-time lease test; the test sleeps a few multiples of it. */
+  /**
+   * Lease length (ms) of the real-time lease test. Only the lapse is waited for (polled, never slept for a fixed time),
+   * so this is a lower bound that needs no margin for scheduling delays; slow transports use a longer one.
+   */
   leaseTickMs?: number
 }
 
@@ -83,10 +86,24 @@ export function printCoverage(label: string): void {
   if (file) appendFileSync(file, `${label} coverage ${JSON.stringify(Object.fromEntries([...COVERAGE].sort()))}\n`)
 }
 
-/** Generous per-test budget: a failing property shrinks, and certification runs at scale 2. */
-export const PROPERTY_TIMEOUT_MS = 300_000
+/** Generous per-test budget: a failing property shrinks. It grows with DIFFERENTIAL_SCALE like the case counts do. */
+export const PROPERTY_TIMEOUT_MS = Math.ceil(300_000 * Math.max(1, scaledRuns(100) / 100))
 
 function sleepMs(ms: number): Promise<void> { return new Promise((resolve) => { setTimeout(resolve, ms) }) }
+
+/**
+ * Polls until the job's lease expiry is `marginMs` in the past on this machine's clock (never a fixed sleep), so it
+ * cannot return early however slow the machine is. A generous deadline only guards against a stuck run.
+ */
+async function waitForLeaseToLapse(driver: JobStoreDifferentialDriver, jobId: string, marginMs: number): Promise<void> {
+  const deadline = Date.now() + 60_000
+  for (;;) {
+    const lease = (await driver.store.getById({ id: jobId, requester: requesterOf("sys") }))?.leaseExpiresAt
+    if (!lease || Date.now() > lease.getTime() + marginMs) return
+    if (Date.now() > deadline) throw new Error(`the lease of ${jobId} did not lapse within 60 s`)
+    await sleepMs(25)
+  }
+}
 
 function parseJson(value: unknown): unknown {
   if (value === null || value === undefined) return null
@@ -618,30 +635,33 @@ export function defineLifecycleRegressions(driver: JobStoreDifferentialDriver): 
   it(`leases expire on the database clock, not the caller's now (${driver.label})`, async () => {
     await driver.reset()
     const { store } = driver
-    // One tick is the lease length; slow transports use a longer tick so a round trip cannot outlast a live lease.
+    // Nothing here depends on a lease staying live for a short real time (that would flake under load): liveness is
+    // checked on an hour-long lease, and lapses are either forced through the database or waited for by polling.
     const tick = driver.leaseTickMs ?? 150
     const job = await store.enqueue({ requester: SYSTEM, job: { executionScope: executionScopeOf("system"), jobType: "regression", jobVersion: 1, payload: {}, runAt: new Date(T0), maxAttempts: 2 } })
     // `now` is an arbitrary instant years in the future: it decides due-ness only, never lease liveness.
     const farFuture = new Date(T0 + 365 * 24 * HOUR)
-    const first = (await store.claimDue({ limit: 1, workerId: "w1", leaseDurationMs: tick, requester: SYSTEM, now: farFuture }))[0]!
+    const first = (await store.claimDue({ limit: 1, workerId: "w1", leaseDurationMs: HOUR, requester: SYSTEM, now: farFuture }))[0]!
     expect(first.id).toBe(job.id)
     expect(first.currentAttempt).toBe(1)
-    // A live lease is neither reclaimable nor stealable, and renewing it keeps it alive past its original expiry.
-    expect(await store.claimDue({ limit: 1, workerId: "w2", leaseDurationMs: tick, requester: SYSTEM, now: farFuture })).toEqual([])
-    expect(await store.renewLease({ jobId: job.id, workerId: "w1", claimToken: first.claimToken!, extendByMs: 5 * tick })).toBe(true)
-    await sleepMs(2 * tick)
-    expect(await store.claimDue({ limit: 1, workerId: "w2", leaseDurationMs: tick, requester: SYSTEM, now: farFuture })).toEqual([])
+    // A live lease is neither reclaimable nor stealable, and renewing it moves its expiry past the original one.
+    expect(await store.claimDue({ limit: 1, workerId: "w2", leaseDurationMs: HOUR, requester: SYSTEM, now: farFuture })).toEqual([])
+    const firstExpiry = (await store.getById({ id: job.id, requester: SYSTEM }))!.leaseExpiresAt!.getTime()
+    expect(await store.renewLease({ jobId: job.id, workerId: "w1", claimToken: first.claimToken!, extendByMs: 5 * HOUR })).toBe(true)
+    expect((await store.getById({ id: job.id, requester: SYSTEM }))!.leaseExpiresAt!.getTime()).toBeGreaterThan(firstExpiry + 3 * HOUR)
+    expect(await store.claimDue({ limit: 1, workerId: "w2", leaseDurationMs: HOUR, requester: SYSTEM, now: farFuture })).toEqual([])
     // Let it lapse: the old holder is fenced out everywhere and a new claim carries a fresh token and the next attempt.
-    await sleepMs(5 * tick)
+    await driver.expireLease(job.id)
     expect(await store.renewLease({ jobId: job.id, workerId: "w1", claimToken: first.claimToken!, extendByMs: 1_000 })).toBe(false)
     expect(await store.markSucceeded({ jobId: job.id, workerId: "w1", claimToken: first.claimToken!, attempt: 1 })).toEqual({ applied: false, reason: "LEASE_LOST" })
+    // The second lease is short and really runs out: the database clock, not the caller's now, decides when.
     const second = (await store.claimDue({ limit: 1, workerId: "w2", leaseDurationMs: tick, requester: SYSTEM, now: farFuture }))[0]!
     expect(second).toMatchObject({ id: job.id, currentAttempt: 2, leaseOwner: "w2" })
     expect(second.claimToken).not.toBe(first.claimToken)
     expect(await store.markSucceeded({ jobId: job.id, workerId: "w1", claimToken: first.claimToken!, attempt: 1 })).toEqual({ applied: false, reason: "LEASE_LOST" })
     expect(await store.markRetrying({ jobId: job.id, workerId: "w2", claimToken: second.claimToken!, attempt: 2, nextAttemptAt: farFuture, error: "x" })).toEqual({ applied: false, reason: "LEASE_LOST" })
     // The final attempt (2 of 2) lapses: nothing can reclaim it, so the next claim dead-letters it instead of leaving it running.
-    await sleepMs(2 * tick)
+    await waitForLeaseToLapse(driver, job.id, tick)
     expect(await store.claimDue({ limit: 1, workerId: "w3", leaseDurationMs: tick, requester: SYSTEM, now: farFuture })).toEqual([])
     expect(await store.getById({ id: job.id, requester: SYSTEM })).toMatchObject({ status: "dead_letter", lastError: driver.expiredFinalAttemptError, leaseOwner: null, claimToken: null, currentAttempt: 2 })
     expect(await store.markSucceeded({ jobId: job.id, workerId: "w2", claimToken: second.claimToken!, attempt: 2 })).toEqual({ applied: false, reason: "LEASE_LOST" })

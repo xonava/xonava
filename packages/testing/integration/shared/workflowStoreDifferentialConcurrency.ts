@@ -3,7 +3,7 @@ import {
   createWorkflowRegistry, defineWorkflow, dispatchWorkflows,
   type WorkflowDispatchResult, type WorkflowFence, type WorkflowInstance, type WorkflowStepContext, type WorkflowStepDefinition, type WorkflowStepResult, type WorkflowStore,
 } from "core/workflow"
-import { forAllAsync, scaledRuns, type Rng } from "../../../core/src/__tests__/differential/harness.js"
+import { forAllAsync, type Rng } from "../../../core/src/__tests__/differential/harness.js"
 import { drive, ManualClock, MemoryWorkflowStore, signalLedgerViolations } from "../../../core/src/__tests__/differential/workflowFixtures.js"
 import { canonical, coverage, coverageCount, PROPERTY_TIMEOUT_MS, SCOPE, type WorkflowStoreDriver } from "./workflowStoreDifferential.js"
 
@@ -27,6 +27,9 @@ import { canonical, coverage, coverageCount, PROPERTY_TIMEOUT_MS, SCOPE, type Wo
  */
 
 const STEP_COUNT = 3
+/** Dispatch leases and the settle deadline are far longer than any run needs, so a loaded machine cannot lapse a live lease or end the wait early. */
+const LEASE_MS = 60_000
+const SETTLE_DEADLINE_MS = 90_000
 const SLEEP_MS = 12
 
 interface StepScript { wait: "go" | "stop" | null; sleep: boolean; flaky: number; comp: boolean; fail: boolean }
@@ -161,7 +164,7 @@ async function runChain(driver: WorkflowStoreDriver, input: ChainCase): Promise<
   const totals: WorkflowDispatchResult = { ...ZERO }
   const workers = input.workers.map(async (worker, index) => {
     while (!stop.value) {
-      const result = await dispatchWorkflows({ store: workerStores[index]!, registry, workerId: `cw${index}`, claimLimit: worker.limit, concurrency: worker.concurrency, leaseDurationMs: 4000, stepTimeoutMs: 20_000 })
+      const result = await dispatchWorkflows({ store: workerStores[index]!, registry, workerId: `cw${index}`, claimLimit: worker.limit, concurrency: worker.concurrency, leaseDurationMs: LEASE_MS, stepTimeoutMs: 20_000 })
       add(totals, result)
       if (result.claimed === 0) await delay(light ? 30 : 3)
     }
@@ -182,7 +185,7 @@ async function runChain(driver: WorkflowStoreDriver, input: ChainCase): Promise<
     }
   })
 
-  const deadline = Date.now() + 25_000
+  const deadline = Date.now() + SETTLE_DEADLINE_MS
   let rows: WorkflowInstance[] = []
   try {
     await Promise.all(deliverers)
@@ -198,7 +201,7 @@ async function runChain(driver: WorkflowStoreDriver, input: ChainCase): Promise<
     await Promise.all(workers)
   }
   // Nothing may be claimable now, and a further dispatch must not change anything.
-  const idle = await dispatchWorkflows({ store: driver.openStore(), registry, workerId: "idle", claimLimit: 10, leaseDurationMs: 4000 })
+  const idle = await dispatchWorkflows({ store: driver.openStore(), registry, workerId: "idle", claimLimit: 10, leaseDurationMs: LEASE_MS })
   expect(idle, "an idle dispatch after the run claims nothing").toEqual(ZERO)
 
   rows = []
@@ -231,7 +234,7 @@ async function runChain(driver: WorkflowStoreDriver, input: ChainCase): Promise<
   for (const receipt of receipts) await reference.deliverSignal({ id: receipt.id, instanceId: receipt.instanceId, name: receipt.name, payload: payloads.get(receipt.id) ?? {} })
   const referenceTotals: WorkflowDispatchResult = { ...ZERO }
   for (let round = 0; round < 400; round++) {
-    const result = await drive(dispatchWorkflows({ store: reference, registry: referenceRegistry, workerId: "ref", claimLimit: 10, leaseDurationMs: 4000, stepTimeoutMs: 20_000, clock }), clock, { maxTimers: 5000 })
+    const result = await drive(dispatchWorkflows({ store: reference, registry: referenceRegistry, workerId: "ref", claimLimit: 10, leaseDurationMs: LEASE_MS, stepTimeoutMs: 20_000, clock }), clock, { maxTimers: 5000 })
     add(referenceTotals, result)
     if (result.claimed > 0) continue
     const timers = [...reference.rows.values()].filter((row) => row.wakeAt !== null).map((row) => row.wakeAt!.getTime())
@@ -275,7 +278,7 @@ export function defineWorkflowConcurrency(driver: WorkflowStoreDriver): void {
     await forAllAsync(`workflow store differential concurrent dispatch (${driver.label})`, generateChainCase(driver.light === true), (value) => runChain(driver, value), {
       runs: driver.concurrencyRuns ?? (driver.light ? 50 : 100), shrink: shrinkChain, describe: describeChain, maxShrinkSteps: 60,
     })
-  }, PROPERTY_TIMEOUT_MS * Math.max(1, scaledRuns(100) / 100))
+  }, PROPERTY_TIMEOUT_MS)
 
   it(`${driver.label}: concurrency generator coverage`, () => {
     if (process.env.DIFFERENTIAL_RUN !== undefined && process.env.DIFFERENTIAL_RUN !== "") return

@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, it } from "vitest"
 import { DrizzleMySqlJobStore, DrizzleMySqlScheduleStore } from "adapters/drizzle-mysql"
 import { mysqlCertificationUrl } from "./database.js"
 import { applyMySqlScheduleNextRunNullableMigration } from "../../fixtures/mysql/bootstrap.js"
-import { assertConcurrentClaimInvariants, assertScheduleStoreMatchesReference, type ScheduleDriver } from "../shared/scheduleStoreDifferential.js"
+import { assertConcurrentClaimInvariants, assertScheduleStoreMatchesReference, scaledTimeoutMs, type ScheduleDriver } from "../shared/scheduleStoreDifferential.js"
 import {
   assertClaimWithoutNowUsesTheClock, assertDispatcherEnqueuesEachOccurrenceOnce, assertElapsedLeaseExpiryFencesOldOwner, assertLiveClaimsDoNotConsumeClaimLimit,
   assertNullNextRunAtRetiresSchedule, assertRenewalNeverShortensLease,
@@ -51,8 +51,8 @@ describe("MySQL schedule store differential", () => {
   })
   afterAll(async () => { await pool.query(`DROP DATABASE IF EXISTS \`${DATABASE}\``); await pool.end() })
 
-  it("matches the reference store over random lifecycle sequences", async () => { await assertScheduleStoreMatchesReference(driver) }, 120_000)
-  it("holds the claim invariants under concurrent workers", async () => { await assertConcurrentClaimInvariants(driver) }, 120_000)
+  it("matches the reference store over random lifecycle sequences", async () => { await assertScheduleStoreMatchesReference(driver) }, scaledTimeoutMs(120_000))
+  it("holds the claim invariants under concurrent workers", async () => { await assertConcurrentClaimInvariants(driver) }, scaledTimeoutMs(120_000))
   it("does not let live claims use up another worker's claim limit", async () => { await assertLiveClaimsDoNotConsumeClaimLimit(driver) })
   it("never shortens a lease on renewal", async () => { await assertRenewalNeverShortensLease(driver) })
   it("claims by the real clock when no time is given", async () => { await assertClaimWithoutNowUsesTheClock(driver) })

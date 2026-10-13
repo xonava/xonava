@@ -62,7 +62,8 @@ export interface WorkflowStoreDriver {
   readonly concurrencyRuns?: number
 }
 
-export const PROPERTY_TIMEOUT_MS = 300_000
+/** Per-property budget; grows with DIFFERENTIAL_SCALE like the case counts (certification runs databases at scale 2). */
+export const PROPERTY_TIMEOUT_MS = Math.ceil(300_000 * Math.max(1, scaledRuns(100) / 100))
 export const SCOPE = { kind: "tenant", tenantId: "t1" } as const
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -573,7 +574,7 @@ export function defineStoreContractDifferential(driver: WorkflowStoreDriver): vo
     await forAllAsync(`workflow store differential lifecycle (${driver.label})`, generateCase(driver.maxOps ?? 36, driver.light ? 2 : INSTANCES), (value) => runCase(driver, value), {
       runs: driver.lifecycleRuns ?? 60, shrink: shrinkCase, describe: describeCase, maxShrinkSteps: 120,
     })
-  }, PROPERTY_TIMEOUT_MS * Math.max(1, scaledRuns(100) / 100))
+  }, PROPERTY_TIMEOUT_MS)
 
   it(`${driver.label}: generator coverage of the lifecycle differential`, () => {
     if (process.env.DIFFERENTIAL_RUN !== undefined && process.env.DIFFERENTIAL_RUN !== "") return
