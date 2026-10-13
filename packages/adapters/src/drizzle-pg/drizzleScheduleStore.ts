@@ -69,6 +69,9 @@ export class DrizzleScheduleStore implements ScheduleStore {
       ...(schedules.remainingOccurrences ? [or(isNull(schedules.remainingOccurrences), gt(schedules.remainingOccurrences, 0))!] : []),
       // A failed schedule backs off: its lease expiry holds the earliest retry time.
       or(sql`COALESCE(${schedules.lastStatus!}, '') <> 'failed'`, isNull(schedules.leaseExpiresAt!), lte(schedules.leaseExpiresAt!, now))!,
+      // A schedule held by a live claim is not claimable. This belongs in the candidate scan as well as the
+      // conditional update: otherwise held schedules (which sort first) use up the claim limit and starve the rest.
+      or(sql`(${schedules.lastStatus!} IS NULL OR ${schedules.lastStatus!} != 'running')`, lt(schedules.leaseExpiresAt!, sql`now()`))!,
     ]
     const selection: Record<string, unknown> = {
        id: schedules.id!, scope: schedules.scope!, jobType: schedules.jobType!, jobVersion: schedules.jobVersion!, tenantId: schedules.tenantId!,
@@ -87,7 +90,6 @@ export class DrizzleScheduleStore implements ScheduleStore {
         // Lifecycle is re-checked here: a schedule paused or moved out of its
         // effective window after the SELECT must not be claimed.
         eq(schedules.id!, row.id as string), eq(schedules.enabled!, true), lte(schedules.nextRunAt!, now), ...lifecycleConditions,
-        or(sql`(${schedules.lastStatus!} IS NULL OR ${schedules.lastStatus!} != 'running')`, and(eq(schedules.lastStatus!, "running"), lt(schedules.leaseExpiresAt!, sql`now()`))),
       ))
        if (getAffectedRows(result) > 0) claimedIds.push({ id: row.id as string, token: claimToken })
     }
@@ -96,7 +98,9 @@ export class DrizzleScheduleStore implements ScheduleStore {
       or(...claimedIds.map(({ id, token }) => and(eq(schedules.id!, id), eq(schedules.claimToken!, token)))),
       eq(schedules.leaseOwner!, args.workerId), eq(schedules.lastStatus!, "running"), gt(schedules.leaseExpiresAt!, sql`now()`),
     )).limit(claimedIds.length)
-    const claimed = (claimedRows as Record<string, unknown>[]).map((row) => ({
+    // The re-read has no defined order; hand the claims back oldest-due first, the order they were won in.
+    const claimOrder = new Map(claimedIds.map(({ id }, index) => [id, index]))
+    const claimed = [...(claimedRows as Record<string, unknown>[])].sort((a, b) => claimOrder.get(a.id as string)! - claimOrder.get(b.id as string)!).map((row) => ({
       // Claiming marks the scheduler lease as running. Keep the execution state
       // observed before that write for overlapPolicy decisions.
       ...toScheduleClaim({ ...row, lastStatus: priorStatuses.get(row.id as string) ?? null }),
@@ -138,10 +142,11 @@ export class DrizzleScheduleStore implements ScheduleStore {
     assertDurableIdentifier(args.workerId, "workerId", 100)
     const schedules = this.config.columnMap.schedules
     // Only a positive extension is meaningful. The absolute expiry is computed
-    // on the database clock so writes never mix app and DB time.
+    // on the database clock so writes never mix app and DB time, and a renewal
+    // moves the expiry forward only: a smaller extension never shortens a lease.
     if (!Number.isFinite(args.extendByMs) || args.extendByMs <= 0) return false
     const leaseExpiresAt = sql`now() + (${args.extendByMs} * interval '1 millisecond')`
-    const result = await this.db.update(this.config.schedulesTable).set({ leaseExpiresAt }).where(and(
+    const result = await this.db.update(this.config.schedulesTable).set({ leaseExpiresAt: sql`GREATEST(${schedules.leaseExpiresAt!}, ${leaseExpiresAt})` }).where(and(
       eq(schedules.id!, args.scheduleId), eq(schedules.leaseOwner!, args.workerId), eq(schedules.claimToken!, args.claimToken),
       eq(schedules.lastStatus!, "running"), gt(schedules.leaseExpiresAt!, sql`now()`),
     ))

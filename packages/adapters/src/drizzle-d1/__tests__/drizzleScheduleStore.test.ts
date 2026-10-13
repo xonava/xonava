@@ -343,4 +343,42 @@ describe("D1 schedule store timezone resolution", () => {
     expect(rendered.sql).toContain("julianday('now')")
     expect(rendered.params).toContain(90_000)
   })
+
+  it("renews to the later of the current and the requested expiry, so a smaller extension never shortens a lease", async () => {
+    let capturedSet: Record<string, unknown> | undefined
+    const db = { update: () => ({ set: (values: Record<string, unknown>) => { capturedSet = values; return { where: async () => ({ changes: 1 }) } } }) } as unknown as DrizzleSessionLike
+    const store = createDrizzleScheduleStore(db, { ...config }, "UTC")
+    await store.renewScheduleLease({ scheduleId: "sched-1", workerId: "worker-1", claimToken: "token", now: new Date(), extendByMs: 1_000 })
+    const rendered = new SQLiteSyncDialect().sqlToQuery(capturedSet!.leaseExpiresAt as SQL<unknown>)
+    expect(rendered.sql.toLowerCase()).toMatch(/max\(.*lease_expires_at.*julianday/)
+  })
+
+  function recordingStore(eligible: Record<string, unknown>[], reread: Record<string, unknown>[]) {
+    const conditions: SQL[] = []
+    const db = {
+      select: () => ({ from: () => ({ where: (condition: SQL) => {
+        conditions.push(condition)
+        return { orderBy: () => ({ limit: () => ({ offset: async () => eligible }) }), limit: async () => reread }
+      } }) }),
+      update: () => ({ set: () => ({ where: async () => ({ changes: 1 }) }) }),
+    } as unknown as DrizzleSessionLike
+    return { store: createDrizzleScheduleStore(db, { ...config }, "UTC"), conditions }
+  }
+
+  it("keeps schedules held by a live claim out of the candidate scan, so they cannot use up the claim limit", async () => {
+    const { store, conditions } = recordingStore([], [])
+    await store.claimDueSchedules({ workerId: "worker-1", leaseDurationMs: 60_000, limit: 10, now: new Date() })
+    const rendered = new SQLiteSyncDialect().sqlToQuery(conditions[0]!)
+    expect(rendered.sql).toContain(`!= 'running'`)
+    expect(rendered.sql).toMatch(/"lease_expires_at" <= /)
+  })
+
+  it("returns the claims oldest-due first, whatever order the re-read returns them in", async () => {
+    const base = { jobType: "j", jobVersion: 1, tenantId: null, scope: "system", payload: "{}", cronExpression: "* * * * *", timezone: "UTC", overlapPolicy: "allow", misfirePolicy: "fire_now", lastRunAt: null, lastStatus: null, claimToken: "t", leaseOwner: "worker-1" }
+    const older = { ...base, id: "older", nextRunAt: 1_000 }
+    const newer = { ...base, id: "newer", nextRunAt: 2_000 }
+    const { store } = recordingStore([older, newer], [newer, older])
+    const claims = await store.claimDueSchedules({ workerId: "worker-1", leaseDurationMs: 60_000, limit: 10, now: new Date() })
+    expect(claims.map((claim) => claim.scheduleId)).toEqual(["older", "newer"])
+  })
 })
