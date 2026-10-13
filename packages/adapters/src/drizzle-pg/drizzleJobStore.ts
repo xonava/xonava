@@ -52,6 +52,14 @@ function buildIdempotencyScope(tenantId: string | null | undefined, scope: strin
   return tenantId ? `tenant:${tenantId}` : scope
 }
 
+/**
+ * PostgreSQL text cannot hold U+0000 (the write fails with 22021), so a failure message that contains one would make
+ * the transition throw and leave the job to be reclaimed after its lease. Replace it with U+FFFD like an invalid byte.
+ */
+function pgText(value: string): string {
+  return value.includes("\u0000") ? value.replaceAll("\u0000", "\uFFFD") : value
+}
+
 /** Stable, sanitized reason recorded when a final attempt's lease expires. */
 export const LEASE_EXPIRED_ON_FINAL_ATTEMPT = "Lease expired on final attempt"
 
@@ -191,7 +199,7 @@ export class DrizzleJobStore implements JobStore {
       [keys.attempt]: args.attempt,
       [keys.workerId]: args.workerId,
       [keys.status]: args.status,
-      [keys.errorMessage]: args.error ?? null,
+      [keys.errorMessage]: args.error == null ? null : pgText(args.error),
       [keys.startedAt]: args.now,
       [keys.finishedAt]: args.now,
     }
@@ -355,7 +363,8 @@ export class DrizzleJobStore implements JobStore {
     assertDurableIdentifier(args.workerId, "workerId", 100)
     const durationMs = args.extendByMs
     if (!Number.isFinite(durationMs) || durationMs <= 0) return false
-    const leaseExpiresAt = sql`now() + (${durationMs} * interval '1 millisecond')`
+    // Renewal only ever moves the expiry forward: a shorter extension than the time left must not shorten the lease.
+    const leaseExpiresAt = sql`GREATEST(${this.jobs.leaseExpiresAt!}, now() + (${durationMs} * interval '1 millisecond'))`
     const result = await this.db.update(this.jobsTable).set({ leaseExpiresAt }).where(and(
         eq(this.jobs.id!, args.jobId), eq(this.jobs.leaseOwner!, args.workerId), eq(this.jobs.claimToken!, args.claimToken),
          eq(this.jobs.status!, "running"), gt(this.jobs.leaseExpiresAt!, sql`now()`),
@@ -379,8 +388,8 @@ export class DrizzleJobStore implements JobStore {
       const now = new Date()
        const where = and(eq(this.jobs.id!, args.jobId), eq(this.jobs.leaseOwner!, args.workerId), eq(this.jobs.claimToken!, args.claimToken), eq(this.jobs.attempts!, args.attempt), lt(this.jobs.attempts!, this.jobs.maxAttempts!), inArray(this.jobs.status!, ["running"]), gt(this.jobs.leaseExpiresAt!, sql`now()`))
        const token = uuidv7()
-       if (this.executionHistory === "required") return this.atomicTransition({ where, token, set: { status: "retrying", nextAttemptAt: args.nextAttemptAt, lastError: args.error, leaseOwner: null, claimToken: token, leaseExpiresAt: null }, status: "retrying", attempt: args.attempt, workerId: args.workerId, error: args.error, jobId: args.jobId, now })
-       const result = await this.db.update(this.jobsTable).set({ status: "retrying", nextAttemptAt: args.nextAttemptAt, lastError: args.error, leaseOwner: null, claimToken: null, leaseExpiresAt: null }).where(where)
+       if (this.executionHistory === "required") return this.atomicTransition({ where, token, set: { status: "retrying", nextAttemptAt: args.nextAttemptAt, lastError: pgText(args.error), leaseOwner: null, claimToken: token, leaseExpiresAt: null }, status: "retrying", attempt: args.attempt, workerId: args.workerId, error: args.error, jobId: args.jobId, now })
+       const result = await this.db.update(this.jobsTable).set({ status: "retrying", nextAttemptAt: args.nextAttemptAt, lastError: pgText(args.error), leaseOwner: null, claimToken: null, leaseExpiresAt: null }).where(where)
     const affected = getAffectedRows(result) > 0
      if (!affected) return { applied: false, reason: "LEASE_LOST" }
        const history = await this.recordExecution(args.jobId, "retrying", args.attempt, args.workerId, args.error, now)
@@ -390,7 +399,7 @@ export class DrizzleJobStore implements JobStore {
   /** Gives a live claim back without consuming the attempt counted at claim time. */
   async release(args: ReleaseJobArgs): Promise<JobTransitionResult> {
     const where = and(eq(this.jobs.id!, args.jobId), eq(this.jobs.leaseOwner!, args.workerId), eq(this.jobs.claimToken!, args.claimToken), eq(this.jobs.status!, "running"), gt(this.jobs.leaseExpiresAt!, sql`now()`))
-    const result = await this.db.update(this.jobsTable).set({ status: "retrying", attempts: sql`CASE WHEN attempts > 0 THEN attempts - 1 ELSE 0 END`, nextAttemptAt: args.nextAttemptAt, lastError: args.reason.slice(0, 512), leaseOwner: null, leaseExpiresAt: null, claimToken: null }).where(where)
+    const result = await this.db.update(this.jobsTable).set({ status: "retrying", attempts: sql`CASE WHEN attempts > 0 THEN attempts - 1 ELSE 0 END`, nextAttemptAt: args.nextAttemptAt, lastError: pgText(args.reason.slice(0, 512)), leaseOwner: null, leaseExpiresAt: null, claimToken: null }).where(where)
     return getAffectedRows(result) > 0 ? { applied: true } : { applied: false, reason: "LEASE_LOST" }
   }
 
@@ -398,8 +407,8 @@ export class DrizzleJobStore implements JobStore {
     const now = new Date()
        const where = and(eq(this.jobs.id!, args.jobId), eq(this.jobs.leaseOwner!, args.workerId), eq(this.jobs.claimToken!, args.claimToken), eq(this.jobs.attempts!, args.attempt), eq(this.jobs.status!, "running"), gt(this.jobs.leaseExpiresAt!, sql`now()`))
        const token = uuidv7()
-       if (this.executionHistory === "required") return this.atomicTransition({ where, token, set: { status: args.status, lastError: args.error, completedAt: now, leaseOwner: null, claimToken: token, leaseExpiresAt: null }, status: args.status, attempt: args.attempt, workerId: args.workerId, error: args.error, jobId: args.jobId, now })
-       const result = await this.db.update(this.jobsTable).set({ status: args.status, lastError: args.error, completedAt: now, leaseOwner: null, claimToken: null, leaseExpiresAt: null }).where(where)
+       if (this.executionHistory === "required") return this.atomicTransition({ where, token, set: { status: args.status, lastError: pgText(args.error), completedAt: now, leaseOwner: null, claimToken: token, leaseExpiresAt: null }, status: args.status, attempt: args.attempt, workerId: args.workerId, error: args.error, jobId: args.jobId, now })
+       const result = await this.db.update(this.jobsTable).set({ status: args.status, lastError: pgText(args.error), completedAt: now, leaseOwner: null, claimToken: null, leaseExpiresAt: null }).where(where)
     const affected = getAffectedRows(result) > 0
      if (!affected) return { applied: false, reason: "LEASE_LOST" }
        const history = await this.recordExecution(args.jobId, args.status, args.attempt, args.workerId, args.error, now)
@@ -407,7 +416,7 @@ export class DrizzleJobStore implements JobStore {
   }
 
   async cancel(args: CancelJobArgs): Promise<JobTransitionResult> {
-      const conditions = [eq(this.jobs.id!, args.jobId), ne(this.jobs.status!, "succeeded"), ne(this.jobs.status!, "cancelled"), ne(this.jobs.status!, "dead_letter")]
+      const conditions = [eq(this.jobs.id!, args.jobId), ne(this.jobs.status!, "succeeded"), ne(this.jobs.status!, "cancelled"), ne(this.jobs.status!, "dead_letter"), ne(this.jobs.status!, "failed")]
       conditions.push(...this.requesterFilters(args.requester))
        const now = new Date()
        if (this.executionHistory === "required") {
@@ -421,7 +430,7 @@ export class DrizzleJobStore implements JobStore {
             })
             const result = await this.db.atomicJobTransition!({
               updateTable: this.jobsTable,
-              updateSet: { status: "cancelled", completedAt: now, lastError: args.reason ?? null, leaseOwner: null, claimToken: token, leaseExpiresAt: null },
+              updateSet: { status: "cancelled", completedAt: now, lastError: args.reason === undefined ? null : pgText(args.reason), leaseOwner: null, claimToken: token, leaseExpiresAt: null },
               updateWhere: and(...conditions),
               historyTable: this.executionsTable,
               historyValues,
@@ -436,7 +445,7 @@ export class DrizzleJobStore implements JobStore {
       const row = rows[0] as Record<string, unknown> | undefined
       if (!row) return { applied: false, reason: "INVALID_STATE" }
       const history = await this.recordExecution(args.jobId, "cancelled", (row.attempts as number) ?? 0, "cancellation", args.reason, now)
-      const result = await this.db.update(this.jobsTable).set({ status: "cancelled", completedAt: now, lastError: args.reason ?? null, leaseOwner: null, claimToken: null, leaseExpiresAt: null }).where(and(...conditions))
+      const result = await this.db.update(this.jobsTable).set({ status: "cancelled", completedAt: now, lastError: args.reason === undefined ? null : pgText(args.reason), leaseOwner: null, claimToken: null, leaseExpiresAt: null }).where(and(...conditions))
       if (getAffectedRows(result) === 0) return { applied: false, reason: "INVALID_STATE" }
       return { applied: true, transitionToken: history.token }
   }

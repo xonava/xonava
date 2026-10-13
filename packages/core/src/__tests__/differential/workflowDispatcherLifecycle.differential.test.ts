@@ -45,13 +45,13 @@ const sum = (counts: WorkflowDispatchResult | ModelCounts): number => counts.adv
 function wrapStore(base: MemoryWorkflowStore): WorkflowStore & { -readonly [K in keyof WorkflowStore]: WorkflowStore[K] } & { commits: MemoryWorkflowStore["commits"] } {
   return {
     start: (input) => base.start(input), get: (id) => base.get(id), claimDue: (args) => base.claimDue(args), assertLease: (fence) => base.assertLease(fence), renewLease: (fence, ms) => base.renewLease(fence, ms),
-    commit: (fence, next) => base.commit(fence, next), deliverSignal: (signal) => base.deliverSignal(signal), cancel: (id) => base.cancel(id), getSignal: (id, name) => base.getSignal(id, name), commits: base.commits,
+    commit: (fence, next) => base.commit(fence, next), deliverSignal: (signal) => base.deliverSignal(signal), cancel: (id) => base.cancel(id), getSignal: (id, name) => base.getSignal(id, name), getSignalById: (id, signalId) => base.getSignalById(id, signalId), commits: base.commits,
   }
 }
 
 function comparable(row: WorkflowInstance): unknown {
   return {
-    status: row.status, step: row.currentStep, vars: JSON.parse(stableJson(row.variables)), attempt: row.stepAttempt, stack: row.compensationStack, signal: row.waitingSignal, wakeAt: row.wakeAt?.getTime() ?? null,
+    status: row.status, step: row.currentStep, vars: JSON.parse(stableJson(row.variables)), attempt: row.stepAttempt, stack: row.compensationStack, signal: row.waitingSignal, resume: row.resumeSignalId ?? null, wakeAt: row.wakeAt?.getTime() ?? null,
     outcome: row.outcome, revision: row.revision, version: row.workflowVersion, leased: row.leaseOwner !== null, leaseExpiresAt: row.leaseExpiresAt?.getTime() ?? null,
     failure: row.failure ? { code: row.failure.code, step: row.failure.step, phase: row.failure.phase, attempt: row.failure.attempt, at: row.failure.at.getTime() } : null,
   }
@@ -60,7 +60,7 @@ function comparable(row: WorkflowInstance): unknown {
 function comparableModel(row: ReturnType<ModelDispatcher["rows"]["get"]>): unknown {
   const r = row!
   return {
-    status: r.status, step: r.step, vars: JSON.parse(stableJson(r.vars)), attempt: r.attempt, stack: r.stack, signal: r.signal, wakeAt: r.wakeAt, outcome: r.outcome, revision: r.revision, version: r.version,
+    status: r.status, step: r.step, vars: JSON.parse(stableJson(r.vars)), attempt: r.attempt, stack: r.stack, signal: r.signal, resume: r.resume, wakeAt: r.wakeAt, outcome: r.outcome, revision: r.revision, version: r.version,
     leased: r.leased, leaseExpiresAt: r.leaseExpiresAt,
     failure: r.failure ? { code: r.failure.code, step: r.failure.step, phase: r.failure.phase, attempt: r.failure.attempt, at: r.failure.at } : null,
   }

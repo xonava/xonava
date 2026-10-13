@@ -24,3 +24,11 @@ export function getAffectedRows(result: unknown): number {
 
   throw new ConfigurationError("Unsupported PostgreSQL mutation result shape: could not extract affected rows")
 }
+
+/**
+ * A `timestamptz` value read through node-postgres. The driver returns a `Date` (millisecond precision); `String(date)` renders
+ * a locale string that drops the milliseconds, so only non-Date values (ISO strings from other drivers) are parsed from text.
+ */
+export function pgDate(value: unknown): Date {
+  return value instanceof Date ? value : new Date(String(value))
+}

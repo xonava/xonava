@@ -1,4 +1,5 @@
 import { pgSchemaName } from "./pgSchemaName"
+import { pgDate } from "./pgUtils"
 import type { NewTemporalRevision, TemporalHistoryStore, TemporalResource, TemporalRevision, TemporalRevisionPage, TemporalSnapshot } from "core/temporal"
 import { validateTemporalRevision, validateTemporalSnapshot } from "core/temporal"
 import { ConflictError } from "core/domain"
@@ -7,7 +8,7 @@ interface PgResult { rows: Record<string, unknown>[] }
 export interface PgTemporalClient { query(text: string, values?: unknown[]): Promise<PgResult> }
 const json = <T>(value: unknown): T => (typeof value === "string" ? JSON.parse(value) : value) as T
 function decode<T extends Readonly<Record<string, unknown>>>(row: Record<string, unknown>): TemporalRevision<T> {
-  return validateTemporalRevision({ scopeId: String(row.scope_id) as TemporalResource["scopeId"], entityType: String(row.entity_type), entityId: String(row.entity_id), revision: Number(row.revision), occurredAt: new Date(String(row.occurred_at)), kind: row.kind as TemporalRevision["kind"], state: row.state == null ? null : json<T>(row.state), ...(row.entity_version == null ? {} : { entityVersion: Number(row.entity_version) }), ...(row.event_id == null ? {} : { eventId: String(row.event_id) }), ...(row.audit_id == null ? {} : { auditId: String(row.audit_id) }) })
+  return validateTemporalRevision({ scopeId: String(row.scope_id) as TemporalResource["scopeId"], entityType: String(row.entity_type), entityId: String(row.entity_id), revision: Number(row.revision), occurredAt: pgDate(row.occurred_at), kind: row.kind as TemporalRevision["kind"], state: row.state == null ? null : json<T>(row.state), ...(row.entity_version == null ? {} : { entityVersion: Number(row.entity_version) }), ...(row.event_id == null ? {} : { eventId: String(row.event_id) }), ...(row.audit_id == null ? {} : { auditId: String(row.audit_id) }) })
 }
 
 export class DrizzlePgTemporalHistoryStore<T extends Readonly<Record<string, unknown>> = Readonly<Record<string, unknown>>> implements TemporalHistoryStore<T> {
@@ -25,7 +26,7 @@ export class DrizzlePgTemporalHistoryStore<T extends Readonly<Record<string, unk
     return decode<T>(result.rows[0])
   }
   async saveSnapshot(value: TemporalSnapshot<T>): Promise<void> { const s = validateTemporalSnapshot(value); await this.db.query(`INSERT INTO ${this.schema}.temporal_snapshots(scope_id,entity_type,entity_id,revision,occurred_at,state) VALUES($1,$2,$3,$4,$5,$6::jsonb) ON CONFLICT DO NOTHING`, [s.scopeId, s.entityType, s.entityId, s.revision, s.occurredAt, s.state === null ? null : JSON.stringify(s.state)]) }
-  async latestSnapshot(resource: TemporalResource, asOf: Date): Promise<TemporalSnapshot<T> | null> { const result = await this.db.query(`SELECT * FROM ${this.schema}.temporal_snapshots WHERE scope_id=$1 AND entity_type=$2 AND entity_id=$3 AND occurred_at<=$4 ORDER BY revision DESC LIMIT 1`, [resource.scopeId, resource.entityType, resource.entityId, asOf]); const row = result.rows[0]; return row ? validateTemporalSnapshot({ ...resource, revision: Number(row.revision), occurredAt: new Date(String(row.occurred_at)), state: row.state == null ? null : json<T>(row.state) }) : null }
+  async latestSnapshot(resource: TemporalResource, asOf: Date): Promise<TemporalSnapshot<T> | null> { const result = await this.db.query(`SELECT * FROM ${this.schema}.temporal_snapshots WHERE scope_id=$1 AND entity_type=$2 AND entity_id=$3 AND occurred_at<=$4 ORDER BY revision DESC LIMIT 1`, [resource.scopeId, resource.entityType, resource.entityId, asOf]); const row = result.rows[0]; return row ? validateTemporalSnapshot({ ...resource, revision: Number(row.revision), occurredAt: pgDate(row.occurred_at), state: row.state == null ? null : json<T>(row.state) }) : null }
   async revisions(resource: TemporalResource, options: { afterRevision: number; asOf: Date; limit: number }): Promise<TemporalRevisionPage<T>> { const result = await this.db.query(`SELECT * FROM ${this.schema}.temporal_revisions WHERE scope_id=$1 AND entity_type=$2 AND entity_id=$3 AND revision>$4 AND occurred_at<=$5 ORDER BY revision LIMIT $6`, [resource.scopeId, resource.entityType, resource.entityId, options.afterRevision, options.asOf, options.limit + 1]); return { items: result.rows.slice(0, options.limit).map(decode<T>), hasMore: result.rows.length > options.limit } }
 }
 

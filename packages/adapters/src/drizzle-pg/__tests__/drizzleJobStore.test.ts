@@ -592,3 +592,31 @@ describe("job release without consuming an attempt", () => {
     await expect(store.release({ jobId: "j1", workerId: "w", claimToken: "stale", nextAttemptAt: new Date(), reason: "x" })).resolves.toEqual({ applied: false, reason: "LEASE_LOST" })
   })
 })
+
+describe("job store guards found by the real-database differential", () => {
+  it("cancel only touches jobs that are not already terminal (succeeded, failed, cancelled, dead_letter)", async () => {
+    const { store, getWhere } = createStore()
+    await store.cancel({ jobId: "j1", requester: { scope: "system" } })
+    const { params } = new PgDialect().sqlToQuery(getWhere()!)
+    for (const status of ["succeeded", "failed", "cancelled", "dead_letter"]) expect(params).toContain(status)
+  })
+
+  it("renewLease keeps the later of the current and the renewed expiry, so a renewal never shortens a lease", async () => {
+    let captured: Record<string, unknown> | undefined
+    const db = { insert: vi.fn(), update: vi.fn(() => ({ set: (values: Record<string, unknown>) => { captured = values; return { where: async () => ({ rowCount: 1 }) } } })) } as unknown as DrizzleSessionLike
+    const store = createDrizzleJobStore(db, { jobsTable, executionsTable, columnMap })
+    await store.renewLease({ jobId: "j", workerId: "w", claimToken: "t", extendByMs: 1_000 })
+    expect(new PgDialect().sqlToQuery(captured!.leaseExpiresAt as SQL<unknown>).sql).toContain("GREATEST(")
+  })
+
+  it("replaces U+0000 in failure text (PostgreSQL text cannot store it) so the transition is not rejected", async () => {
+    let captured: Record<string, unknown> | undefined
+    const db = {
+      insert: vi.fn(() => ({ values: async () => undefined })),
+      update: vi.fn(() => ({ set: (values: Record<string, unknown>) => { captured = values; return { where: async () => ({ rowCount: 1 }) } } })),
+    } as unknown as DrizzleSessionLike
+    const store = createDrizzleJobStore(db, { jobsTable, executionsTable, columnMap })
+    await expect(store.markFailed({ jobId: "j", workerId: "w", claimToken: "t", attempt: 1, error: "bad\u0000text", status: "failed" })).resolves.toMatchObject({ applied: true })
+    expect(captured!.lastError).toBe("bad\uFFFDtext")
+  })
+})

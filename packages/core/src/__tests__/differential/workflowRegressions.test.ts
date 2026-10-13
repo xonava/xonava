@@ -151,20 +151,36 @@ describe("regressions found by the workflow differentials", () => {
     }
   })
 
-  // Not fixed (design decision for the store contract, see the report): a signal that is delivered while the
-  // instance is still running its previous step is recorded as a receipt but wakes nothing, and the step's own
-  // `wait` for that signal name then parks the instance until a *new* signal id arrives. Re-sending the same
-  // signal id is reported as a duplicate and cannot wake it either, so the wake-up is lost for good.
-  it.fails("a signal received before the instance reaches its wait is not lost", async () => {
+  // Found by the workflow differentials: a signal delivered while the instance was still running its previous step was recorded
+  // as a receipt but woke nothing; the step's own `wait` for that name then parked the instance, and re-sending the same signal
+  // id was reported as a duplicate, so the wake-up was lost for good. Receipts are now buffered (docs/spec/workflow.md,
+  // "Signals"): the commit of the `wait` consumes the pending receipt and leaves the instance resumed.
+  it("a signal received before the instance reaches its wait is not lost", async () => {
     const spec = world(step([{ k: "signalSelf", name: "go", then: { k: "wait", sig: "go" } }, { k: "complete" }]))
     const { store, built, clock } = await runOnce(spec)
-    expect(store.rows.get("i0")).toMatchObject({ status: "waiting", waitingSignal: "go" })
     const signalId = store.receipts[0]!.id
+    // The wait found the buffered receipt: the instance is already resumed by it, not parked.
+    expect(store.rows.get("i0")).toMatchObject({ status: "pending", waitingSignal: "go", resumeSignalId: signalId })
+    expect(store.consumptions).toEqual([{ signalId, instanceId: "i0", via: "commit", revision: 2 }])
     expect(await store.deliverSignal({ id: signalId, instanceId: "i0", name: "go", payload: {} })).toEqual({ delivered: false, duplicate: true })
-    await clock.jumpTo(clock.current + 10_000)
     await drive(dispatchWorkflows({ store, registry: built.registry, workerId: "w1", claimLimit: 1, leaseDurationMs: 1000, stepTimeoutMs: 50, cancellationGraceMs: 20, clock }), clock)
-    // Desired: the early signal satisfies the wait, so the resumed step ran and the workflow finished.
-    expect(store.rows.get("i0")?.status).toBe("succeeded")
+    // The early signal satisfied the wait, so the resumed step ran (with exactly that receipt) and the workflow finished.
+    expect(store.rows.get("i0")).toMatchObject({ status: "succeeded", resumeSignalId: null })
+    expect(built.log.at(-1)).toMatchObject({ step: "a", signalId })
+  })
+
+  it("the resumed step receives the receipt that resumed it, not the latest receipt of that name", async () => {
+    // Before: getSignal(name) returned the latest receipt, so a signal buffered after the one that woke the step replaced it.
+    const spec = world(step([{ k: "wait", sig: "go" }, { k: "complete" }]))
+    const { store, built, clock } = await runOnce(spec)
+    expect(store.rows.get("i0")).toMatchObject({ status: "waiting", waitingSignal: "go" })
+    await store.deliverSignal({ id: "first", instanceId: "i0", name: "go", payload: { n: 1 } })
+    await store.deliverSignal({ id: "second", instanceId: "i0", name: "go", payload: { n: 2 } })
+    expect(store.rows.get("i0")).toMatchObject({ status: "pending", resumeSignalId: "first" })
+    expect(store.pending("i0", "go").map((receipt) => receipt.id)).toEqual(["second"])
+    await drive(dispatchWorkflows({ store, registry: built.registry, workerId: "w1", claimLimit: 1, leaseDurationMs: 1000, stepTimeoutMs: 50, cancellationGraceMs: 20, clock }), clock)
+    expect(built.log.at(-1)).toMatchObject({ signalId: "first" })
+    expect(store.pending("i0", "go").map((receipt) => receipt.id), "the later receipt is still pending, never consumed by the resumed step").toEqual(["second"])
   })
 })
 

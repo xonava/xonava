@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { pgTable, text, integer, boolean, timestamp } from "drizzle-orm/pg-core"
+import { PgDialect, pgTable, text, integer, boolean, timestamp } from "drizzle-orm/pg-core"
+import type { SQL } from "drizzle-orm/sql/sql"
 import { createDrizzleScheduleStore, type DrizzleScheduleStoreConfig } from "../drizzleScheduleStore"
 import type { DrizzleSessionLike } from "../drizzleRepository"
 
@@ -159,5 +160,41 @@ describe("PostgreSQL schedule store timezone resolution", () => {
       scheduleId: first.scheduleId, workerId: "worker-1", claimToken: first.claimToken,
       nextRunAt: new Date(now.getTime() + 180_000), lastRunAt: now, lastStatus: "succeeded",
     })).resolves.toBe(false)
+  })
+
+  it("renews to the later of the current and the requested expiry, so a smaller extension never shortens a lease", async () => {
+    const { store, updates } = createStore([schedule("platform-1", null, "UTC")])
+    await expect(store.renewScheduleLease({ scheduleId: "platform-1", workerId: "worker-1", claimToken: "token", now: new Date(), extendByMs: 1_000 })).resolves.toBe(true)
+    const rendered = new PgDialect().sqlToQuery(updates[0]!.leaseExpiresAt as SQL)
+    expect(rendered.sql.toLowerCase()).toMatch(/greatest\(.*lease_expires_at.*now\(\)/)
+    expect(rendered.params).toContain(1_000)
+  })
+
+  function recordingStore(eligible: Record<string, unknown>[], reread: Record<string, unknown>[]) {
+    const conditions: SQL[] = []
+    const db = {
+      select: () => ({ from: () => ({ where: (condition: SQL) => {
+        conditions.push(condition)
+        return { orderBy: () => ({ limit: () => ({ offset: async () => eligible }) }), limit: async () => reread }
+      } }) }),
+      update: () => ({ set: () => ({ where: async () => ({ rowCount: 1 }) }) }),
+    } as unknown as DrizzleSessionLike
+    return { store: createDrizzleScheduleStore(db, config, "UTC"), conditions }
+  }
+
+  it("keeps schedules held by a live claim out of the candidate scan, so they cannot use up the claim limit", async () => {
+    const { store, conditions } = recordingStore([], [])
+    await store.claimDueSchedules(claimArgs)
+    const rendered = new PgDialect().sqlToQuery(conditions[0]!)
+    expect(rendered.sql).toContain(`!= 'running'`)
+    expect(rendered.sql).toMatch(/"lease_expires_at" < now\(\)/)
+  })
+
+  it("returns the claims oldest-due first, whatever order the re-read returns them in", async () => {
+    const older = { ...schedule("older", null, "UTC"), nextRunAt: new Date(1_000), claimToken: "t1", leaseOwner: "worker-1", lastStatus: "running", leaseExpiresAt: new Date(Date.now() + 60_000) }
+    const newer = { ...schedule("newer", null, "UTC"), nextRunAt: new Date(2_000), claimToken: "t2", leaseOwner: "worker-1", lastStatus: "running", leaseExpiresAt: new Date(Date.now() + 60_000) }
+    const { store } = recordingStore([older, newer], [newer, older])
+    const claims = await store.claimDueSchedules(claimArgs)
+    expect(claims.map((claim) => claim.scheduleId)).toEqual(["older", "newer"])
   })
 })

@@ -37,6 +37,14 @@ export interface WorkflowInstance {
   readonly stepAttempt: number
   readonly compensationStack: readonly string[]
   readonly waitingSignal: string | null
+  /**
+   * Id of the signal receipt that resumed the current step, set when a receipt is consumed (by a delivery that
+   * wakes the instance, or by the commit of a `wait` that finds a buffered receipt) and cleared by the next
+   * forward, failure, or cancellation transition. Retries, stalls, and released claims keep it, so every attempt
+   * of the resumed step receives the same signal. Absent/null: not resumed by a signal. Stores without the
+   * column omit it (see docs/spec/workflow.md, "Signals").
+   */
+  readonly resumeSignalId?: string | null
   readonly wakeAt: Date | null
   readonly outcome: WorkflowTerminalOutcome | null
   readonly revision: number
@@ -50,6 +58,10 @@ export interface WorkflowInstance {
 }
 
 export interface WorkflowClaim { readonly instance: WorkflowInstance; readonly workerId: string; readonly claimToken: string }
+/**
+ * A signal receipt. Receipts are durable; each is consumed at most once (docs/spec/workflow.md, "Signals").
+ * Whether a receipt is pending or consumed is store state and is not part of the value handed to steps.
+ */
 export interface WorkflowSignal { readonly id: string; readonly instanceId: string; readonly name: string; readonly payload: Readonly<Record<string, unknown>>; readonly deliveredAt: Date }
 export interface WorkflowTimer { readonly instanceId: string; readonly wakeAt: Date }
 
@@ -66,7 +78,10 @@ export interface WorkflowStepContext {
   readonly executionScope: ExecutionScope
   readonly attempt: number
   readonly variables: Readonly<Record<string, unknown>>
-  /** The signal that resumed this step, when the store exposes delivered signals. */
+  /**
+   * The signal receipt that resumed this step (the consumed receipt named by `resumeSignalId`), when the store can
+   * look receipts up. Absent when the step was not resumed by a signal.
+   */
   readonly signal?: WorkflowSignal
   /** Cooperative lifecycle signal. Steps must stop external activity when aborted. */
   readonly executionSignal: AbortSignal

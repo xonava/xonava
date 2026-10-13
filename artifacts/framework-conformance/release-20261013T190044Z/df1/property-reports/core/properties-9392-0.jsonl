@@ -1,0 +1,12 @@
+{"property":"abac read plan vs query read maps everywhere","seed":819824981,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:31:20.342Z"}
+{"property":"abac read plan vs query conditional read maps with ties","seed":819824981,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:31:37.011Z"}
+{"property":"abac read plan vs query read maps with the reserved * key","seed":819824981,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:31:53.550Z"}
+{"property":"abac deny read map","seed":819824981,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:31:55.485Z"}
+{"property":"abac write oracle mixed","seed":819824981,"scale":5,"baseRuns":250,"runs":1250,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:31:59.690Z"}
+{"property":"abac write oracle write lists with ties","seed":819824981,"scale":5,"baseRuns":250,"runs":1250,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:32:04.468Z"}
+{"property":"abac write oracle UNKNOWN-heavy","seed":819824981,"scale":5,"baseRuns":250,"runs":1250,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:32:08.715Z"}
+{"property":"abac create explicit null","seed":819824981,"scale":5,"baseRuns":250,"runs":1250,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:32:10.483Z"}
+{"property":"abac create complete record","seed":819824981,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:32:12.257Z"}
+{"property":"abac record-dependent field write","seed":819824981,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:32:14.414Z"}
+{"property":"abac read modes","seed":819824981,"scale":5,"baseRuns":100,"runs":500,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:32:16.744Z"}
+{"property":"abac date spellings on write","seed":819824981,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:32:20.695Z"}

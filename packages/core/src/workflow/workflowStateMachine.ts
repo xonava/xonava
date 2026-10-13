@@ -60,7 +60,7 @@ function enterFailure(instance: WorkflowInstance, failure: WorkflowFailure, now:
     ...instance, ...released,
     status: compensate ? "compensating" : "failed",
     outcome: compensate ? null : "failed",
-    stepAttempt: 0, waitingSignal: null, wakeAt: null, failure,
+    stepAttempt: 0, waitingSignal: null, resumeSignalId: null, wakeAt: null, failure,
     revision: instance.revision + 1, updatedAt: now,
   })
 }
@@ -105,7 +105,7 @@ export function applyWorkflowStep(instance: WorkflowInstance, result: WorkflowSt
   const base = { ...instance, ...released, variables, revision: instance.revision + 1, updatedAt: now }
   // A forward result is the step succeeding: a failure recorded for an earlier attempt (the stalled-attempt TIMEOUT marker) is spent and
   // must not outlive it. `retry` keeps the record (the step has not succeeded), as do the failure/compensation transitions.
-  const forward = { ...base, failure: null }
+  const forward = { ...base, failure: null, resumeSignalId: null }
   switch (result.kind) {
     case "next": return seal({ ...forward, status: "pending", currentStep: result.step, stepAttempt: 0, compensationStack: result.compensation ? [...instance.compensationStack, result.compensation] : instance.compensationStack, waitingSignal: null, wakeAt: null })
     // A durable wait or sleep is a successful step outcome, not a failed
@@ -142,7 +142,7 @@ export function failWorkflowStep(instance: WorkflowInstance, failure: WorkflowFa
 /** Compensation exhausted its policy: stop, keep the remaining stack, and require manual intervention. */
 export function failCompensation(instance: WorkflowInstance, failure: WorkflowFailure, now: Date): WorkflowInstance {
   if (instance.status !== "compensating") throw new WorkflowStateError("Workflow is not compensating")
-  return seal({ ...instance, ...released, status: "compensation_failed", outcome: "failed", wakeAt: null, failure, revision: instance.revision + 1, updatedAt: now })
+  return seal({ ...instance, ...released, status: "compensation_failed", outcome: "failed", wakeAt: null, resumeSignalId: null, failure, revision: instance.revision + 1, updatedAt: now })
 }
 
 /**
@@ -165,18 +165,53 @@ export function isStalledWorkflowAttempt(instance: WorkflowInstance): boolean {
     failure.step === instance.currentStep && failure.attempt >= 1 && failure.attempt < instance.stepAttempt
 }
 
+/** Whether the instance is parked waiting for a signal: waiting, a signal name recorded, and no timer (a retry timer is not a signal wait). */
+export function isWaitingForWorkflowSignal(instance: WorkflowInstance, name?: string): boolean {
+  return instance.status === "waiting" && instance.wakeAt === null && instance.waitingSignal !== null &&
+    (name === undefined || instance.waitingSignal === name)
+}
+
 /**
- * Resumes a waiting instance. The signal name stays recorded on the pending
- * instance so the dispatcher can hand the delivered signal to the step; the
- * step's next transition clears or replaces it. An instance waiting on a retry
- * timer (wakeAt set) is not waiting for a signal: it already received it, and a
- * repeated delivery must not skip the backoff.
+ * Whether `next`, the transition a store is asked to commit, parks the instance on a signal (a `wait` result). A store that
+ * buffers signals checks this inside `commit` and, if a pending receipt of `next.waitingSignal` exists, stores
+ * `resumeWorkflowFromBufferedSignal` instead.
+ */
+export function isWorkflowSignalWait(next: WorkflowInstance): boolean { return isWaitingForWorkflowSignal(next) }
+
+/**
+ * The oldest pending receipt of `name` from `pending`, which MUST be in delivery order (oldest first). Stores with an
+ * ordered query do not need it; it documents the selection rule.
+ */
+export function oldestPendingWorkflowSignal<T extends { readonly name: string }>(pending: readonly T[], name: string): T | undefined {
+  return pending.find((receipt) => receipt.name === name)
+}
+
+/**
+ * Resumes a waiting instance because a delivery woke it. The signal name stays recorded on the pending instance and
+ * `resumeSignalId` names the consumed receipt, so the dispatcher hands exactly that receipt to the step; the step's next
+ * transition clears or replaces both. An instance waiting on a retry timer (wakeAt set) is not waiting for a signal: it
+ * already received it, and a repeated delivery must not skip the backoff.
+ *
+ * `signal` is the oldest pending receipt of the awaited name (the one the store consumes). The store advances the
+ * revision by exactly one for the delivery, as this function does.
  */
 export function deliverWorkflowSignal(instance: WorkflowInstance, signal: WorkflowSignal, now: Date): WorkflowInstance {
-  if (instance.status !== "waiting" || instance.wakeAt !== null || instance.waitingSignal !== signal.name) throw new WorkflowStateError("Workflow is not waiting for this signal")
+  if (!isWaitingForWorkflowSignal(instance, signal.name)) throw new WorkflowStateError("Workflow is not waiting for this signal")
   // A signal wait never carries a retry count (see applyWorkflowStep), so the
   // resumed step starts from attempt 0 even for instances persisted earlier.
-  return seal({ ...instance, status: "pending", stepAttempt: 0, waitingSignal: signal.name, wakeAt: null, revision: instance.revision + 1, updatedAt: now })
+  return seal({ ...instance, status: "pending", stepAttempt: 0, waitingSignal: signal.name, resumeSignalId: signal.id, wakeAt: null, revision: instance.revision + 1, updatedAt: now })
+}
+
+/**
+ * The instance a store commits when a step returned `wait(name)` and a pending receipt of that name already exists.
+ * `committed` is the `wait` transition the dispatcher asked to commit (`isWorkflowSignalWait`); `signal` is the OLDEST
+ * pending receipt of that name, which the store consumes in the same atomic step. The result is `pending` (resumed) with
+ * `resumeSignalId` set; it does not advance the revision again, because the whole commit is one transition (the store
+ * sets `revision = row.revision + 1` as for any commit) and the lease is released as for any commit.
+ */
+export function resumeWorkflowFromBufferedSignal(committed: WorkflowInstance, signal: WorkflowSignal, now: Date): WorkflowInstance {
+  if (!isWorkflowSignalWait(committed) || committed.waitingSignal !== signal.name) throw new WorkflowStateError("Workflow is not waiting for this signal")
+  return seal({ ...committed, status: "pending", stepAttempt: 0, waitingSignal: signal.name, resumeSignalId: signal.id, wakeAt: null, updatedAt: now })
 }
 
 /**
@@ -201,7 +236,7 @@ export function cancelWorkflow(instance: WorkflowInstance, now: Date): WorkflowI
   if (isWorkflowTerminal(instance) || instance.status === "compensating") return instance
   const compensate = instance.compensationStack.length > 0
   const failure = createWorkflowFailure({ code: "CANCELLED", message: "Workflow was cancelled", step: instance.currentStep, phase: "execute", attempt: instance.stepAttempt, at: now })
-  return seal({ ...instance, ...released, status: compensate ? "compensating" : "cancelled", outcome: compensate ? null : "cancelled", stepAttempt: 0, waitingSignal: null, wakeAt: null, failure, revision: instance.revision + 1, updatedAt: now })
+  return seal({ ...instance, ...released, status: compensate ? "compensating" : "cancelled", outcome: compensate ? null : "cancelled", stepAttempt: 0, waitingSignal: null, resumeSignalId: null, wakeAt: null, failure, revision: instance.revision + 1, updatedAt: now })
 }
 
 export function completeCompensation(instance: WorkflowInstance, now: Date): WorkflowInstance {

@@ -1,0 +1,5 @@
+{"property":"job retry: delays are bounded, finite and end at maxAttempts","seed":819824981,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:33:37.934Z"}
+{"property":"job retry: delay is monotone in attempt","seed":819824981,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:33:38.224Z"}
+{"property":"job retry: delay matches the closed form","seed":819824981,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:33:38.423Z"}
+{"property":"job retry: next attempt time is delay after now and always a valid Date","seed":819824981,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:33:39.272Z"}
+{"property":"job retry: invalid policy or attempt is rejected everywhere","seed":819824981,"scale":5,"baseRuns":100,"runs":500,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:33:39.594Z"}

@@ -1,0 +1,2 @@
+{"property":"workflow store differential lifecycle (d1)","seed":819824981,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:47:30.941Z"}
+{"property":"workflow store differential concurrent dispatch (d1)","seed":819824981,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:49:01.191Z"}

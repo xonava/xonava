@@ -20,6 +20,7 @@ import {
   createDf1SourceManifest,
   deriveDf1Seed,
   df1OutputDirectory,
+  df1SourcePaths,
   df1Suites,
   loadAndValidateDf1Evidence,
   readDf1Baseline,
@@ -91,6 +92,32 @@ describe("DF1 property call-site scanning", () => {
   it("refuses indirect uses of the harness functions", () => {
     for (const source of ["const check = forAll\ncheck(\"hidden\", gen, p)", "run(forAllAsync)", "export { forAll }", "const table = { forAll }"]) {
       assert.throws(() => scanPropertyCallSites(header + source, file), refused(/other than as a direct call/), source)
+    }
+  })
+})
+
+describe("DF1 real-database store differential suites", () => {
+  it("runs the job, schedule, workflow and signal-buffering suites on every database and requires their properties", async () => {
+    const suites = await df1Suites(repositoryRoot)
+    const sites = await requiredCallSites(repositoryRoot, suites)
+    for (const suite of suites.filter(candidate => candidate.kind === "database")) {
+      for (const name of ["jobStoreDifferential", "scheduleStoreDifferential", "workflowStoreDifferential", "workflowSignalBuffering"]) {
+        assert.ok(suite.testFiles.includes(`packages/testing/integration/${suite.id}/${name}.integration.test.ts`), `${suite.id} runs ${name}`)
+      }
+      const names = sites[suite.id].map(site => site.display)
+      for (const fragment of ["job store lifecycle differential", "job store concurrent transitions", "job store concurrent claim", "core job dispatcher", "schedule store lifecycle differential", "schedule store concurrent claims", "workflow store differential lifecycle", "workflow store differential concurrent dispatch"]) {
+        assert.ok(names.some(name => name.includes(fragment)), `${suite.id} requires "${fragment}"`)
+      }
+    }
+  })
+
+  it("covers the adapter store sources and every fixture migration", async () => {
+    const paths = await df1SourcePaths(repositoryRoot)
+    for (const adapter of ["pg", "mysql", "d1"]) {
+      for (const store of ["Job", "Schedule", "Workflow"]) assert.ok(paths.includes(`packages/adapters/src/drizzle-${adapter}/drizzle${store}Store.ts`), `${adapter} ${store} store`)
+    }
+    for (const directory of ["postgres", "mysql", "d1"]) {
+      for (const migration of ["0001_framework.sql", "0002_workflow_signal_buffering.sql"]) assert.ok(paths.includes(`packages/testing/fixtures/${directory}/migrations/${migration}`), `${directory} ${migration}`)
     }
   })
 })

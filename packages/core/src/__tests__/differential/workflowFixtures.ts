@@ -7,6 +7,7 @@
 import type { TimerClock } from "../../kernel/clock"
 import type { StartWorkflowInput, WorkflowFence, WorkflowStore } from "../../workflow/store"
 import type { WorkflowClaim, WorkflowInstance, WorkflowSignal } from "../../workflow/types"
+import { deliverWorkflowSignal, isWaitingForWorkflowSignal, isWorkflowSignalWait, isWorkflowTerminal, resumeWorkflowFromBufferedSignal } from "../../workflow/workflowStateMachine"
 
 export const EPOCH = Date.UTC(2026, 9, 1)
 
@@ -76,15 +77,71 @@ export async function drive<T>(work: Promise<T>, clock: ManualClock, options: { 
   throw new Error(`the dispatch did not finish after ${limit} timers`)
 }
 
+/** Plain-data view of a store's signal ledger, so the same invariant check can run against any store (memory, SQL). */
+export interface SignalLedgerView {
+  /** Every stored receipt in delivery order (the store's monotonic order). */
+  readonly receipts: readonly { readonly id: string; readonly instanceId: string; readonly name: string }[]
+  /** Ids of consumed receipts (each at most once). */
+  readonly consumed: ReadonlySet<string>
+  readonly rows: Iterable<{ readonly id: string; readonly status: string; readonly wakeAt: Date | null; readonly waitingSignal: string | null; readonly resumeSignalId?: string | null }>
+}
+
+/**
+ * The structural invariants of the signal contract (docs/spec/workflow.md, "Signals"), as human-readable violations (empty when fine):
+ * consumed receipts of one (instance, name) are a prefix of its delivery order (FIFO, no gaps); an instance that is waiting for a
+ * signal has no pending receipt of that name (nothing is lost); `resumeSignalId` names a consumed receipt of the awaited name.
+ */
+export function signalLedgerViolations(view: SignalLedgerView): string[] {
+  const violations: string[] = []
+  const ids = new Set(view.receipts.map((receipt) => receipt.id))
+  if (ids.size !== view.receipts.length) violations.push("a receipt id is stored twice")
+  for (const id of view.consumed) if (!ids.has(id)) violations.push(`consumed receipt ${id} does not exist`)
+  const byKey = new Map<string, boolean[]>()
+  for (const receipt of view.receipts) {
+    const key = JSON.stringify([receipt.instanceId, receipt.name])
+    byKey.set(key, [...(byKey.get(key) ?? []), view.consumed.has(receipt.id)])
+  }
+  for (const [key, flags] of byKey) {
+    const firstPending = flags.indexOf(false)
+    if (firstPending !== -1 && flags.slice(firstPending).includes(true)) violations.push(`${key}: a later receipt was consumed while an older one is still pending`)
+  }
+  const byId = new Map(view.receipts.map((receipt) => [receipt.id, receipt]))
+  for (const row of view.rows) {
+    if (row.status === "waiting" && row.wakeAt === null && row.waitingSignal !== null) {
+      const stuck = view.receipts.find((receipt) => receipt.instanceId === row.id && receipt.name === row.waitingSignal && !view.consumed.has(receipt.id))
+      if (stuck) violations.push(`${row.id}: waiting for "${row.waitingSignal}" while receipt ${stuck.id} is pending (lost signal)`)
+    }
+    if (row.resumeSignalId !== undefined && row.resumeSignalId !== null) {
+      const receipt = byId.get(row.resumeSignalId)
+      if (!receipt || receipt.instanceId !== row.id) violations.push(`${row.id}: resumeSignalId ${row.resumeSignalId} is not a receipt of this instance`)
+      else if (!view.consumed.has(receipt.id)) violations.push(`${row.id}: resumeSignalId ${receipt.id} is not consumed`)
+      else if (row.waitingSignal !== receipt.name) violations.push(`${row.id}: resumeSignalId ${receipt.id} (${receipt.name}) does not match waitingSignal ${String(row.waitingSignal)}`)
+    }
+  }
+  return violations
+}
+
 export interface CommitRecord { readonly instanceId: string; readonly claimToken: string; readonly workerId: string; readonly fenceRevision: number; readonly accepted: boolean }
 
-/** In-memory store following the SQL stores: the store counts attempts at claim, owns revisions, and records signal receipts. */
+/** One consumption of a signal receipt: by a delivery that woke a waiting instance, or by the commit of a `wait` that found it buffered. */
+export interface Consumption { readonly signalId: string; readonly instanceId: string; readonly via: "deliver" | "commit"; readonly revision: number }
+
+/**
+ * In-memory store following the SQL stores: the store counts attempts at claim, owns revisions, and records signal receipts.
+ * Receipts follow the buffering contract (docs/spec/workflow.md, "Signals"): `receipts` is in delivery order (the array index
+ * is the store-assigned monotonic order), a receipt is pending until its id appears in `consumed`, and consumption happens
+ * only inside `deliverSignal` (a waiting instance) or `commit` (a `wait` result with a pending receipt), always for the oldest
+ * pending receipt of the awaited name.
+ */
 export class MemoryWorkflowStore implements WorkflowStore {
   readonly rows = new Map<string, WorkflowInstance>()
   readonly receipts: WorkflowSignal[] = []
+  /** Consumed receipts by id. A receipt id appears here at most once (the store throws on a second consumption). */
+  readonly consumed = new Map<string, Consumption>()
+  readonly consumptions: Consumption[] = []
   readonly commits: CommitRecord[] = []
   /** Every claim ever handed out, in order. */
-  readonly claims: Array<{ instanceId: string; claimToken: string; workerId: string; attempt: number; revision: number }> = []
+  readonly claims: Array<{ instanceId: string; claimToken: string; workerId: string; attempt: number; revision: number; resumeSignalId: string | null; consumedBefore: number }> = []
   #token = 0
   constructor(private readonly clock: ManualClock) {}
 
@@ -94,7 +151,7 @@ export class MemoryWorkflowStore implements WorkflowStore {
     const at = this.clock.now()
     const row: WorkflowInstance = {
       id: input.id, workflowType: input.workflowType, workflowVersion: input.workflowVersion, executionScope: input.executionScope, status: "pending",
-      currentStep: input.initialStep, variables: input.variables, stepAttempt: 0, compensationStack: [], waitingSignal: null, wakeAt: null, outcome: null,
+      currentStep: input.initialStep, variables: input.variables, stepAttempt: 0, compensationStack: [], waitingSignal: null, resumeSignalId: null, wakeAt: null, outcome: null,
       revision: 0, failure: null, leaseOwner: null, claimToken: null, leaseExpiresAt: null, createdAt: at, updatedAt: at,
     }
     this.rows.set(row.id, row)
@@ -116,7 +173,7 @@ export class MemoryWorkflowStore implements WorkflowStore {
         stepAttempt: row.stepAttempt + 1, revision: row.revision + 1, updatedAt: new Date(now),
       }
       this.rows.set(row.id, claimed)
-      this.claims.push({ instanceId: row.id, claimToken, workerId: args.workerId, attempt: claimed.stepAttempt, revision: claimed.revision })
+      this.claims.push({ instanceId: row.id, claimToken, workerId: args.workerId, attempt: claimed.stepAttempt, revision: claimed.revision, resumeSignalId: claimed.resumeSignalId ?? null, consumedBefore: this.consumptions.length })
       return { instance: claimed, workerId: args.workerId, claimToken }
     })
   }
@@ -132,24 +189,47 @@ export class MemoryWorkflowStore implements WorkflowStore {
     this.rows.set(row.id, { ...row, leaseExpiresAt: new Date(Math.max(row.leaseExpiresAt!.getTime(), this.clock.current + extendByMs)) })
     return true
   }
+  /** The pending (unconsumed) receipts of one instance, optionally of one name, oldest first. */
+  pending(instanceId: string, name?: string): WorkflowSignal[] {
+    return this.receipts.filter((receipt) => receipt.instanceId === instanceId && (name === undefined || receipt.name === name) && !this.consumed.has(receipt.id))
+  }
+  /** The signal ledger as plain data (see signalLedgerViolations). */
+  ledger(): SignalLedgerView { return { receipts: this.receipts, consumed: new Set(this.consumed.keys()), rows: this.rows.values() } }
+  #consume(receipt: WorkflowSignal, via: Consumption["via"], revision: number): void {
+    if (this.consumed.has(receipt.id)) throw new Error(`receipt ${receipt.id} consumed twice`)
+    const record: Consumption = { signalId: receipt.id, instanceId: receipt.instanceId, via, revision }
+    this.consumed.set(receipt.id, record)
+    this.consumptions.push(record)
+  }
   async commit(fence: WorkflowFence, next: WorkflowInstance): Promise<boolean> {
     const row = this.#current(fence)
     this.commits.push({ instanceId: fence.instanceId, claimToken: fence.claimToken, workerId: fence.workerId, fenceRevision: fence.revision, accepted: row !== undefined })
     if (!row) return false
+    const at = new Date(this.clock.current)
+    // Buffering: a `wait` for a name that already has a pending receipt consumes the oldest one and leaves the instance resumed, atomically with this commit.
+    const buffered = isWorkflowSignalWait(next) ? this.pending(row.id, next.waitingSignal!)[0] : undefined
+    const stored = buffered ? resumeWorkflowFromBufferedSignal(next, buffered, at) : next
+    const revision = row.revision + 1
     this.rows.set(row.id, {
-      ...row, workflowVersion: next.workflowVersion, status: next.status, currentStep: next.currentStep, variables: next.variables, stepAttempt: next.stepAttempt,
-      compensationStack: next.compensationStack, waitingSignal: next.waitingSignal, wakeAt: next.wakeAt, outcome: next.outcome, failure: next.failure ?? null,
-      revision: row.revision + 1, leaseOwner: null, claimToken: null, leaseExpiresAt: null, updatedAt: new Date(this.clock.current),
+      ...row, workflowVersion: stored.workflowVersion, status: stored.status, currentStep: stored.currentStep, variables: stored.variables, stepAttempt: stored.stepAttempt,
+      compensationStack: stored.compensationStack, waitingSignal: stored.waitingSignal, resumeSignalId: stored.resumeSignalId ?? null, wakeAt: stored.wakeAt, outcome: stored.outcome, failure: stored.failure ?? null,
+      revision, leaseOwner: null, claimToken: null, leaseExpiresAt: null, updatedAt: at,
     })
+    if (buffered) this.#consume(buffered, "commit", revision)
     return true
   }
   async deliverSignal(signal: Omit<WorkflowSignal, "deliveredAt">): Promise<{ delivered: boolean; duplicate: boolean }> {
     const row = this.rows.get(signal.instanceId)
     if (!row) return { delivered: false, duplicate: false }
     if (this.receipts.some((receipt) => receipt.id === signal.id)) return { delivered: false, duplicate: true }
-    this.receipts.push({ ...signal, deliveredAt: new Date(this.clock.current) })
-    if (row.status === "waiting" && row.wakeAt === null && row.waitingSignal === signal.name) {
-      this.rows.set(row.id, { ...row, status: "pending", wakeAt: null, stepAttempt: 0, revision: row.revision + 1, updatedAt: new Date(this.clock.current) })
+    if (isWorkflowTerminal(row)) return { delivered: false, duplicate: false }
+    const at = new Date(this.clock.current)
+    this.receipts.push({ ...signal, deliveredAt: at })
+    if (isWaitingForWorkflowSignal(row, signal.name)) {
+      const oldest = this.pending(row.id, signal.name)[0]!
+      const woken = deliverWorkflowSignal(row, oldest, at)
+      this.rows.set(row.id, { ...row, status: woken.status, stepAttempt: woken.stepAttempt, waitingSignal: woken.waitingSignal, resumeSignalId: woken.resumeSignalId ?? null, wakeAt: woken.wakeAt, revision: woken.revision, updatedAt: at })
+      this.#consume(oldest, "deliver", woken.revision)
     }
     return { delivered: true, duplicate: false }
   }
@@ -160,9 +240,12 @@ export class MemoryWorkflowStore implements WorkflowStore {
     this.rows.set(row.id, {
       ...row, status: compensate ? "compensating" : "cancelled", outcome: compensate ? null : "cancelled",
       failure: { code: "CANCELLED", message: "Workflow was cancelled", step: row.currentStep, phase: "execute", attempt: row.stepAttempt, at: new Date(this.clock.current) },
-      stepAttempt: 0, waitingSignal: null, wakeAt: null, revision: row.revision + 1, leaseOwner: null, claimToken: null, leaseExpiresAt: null, updatedAt: new Date(this.clock.current),
+      stepAttempt: 0, waitingSignal: null, resumeSignalId: null, wakeAt: null, revision: row.revision + 1, leaseOwner: null, claimToken: null, leaseExpiresAt: null, updatedAt: new Date(this.clock.current),
     })
     return true
+  }
+  async getSignalById(instanceId: string, signalId: string): Promise<WorkflowSignal | null> {
+    return this.receipts.find((receipt) => receipt.instanceId === instanceId && receipt.id === signalId) ?? null
   }
   async getSignal(instanceId: string, name: string): Promise<WorkflowSignal | null> {
     return [...this.receipts].reverse().find((receipt) => receipt.instanceId === instanceId && receipt.name === name) ?? null
