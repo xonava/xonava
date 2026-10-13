@@ -408,7 +408,7 @@ describe("workflow state machine — step result well-formedness", () => {
       const valid = (field: string, check: (value: unknown) => boolean): boolean => !(field in result) || check(result[field])
       const text = (x: unknown): boolean => typeof x === "string" && x.length > 0
       const wellFormed = valid("variables", (x) => x === null || (typeof x === "object" && !Array.isArray(x))) &&
-        (kind !== "next" || (("step" in result) && text(result.step) && valid("compensation", text))) &&
+        (kind !== "next" || (("step" in result) && text(result.step) && valid("compensation", (x) => x === null || x === "" || text(x)))) &&
         (kind !== "wait" || (("signal" in result) && text(result.signal))) &&
         (kind !== "sleep" || (result.wakeAt instanceof Date && !Number.isNaN(result.wakeAt.getTime())))
       const instance = produce(FRESH({ step: "a", stack: [] }))

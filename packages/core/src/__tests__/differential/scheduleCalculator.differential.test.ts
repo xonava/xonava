@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { createRng, forAll, type Rng } from "./harness"
+import { createRng, forAll, scaledRuns, type Rng } from "./harness"
 import {
   DISAMBIGUATIONS, describeInstant, generateCronExpression, generateDenseCronExpression, generateInstant,
   generateMaybeInvalidExpression, generateZone, surroundWithWhitespace,
@@ -20,7 +20,7 @@ import type { CronDisambiguation, ScheduleDefinition } from "../../execution/typ
  */
 
 // Release certification runs every property at a multiple of its base run count.
-vi.setConfig({ testTimeout: 120_000 })
+vi.setConfig({ testTimeout: 120_000 * Math.max(1, scaledRuns(100) / 100) })
 
 const MINUTE = 60_000
 const DAY = 86_400_000
@@ -371,5 +371,29 @@ describe("schedule calculator - fire decision", () => {
       }
       expect(decision).toBe(expected)
     }, { runs: 400 })
+  })
+})
+
+describe("schedule calculator - years 0-99", () => {
+  // Date.UTC(year, ...) maps years 0-99 to 1900-1999; the calendar walk must treat them as the years they are.
+  const earlyInstant = (rng: Rng): number => {
+    const date = new Date(0)
+    const year = rng.bool(0.3) ? rng.pick([1, 4, 96, 99, 100]) : 1 + rng.int(199)
+    date.setUTCFullYear(year, rng.bool(0.4) ? rng.pick([1, 11]) : rng.int(12), rng.bool(0.4) ? rng.pick([27, 28, 29, 30]) : 1 + rng.int(28))
+    date.setUTCHours(rng.int(24), rng.int(60), 0, 0)
+    return date.getTime()
+  }
+  it("equals the brute-force oracle for UTC searches that start in the first two centuries", () => {
+    forAll("getNextOccurrence equals the oracle for UTC instants in years 1-199", (rng) => ({ expression: generateDenseCronExpression(rng), after: earlyInstant(rng) }), ({ expression, after }) => {
+      const cron = cronOf(expression)
+      const actual = getNextOccurrence(expression, new Date(after))
+      const expected = oracleNext({ cron, timeZone: "UTC", afterMs: after })
+      if (expected === null && actual !== null) {
+        // Beyond the oracle's horizon (e.g. Feb 29 AND a rare weekday): confirm by scanning up to the answer.
+        expect(oracleOccurrences({ cron, timeZone: "UTC", afterMs: after, endMs: actual.getTime(), limit: 1 })).toEqual([actual.getTime()])
+        return
+      }
+      expect(actual === null ? null : actual.getTime()).toBe(expected)
+    }, { runs: 150, describe: ({ expression, after }) => `${expression} | after ${new Date(after).toISOString()}` })
   })
 })

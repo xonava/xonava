@@ -7,13 +7,15 @@ import type { EntityDescriptor, InteractiveTransactionProvider, PersistenceProvi
 import type { PersistenceCapabilities } from "core/persistence"
 import {createDrizzleMySqlRepository,type MySqlDatabaseLike} from "./drizzleRepository"
 import type {DrizzleColumnMap} from "../drizzle-shared/predicateCompiler"
+import {CachePrefixLedger,resolveRegistration,type RegistrableEntity} from "../drizzle-shared/entityRegistration"
 import {validateMySqlConstraintMap,validateMySqlTransactionTimeout} from "./mysqlUtils"
 
 const sessionByProvider=new WeakMap<PersistenceProvider,MySqlDatabaseLike>()
 export function getDrizzleMySqlSession(provider:PersistenceProvider):MySqlDatabaseLike{const session=sessionByProvider.get(provider);if(!session)throw new ConfigurationError("No Drizzle MySQL session found for this persistence provider");return session}
 
 export interface MySqlEntityMapping{readonly table:AnyMySqlTable;readonly columnMap:DrizzleColumnMap}
-export class DrizzleMySqlEntityRegistry{private readonly mappings=new Map<string,MySqlEntityMapping>();register<T>(entity:EntityDescriptor<T>,table:AnyMySqlTable,columnMap:DrizzleColumnMap,namespace?:string):this{const key=namespace?`${namespace}:${entity?.name}`:String(entity?.name);validateMySqlEntityRegistration(entity,columnMap,key);if(this.mappings.has(key))throw new ConfigurationError(`Invalid or duplicate MySQL entity registration: ${key}`);this.mappings.set(key,{table,columnMap});return this}get(name:string,namespace?:string){return this.mappings.get(namespace?`${namespace}:${name}`:name)}}
+/** Accepts a persistence descriptor or a compiled `defineEntity()` definition; a compiled entity's resolved cache key prefix must be unique across the registry. */
+export class DrizzleMySqlEntityRegistry{private readonly mappings=new Map<string,MySqlEntityMapping>();private readonly cachePrefixes=new CachePrefixLedger();register<T>(input:RegistrableEntity<T>,table:AnyMySqlTable,columnMap:DrizzleColumnMap,namespace?:string):this{const {descriptor:entity,cachePrefix}=resolveRegistration(input);const key=namespace?`${namespace}:${entity?.name}`:String(entity?.name);validateMySqlEntityRegistration(entity,columnMap,key);if(this.mappings.has(key))throw new ConfigurationError(`Invalid or duplicate MySQL entity registration: ${key}`);this.cachePrefixes.assertAvailable(cachePrefix);this.cachePrefixes.claim(cachePrefix);this.mappings.set(key,{table,columnMap});return this}get(name:string,namespace?:string){return this.mappings.get(namespace?`${namespace}:${name}`:name)}}
 /** Mirrors the PostgreSQL registry: primary key and version field must be declared, mapped fields. */
 function validateMySqlEntityRegistration<T>(entity:EntityDescriptor<T>,columnMap:DrizzleColumnMap,key:string):void{
   if(!entity||typeof entity.name!=="string"||!entity.name.trim())throw new ConfigurationError(`MySQL registry registration "${key}" requires a non-empty entity name`)

@@ -186,7 +186,7 @@ describe("F1 hard resource limits", () => {
     expect(() => canonicalJsonString(arr100k)).not.toThrow()
     arr100k.push(0)
     expect(() => canonicalJsonString(arr100k)).toThrow(CanonicalJsonError)
-  })
+  }, 60_000)
 
   it("enforces maxTotalNodes 250k", () => {
     const root: Record<string, unknown> = {}
@@ -199,7 +199,7 @@ describe("F1 hard resource limits", () => {
     for (let i = 0; i < 999; i++) rootPass[`k${i}`] = new Array(249).fill(1) as number[]
     expect(() => canonicalJsonString(rootPass)).not.toThrow()
     expect(() => canonicalJsonString(root)).toThrow(CanonicalJsonError)
-  })
+  }, 60_000)
 
   it("rejects strings exceeding maxStringUtf8Bytes and property names exceeding 1024", () => {
     const bigStr = "a".repeat(CANONICAL_JSON_LIMITS_V1.maxStringUtf8Bytes + 1)
@@ -212,7 +212,7 @@ describe("F1 hard resource limits", () => {
     const obj: Record<string, unknown> = {}
     obj[longKey] = 1
     expect(() => canonicalJsonString(obj)).toThrow(CanonicalJsonError)
-  })
+  }, 60_000)
 
   it("rejects canonical output exceeding maxUtf8Bytes (via canary small limit simulation)", () => {
     const chunk = "a".repeat(6 * 1024 * 1024)

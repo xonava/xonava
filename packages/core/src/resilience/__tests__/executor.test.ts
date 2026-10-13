@@ -71,6 +71,27 @@ describe("withResilience", () => {
     expect([result, calls]).toEqual(["ok", 3])
   })
 
+  it("counts permanent errors and timeouts as breaker failures but not the caller's own cancellation (documented)", async () => {
+    const breaker = createCircuitBreaker({ failureThreshold: 2, resetAfterMs: 1_000 })
+    const fail = (): Promise<never> => withResilience({ circuitBreaker: { failureThreshold: 2, resetAfterMs: 1_000 } }, { kind: "read" }, async () => { throw new ValidationError("bad") }, { breaker })
+    await expect(fail()).rejects.toBeInstanceOf(ValidationError)
+    expect(breaker.state).toMatchObject({ status: "closed", consecutiveFailures: 1 })
+    await expect(fail()).rejects.toBeInstanceOf(ValidationError)
+    expect(breaker.state.status).toBe("open")
+    await expect(fail()).rejects.toBeInstanceOf(UnavailableError)
+  })
+
+  it("never retries immediately: a 1 ms base with a zero jitter sample still waits 1 ms", async () => {
+    vi.useFakeTimers()
+    let calls = 0
+    const run = withResilience({ retry: { maxAttempts: 2, backoffMs: 1 } }, { kind: "read" }, async () => { calls++; if (calls < 2) throw new Error("flaky"); return "ok" }, { random: () => 0 })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(calls).toBe(1)
+    await vi.advanceTimersByTimeAsync(1)
+    await expect(run).resolves.toBe("ok")
+    expect(calls).toBe(2)
+  })
+
   it("never retries non-idempotent mutations or permanent errors", async () => {
     await expect(withResilience({ retry: { maxAttempts: 3 } }, { kind: "non-idempotent-mutation" }, async () => 1)).rejects.toBeInstanceOf(ConfigurationError)
     let calls = 0

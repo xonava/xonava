@@ -1,0 +1,3 @@
+{"property":"schedule lifecycle instant validation matches the ISO reference","seed":2278251833,"scale":5,"baseRuns":600,"runs":3000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:38:04.165Z"}
+{"property":"schedule lifecycle effectiveness follows the half-open window","seed":2278251833,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:38:04.246Z"}
+{"property":"fenced schedule claim token validation","seed":2278251833,"scale":5,"baseRuns":100,"runs":500,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:38:04.312Z"}

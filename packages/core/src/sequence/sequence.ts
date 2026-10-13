@@ -56,7 +56,8 @@ export function sequencePeriod(reset: SequenceResetPeriod, at: Date, timeZone = 
   if (!(at instanceof Date) || Number.isNaN(at.getTime())) throw new ConfigurationError("Sequence allocation time is invalid")
   if (reset === "never") return "all"
   const parts = Object.fromEntries(zonedFormatter(timeZone).formatToParts(at).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]))
-  if (parts.era !== "AD") throw new ConfigurationError("Sequence allocation time is invalid")
+  // Years 1..9999 only: a fifth year digit makes compact tokens ambiguous (2026+"305" = 20263+"05" with an empty separator).
+  if (parts.era !== "AD" || Number(parts.year) > 9999) throw new ConfigurationError("Sequence allocation time is invalid")
   const year = String(parts.year).padStart(4, "0")
   if (reset === "year") return year
   if (reset === "month") return `${year}-${parts.month}`

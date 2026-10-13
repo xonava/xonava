@@ -32,14 +32,17 @@ Traceability: `packages/core/src/workflow`; workflow unit and provider integrati
 | `fail` result | fail immediately (`STEP_FAILED`) | `compensation_failed` |
 | error with `retryable: true` or `kind: "retryable"` | retry under policy | retry under policy |
 | any other error | fail immediately (error code) | retry under policy |
-| deadline exceeded, step stopped within the grace period | retry only if `idempotent: true`, else fail (`TIMEOUT`) | retry under policy |
+| deadline exceeded after the step started, step stopped within the grace period | retry only if `idempotent: true`, else fail (`TIMEOUT`) | retry under policy |
+| deadline exceeded before the step was started (slow lease renewal or signal read) | retry under policy (the step cannot have had an external effect, so `idempotent` is irrelevant) | same |
 | deadline exceeded, step ignored cancellation | nothing is committed (`stalled`); the lease lapses and the next claim counts the attempt | same |
 | attempt counter already above `maxAttempts` at claim | fail without running (`ATTEMPTS_EXHAUSTED`) | `compensation_failed` |
 | definition version unknown to this worker | hand back without consuming an attempt (`deferred`) | same |
 
+A `next` result's `compensation` of `null`, `undefined`, or `""` means no compensation step; any other non-string value is malformed (`INVALID_STEP_RESULT`).
+
 A failed execution step enters `compensating` when the compensation stack is non-empty, otherwise `failed`. Compensation runs the stack in reverse order; a compensation step that exhausts its policy stops the instance in the terminal state `compensation_failed`, keeping the remaining stack for manual intervention. A dispatcher MUST NOT record a failure (and so start compensation) while a timed-out step may still be running.
 
-**Failure record.** The instance carries `failure: { code, message, step, phase, attempt, at }` for the most recent terminal or compensating failure. Messages are sanitized (contact details and dates redacted), limited to 512 characters, and never include stack traces. Cancellation records code `CANCELLED`; a cancelled instance that finishes compensation ends `cancelled`, not `failed`.
+**Failure record.** The instance carries `failure: { code, message, step, phase, attempt, at }` for the most recent terminal or compensating failure. Messages are sanitized (contact details and dates redacted), limited to 512 characters, and never include stack traces. The record is diagnostic state of the current outcome, not history: a forward step result (`next`, `wait`, `sleep`, `complete`) is a successful attempt and clears it (`failure` becomes null), including the `TIMEOUT` record of an earlier stalled attempt once the resumed step succeeds. A `retry` result, a retry timer, and compensation transitions keep it; `failed`, `cancelled`, and `compensation_failed` instances keep their terminal record. Cancellation records code `CANCELLED`; a cancelled instance that finishes compensation ends `cancelled`, not `failed`.
 
 **Signals.** Delivering a signal moves the instance from `waiting` to `pending` and keeps the signal name recorded until the step's next transition. Stores that implement `getSignal` let the dispatcher pass the delivered signal (payload deep-frozen) to the resumed step as `context.signal`.
 

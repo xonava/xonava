@@ -1,0 +1,2 @@
+{"property":"abac normalization fail closed","seed":2278251833,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:56.630Z"}
+{"property":"abac literal canonicalization","seed":2278251833,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:56.764Z"}

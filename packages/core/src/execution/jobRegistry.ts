@@ -79,14 +79,14 @@ export function createJobRegistry(options?: { now?: () => Date; upcasters?: read
 }
 
 function validateJobDefinition(definition: JobDefinition): void {
-  if (!definition || typeof definition !== "object") throw new ValidationError("Job definition must be an object.")
-  if (typeof definition.type !== "string" || definition.type.trim().length === 0) throw new ValidationError("Job type must be non-empty.")
-  if (!Number.isInteger(definition.version) || definition.version < 1) throw new ValidationError("Job version must be a positive integer.")
-  if (!Number.isInteger(definition.maxAttempts) || definition.maxAttempts < 1) throw new ValidationError("maxAttempts must be a positive integer.")
-  if (!Number.isFinite(definition.retryDelayMs) || definition.retryDelayMs < 0) throw new ValidationError("retryDelayMs must be finite and non-negative.")
-  if (!Number.isFinite(definition.retryBackoffMultiplier) || definition.retryBackoffMultiplier <= 0) throw new ValidationError("retryBackoffMultiplier must be finite and greater than zero.")
-  if (definition.timeoutMs !== undefined && (!Number.isFinite(definition.timeoutMs) || definition.timeoutMs <= 0)) throw new ValidationError("timeoutMs must be finite and greater than zero.")
+  if (!definition || typeof definition !== "object") throw new ConfigurationError("Job definition must be an object.")
+  if (typeof definition.type !== "string" || definition.type.trim().length === 0) throw new ConfigurationError("Job type must be non-empty.")
+  if (!Number.isInteger(definition.version) || definition.version < 1) throw new ConfigurationError("Job version must be a positive integer.")
+  if (!Number.isInteger(definition.maxAttempts) || definition.maxAttempts < 1) throw new ConfigurationError("maxAttempts must be a positive integer.")
+  if (!Number.isFinite(definition.retryDelayMs) || definition.retryDelayMs < 0) throw new ConfigurationError("retryDelayMs must be finite and non-negative.")
+  if (!Number.isFinite(definition.retryBackoffMultiplier) || definition.retryBackoffMultiplier <= 0) throw new ConfigurationError("retryBackoffMultiplier must be finite and greater than zero.")
+  if (definition.timeoutMs !== undefined && (!Number.isFinite(definition.timeoutMs) || definition.timeoutMs <= 0)) throw new ConfigurationError("timeoutMs must be finite and greater than zero.")
   if (definition.timeoutMs !== undefined) assertTimerDelayWithinLimit("timeoutMs", definition.timeoutMs)
-  if (typeof definition.decodePayload !== "function") throw new ValidationError("Job definition must provide decodePayload.")
-  if (typeof definition.execute !== "function") throw new ValidationError("Job definition must provide execute.")
+  if (typeof definition.decodePayload !== "function") throw new ConfigurationError("Job definition must provide decodePayload.")
+  if (typeof definition.execute !== "function") throw new ConfigurationError("Job definition must provide execute.")
 }

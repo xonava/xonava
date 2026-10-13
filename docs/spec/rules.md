@@ -2,7 +2,7 @@
 
 ## Definition and compilation
 
-A rule set has a stable non-empty key, positive integer version, explicit conflict-resolution policy, and a bounded collection of rules. Each rule has a stable key, positive integer version, integer priority, predicate condition, one or more declarative data-only actions, OPTIONAL conflict key, OPTIONAL description, and OPTIONAL effective window. Effective timestamps MUST be canonical ISO-8601 instants. `effectiveFrom` is inclusive and `effectiveUntil` is exclusive. A finite window MUST be increasing.
+A rule set has a stable non-empty key, positive integer version, explicit conflict-resolution policy, and a bounded collection of rules. Each rule has a stable key, positive integer version, integer priority, predicate condition, one or more declarative data-only actions, OPTIONAL conflict key, OPTIONAL description, and OPTIONAL effective window. Effective timestamps MUST be canonical ISO-8601 instants (`YYYY-MM-DDTHH:mm:ss.sssZ`, four-digit year, calendar-valid fields); they are validated with the strict shared instant parser, so free text, impossible dates (`2026-02-30`), zone-less or offset forms, date-only forms and expanded-year forms are rejected as configuration errors. `effectiveFrom` is inclusive and `effectiveUntil` is exclusive. A finite window MUST be increasing.
 
 Compilation MUST reject malformed predicates, duplicate `(rule key, rule version)` identities, executable or accessor-backed action data, non-plain data, invalid dates, non-finite numbers, and structures outside documented bounds. Compilation MUST defensively snapshot and freeze framework-owned definition data. Only values returned by `compileRuleSet` are accepted for evaluation.
 

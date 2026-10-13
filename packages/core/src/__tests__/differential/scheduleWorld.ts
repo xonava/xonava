@@ -311,7 +311,10 @@ export class ScheduleWorld {
 
   setJobStatus(key: string, status: JobStatus): void {
     const job = this.jobs.get(key)
-    if (job) job.status = status
+    if (!job) return
+    job.status = status
+    // Every read path of a real store reports the live status; keep the stored row in step with it.
+    job.stored = { ...job.stored, status }
   }
 
   // ---- renewal clock -----------------------------------------------------

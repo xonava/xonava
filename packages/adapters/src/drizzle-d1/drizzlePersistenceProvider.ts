@@ -16,6 +16,7 @@ import { assertOutboxScope } from "core/events"
 import { normalizeDrizzleError } from "../drizzle-shared/errors"
 import { Predicate } from "core/domain"
 import { DrizzlePredicateCompiler, type PredicateCompilerOptions } from "../drizzle-shared/predicateCompiler"
+import { CachePrefixLedger, resolveRegistration, type RegistrableEntity } from "../drizzle-shared/entityRegistration"
 
 const SQLITE_PREDICATES: PredicateCompilerOptions = Object.freeze({ dialect: "sqlite" })
 import { assertD1BatchLimits, estimateD1Statement } from "./d1BatchLimits"
@@ -112,13 +113,21 @@ export type AuditRecordMapper = (record: AuditRecord) => Record<string, unknown>
 
 export class DrizzleEntityRegistry {
   private mappings = new Map<string, EntityMapping>()
+  private cachePrefixes = new CachePrefixLedger()
 
-  register<T>(entity: EntityDescriptor<T>, table: AnySQLiteTable, columnMap: DrizzleColumnMap, namespace?: string): this {
+  /**
+   * Accepts a persistence descriptor or a compiled `defineEntity()` definition.
+   * A compiled entity's resolved cache key prefix must be unique across the registry.
+   */
+  register<T>(input: RegistrableEntity<T>, table: AnySQLiteTable, columnMap: DrizzleColumnMap, namespace?: string): this {
+    const { descriptor: entity, cachePrefix } = resolveRegistration(input)
     const key = namespace ? `${namespace}:${entity.name}` : entity.name
     validateEntityRegistration(entity, columnMap, key)
     if (this.mappings.has(key)) {
       throw new ConfigurationError(`Entity "${key}" is already registered in the Drizzle entity registry.`)
     }
+    this.cachePrefixes.assertAvailable(cachePrefix)
+    this.cachePrefixes.claim(cachePrefix)
     this.mappings.set(key, { table, columnMap, entity })
     return this
   }

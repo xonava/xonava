@@ -16,7 +16,7 @@ import type { TemporalHistoryStore, TemporalResource, TemporalRevision, Temporal
 const resource: TemporalResource = { scopeId: encodeExecutionScopeId({ kind: "system", systemKey: "test" }), entityType: "person", entityId: "p1" }
 const T0 = Date.UTC(2026, 0, 1)
 
-type Fault = "none" | "gap" | "duplicate" | "foreign" | "future" | "empty-hasmore" | "bad-first-kind" | "bad-kind" | "deleted-with-state" | "foreign-snapshot" | "future-snapshot" | "ghost-snapshot"
+type Fault = "none" | "gap" | "duplicate" | "foreign" | "future" | "empty-hasmore" | "bad-first-kind" | "bad-kind" | "deleted-with-state" | "foreign-snapshot" | "future-snapshot" | "ghost-snapshot" | "oversized-page"
 
 interface HistoryCase {
   kinds: TemporalRevisionKind[]
@@ -48,7 +48,7 @@ function generateHistory(rng: Rng): HistoryCase {
     snapshotAt: rng.bool(0.5) ? rng.int(kinds.length + 1) : null,
     pageSize: rng.pick([1, 2, 3, 5, 250]),
     maxRevisions: rng.pick([1, 2, 3, 5, 10_000, 10_000]),
-    fault: rng.bool(0.45) ? rng.pick(["gap", "duplicate", "foreign", "future", "empty-hasmore", "bad-first-kind", "bad-kind", "deleted-with-state", "foreign-snapshot", "future-snapshot", "ghost-snapshot"] as const) : "none",
+    fault: rng.bool(0.45) ? rng.pick(["gap", "duplicate", "foreign", "future", "empty-hasmore", "bad-first-kind", "bad-kind", "deleted-with-state", "foreign-snapshot", "future-snapshot", "ghost-snapshot", "oversized-page"] as const) : "none",
   }
 }
 
@@ -86,6 +86,8 @@ function makeStore(history: TemporalRevision[], c: HistoryCase, calls: { revisio
           case "foreign": items = [{ ...first, entityId: "other" }, ...items.slice(1)]; break
           case "future": items = [{ ...first, occurredAt: new Date(options.asOf.getTime() + 1) }, ...items.slice(1)]; break
           case "empty-hasmore": return { items: [], hasMore: true }
+          // More revisions than the requested limit (the next real one when it exists, so only the size is wrong).
+          case "oversized-page": items = [...items, eligible[items.length] ?? items[items.length - 1]!]; break
           case "bad-first-kind": if (first.revision === 1) items = [{ ...first, kind: "updated" }, ...items.slice(1)]; break
           case "bad-kind": if (items.length > 0) items = [{ ...first, kind: first.revision === 1 ? "restored" : "created" }, ...items.slice(1)]; break
           case "deleted-with-state": items = [{ ...first, kind: "deleted" }, ...items.slice(1)]; break

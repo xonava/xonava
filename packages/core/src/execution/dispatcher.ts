@@ -16,7 +16,7 @@ import type {
 import { InvalidJobPayloadError, MalformedJobPayloadError } from "./types"
 import { assertJobScopeMatches, assertTimerDelayWithinLimit } from "./types"
 import { createExecutionContext } from "./executionContext"
-import { ConfigurationError, ValidationError } from "../domain"
+import { ConfigurationError } from "../domain"
 import { createTelemetryLogger, type TelemetryLogger, type TelemetryPort } from "../telemetry/telemetry"
 
 export const MAX_STORED_JOB_PAYLOAD_BYTES = 1024 * 1024
@@ -194,7 +194,7 @@ async function renewWithDeadline(operation: Promise<boolean>, leaseDurationMs: n
 
 async function markFailedState(args: Parameters<JobStore["markFailed"]>[0], store: JobStore): Promise<{ applied: boolean; error?: string }> {
   try {
-    const status = await store.markFailed(args)
+    const status = await store.markFailed({ ...args, error: boundJobErrorMessage(args.error) })
     return status.applied ? status : { applied: false, error: status.reason === "HISTORY_FAILED" ? status.historyError ?? "Required execution history could not be persisted" : "Job lease was lost" }
   } catch (error) {
     return { applied: false, error: errorMessage(error) }
@@ -220,9 +220,9 @@ export async function dispatchDueJobs(config: DispatcherConfig): Promise<Dispatc
   for (const job of jobs) {
     // One job's failure outside executeJob's own error paths (a throwing idGenerator or clock, a context that cannot be
     // built) must stay with that job: rejecting here would strand the other claimed jobs until their leases lapse.
-    const outcome = await executeJob({ ...config, job, log, clock }).catch((error: unknown): JobOutcome => {
+    const outcome = await executeJob({ ...config, job, log, clock }).catch(async (error: unknown): Promise<JobOutcome> => {
       log.error("Job execution setup failed", { jobId: job.id, jobType: job.jobType, error: errorMessage(error) })
-      return { kind: "lease_lost", error: `Job execution failed before the handler ran: ${errorMessage(error)}` }
+      return releaseAfterSetupFailure({ ...config, job, log, clock }, `Job execution failed before the handler ran: ${errorMessage(error)}`)
     })
     if (outcome.kind === "succeeded") result.succeeded++
     else if (outcome.kind === "failed") result.failed++
@@ -261,6 +261,44 @@ export async function dispatchDueJobs(config: DispatcherConfig): Promise<Dispatc
     stalled: result.stalled,
   })
   return result
+}
+
+/**
+ * The next-attempt time of a job handed back without consuming an attempt (release, or the markRetrying fallback of an
+ * unknown-definition deferral): the dispatcher clock reading taken now, plus one lease duration. Call it immediately
+ * before the store call that carries the result. Throws when the clock throws or does not return a valid date.
+ */
+function handBackTime(clock: DispatcherClock, leaseDurationMs: number): Date {
+  const at = clock.now()
+  if (!(at instanceof Date) || Number.isNaN(at.getTime())) throw new Error("clock returned an invalid date")
+  return new Date(at.getTime() + leaseDurationMs)
+}
+
+/**
+ * Hands a claimed job back after setup failed before its handler ran, without consuming an attempt, so it does not sit
+ * claimed until its lease lapses. Retried no sooner than one lease duration later: a persistent setup fault must not
+ * spin on every tick. Never throws: the configured clock may be the thing that failed, and the other claimed jobs of the
+ * batch still need to run. Without a release primitive, or when it fails, the lease simply lapses (lease_lost).
+ */
+async function releaseAfterSetupFailure(args: DispatcherConfig & { job: StoredJob; log: DispatcherLogger; clock: DispatcherClock }, error: string): Promise<JobOutcome> {
+  const { job, store, workerId, leaseDurationMs, log, clock } = args
+  if (!job.claimToken || typeof store.release !== "function") return { kind: "lease_lost", error }
+  try {
+    let nextAttemptAt: Date
+    try {
+      nextAttemptAt = handBackTime(clock, leaseDurationMs)
+    } catch {
+      nextAttemptAt = new Date(Date.now() + leaseDurationMs)
+    }
+    const released = await store.release({ jobId: job.id, workerId, claimToken: job.claimToken, nextAttemptAt, reason: boundJobErrorMessage(error) })
+    if (released.applied) {
+      log.warn("Job released: setup failed", { jobId: job.id, jobType: job.jobType, error })
+      return { kind: "retried", error }
+    }
+  } catch (releaseError) {
+    log.warn("Job release after setup failure failed", { jobId: job.id, error: errorMessage(releaseError) })
+  }
+  return { kind: "lease_lost", error }
 }
 
 async function executeJob(args: DispatcherConfig & { job: StoredJob; log: DispatcherLogger; clock: DispatcherClock }): Promise<JobOutcome> {
@@ -571,21 +609,34 @@ async function deferUnrunnableJob(args: DispatcherConfig & { job: StoredJob; log
     const status = await markFailedState({ jobId: job.id, workerId, claimToken, error: deadLetterError, status: "dead_letter", attempt }, store)
     return status.applied ? { kind: "dead_letter", error: deadLetterError } : { kind: "lease_lost", error: status.error ?? deadLetterError }
   }
-  const nextAttemptAt = new Date(at.getTime() + leaseDurationMs)
+  // Hand-back time rule (docs/spec/execution.md, "Hand-back time"): every hand-back store call carries the dispatcher
+  // clock reading taken immediately before that call is issued, plus one lease duration. The reading is never carried
+  // over from an earlier call and never clamped against it: a slow failed call or a clock that moved backwards in the
+  // meantime does not change what the next call is told.
+  let nextAttemptAt = new Date(at.getTime() + leaseDurationMs)
+  const stampHandBack = (): Date => {
+    try { nextAttemptAt = handBackTime(clock, leaseDurationMs) } catch { /* keep the previous stamp, which is already one lease ahead of the decision */ }
+    return nextAttemptAt
+  }
   if (typeof store.release === "function") {
-    try {
-      const released = await store.release({ jobId: job.id, workerId, claimToken, nextAttemptAt, reason: error })
-      if (released.applied) {
-        log.warn("Job released: unknown definition", { jobId: job.id, jobType: job.jobType, jobVersion: job.jobVersion })
-        return { kind: "retried", error }
+    // A transient release failure is tried once more before falling back to markRetrying, which consumes an attempt: a
+    // job with a small budget must not be dead-lettered inside its deferral window by one store hiccup.
+    for (let tries = 1; tries <= 2; tries++) {
+      try {
+        const released = await store.release({ jobId: job.id, workerId, claimToken, nextAttemptAt: tries === 1 ? nextAttemptAt : stampHandBack(), reason: boundJobErrorMessage(error) })
+        if (released.applied) {
+          log.warn("Job released: unknown definition", { jobId: job.id, jobType: job.jobType, jobVersion: job.jobVersion })
+          return { kind: "retried", error }
+        }
+        return { kind: "lease_lost", error: "Job lease was lost" }
+      } catch (releaseError) {
+        log.warn("Job release failed", { jobId: job.id, error: errorMessage(releaseError), tries })
       }
-      return { kind: "lease_lost", error: "Job lease was lost" }
-    } catch (releaseError) {
-      log.warn("Job release failed", { jobId: job.id, error: errorMessage(releaseError) })
     }
+    stampHandBack()
   }
   try {
-    const deferred = await store.markRetrying({ jobId: job.id, workerId, claimToken, nextAttemptAt, error, attempt })
+    const deferred = await store.markRetrying({ jobId: job.id, workerId, claimToken, nextAttemptAt, error: boundJobErrorMessage(error), attempt })
     if (deferred.applied) {
       log.warn("Job deferred: unknown definition", { jobId: job.id, jobType: job.jobType, jobVersion: job.jobVersion, attempt })
       return { kind: "retried", error }
@@ -599,24 +650,24 @@ async function deferUnrunnableJob(args: DispatcherConfig & { job: StoredJob; log
 
 function validateDispatcherConfig(config: DispatcherConfig): void {
   if (typeof config.workerId !== "string" || config.workerId.trim().length === 0) throw new ConfigurationError("workerId must be a non-empty string")
-  if (!Number.isInteger(config.claimLimit) || config.claimLimit < 1) throw new ValidationError("claimLimit must be a positive integer")
+  if (!Number.isInteger(config.claimLimit) || config.claimLimit < 1) throw new ConfigurationError("claimLimit must be a positive integer")
   const MAX_CLAIM_LIMIT = 100
-  if (config.claimLimit > MAX_CLAIM_LIMIT) throw new ValidationError(`Claim limit ${config.claimLimit} exceeds maximum ${MAX_CLAIM_LIMIT}`)
-  if (!Number.isFinite(config.leaseDurationMs) || config.leaseDurationMs <= 0) throw new ValidationError("leaseDurationMs must be positive")
+  if (config.claimLimit > MAX_CLAIM_LIMIT) throw new ConfigurationError(`Claim limit ${config.claimLimit} exceeds maximum ${MAX_CLAIM_LIMIT}`)
+  if (!Number.isFinite(config.leaseDurationMs) || config.leaseDurationMs <= 0) throw new ConfigurationError("leaseDurationMs must be positive")
   // leaseDurationMs is the default execution timeout, grace period and heartbeat basis.
   assertTimerDelayWithinLimit("leaseDurationMs", config.leaseDurationMs)
   if (config.timeoutPolicy) {
     if (!Number.isFinite(config.timeoutPolicy.cancellationGraceMs) || config.timeoutPolicy.cancellationGraceMs < 0) {
-      throw new ValidationError("cancellationGraceMs must be finite and non-negative")
+      throw new ConfigurationError("cancellationGraceMs must be finite and non-negative")
     }
     assertTimerDelayWithinLimit("cancellationGraceMs", config.timeoutPolicy.cancellationGraceMs)
     if (config.timeoutPolicy.timeoutMs !== undefined && (!Number.isFinite(config.timeoutPolicy.timeoutMs) || config.timeoutPolicy.timeoutMs <= 0)) {
-      throw new ValidationError("timeoutMs must be finite and positive")
+      throw new ConfigurationError("timeoutMs must be finite and positive")
     }
     if (config.timeoutPolicy.timeoutMs !== undefined) assertTimerDelayWithinLimit("timeoutMs", config.timeoutPolicy.timeoutMs)
   }
   if (config.unknownDefinitionMaxDeferralMs !== undefined && (!Number.isFinite(config.unknownDefinitionMaxDeferralMs) || config.unknownDefinitionMaxDeferralMs < 0)) {
-    throw new ValidationError("unknownDefinitionMaxDeferralMs must be finite and non-negative")
+    throw new ConfigurationError("unknownDefinitionMaxDeferralMs must be finite and non-negative")
   }
 }
 

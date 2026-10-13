@@ -1,6 +1,6 @@
 # Sequence numbering
 
-`core/sequence` defines tenant-scoped, named counters. A counter is further scoped by a UTC reset bucket (`never`, year, month, or day). Formatting adds an optional prefix and zero padding after allocation; it never changes the stored numeric value.
+`core/sequence` defines tenant-scoped, named counters. A counter is further scoped by a reset bucket (`never`, year, month, or day) evaluated in the definition's time zone (see below). Formatting adds an optional prefix and zero padding after allocation; it never changes the stored numeric value.
 
 A resetting counter restarts its numbers every period, so its formatted values repeat unless they embed the period. A resetting counter MUST therefore declare `periodFormat` explicitly (`compact`, for example `INV-2026-1`, or `iso`; or `none` when the period is carried elsewhere, such as on the document itself); an omitted format is a `ConfigurationError` rather than a silent default, so neither repeated identifiers nor a changed format of an existing series can happen implicitly. A counter that never resets has no period to embed and rejects any format other than `none`.
 
@@ -8,6 +8,8 @@ A resetting counter restarts its numbers every period, so its formatted values r
 
 PostgreSQL and MySQL callers pass a transaction-bound client to their store. D1 callers use `nextWithStatements`; its consumer statements and allocation execute in one atomic D1 batch. Consumer SQL reads the new value from `framework_sequences` using the same scope, name, and period.
 
-Scope, name, and period are compared byte-for-byte. Provider schemas therefore use binary/ordinal collations where a database's default collation is case-insensitive. Reset buckets use UTC so allocation is deterministic across regions.
+Scope, name, and period are compared byte-for-byte. Provider schemas therefore use binary/ordinal collations where a database's default collation is case-insensitive.
+
+Reset buckets are calendar periods of the allocation instant in the definition's `timeZone`: an IANA zone name of at most 64 characters, default `UTC`, validated when the definition is validated (an unknown or non-string zone is a `ConfigurationError`). Periods begin at local midnight (local January 1 for `year`, the first of the month for `month`), following the zone's historical offset and daylight-saving rules, so a counter in `Asia/Kolkata` resets at 00:00 IST, not 05:30 UTC. The bucket is the stored period key: `never` is `all`, `year` is `YYYY`, `month` is `YYYY-MM`, `day` is `YYYY-MM-DD`; the zone is not part of the key, so changing a definition's `timeZone` mid-series re-buckets later allocations against the existing counters and MUST be treated as a migration. The allocation instant is `request.at` or the injected clock; it MUST come from a trusted server clock. For a resetting counter the instant's local date MUST fall in years 1–9999 CE; an invalid date, an earlier date (BC/year 0 would alias CE years), or a later date (a fifth year digit makes compact formatted values ambiguous when the separator is empty or begins with a digit, for example `2026`+`305` and `20263`+`05`) is rejected with a `ConfigurationError` before the store is called. The range is evaluated on the local date, so the last instant of 9999 UTC may already be rejected in a zone east of UTC. A `never` counter has no bucket and requires only a valid date.
 
 The service does not interpret the number, select document-specific prefixes, or promise that deleting an already committed business record will recycle its number.

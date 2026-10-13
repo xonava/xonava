@@ -339,7 +339,7 @@ export async function orderingReport(driver: ParityDriver, rows: readonly Parity
       const failure = await check()
       if (failure) failures[aspect] = failure
     } catch (error) {
-      failures[aspect] = `threw ${error instanceof Error ? error.message : String(error)}`
+      failures[aspect] = `threw ${describeErrorChain(error)}`
     }
   }
 
@@ -377,6 +377,25 @@ export async function orderingReport(driver: ParityDriver, rows: readonly Parity
   await attempt("forward", async () => firstDifference(await walk("after")))
   await attempt("backward", async () => firstDifference(await walk("before")))
   return { spec, label, failures }
+}
+
+/** Drizzle wraps driver failures in "Failed query"; the message alone hides the driver error, so walk the whole cause chain. */
+export function describeErrorChain(error: unknown): string {
+  const parts: string[] = []
+  const seen = new Set<unknown>()
+  let current: unknown = error
+  for (let depth = 0; current !== undefined && current !== null && depth < 8 && !seen.has(current); depth += 1) {
+    seen.add(current)
+    if (current instanceof Error) {
+      const code = (current as { code?: unknown }).code
+      parts.push(`${current.name}${code === undefined ? "" : ` [${String(code)}]`}: ${current.message}`)
+      current = (current as { cause?: unknown }).cause
+    } else {
+      parts.push(String(current))
+      break
+    }
+  }
+  return parts.join("\n  caused by ")
 }
 
 export async function orderingReports(driver: ParityDriver, rows: readonly ParityRecord[]): Promise<OrderingReport[]> {

@@ -116,10 +116,10 @@ export function refApply(i: RefInstance, event: RefEvent, now: number): RefOutco
         if (refDurableBytes(merged) > REF_MAX_DURABLE_BYTES) return reject("definition")
       }
       switch (result.kind) {
-        case "next": return ok(bump(i, { status: "pending", step: result.step, attempt: 0, stack: result.compensation ? [...i.stack, result.compensation] : [...i.stack], signal: null, wakeAt: null, vars: { ...i.vars, ...(result.variables ?? {}) } }))
-        case "wait": return ok(bump(i, { status: "waiting", attempt: 0, signal: result.signal, wakeAt: null, vars: { ...i.vars, ...(result.variables ?? {}) } }))
-        case "sleep": return ok(bump(i, { status: "waiting", attempt: 0, signal: null, wakeAt: result.wakeAt, vars: { ...i.vars, ...(result.variables ?? {}) } }))
-        case "complete": return ok(bump(i, { status: "succeeded", outcome: "succeeded", signal: null, wakeAt: null, vars: { ...i.vars, ...(result.variables ?? {}) } }))
+        case "next": return ok(bump(i, { failure: null, status: "pending", step: result.step, attempt: 0, stack: result.compensation ? [...i.stack, result.compensation] : [...i.stack], signal: null, wakeAt: null, vars: { ...i.vars, ...(result.variables ?? {}) } }))
+        case "wait": return ok(bump(i, { failure: null, status: "waiting", attempt: 0, signal: result.signal, wakeAt: null, vars: { ...i.vars, ...(result.variables ?? {}) } }))
+        case "sleep": return ok(bump(i, { failure: null, status: "waiting", attempt: 0, signal: null, wakeAt: result.wakeAt, vars: { ...i.vars, ...(result.variables ?? {}) } }))
+        case "complete": return ok(bump(i, { failure: null, status: "succeeded", outcome: "succeeded", signal: null, wakeAt: null, vars: { ...i.vars, ...(result.variables ?? {}) } }))
         case "retry": return ok(bump(i, { status: compensating ? "compensating" : "pending", wakeAt: null }))
       }
       return reject("state")

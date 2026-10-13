@@ -110,6 +110,83 @@ describe("unknown-definition deferral window", () => {
   })
 })
 
+describe("unknown-definition deferral survives a transient release failure", () => {
+  const ghost = () => claimed({ jobType: "ghost", maxAttempts: 1, lastError: null })
+
+  it("retries the release once instead of consuming the attempt budget through markRetrying", async () => {
+    const { store, dispatch } = setup(async () => ({ success: true }), ghost())
+    store.release.mockRejectedValueOnce(new Error("connection reset"))
+    const result = await dispatch()
+    // Before the fix a single failed release fell through to markRetrying (which spends an attempt) and then to markFailed.
+    expect(store.release).toHaveBeenCalledTimes(2)
+    expect(store.markRetrying).not.toHaveBeenCalled()
+    expect(store.markFailed).not.toHaveBeenCalled()
+    expect(result).toMatchObject({ retried: 1, deadLettered: 0, leaseLost: 0 })
+  })
+
+  it("does not retry a release that was answered (not applied): the lease is lost", async () => {
+    const { store, dispatch } = setup(async () => ({ success: true }), ghost())
+    store.release.mockResolvedValue({ applied: false as never })
+    expect(await dispatch()).toMatchObject({ leaseLost: 1, retried: 0 })
+    expect(store.release).toHaveBeenCalledTimes(1)
+  })
+
+  it("still falls back to markRetrying when the release keeps failing", async () => {
+    const { store, dispatch } = setup(async () => ({ success: true }), ghost())
+    store.release.mockRejectedValue(new Error("store down"))
+    expect(await dispatch()).toMatchObject({ retried: 1 })
+    expect(store.release).toHaveBeenCalledTimes(2)
+    expect(store.markRetrying).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("hand-back time is stamped from the clock when each store call is issued", () => {
+  // Found by job dispatcher "random interleavings" (seed 4259685034, run 1229): a release failed after store latency while the
+  // worker's clock skew moved by -9 ms, so the retried release carried max(previous, now + lease) = +61 ms instead of +60 ms.
+  const ghost = () => claimed({ jobType: "ghost", maxAttempts: 1, lastError: null })
+
+  function skewedSetup(job: StoredJob) {
+    let reading = NOW.getTime()
+    const skewedClock = { now: () => new Date(reading), sleep: async () => undefined }
+    const store = {
+      claimDue: vi.fn(async () => [job]),
+      renewLease: vi.fn(async () => true),
+      markSucceeded: vi.fn(async () => ({ applied: true as const })),
+      markRetrying: vi.fn(async () => ({ applied: true as const })),
+      markFailed: vi.fn(async () => ({ applied: true as const })),
+      release: vi.fn(async () => ({ applied: true as const })),
+    }
+    const dispatch = () => dispatchDueJobs({ store: store as unknown as JobStore, registry: createJobRegistry(), workerId: "w", leaseDurationMs: 60, claimLimit: 1, requester: { scope: "system" }, clock: skewedClock })
+    return { store, dispatch, move: (deltaMs: number) => { reading += deltaMs } }
+  }
+
+  const nextAttemptsOf = (mock: { mock: { calls: unknown[][] } }): number[] => mock.mock.calls.map((call) => (call[0] as { nextAttemptAt: Date }).nextAttemptAt.getTime())
+
+  it("stamps the retried release with the clock reading at the retry, even when the clock moved backwards during the failed call", async () => {
+    const { store, dispatch, move } = skewedSetup(ghost())
+    // The first release takes 8 ms to fail, and the worker's clock skew changes by -9 ms meanwhile: the clock reads 1 ms earlier.
+    store.release.mockImplementationOnce(async () => { move(8 - 9); throw new Error("store unavailable") })
+    expect(await dispatch()).toMatchObject({ retried: 1, leaseLost: 0, deadLettered: 0 })
+    // Before the fix the second call was clamped to the first call's stamp: [NOW + 60, NOW + 60] instead of [NOW + 60, NOW - 1 + 60].
+    expect(nextAttemptsOf(store.release)).toEqual([NOW.getTime() + 60, NOW.getTime() - 1 + 60])
+  })
+
+  it("stamps the retried release with a later reading when the failed call was slow", async () => {
+    const { store, dispatch, move } = skewedSetup(ghost())
+    store.release.mockImplementationOnce(async () => { move(36); throw new Error("store unavailable") })
+    expect(await dispatch()).toMatchObject({ retried: 1 })
+    expect(nextAttemptsOf(store.release)).toEqual([NOW.getTime() + 60, NOW.getTime() + 36 + 60])
+  })
+
+  it("stamps the markRetrying fallback with the clock reading when it is issued", async () => {
+    const { store, dispatch, move } = skewedSetup(ghost())
+    store.release.mockImplementation(async () => { move(5); throw new Error("store down") })
+    expect(await dispatch()).toMatchObject({ retried: 1 })
+    expect(nextAttemptsOf(store.release)).toEqual([NOW.getTime() + 60, NOW.getTime() + 5 + 60])
+    expect(nextAttemptsOf(store.markRetrying)).toEqual([NOW.getTime() + 10 + 60])
+  })
+})
+
 describe("job fingerprint and the attempt budget", () => {
   const job: NewJob = { executionScope: { kind: "system", systemKey: "framework" }, jobType: "job", jobVersion: 1, payload: { a: 1 }, runAt: NOW, idempotencyKey: "k" }
 
@@ -185,9 +262,52 @@ describe("one claimed job's setup failure stays with that job", () => {
     // Before the fix the throw rejected dispatchDueJobs, so job-2 was never run and stayed claimed until its lease lapsed.
     const result = await dispatch()
     expect(ran).toEqual(["job-2"])
-    expect(result).toMatchObject({ claimed: 2, succeeded: 1, leaseLost: 1 })
-    expect(result.errors).toEqual([expect.objectContaining({ jobId: "job-1", action: "lease_lost", error: expect.stringContaining("id source down") as string })])
+    expect(result).toMatchObject({ claimed: 2, succeeded: 1, retried: 1, leaseLost: 0 })
+    expect(result.errors).toEqual([expect.objectContaining({ jobId: "job-1", action: "retry", error: expect.stringContaining("id source down") as string })])
     expect(store.markSucceeded).toHaveBeenCalledTimes(1)
+  })
+
+  it("releases the job whose setup failed, without consuming an attempt, instead of leaving it claimed until its lease lapses", async () => {
+    let calls = 0
+    const { store, dispatch } = batch({ idGenerator: () => { if (++calls === 1) throw new Error("id source down"); return `exec-${calls}` } })
+    await dispatch()
+    // Before the fix the job was reported lease_lost and never released: it waited out its whole lease.
+    expect(store.release).toHaveBeenCalledTimes(1)
+    expect(store.release).toHaveBeenCalledWith(expect.objectContaining({ jobId: "job-1", workerId: "w", claimToken: "tok-1", nextAttemptAt: new Date(NOW.getTime() + 60_000), reason: expect.stringContaining("id source down") as string }))
+    expect(store.markRetrying).not.toHaveBeenCalled()
+    expect(store.markFailed).not.toHaveBeenCalled()
+  })
+
+  it("reports lease_lost when the store cannot release (not applied, throws, or no release primitive) and still runs the rest", async () => {
+    const failures: Array<(store: ReturnType<typeof batch>["store"]) => void> = [
+      (store) => store.release.mockResolvedValue({ applied: false as never }),
+      (store) => store.release.mockRejectedValue(new Error("store down")),
+      (store) => { delete (store as { release?: unknown }).release },
+    ]
+    for (const breakRelease of failures) {
+      let calls = 0
+      const { store, dispatch, ran } = batch({ idGenerator: () => { if (++calls === 1) throw new Error("id source down"); return `exec-${calls}` } })
+      breakRelease(store)
+      const result = await dispatch()
+      expect(ran).toEqual(["job-2"])
+      expect(result).toMatchObject({ claimed: 2, succeeded: 1, retried: 0, leaseLost: 1 })
+      expect(result.errors).toEqual([expect.objectContaining({ jobId: "job-1", action: "lease_lost" })])
+    }
+  })
+
+  it("releases with a fallback run time when the configured clock keeps throwing", async () => {
+    let throwing = false
+    const brokenClock = { now: () => { if (throwing) throw new Error("clock unavailable"); return NOW }, sleep: async () => undefined }
+    const { store, dispatch, ran } = batch({}, brokenClock)
+    store.renewLease.mockImplementationOnce(async () => { throwing = true; return true })
+    // The clock breaks for job-1's setup (and its release), then recovers for job-2.
+    store.release.mockImplementationOnce(async () => { throwing = false; return { applied: true as const } })
+    const before = Date.now()
+    const result = await dispatch()
+    expect(ran).toEqual(["job-2"])
+    expect(result).toMatchObject({ claimed: 2, succeeded: 1, retried: 1 })
+    const nextAttemptAt = (store.release.mock.calls as unknown as Array<[{ nextAttemptAt: Date }]>)[0]![0].nextAttemptAt
+    expect(nextAttemptAt.getTime()).toBeGreaterThanOrEqual(before + 60_000)
   })
 
   it("still runs the remaining claimed jobs when the clock throws while one job starts", async () => {
@@ -202,5 +322,50 @@ describe("one claimed job's setup failure stays with that job", () => {
     expect(ran).toContain("job-2")
     expect(result.claimed).toBe(2)
     expect(result.succeeded + result.leaseLost + result.retried + result.deadLettered).toBe(2)
+    expect(store.release).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("job failure text is bounded on every store write", () => {
+  const LONG = 200_000
+  const over = (text: string | undefined) => new TextEncoder().encode(text ?? "").byteLength > 65_535
+  const reject = (what: string) => new Error(`Data too long for column '${what}'`)
+  function strictSetup(job: StoredJob, definition: Partial<JobDefinition> = {}) {
+    const s = setup(async () => ({ success: true }), job, definition)
+    const release = s.store.release as unknown as { mockImplementation: (fn: (args: { reason?: string }) => Promise<{ applied: true }>) => void }
+    release.mockImplementation(async (args) => { if (over(args.reason)) throw reject("reason"); return { applied: true as const } })
+    return s
+  }
+  const stored = (text: string) => expect(new TextEncoder().encode(text).byteLength).toBeLessThanOrEqual(MAX_JOB_ERROR_BYTES)
+
+  it("dead-letters a payload that fails to decode with an oversized message instead of leaving the job running", async () => {
+    const { store, dispatch } = strictSetup(claimed(), { decodePayload: () => { throw new Error(`invalid payload: ${"x".repeat(LONG)}`) } })
+    // Before the fix markFailed received the raw 200 KB message, the store rejected it and the outcome was lease_lost.
+    expect(await dispatch()).toMatchObject({ deadLettered: 1, leaseLost: 0 })
+    stored(store.markFailed.mock.calls[0]![0].error)
+  })
+
+  it("dead-letters a scope mismatch whose validation error is oversized", async () => {
+    const scope = { kind: "system", get systemKey(): string { throw new Error(`corrupt scope: ${"x".repeat(LONG)}`) } } as unknown as StoredJob["executionScope"]
+    const { store, dispatch } = strictSetup(claimed({ executionScope: scope }))
+    expect(await dispatch()).toMatchObject({ deadLettered: 1, leaseLost: 0 })
+    stored(store.markFailed.mock.calls[0]![0].error)
+  })
+
+  it("dead-letters an expired unknown definition whose job type is oversized", async () => {
+    const { store, dispatch } = strictSetup(claimed({ jobType: "g".repeat(LONG), lastError: `Unknown job definition: g@1 (unrunnable since ${new Date(NOW.getTime() - DEFAULT_UNKNOWN_DEFINITION_MAX_DEFERRAL_MS - 1).toISOString()})` }))
+    expect(await dispatch()).toMatchObject({ deadLettered: 1, leaseLost: 0 })
+    stored(store.markFailed.mock.calls[0]![0].error)
+  })
+
+  it("bounds the release reason and the markRetrying fallback of a deferred unknown definition", async () => {
+    const released = strictSetup(claimed({ jobType: "g".repeat(LONG), lastError: null }))
+    expect(await released.dispatch()).toMatchObject({ retried: 1, leaseLost: 0 })
+    stored((released.store.release.mock.calls as unknown as Array<[{ reason: string }]>)[0]![0].reason)
+
+    const retrying = strictSetup(claimed({ jobType: "g".repeat(LONG), lastError: null }))
+    retrying.store.release.mockRejectedValue(new Error("down"))
+    expect(await retrying.dispatch()).toMatchObject({ retried: 1, leaseLost: 0 })
+    stored(retrying.store.markRetrying.mock.calls[0]![0].error)
   })
 })

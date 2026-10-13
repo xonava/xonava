@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { bootstrapD1Fixture } from "../../fixtures/d1/bootstrap.js"
+import { tolerateStaleConnections } from "./staleConnection.js"
 
 const WORKER_SCRIPT = "export default { fetch() { return new Response('framework-d1-fixture') } }"
 export type D1Database = Awaited<ReturnType<Miniflare["getD1Database"]>>
@@ -21,7 +22,7 @@ export async function openD1Fixture(persistPath?: string): Promise<D1Fixture> {
     d1Databases: { DB: "framework-certification" },
     ...(persistPath === undefined ? {} : { d1Persist: persistPath }),
   })
-  const db = await mf.getD1Database("DB")
+  const db = tolerateStaleConnections(await mf.getD1Database("DB"))
   await bootstrapD1Fixture(db)
   return { db, ...(persistPath === undefined ? {} : { persistPath }), close: () => mf.dispose() }
 }

@@ -10,6 +10,7 @@ import { definitionId, resolveDependencyOrder } from "./dependencyGraph.js"
 import { type FrameworkDefinitionRegistry } from "./definitionRegistry.js"
 import { cloneAndFreezeDefinition } from "../kernel/definitionIntegrity.js"
 import { readonlyMap } from "../kernel/readonlyCollections.js"
+import { assertUniqueCacheKeyPrefixes } from "../entity/cachePrefixes.js"
 
 export interface CompileFrameworkOptions {
   readonly frameworkVersion: string; readonly sourceRevision: string; readonly availableCapabilities?: readonly string[]
@@ -46,7 +47,7 @@ function assertCertification(cert: GuaranteeCertificationV1, options: CompileFra
   if (cert.status === "proven") {
     const evidence = cert.evidence
     if (!evidence) fail(`proven certification ${cert.guarantee} has no evidence`)
-    if (!Number.isSafeInteger(evidence.suiteVersion) || evidence.suiteVersion < 1 || !HEX_256.test(evidence.artifactSha256)) fail(`invalid evidence for ${cert.guarantee}`)
+    if (!Number.isSafeInteger(evidence.suiteVersion) || evidence.suiteVersion < 1 || typeof evidence.artifactSha256 !== "string" || !HEX_256.test(evidence.artifactSha256)) fail(`invalid evidence for ${cert.guarantee}`)
     nonEmpty(evidence.suiteId, "evidence.suiteId"); nonEmpty(evidence.artifactPath, "evidence.artifactPath")
     if (evidence.sourceRevision !== options.sourceRevision || evidence.frameworkVersion !== options.frameworkVersion) fail(`stale evidence for ${cert.guarantee}`)
     if (!Number.isFinite(Date.parse(evidence.executedAt))) fail(`invalid evidence timestamp for ${cert.guarantee}`)
@@ -128,6 +129,12 @@ function compileOpenedRegistry(registry: FrameworkDefinitionRegistry, options: C
       for (const capability of definition.requiredCapabilities ?? []) if (!datasource.capabilities.includes(capability)) fail(`datasource ${datasource.key} lacks capability ${capability} required by ${definitionId(definition)}`)
     }
   }
+  // Entities declare their resolved cache key prefix in config.cache.keyPrefix; an
+  // explicit prefix shared by two entities would mix their cached rows.
+  assertUniqueCacheKeyPrefixes(definitions.flatMap(d => {
+    const keyPrefix = d.kind === "entity" ? (d.config?.cache as { keyPrefix?: unknown } | undefined)?.keyPrefix : undefined
+    return typeof keyPrefix === "string" ? [{ owner: definitionId(d), keyPrefix }] : []
+  }))
   const formatSource = options.durableFormats ?? COMPILED_DURABLE_FORMAT_REGISTRY_V1
   validateFormats(formatSource, definitions)
   const durableFormats = sealFormats(formatSource)

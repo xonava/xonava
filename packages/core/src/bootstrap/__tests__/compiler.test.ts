@@ -76,6 +76,10 @@ describe("Framework 2.0 bootstrap compiler", () => {
     const ok = new FrameworkDefinitionRegistry(); for (const d of registry.snapshot()) ok.register(d)
     const plan = compileFramework(ok, { frameworkVersion: "2.0.0", sourceRevision: "rev", certifications: [certification], evidenceArtifactDigests: { "evidence/pg.json": digest } })
     expect(plan.guarantees.certifications.size).toBe(1)
+    // Before the fix HEX_256.test([digest]) coerced the array to its element and passed the shape check.
+    const arrayDigest = { ...certification, evidence: { ...certification.evidence, artifactSha256: [digest] } }
+    const fresh = new FrameworkDefinitionRegistry(); for (const d of registry.snapshot()) fresh.register(d)
+    expect(() => compileFramework(fresh, { frameworkVersion: "2.0.0", sourceRevision: "rev", certifications: [arrayDigest as never], evidenceArtifactDigests: { "evidence/pg.json": digest } })).toThrow(/invalid evidence/)
   })
 
   it("rejects incompatible formats, unsupported delegation, duplicate resolver bindings and mutation", () => {

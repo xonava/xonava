@@ -16,6 +16,7 @@ describe("schedule dispatcher validation branches", () => {
   it("validates global options before claiming", async () => {
     const s = stores([])
     await expect(materializeDueSchedules({ ...s, workerId: "w", leaseDurationMs: 0 })).rejects.toThrow("lease duration")
+    await expect(materializeDueSchedules({ ...s, workerId: "w", leaseDurationMs: 0 })).rejects.toBeInstanceOf(ConfigurationError)
     await expect(materializeDueSchedules({ ...s, workerId: "w", maxQueueAllOccurrences: 0 })).resolves.toEqual({ schedulesProcessed: 0, jobsEnqueued: 0, errors: [] })
   })
 

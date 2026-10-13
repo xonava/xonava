@@ -79,6 +79,8 @@ describe("redactSensitiveText equivalence with the original expression", () => {
 
 describe("redactSensitiveText is linear-time on adversarial input", () => {
   const SIZE = 200_000
+  // Generous on purpose: v8 coverage (release certification) slows these runs several-fold, while a quadratic regression needs many seconds at 200 kB.
+  const BUDGET_MS = 2_000
   const shapes: Array<[string, (size: number) => string]> = [
     ["a.a.a. repeated", (n) => "a.".repeat(n / 2)],
     ["a.a.a.@ then dots", (n) => "a.".repeat(n / 4) + "@" + "a.".repeat(n / 4)],
@@ -96,11 +98,11 @@ describe("redactSensitiveText is linear-time on adversarial input", () => {
     ["dates without boundary", (n) => "2026-08-05_".repeat(n / 11)],
     ["unicode", (n) => "é.".repeat(n / 2) + "😀@".repeat(n / 8)],
   ]
-  it.each(shapes)("%s: 200 kB in well under half a second", (_name, build) => {
+  it.each(shapes)("%s: 200 kB within the linear-time budget", (_name, build) => {
     const input = build(SIZE)
     expect(input.length).toBeGreaterThanOrEqual(SIZE / 2)
-    expect(timed(() => redactSensitiveText(input))).toBeLessThan(500)
-    expect(timed(() => defaultAuditSanitizer({ nested: [input] }))).toBeLessThan(500)
+    expect(timed(() => redactSensitiveText(input))).toBeLessThan(BUDGET_MS)
+    expect(timed(() => defaultAuditSanitizer({ nested: [input] }))).toBeLessThan(BUDGET_MS)
   })
 
   it("grows roughly linearly: 20x the input costs far less than 400x the time", () => {

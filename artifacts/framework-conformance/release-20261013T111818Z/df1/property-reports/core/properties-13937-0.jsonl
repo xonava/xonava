@@ -1,0 +1,10 @@
+{"property":"resilience executor matches the event model","seed":2278251833,"scale":5,"baseRuns":250,"runs":1250,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:46.702Z"}
+{"property":"abort wins promptly at its own instant","seed":2278251833,"scale":5,"baseRuns":120,"runs":600,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:47.020Z"}
+{"property":"resilience concurrent bulkhead and breaker","seed":2278251833,"scale":5,"baseRuns":150,"runs":750,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:48.716Z"}
+{"property":"backoff delay bounds","seed":2278251833,"scale":5,"baseRuns":150,"runs":750,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:50.051Z"}
+{"property":"backoff survives bad random","seed":2278251833,"scale":5,"baseRuns":60,"runs":300,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:50.064Z"}
+{"property":"resilience policy validity","seed":2278251833,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:50.312Z"}
+{"property":"backoff policy validity","seed":2278251833,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:50.359Z"}
+{"property":"resilience policy snapshot","seed":2278251833,"scale":5,"baseRuns":60,"runs":300,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:50.385Z"}
+{"property":"circuit breaker model","seed":2278251833,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:51.502Z"}
+{"property":"bulkhead model","seed":2278251833,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:52.324Z"}

@@ -43,7 +43,7 @@ export interface RateLimitCheckResult {
 
 export function parseTimeWindowMs(value: string | number): number {
   if (typeof value === "number") {
-    if (!Number.isFinite(value) || value <= 0) throw new ConfigurationError("Rate-limit time window must be a finite positive number.")
+    if (!Number.isSafeInteger(value) || value <= 0) throw new ConfigurationError("Rate-limit time window must be a positive safe integer of milliseconds.")
     return value
   }
   if (typeof value !== "string") throw new ConfigurationError("Rate-limit time window must be a string or number.")
@@ -89,8 +89,8 @@ export async function checkRateLimit(args: {
   // The key is derived from request material (actor, IP, custom key), so a
   // blank key is reported as a client input problem.
   if (typeof args.key !== "string" || args.key.trim().length === 0) throw new ValidationError("Rate-limit key must be non-empty.")
-  if (!Number.isFinite(args.limit) || args.limit <= 0) throw new ConfigurationError("Rate-limit max must be positive.")
-  if (!Number.isFinite(args.windowMs) || args.windowMs <= 0) throw new ConfigurationError("Rate-limit window must be positive.")
+  if (!Number.isSafeInteger(args.limit) || args.limit <= 0) throw new ConfigurationError("Rate-limit max must be a positive safe integer.")
+  if (!Number.isSafeInteger(args.windowMs) || args.windowMs <= 0) throw new ConfigurationError("Rate-limit window must be a positive safe integer of milliseconds.")
   const algorithm = args.algorithm ?? "fixed-window"
   const cost = args.cost ?? 1
   if (!(["fixed-window", "sliding-window", "token-bucket"] as const).includes(algorithm)) throw new ConfigurationError("Rate-limit algorithm is invalid.")
@@ -150,7 +150,7 @@ export async function enforceRateLimit(args: {
   failureMode?: RateLimitFailureMode
   nowMs?: () => number
 }): Promise<RateLimitCheckResult> {
-  if (!Number.isFinite(args.config.max) || args.config.max <= 0) throw new ConfigurationError("Rate-limit max must be positive.")
+  if (!Number.isSafeInteger(args.config.max) || args.config.max <= 0) throw new ConfigurationError("Rate-limit max must be a positive safe integer.")
   for (const key of ["consistency", "failureMode"] as const) {
     if (args.config[key] !== undefined && ((args[key] !== undefined && args[key] !== args.config[key]) || (args.policy?.[key] !== undefined && args.policy[key] !== args.config[key]))) throw new ConfigurationError(`Rate-limit ${key} configuration conflicts with explicit options.`)
   }

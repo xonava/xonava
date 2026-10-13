@@ -14,6 +14,17 @@ function compile(rules = [rule()], conflictResolution: RuleSetDefinition<Action>
   return compileRuleSet<Action>({ key: "checkout", version: 1, rules, conflictResolution })
 }
 
+describe("rule key validation", () => {
+  it.each([
+    ["rule-set key", () => compileRuleSet<Action>({ key: ["rs"] as never, version: 1, rules: [rule()], conflictResolution: { kind: "all-matches" } })],
+    ["rule key", () => compile([rule({ key: ["r1"] })])],
+    ["conflict key", () => compile([rule({ conflictKey: ["c1"] })])],
+  ])("rejects a non-string %s that a regular expression would coerce to a valid key", (_name, build) => {
+    // Before the fix KEY.test(["rs"]) coerced the array to "rs" and compilation succeeded.
+    expect(build).toThrow(ConfigurationError)
+  })
+})
+
 describe("business rule engine", () => {
   it("evaluates matching predicates and returns declarative actions", () => {
     const result = evaluateRuleSet(compile(), { total: 150 }, new Date("2026-01-01T00:00:00.000Z"))

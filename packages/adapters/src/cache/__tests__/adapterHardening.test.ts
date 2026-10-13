@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { CacheService } from "core/cache"
-import { ConfigurationError } from "core/domain"
+import { ConfigurationError, ValidationError } from "core/domain"
 import { CacheBackedRateLimitStore } from "../cacheBackedRateLimitStore"
 import { InMemoryCacheAdapter } from "../inMemoryCacheAdapter"
 import { KvCacheAdapter } from "../kvCacheAdapter"
@@ -18,6 +18,7 @@ function createFakeKv() {
       return options?.type === "json" ? JSON.parse(value) as unknown : value
     }),
     put: vi.fn(async (key: string, value: string, options?: { expirationTtl?: number }) => {
+      if (new TextEncoder().encode(key).length > 512) throw new Error("KV PUT failed: 414 UriTooLong (keys are limited to 512 bytes)")
       if (options?.expirationTtl !== undefined && options.expirationTtl < 60) {
         throw new Error(`Invalid expiration_ttl of ${options.expirationTtl}. Expiration TTL must be at least 60.`)
       }
@@ -93,19 +94,61 @@ describe("defect 1: clear() keeps tag generations monotonic", () => {
     const adapter = new KvCacheAdapter(kv as never)
     const generation = await adapter.advanceTagGeneration("t")
     const counter = kv.store.get("__cachegen__:t")
-    // A value key spelled like the LEGACY counter location of tag "t".
-    await adapter.set("__generation__:t", "not-a-generation")
+    // A value key spelled like the LEGACY counter location of tag "t" is rejected.
+    await expect(adapter.set("__generation__:t", "not-a-generation")).rejects.toBeInstanceOf(ValidationError)
     // The new-layout counter is out of reach of any cache key.
     expect(kv.store.get("__cachegen__:t")).toBe(counter)
-    // The overwritten legacy counter only changes the observed (composite)
-    // generation: a fail-safe extra invalidation, never a value read as a
-    // generation and never a return to the previously observed generation.
+    expect(await adapter.getTagGeneration("t")).toBe(generation)
+    // A legacy counter that is changed out of band only changes the observed
+    // (composite) generation: a fail-safe extra invalidation, never a return to
+    // the previously observed generation.
+    kv.store.set("__cache__:__generation__:t", JSON.stringify("not-a-generation"))
     const afterOverwrite = await adapter.getTagGeneration("t")
     expect(afterOverwrite).not.toBe(generation)
-    expect(afterOverwrite).not.toContain("not-a-generation")
     await adapter.clear()
     expect(kv.store.get("__cachegen__:t")).toBe(counter)
     expect(await adapter.getTagGeneration("t")).toBe(afterOverwrite)
+  })
+
+  describe("reserved internal key prefixes", () => {
+    const reserved = ["__tag__:x", "__revision__:k", "__generation__:t", "__generation__:", "__generation__:0:k"]
+
+    it.each(reserved)("rejects raw key %s on every key-taking operation without touching storage", async (key) => {
+      const kv = createFakeKv()
+      const adapter = new KvCacheAdapter(kv as never)
+      await adapter.advanceTagGeneration("x")
+      await adapter.addToTag("x", "plain")
+      const before = new Map(kv.store)
+      const calls: Array<() => Promise<unknown>> = [
+        () => adapter.get(key),
+        () => adapter.set(key, "v"),
+        () => adapter.has(key),
+        () => adapter.delete(key),
+        () => adapter.addToTag("x", key),
+      ]
+      for (const call of calls) await expect(call()).rejects.toBeInstanceOf(ValidationError)
+      expect(new Map(kv.store)).toEqual(before)
+    })
+
+    it("a raw tag-list key cannot read or overwrite the tag membership list", async () => {
+      const kv = createFakeKv()
+      const adapter = new KvCacheAdapter(kv as never)
+      await adapter.set("member", 1)
+      await adapter.addToTag("x", "member")
+      await expect(adapter.get("__tag__:x")).rejects.toBeInstanceOf(ValidationError)
+      await expect(adapter.set("__tag__:x", "owned")).rejects.toBeInstanceOf(ValidationError)
+      expect(await adapter.getTagKeys("x")).toEqual(["member"])
+    })
+
+    it("still accepts ordinary keys and CacheService generation-qualified storage keys", async () => {
+      const kv = createFakeKv()
+      const adapter = new KvCacheAdapter(kv as never)
+      await adapter.set("__tag_not_reserved", 1)
+      await adapter.set("tag:x", 2)
+      await adapter.set('__generation__:"1:abc":user:1', 3)
+      expect(await adapter.get('__generation__:"1:abc":user:1')).toBe(3)
+      expect(await adapter.get("tag:x")).toBe(2)
+    })
   })
 
   describe("rolling deploy with instances on the previous counter layout", () => {
@@ -149,6 +192,126 @@ describe("defect 1: clear() keeps tag generations monotonic", () => {
       for (const tag of tags) await adapter.advanceTagGeneration(tag)
       expect(await service.getOrSet("records:list:page-1", async () => "v", tags)).toBe("v")
       for (const key of kv.store.keys()) expect(new TextEncoder().encode(key).length).toBeLessThanOrEqual(512)
+    })
+
+    describe("generation pair is self-healing and bounded", () => {
+      const keyBytes = (kv: ReturnType<typeof createFakeKv>) => [...kv.store.keys()].map((name) => new TextEncoder().encode(name).length)
+
+      it("a counter only the previous release wrote converges: current is adopted from legacy", async () => {
+        const kv = createFakeKv()
+        const adapter = new KvCacheAdapter(kv as never)
+        kv.store.set(legacyKey("t"), JSON.stringify("123:abc"))
+        const first = await adapter.getTagGeneration("t")
+        expect(first).toBe("123:abc")
+        expect(kv.store.get(newKey("t"))).toBe(JSON.stringify("123:abc"))
+        expect(await adapter.getTagGeneration("t")).toBe(first)
+        // The adopted counter still fences: an old instance advancing only legacy changes the generation.
+        kv.store.set(legacyKey("t"), JSON.stringify("124:def"))
+        expect(await adapter.getTagGeneration("t")).not.toBe(first)
+      })
+
+      it("adoption never throws when the write fails, and the reported token is still bounded", async () => {
+        const kv = createFakeKv()
+        const adapter = new KvCacheAdapter(kv as never)
+        kv.store.set(legacyKey("t"), JSON.stringify("123:abc"))
+        kv.put.mockRejectedValueOnce(new Error("kv write unavailable"))
+        const token = await adapter.getTagGeneration("t")
+        expect(token).toMatch(/^h:[A-Za-z0-9_-]{43}$/)
+        expect(kv.store.has(newKey("t"))).toBe(false)
+        // The next read adopts successfully.
+        expect(await adapter.getTagGeneration("t")).toBe("123:abc")
+      })
+
+      it("adoption does not overwrite a counter a new-release invalidation wrote in between", async () => {
+        const kv = createFakeKv()
+        const adapter = new KvCacheAdapter(kv as never)
+        kv.store.set(legacyKey("t"), JSON.stringify("123:abc"))
+        const realGet = kv.get.getMockImplementation()!
+        let currentReads = 0
+        kv.get.mockImplementation(async (key: string, options?: { type: "json" }) => {
+          if (key === newKey("t") && ++currentReads === 2) kv.store.set(newKey("t"), JSON.stringify("200:new"))
+          return realGet(key, options)
+        })
+        await adapter.getTagGeneration("t")
+        expect(kv.store.get(newKey("t"))).toBe(JSON.stringify("200:new"))
+      })
+
+      it("a diverged pair is reported as a fixed-length token, so many tags stay under KV's 512-byte key cap", async () => {
+        const kv = createFakeKv()
+        const adapter = new KvCacheAdapter(kv as never)
+        const tags = Array.from({ length: 4 }, (_, i) => `tenant.records.${String(i).padStart(5, "0")}`)
+        tags.forEach((tag, i) => {
+          kv.store.set(newKey(tag), JSON.stringify(`10${i}:11111111-1111-1111-1111-111111111111`))
+          kv.store.set(legacyKey(tag), JSON.stringify(`20${i}:22222222-2222-2222-2222-222222222222`))
+        })
+        for (const tag of tags) expect(await adapter.getTagGeneration(tag)).toMatch(/^h:[A-Za-z0-9_-]{43}$/)
+        const service = new CacheService({ adapter })
+        let resolved = 0
+        const resolver = async () => { resolved += 1; return "v" }
+        expect(await service.getOrSet("records:list:page-1", resolver, tags)).toBe("v")
+        expect(await service.getOrSet("records:list:page-1", resolver, tags)).toBe("v")
+        expect(resolved).toBe(1)
+        expect(Math.max(...keyBytes(kv))).toBeLessThanOrEqual(512)
+      })
+
+      it("distinct pairs report distinct tokens and the order of the pair matters", async () => {
+        const kv = createFakeKv()
+        const adapter = new KvCacheAdapter(kv as never)
+        const tokens = new Set<string>()
+        for (const [current, legacy] of [["1:a", "2:b"], ["2:b", "1:a"], ["1:a", "1:b"], ["1:b", "1:a"], ["1:a", undefined], [undefined, "1:b"]] as const) {
+          kv.store.delete(newKey("t")); kv.store.delete(legacyKey("t"))
+          if (current !== undefined) kv.store.set(newKey("t"), JSON.stringify(current))
+          if (legacy !== undefined) kv.store.set(legacyKey("t"), JSON.stringify(legacy))
+          // current-missing pairs are healed (converged); keep the legacy-only case out of the pair set.
+          const token = await adapter.getTagGeneration("t")
+          tokens.add(token)
+        }
+        expect(tokens.size).toBe(6)
+      })
+
+      it("an invalidation of a diverged pair converges the counters and changes the token", async () => {
+        const kv = createFakeKv()
+        const adapter = new KvCacheAdapter(kv as never)
+        kv.store.set(newKey("t"), JSON.stringify("1:a"))
+        kv.store.set(legacyKey("t"), JSON.stringify("2:b"))
+        const before = await adapter.getTagGeneration("t")
+        const advanced = await adapter.advanceTagGeneration("t")
+        expect(advanced).not.toBe(before)
+        expect(await adapter.getTagGeneration("t")).toBe(advanced)
+        expect(advanced).toMatch(/^\d+:[0-9a-f-]{36}$/)
+      })
+
+      it("concurrent new-release invalidations (W1.legacy, W2.legacy, W2.current, W1.current) fence at every step", async () => {
+        const kv = createFakeKv()
+        const adapter = new KvCacheAdapter(kv as never)
+        const service = new CacheService({ adapter })
+        await adapter.advanceTagGeneration("t")
+        let db = "v0"
+        const read = () => service.getOrSet("k", async () => db, ["t"])
+        expect(await read()).toBe("v0")
+        const tokens = [await adapter.getTagGeneration("t")]
+        const step = async (key: string, value: string, fresh: string) => {
+          kv.store.set(key, JSON.stringify(value))
+          db = fresh
+          const token = await adapter.getTagGeneration("t")
+          expect(tokens).not.toContain(token)
+          tokens.push(token)
+          // A reader never sees data cached before this write.
+          expect(await read()).toBe(fresh)
+        }
+        await step(legacyKey("t"), "100:w1", "v1") // W1.legacy
+        await step(legacyKey("t"), "101:w2", "v2") // W2.legacy
+        await step(newKey("t"), "101:w2", "v3") // W2.current: converged on W2's value
+        await step(newKey("t"), "100:w1", "v4") // W1.current: diverged for good (current=W1, legacy=W2)
+        expect(tokens.at(-1)).toMatch(/^h:/)
+        expect(Math.max(...keyBytes(kv))).toBeLessThanOrEqual(512)
+        // The diverged state is stable (no read-side rewriting) and bounded, and the next invalidation converges it.
+        expect(await adapter.getTagGeneration("t")).toBe(tokens.at(-1))
+        db = "v5"
+        await adapter.advanceTagGeneration("t")
+        expect(await read()).toBe("v5")
+        expect(await adapter.getTagGeneration("t")).toMatch(/^\d+:[0-9a-f-]{36}$/)
+      })
     })
 
     it("advances both layouts (legacy first) so old instances observe new advances", async () => {

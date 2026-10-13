@@ -1,5 +1,5 @@
 import type { RetryPolicy } from "./types"
-import { ValidationError } from "../domain"
+import { ConfigurationError, ValidationError } from "../domain"
 
 /** Backoff ceiling applied when a policy sets no maxDelayMs (24 hours). */
 export const DEFAULT_MAX_RETRY_DELAY_MS = 24 * 60 * 60 * 1000
@@ -9,17 +9,17 @@ const MAX_DATE_MS = 8_640_000_000_000_000
 
 function assertFiniteRetryValue(name: string, value: number, minimum: number): void {
   if (!Number.isFinite(value) || value < minimum) {
-    throw new ValidationError(`${name} must be a finite number >= ${minimum}`)
+    throw new ConfigurationError(`${name} must be a finite number >= ${minimum}`)
   }
 }
 
 export function validateRetryPolicy(policy: RetryPolicy): void {
   if (!Number.isInteger(policy.maxAttempts) || policy.maxAttempts < 1) {
-    throw new ValidationError("maxAttempts must be a finite integer >= 1")
+    throw new ConfigurationError("maxAttempts must be a finite integer >= 1")
   }
   assertFiniteRetryValue("delayMs", policy.delayMs, 0)
   if (!Number.isFinite(policy.backoffMultiplier) || policy.backoffMultiplier <= 0) {
-    throw new ValidationError("backoffMultiplier must be greater than zero.")
+    throw new ConfigurationError("backoffMultiplier must be greater than zero.")
   }
   if (policy.maxDelayMs !== undefined) assertFiniteRetryValue("maxDelayMs", policy.maxDelayMs, 0)
 }

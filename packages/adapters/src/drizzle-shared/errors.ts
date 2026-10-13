@@ -6,6 +6,14 @@ function* causeChain(error:unknown):Generator<Record<string,unknown>>{let curren
 function machineCode(error:unknown):string|number|undefined{for(const current of causeChain(error)){const code=current.code??current.errno;if(typeof code==="string"||typeof code==="number")return code}return undefined}
 /** Provider messages along the cause chain. Used only for classification, never copied into framework errors. */
 function providerMessages(error:unknown):string[]{const messages:string[]=[];for(const current of causeChain(error))if(typeof current.message==="string")messages.push(current.message);return messages}
+const D1_ERROR_TOKEN=/D1_ERROR\b/i
+const RESET_WORD=/\breset\b/i
+const LINE_TERMINATORS=/[\n\r\u2028\u2029]/
+/** Linear equivalent of `/D1_ERROR\b.*\breset\b/i`: on one line, "reset" must follow the first D1_ERROR token (the backtracking form is quadratic on repeated tokens). The remainder starts after a non-word character, so slicing cannot create a false word boundary. */
+function isD1ResetMessage(message:string):boolean{
+  for(const line of message.split(LINE_TERMINATORS)){const token=D1_ERROR_TOKEN.exec(line);if(token!==null&&RESET_WORD.test(line.slice(token.index+token[0].length)))return true}
+  return false
+}
 type D1MessageClass="conflict"|"foreign_key"|"not_null"|"check"|"retryable"
 /** D1 surfaces SQLite failures without machine codes, so classification falls back to stable SQLite message markers. */
 function classifyD1Message(error:unknown):D1MessageClass|undefined{
@@ -14,7 +22,7 @@ function classifyD1Message(error:unknown):D1MessageClass|undefined{
     if(message.includes("FOREIGN KEY constraint failed"))return "foreign_key"
     if(message.includes("NOT NULL constraint failed"))return "not_null"
     if(message.includes("CHECK constraint failed"))return "check"
-    if(message.includes("SQLITE_BUSY")||message.includes("database is locked")||message.includes("Overloaded")||message.includes("Network connection lost")||/D1_ERROR\b.*\breset\b/i.test(message))return "retryable"
+    if(message.includes("SQLITE_BUSY")||message.includes("database is locked")||message.includes("Overloaded")||message.includes("Network connection lost")||isD1ResetMessage(message))return "retryable"
   }
   return undefined
 }

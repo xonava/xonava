@@ -4,6 +4,7 @@ import { materializeDueSchedules } from "../../execution/scheduleDispatcher"
 import { compileScheduleLifecycle } from "../../execution/scheduleLifecycle"
 import type { FencedScheduleClaim, ScheduleStore } from "../../execution/scheduleStore"
 import type { JobStore, StoredJob } from "../../execution/types"
+import { ScheduleWorld, type WorldSchedule } from "./scheduleWorld"
 
 /**
  * Deterministic regressions for bugs found by the schedule differential suites
@@ -42,6 +43,28 @@ describe("schedule regressions", () => {
 
     it("keeps the default (earliest) behaviour unchanged", () => {
       expect(getNextOccurrence("30 1 * * *", new Date("2026-11-01T05:40:00Z"), "America/New_York")?.toISOString()).toBe("2026-11-02T06:30:00.000Z")
+    })
+  })
+
+  describe("years 0-99 are not mapped to 1900-1999", () => {
+    it("finds the next leap day from the year 1 (UTC and a fixed-offset zone) instead of 1904", () => {
+      const start = new Date("0001-01-01T00:00:00.000Z")
+      expect(getNextOccurrence("0 0 29 2 *", start)?.toISOString()).toBe("0004-02-29T00:00:00.000Z")
+      expect(getNextOccurrence("0 0 29 2 *", start, "UTC")?.toISOString()).toBe("0004-02-29T00:00:00.000Z")
+      expect(getNextOccurrence("0 0 29 2 *", start, "Etc/GMT-3")?.toISOString()).toBe("0004-02-28T21:00:00.000Z")
+    })
+
+    it("walks across the year 99 -> 100 boundary and the non-leap year 100", () => {
+      expect(getNextOccurrence("30 23 31 12 *", new Date("0099-12-31T23:30:00.000Z"))?.toISOString()).toBe("0100-12-31T23:30:00.000Z")
+      expect(getNextOccurrence("0 0 29 2 *", new Date("0096-03-01T00:00:00.000Z"))?.toISOString()).toBe("0104-02-29T00:00:00.000Z")
+      expect(getNextOccurrence("0 0 1 1 *", new Date("0050-06-15T12:00:00.000Z"))?.toISOString()).toBe("0051-01-01T00:00:00.000Z")
+    })
+
+    it("computes the day of week and the due occurrences for early years", () => {
+      // 0001-01-01 is a Monday (proleptic Gregorian).
+      expect(getNextOccurrence("0 0 * * 1", new Date("0001-01-01T00:00:00.000Z"))?.toISOString()).toBe("0001-01-08T00:00:00.000Z")
+      const occurrences = computeScheduleOccurrences({ schedule: { cronExpression: "0 0 * * *", enabled: true, nextRunAt: new Date("0003-12-30T00:00:00.000Z") }, now: new Date("0004-01-02T00:00:00.000Z"), maxCount: 10 })
+      expect(occurrences.map((date) => date.toISOString())).toEqual(["0003-12-30T00:00:00.000Z", "0003-12-31T00:00:00.000Z", "0004-01-01T00:00:00.000Z", "0004-01-02T00:00:00.000Z"])
     })
   })
 
@@ -157,6 +180,126 @@ describe("schedule regressions", () => {
     it("shouldFireSchedule keeps its public fallback for direct callers", () => {
       const schedule = { cronExpression: "*/5 * * * *", timezone: "UTC", enabled: true, misfirePolicy: { type: "fire_now" as const }, overlapPolicy: { type: "skip" as const }, nextRunAt: new Date("2026-08-01T10:00:00Z"), lastRunAt: null, lastStatus: "running" }
       expect(shouldFireSchedule({ schedule, now: new Date("2026-08-01T10:00:30Z") })).toBe("skip")
+    })
+  })
+
+  describe("calendar exclusion applies per occurrence in a queue_all backlog", () => {
+    // */5 from 10:00, now 10:20 -> slots 10:00 10:05 10:10 10:15 10:20.
+    function backlog(misfire: "queue_all" | "fire_now" | "skip", excludedSlots: string[]) {
+      const claim: FencedScheduleClaim = {
+        scheduleId: "s1", scope: "platform", executionScope: { kind: "platform", platformKey: "default" }, jobType: "test.job", jobVersion: 1, tenantId: null, payload: "{}",
+        cronExpression: "*/5 * * * *", timezone: "UTC", overlapPolicy: { type: "allow" }, misfirePolicy: { type: misfire },
+        nextRunAt: new Date("2026-08-01T10:00:00Z"), lastRunAt: null, lastStatus: null, claimToken: "claim-1",
+        lifecycle: compileScheduleLifecycle({ calendarExclusionKey: "cal" }),
+      }
+      const advance = vi.fn(async () => true)
+      const scheduleStore: ScheduleStore = { claimDueSchedules: vi.fn(async () => [claim]), advanceSchedule: advance, releaseSchedule: vi.fn(async () => true), renewScheduleLease: vi.fn(async () => true) }
+      const enqueued: string[] = []
+      const jobStore = {
+        getLatestPriorScheduleExecution: vi.fn(async () => null),
+        getByIdempotencyKey: vi.fn(async () => null),
+        enqueue: vi.fn(async ({ job }: Parameters<JobStore["enqueue"]>[0]) => { enqueued.push(job.runAt!.toISOString()); return { id: `job-${enqueued.length}` } as StoredJob }),
+      } as unknown as JobStore
+      const calendarExclusionProvider = { isExcluded: async (_key: string, instant: Date) => excludedSlots.includes(instant.toISOString()) }
+      const result = materializeDueSchedules({ scheduleStore, jobStore, workerId: "w", now: new Date("2026-08-01T10:20:00Z"), calendarExclusionProvider })
+      return { advance, enqueued, result }
+    }
+
+    it("enqueues the non-excluded slots when the oldest slot is excluded", async () => {
+      const { advance, enqueued, result } = backlog("queue_all", ["2026-08-01T10:00:00.000Z"])
+      expect((await result).errors).toEqual([])
+      expect(enqueued).toEqual(["2026-08-01T10:05:00.000Z", "2026-08-01T10:10:00.000Z", "2026-08-01T10:15:00.000Z", "2026-08-01T10:20:00.000Z"])
+      expect(advance).toHaveBeenCalledWith(expect.objectContaining({ lastStatus: "fired", occurrencesFired: 4, nextRunAt: new Date("2026-08-01T10:25:00Z") }))
+    })
+
+    it("does not enqueue later excluded slots", async () => {
+      const { advance, enqueued, result } = backlog("queue_all", ["2026-08-01T10:10:00.000Z", "2026-08-01T10:20:00.000Z"])
+      await result
+      expect(enqueued).toEqual(["2026-08-01T10:00:00.000Z", "2026-08-01T10:05:00.000Z", "2026-08-01T10:15:00.000Z"])
+      expect(advance).toHaveBeenCalledWith(expect.objectContaining({ lastStatus: "fired", occurrencesFired: 3 }))
+    })
+
+    it("advances a fully excluded backlog as skipped, past its last slot", async () => {
+      const all = ["10:00", "10:05", "10:10", "10:15", "10:20"].map((time) => `2026-08-01T${time}:00.000Z`)
+      const { advance, enqueued, result } = backlog("queue_all", all)
+      await result
+      expect(enqueued).toEqual([])
+      expect(advance).toHaveBeenCalledWith(expect.objectContaining({ lastStatus: "skipped", occurrencesFired: 0, nextRunAt: new Date("2026-08-01T10:25:00Z") }))
+    })
+
+    it.each(["fire_now", "skip"] as const)("still skips a single-run policy (%s) whose claimed slot is excluded", async (misfire) => {
+      const { advance, enqueued, result } = backlog(misfire, ["2026-08-01T10:00:00.000Z"])
+      await result
+      expect(enqueued).toEqual([])
+      expect(advance).toHaveBeenCalledWith(expect.objectContaining({ lastStatus: "skipped", nextRunAt: new Date("2026-08-01T10:25:00Z") }))
+    })
+  })
+
+  describe("overlap skip uses the live status of an occurrence's existing job (DF1 seed 2304085779 run 107)", () => {
+    // A committed-but-thrown enqueue leaves occurrence 0's job behind; the schedule keeps its nextRunAt. When that job later
+    // fails (a terminal, non-busy status) the retry must count it as occurrence 0's run and go on to enqueue the rest of the
+    // backlog. The idempotency lookup of the harness' job store used to keep reporting the stale "pending" status, which made
+    // the dispatcher treat the schedule as busy and drop every later slot (the reference model, using the live status, enqueued).
+    const MINUTE = 60_000
+    const start = Date.UTC(2026, 7, 1, 10, 20)
+    function setup(): { world: ScheduleWorld; row: WorldSchedule; first: string } {
+      const world = new ScheduleWorld(start)
+      const row: WorldSchedule = {
+        id: "s1", scope: "platform", payload: "{}", cron: "*/5 * * * *", timezone: "UTC", overlap: "skip", misfire: "queue_all", enabled: true, paused: false,
+        effectiveFrom: null, effectiveUntil: null, remaining: null, calendarKey: null, nextRunAt: start - 20 * MINUTE, lastRunAt: null, lastStatus: null, lastError: null,
+        leaseOwner: null, claimToken: null, leaseExpiresAt: null,
+      }
+      world.put(row)
+      return { world, row, first: `schedule:s1:${new Date(row.nextRunAt!).toISOString()}` }
+    }
+    const tick = (world: ScheduleWorld) => materializeDueSchedules({ scheduleStore: world.scheduleStore, jobStore: world.jobStore, workerId: "w1", now: new Date(world.now), renewalClock: world.renewalClock })
+
+    it.each([["failed", true], ["dead_letter", true], ["cancelled", true], ["succeeded", true], ["pending", false], ["running", false], ["retrying", false]] as const)(
+      "after the first occurrence's job becomes %s the retry enqueues the next slot: %s",
+      async (status, enqueuesNext) => {
+        const { world, row, first } = setup()
+        world.armFault("s1", { kind: "enqueue_throws", index: 0, committed: true, style: "error" })
+        const failedTick = await tick(world)
+        world.clearFaults()
+        expect(failedTick.errors).toEqual(["enqueue failed"])
+        expect([...world.jobs.keys()]).toEqual([first])
+        world.setJobStatus(first, status)
+        expect((await world.jobStore.getByIdempotencyKey({ key: first, requester: { scope: "system" } }))?.status).toBe(status)
+
+        world.now += 10_000 // past the 5 s failure backoff
+        const retry = await tick(world)
+        expect(retry.errors).toEqual([])
+        // Slot 10:00 already has its job; an idle overlap-skip schedule then fires exactly one more slot (10:05), whose job makes it
+        // busy for the rest of the backlog. A busy first job drops every later slot.
+        expect(retry.jobsEnqueued).toBe(enqueuesNext ? 1 : 0)
+        expect(world.violations).toEqual([])
+        expect(row.nextRunAt).toBeGreaterThan(world.now)
+      },
+    )
+  })
+
+  describe("repeated failures back off for up to the default maximum before the schedule is claimable again (DF1 seed 202 run 59)", () => {
+    it("holds a schedule that failed twice, 12 h apart, for 15 minutes, then materializes its whole backlog", async () => {
+      const MINUTE = 60_000
+      const start = Date.UTC(2026, 7, 1, 10, 20)
+      const world = new ScheduleWorld(start)
+      const row: WorldSchedule = {
+        id: "s1", scope: "system", payload: "{}", cron: "*/10 * * * *", timezone: "UTC", overlap: "queue", misfire: "queue_all", enabled: true, paused: false,
+        effectiveFrom: null, effectiveUntil: null, remaining: null, calendarKey: null, nextRunAt: start - 30 * MINUTE, lastRunAt: null, lastStatus: null, lastError: null,
+        leaseOwner: null, claimToken: null, leaseExpiresAt: null,
+      }
+      world.put(row)
+      const tick = (maxQueueAllOccurrences: number) => materializeDueSchedules({ scheduleStore: world.scheduleStore, jobStore: world.jobStore, workerId: "w1", now: new Date(world.now), renewalClock: world.renewalClock, maxQueueAllOccurrences })
+      expect((await tick(-1)).errors).toEqual(["maxQueueAllOccurrences must be a positive integer"])
+      world.now += 12 * 60 * MINUTE
+      expect((await tick(2.5)).errors).toEqual(["maxQueueAllOccurrences must be a positive integer"])
+      // The second failure came 12 h after the first, so the delay is capped at the 15 minute maximum rather than 10 minutes.
+      world.now += 10 * MINUTE + 1
+      expect(await tick(1000)).toMatchObject({ schedulesProcessed: 0, jobsEnqueued: 0, errors: [] })
+      world.now += 5 * MINUTE
+      expect(await tick(1000)).toMatchObject({ schedulesProcessed: 1, errors: [] })
+      expect(world.jobs.size).toBeGreaterThan(0)
+      expect(row.nextRunAt).toBeGreaterThan(world.now)
     })
   })
 

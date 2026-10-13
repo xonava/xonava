@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { forAllAsync, type Rng } from "./harness"
+import { forAllAsync, scaledRuns, type Rng } from "./harness"
 import { generateDenseCronExpression, generateInstant, generateZone } from "./scheduleArbitraries"
 import { oracleNext, oracleOccurrences, parseOracleCron, type OracleCron } from "./scheduleOracle"
 import { FAULT_TEXT, ScheduleWorld, type ClaimRecord, type ScheduleScopeKind, type StoreFault, type WorldEvent, type WorldSchedule } from "./scheduleWorld"
@@ -18,7 +18,10 @@ import type { JobRequester, JobStatus } from "../../execution/types"
  * Model of the policies (execution.md is silent on details; these follow the
  * dispatcher's documented comments and the store contract):
  *  - claims only come from the store; the dispatcher never claims by itself
- *  - lifecycle/calendar exclusion of the claimed occurrence: skip it and move to the first occurrence after now
+ *  - lifecycle exclusion: skip the claim and move to the first occurrence after now
+ *  - calendar exclusion applies per occurrence: a single-run policy skips its claimed occurrence and moves to the first
+ *    occurrence after now; in a queue_all backlog an excluded slot is consumed without a job (nor a remaining occurrence)
+ *    and the other slots enqueue; a backlog that is entirely excluded advances as "skipped" past its last slot
  *  - misfire "skip": a lag of more than 60 minutes drops the backlog; within the window one run fires
  *  - misfire "fire_now": one run (runAt = now) for the oldest due occurrence, then next occurrence after now
  *  - misfire "queue_all": every due occurrence (oldest first, at most maxQueueAllOccurrences per tick)
@@ -32,7 +35,7 @@ import type { JobRequester, JobStatus } from "../../execution/types"
  *    lease records nothing and never enqueues after the loss
  */
 
-vi.setConfig({ testTimeout: 120_000 })
+vi.setConfig({ testTimeout: 120_000 * Math.max(1, scaledRuns(100) / 100) })
 
 const MINUTE = 60_000
 const HOUR = 3_600_000
@@ -265,10 +268,10 @@ function modelClaim(record: ClaimRecord, ctx: TickContext, faults: StoreFault[])
     !lifecycle.paused && (lifecycle.remainingOccurrences === undefined || lifecycle.remainingOccurrences > 0) &&
     (lifecycle.effectiveFrom === undefined || now >= Date.parse(lifecycle.effectiveFrom)) && (lifecycle.effectiveUntil === undefined || now < Date.parse(lifecycle.effectiveUntil))
   )
-  // The calendar is consulted for the claimed (oldest) occurrence only.
-  if (!effective || (lifecycle?.calendarExclusionKey !== undefined && calendarExcludes(lifecycle.calendarExclusionKey, claim.nextRunAt))) return skipTo()
-
   const queueAll = claim.misfirePolicy.type === "queue_all"
+  const excluded = (instant: number): boolean => lifecycle?.calendarExclusionKey !== undefined && calendarExcludes(lifecycle.calendarExclusionKey, new Date(instant))
+  if (!effective || (!queueAll && excluded(first))) return skipTo()
+
   const cap = ctx.cap ?? 50
   if (queueAll && (!Number.isInteger(cap) || cap <= 0)) return fail("maxQueueAllOccurrences must be a positive integer")
 
@@ -296,6 +299,7 @@ function modelClaim(record: ClaimRecord, ctx: TickContext, faults: StoreFault[])
 
   const remaining = lifecycle?.remainingOccurrences
   let fired = 0
+  let calendarSkipped = 0
   let lastOccurrence: number | undefined
   let lastJob: Prior | null = null
   const enqueueFault = faults.find((fault): fault is Extract<StoreFault, { kind: "enqueue_throws" }> => fault.kind === "enqueue_throws")
@@ -303,6 +307,10 @@ function modelClaim(record: ClaimRecord, ctx: TickContext, faults: StoreFault[])
   for (const occurrence of occurrences) {
     if (remaining !== undefined && fired >= remaining) break
     lastOccurrence = occurrence
+    if (queueAll && excluded(occurrence)) {
+      calendarSkipped++
+      continue
+    }
     const key = `schedule:${claim.scheduleId}:${new Date(occurrence).toISOString()}`
     if (skipsOverlap && busyOf(lastJob ?? groupPrior)) continue
     const existing = record.jobs.find((job) => job.key === key)
@@ -325,7 +333,7 @@ function modelClaim(record: ClaimRecord, ctx: TickContext, faults: StoreFault[])
   if (lastOccurrence === undefined) return fail(`Schedule ${claim.scheduleId} produced no occurrence`, truncated)
   const next = nextAfter(queueAll ? lastOccurrence : now)
   if (next === null) return fail(`Schedule ${claim.scheduleId} has no future occurrence for its cron expression.`, truncated)
-  return { attempts, truncated, terminal: { kind: "advance", args: { nextRunAt: next, lastRunAt: now, lastStatus: "fired", occurrencesFired: fired } } }
+  return { attempts, truncated, terminal: { kind: "advance", args: { nextRunAt: next, lastRunAt: now, lastStatus: fired === 0 && calendarSkipped > 0 ? "skipped" : "fired", occurrencesFired: fired } } }
 }
 
 function payloadKindOf(payload: string): PayloadKind {
@@ -592,7 +600,9 @@ class Runner {
 
   async drain(): Promise<void> {
     const world = this.world
-    world.now = Math.min(CLOCK_CEILING, world.now + 600_001)
+    // Past every lease (<= 600_000 ms) and past the longest default failure backoff: a schedule that failed repeatedly is not
+    // claimable again for DEFAULT_SCHEDULE_FAILURE_BACKOFF.maxDelayMs, and draining must not mistake that wait for lost work.
+    world.now = Math.min(CLOCK_CEILING, world.now + Math.max(600_001, DEFAULT_SCHEDULE_FAILURE_BACKOFF.maxDelayMs + 1))
     for (const row of world.schedules.values()) {
       row.paused = false
       row.enabled = true

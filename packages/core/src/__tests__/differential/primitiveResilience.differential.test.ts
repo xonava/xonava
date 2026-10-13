@@ -101,7 +101,7 @@ function simulate(c: ResilienceCase, abortAt: number | undefined): Model {
     const n = attempt
     const base = Math.min(MAX_BACKOFF_DELAY_MS, backoff.init * 2 ** (n - 1))
     const sample = c.rand[(n - 1) % c.rand.length]!
-    const delay = Math.floor(base / 2 + (sample * base) / 2)
+    const delay = Math.max(1, Math.floor(base / 2 + (sample * base) / 2))
     const endDelay = s + delay
     if (delay > 0) events.push(endDelay)
     if (delay > 0 && abortAt !== undefined && abortAt < endDelay) return done({ kind: "abort", at: abortAt }, attempt, leaked())
@@ -452,9 +452,11 @@ describe("backoff arithmetic", () => {
         expect(Number.isSafeInteger(delay) && delay >= 0 && delay <= maxDelayMs, `delay ${delay} for attempt ${n}`).toBe(true)
         if (c.jitter === "none") expect(delay).toBe(Math.floor(base))
         else {
-          expect(delay).toBeGreaterThanOrEqual(Math.floor(base / 2))
+          // A positive base never yields a 0 ms (immediate) retry; only an explicit zero base does.
+          const least = base > 0 ? 1 : 0
+          expect(delay).toBeGreaterThanOrEqual(Math.max(least, Math.floor(base / 2)))
           expect(delay).toBeLessThanOrEqual(Math.floor(base))
-          expect(delay).toBe(Math.floor(base / 2 + (c.samples[i]! * base) / 2))
+          expect(delay).toBe(Math.max(least, Math.floor(base / 2 + (c.samples[i]! * base) / 2)))
         }
       })
       // Without jitter the schedule is non-decreasing.
@@ -472,7 +474,7 @@ describe("backoff arithmetic", () => {
       const policy = validateBackoffPolicy({ maxAttempts: 100, initialDelayMs: c.init, backoffMultiplier: 2, maxDelayMs: MAX_BACKOFF_DELAY_MS, jitter: "equal" })
       const base = Math.min(MAX_BACKOFF_DELAY_MS, c.init * 2 ** (c.n - 1))
       const delay = computeBackoffDelayMs(policy, c.n, () => c.sample)
-      expect(delay).toBeGreaterThanOrEqual(Math.floor(base / 2))
+      expect(delay).toBeGreaterThanOrEqual(Math.max(1, Math.floor(base / 2)))
       expect(delay).toBeLessThanOrEqual(Math.floor(base))
     }, { runs: 60, describe: (c) => JSON.stringify(c) })
   })

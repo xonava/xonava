@@ -1,0 +1,6 @@
+{"property":"predicate instant spelling","seed":2278251833,"scale":5,"baseRuns":1200,"runs":6000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:57.815Z"}
+{"property":"record instant spelling","seed":2278251833,"scale":5,"baseRuns":1200,"runs":6000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:57.997Z"}
+{"property":"instant order","seed":2278251833,"scale":5,"baseRuns":2000,"runs":10000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:58.083Z"}
+{"property":"rfc3339 round trip","seed":2278251833,"scale":5,"baseRuns":3000,"runs":15000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:58.520Z"}
+{"property":"rfc3339 rejects invalid fields","seed":2278251833,"scale":5,"baseRuns":3000,"runs":15000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:58.794Z"}
+{"property":"code point order","seed":2278251833,"scale":5,"baseRuns":3000,"runs":15000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:38:00.036Z"}
