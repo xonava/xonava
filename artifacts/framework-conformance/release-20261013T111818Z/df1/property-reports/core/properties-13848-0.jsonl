@@ -1,0 +1,21 @@
+{"property":"canonical vs JCS model","seed":2278251833,"scale":5,"baseRuns":800,"runs":4000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:03.377Z"}
+{"property":"canonical round trip vs JSON","seed":2278251833,"scale":5,"baseRuns":800,"runs":4000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:04.098Z"}
+{"property":"canonical stability","seed":2278251833,"scale":5,"baseRuns":800,"runs":4000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:04.863Z"}
+{"property":"canonical no normalization","seed":2278251833,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:04.938Z"}
+{"property":"canonical rejection anywhere","seed":2278251833,"scale":5,"baseRuns":600,"runs":3000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:05.148Z"}
+{"property":"decoder vs JSON.parse under mutation","seed":2278251833,"scale":5,"baseRuns":3000,"runs":15000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:06.656Z"}
+{"property":"decoder bytes vs TextDecoder","seed":2278251833,"scale":5,"baseRuns":800,"runs":4000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:07.014Z"}
+{"property":"base64url round trip","seed":2278251833,"scale":5,"baseRuns":500,"runs":2500,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:07.441Z"}
+{"property":"base64url strict","seed":2278251833,"scale":5,"baseRuns":1500,"runs":7500,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:07.668Z"}
+{"property":"fingerprint domain separation","seed":2278251833,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:07.994Z"}
+{"property":"fingerprint separator injective","seed":2278251833,"scale":5,"baseRuns":600,"runs":3000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:08.356Z"}
+{"property":"fingerprint separator grammar","seed":2278251833,"scale":5,"baseRuns":500,"runs":2500,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:08.475Z"}
+{"property":"fingerprint semantic stability","seed":2278251833,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:08.846Z"}
+{"property":"versioned codec round trip","seed":2278251833,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:09.355Z"}
+{"property":"versioned codec malformed envelope","seed":2278251833,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:09.475Z"}
+{"property":"cursor round trip","seed":2278251833,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:10.475Z"}
+{"property":"cursor tamper","seed":2278251833,"scale":5,"baseRuns":600,"runs":3000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:11.172Z"}
+{"property":"cursor strict canonical","seed":2278251833,"scale":5,"baseRuns":600,"runs":3000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:12.258Z"}
+{"property":"cursor binding","seed":2278251833,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:13.087Z"}
+{"property":"cursor expiry and rotation","seed":2278251833,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:13.922Z"}
+{"property":"cursor payload types","seed":2278251833,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:14.094Z"}

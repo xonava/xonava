@@ -1,0 +1,3 @@
+{"property":"rate-limit window parsing","seed":2278251833,"scale":5,"baseRuns":500,"runs":2500,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:54.113Z"}
+{"property":"rate-limit decision table","seed":2278251833,"scale":5,"baseRuns":600,"runs":3000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:54.678Z"}
+{"property":"rate-limit fixed and sliding window streams","seed":2278251833,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:57.676Z"}

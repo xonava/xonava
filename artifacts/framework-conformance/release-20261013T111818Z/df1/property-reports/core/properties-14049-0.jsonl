@@ -1,0 +1,2 @@
+{"property":"job context: fenced effects honour the lease assertion","seed":2278251833,"scale":5,"baseRuns":150,"runs":750,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:38:03.893Z"}
+{"property":"job context: generated execution ids are unique","seed":2278251833,"scale":5,"baseRuns":50,"runs":250,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:38:03.915Z"}
