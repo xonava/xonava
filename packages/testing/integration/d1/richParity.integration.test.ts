@@ -4,6 +4,7 @@ import { drizzle } from "drizzle-orm/d1"
 import { integer, numeric, real, sqliteTable, text } from "drizzle-orm/sqlite-core"
 import { compileDrizzlePredicate, createDrizzleRepository } from "adapters/drizzle-d1"
 import type { UnversionedEntityDescriptor } from "core/persistence"
+import { tolerateStaleConnections } from "./staleConnection.js"
 import { checkAbacScopeParity, checkPredicateParity, generateDataset, orderingReports, orderingVerdict, roundTripMismatches, summary, type ParityDriver, type ParityRecord } from "../shared/richParity.js"
 
 const TABLE = "fw_rich_parity"
@@ -56,7 +57,7 @@ describe("real-database differential vs core (SQLite/D1)", () => {
 
   beforeAll(async () => {
     mf = new Miniflare({ modules: true, script: "export default { fetch() { return new Response('ok') } }", compatibilityDate: "2025-09-01", d1Databases: { DB: "rich-parity" } })
-    const d1 = await mf.getD1Database("DB")
+    const d1 = tolerateStaleConnections(await mf.getD1Database("DB"))
     await d1.exec(`DROP TABLE IF EXISTS ${TABLE}`)
     await d1.exec(`CREATE TABLE ${TABLE} (id INTEGER PRIMARY KEY, name TEXT, code TEXT, owner_id TEXT, amount REAL, rank REAL, active INTEGER, due_on TEXT, updated_at INTEGER, tags TEXT, price NUMERIC)`)
     const db = drizzle(d1 as never)
