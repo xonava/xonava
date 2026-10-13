@@ -892,7 +892,10 @@ function verifyLog(args: OracleArgs): void {
         if (workerNow - markerSince > scenario.capMs + tolerance) complain(`${label}: deferred ${workerNow - markerSince}ms after the window opened, beyond the ${scenario.capMs}ms cap`)
       }
       if (!deferSince.has(entry.jobId)) deferSince.set(entry.jobId, marker ? Math.min(markerSince, workerNow) : workerNow)
-      if (kind === "release" && entry.nextAttemptAt !== workerNow + scenario.leaseMs) complain(`${label}: release nextAttemptAt +${(entry.nextAttemptAt ?? 0) - workerNow} instead of +${scenario.leaseMs}`)
+      // Hand-back time rule (docs/spec/execution.md): the worker's clock reading when the call is issued (workerNow is read
+      // as the store call starts, before any latency) plus one lease. A failed earlier call, its latency or a clock that moved
+      // backwards meanwhile do not carry over: the retried release and the markRetrying fallback are stamped afresh.
+      if (entry.nextAttemptAt !== workerNow + scenario.leaseMs) complain(`${label}: ${kind} nextAttemptAt +${(entry.nextAttemptAt ?? 0) - workerNow} instead of +${scenario.leaseMs}`)
     } else {
       if (kind === "dead_letter" && (entry.error ?? "").startsWith("UNKNOWN_JOB_DEFINITION")) {
         const since = deferSince.get(entry.jobId)

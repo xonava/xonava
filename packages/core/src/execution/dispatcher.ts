@@ -264,6 +264,17 @@ export async function dispatchDueJobs(config: DispatcherConfig): Promise<Dispatc
 }
 
 /**
+ * The next-attempt time of a job handed back without consuming an attempt (release, or the markRetrying fallback of an
+ * unknown-definition deferral): the dispatcher clock reading taken now, plus one lease duration. Call it immediately
+ * before the store call that carries the result. Throws when the clock throws or does not return a valid date.
+ */
+function handBackTime(clock: DispatcherClock, leaseDurationMs: number): Date {
+  const at = clock.now()
+  if (!(at instanceof Date) || Number.isNaN(at.getTime())) throw new Error("clock returned an invalid date")
+  return new Date(at.getTime() + leaseDurationMs)
+}
+
+/**
  * Hands a claimed job back after setup failed before its handler ran, without consuming an attempt, so it does not sit
  * claimed until its lease lapses. Retried no sooner than one lease duration later: a persistent setup fault must not
  * spin on every tick. Never throws: the configured clock may be the thing that failed, and the other claimed jobs of the
@@ -273,14 +284,13 @@ async function releaseAfterSetupFailure(args: DispatcherConfig & { job: StoredJo
   const { job, store, workerId, leaseDurationMs, log, clock } = args
   if (!job.claimToken || typeof store.release !== "function") return { kind: "lease_lost", error }
   try {
-    let at: Date
+    let nextAttemptAt: Date
     try {
-      at = clock.now()
+      nextAttemptAt = handBackTime(clock, leaseDurationMs)
     } catch {
-      at = new Date()
+      nextAttemptAt = new Date(Date.now() + leaseDurationMs)
     }
-    if (!(at instanceof Date) || Number.isNaN(at.getTime())) at = new Date()
-    const released = await store.release({ jobId: job.id, workerId, claimToken: job.claimToken, nextAttemptAt: new Date(at.getTime() + leaseDurationMs), reason: boundJobErrorMessage(error) })
+    const released = await store.release({ jobId: job.id, workerId, claimToken: job.claimToken, nextAttemptAt, reason: boundJobErrorMessage(error) })
     if (released.applied) {
       log.warn("Job released: setup failed", { jobId: job.id, jobType: job.jobType, error })
       return { kind: "retried", error }
@@ -599,13 +609,21 @@ async function deferUnrunnableJob(args: DispatcherConfig & { job: StoredJob; log
     const status = await markFailedState({ jobId: job.id, workerId, claimToken, error: deadLetterError, status: "dead_letter", attempt }, store)
     return status.applied ? { kind: "dead_letter", error: deadLetterError } : { kind: "lease_lost", error: status.error ?? deadLetterError }
   }
+  // Hand-back time rule (docs/spec/execution.md, "Hand-back time"): every hand-back store call carries the dispatcher
+  // clock reading taken immediately before that call is issued, plus one lease duration. The reading is never carried
+  // over from an earlier call and never clamped against it: a slow failed call or a clock that moved backwards in the
+  // meantime does not change what the next call is told.
   let nextAttemptAt = new Date(at.getTime() + leaseDurationMs)
+  const stampHandBack = (): Date => {
+    try { nextAttemptAt = handBackTime(clock, leaseDurationMs) } catch { /* keep the previous stamp, which is already one lease ahead of the decision */ }
+    return nextAttemptAt
+  }
   if (typeof store.release === "function") {
     // A transient release failure is tried once more before falling back to markRetrying, which consumes an attempt: a
     // job with a small budget must not be dead-lettered inside its deferral window by one store hiccup.
     for (let tries = 1; tries <= 2; tries++) {
       try {
-        const released = await store.release({ jobId: job.id, workerId, claimToken, nextAttemptAt, reason: boundJobErrorMessage(error) })
+        const released = await store.release({ jobId: job.id, workerId, claimToken, nextAttemptAt: tries === 1 ? nextAttemptAt : stampHandBack(), reason: boundJobErrorMessage(error) })
         if (released.applied) {
           log.warn("Job released: unknown definition", { jobId: job.id, jobType: job.jobType, jobVersion: job.jobVersion })
           return { kind: "retried", error }
@@ -613,10 +631,9 @@ async function deferUnrunnableJob(args: DispatcherConfig & { job: StoredJob; log
         return { kind: "lease_lost", error: "Job lease was lost" }
       } catch (releaseError) {
         log.warn("Job release failed", { jobId: job.id, error: errorMessage(releaseError), tries })
-        // The failed call may have been slow: keep the hand-back one lease duration ahead of the retry.
-        try { nextAttemptAt = new Date(Math.max(nextAttemptAt.getTime(), clock.now().getTime() + leaseDurationMs)) } catch { /* keep the earlier time */ }
       }
     }
+    stampHandBack()
   }
   try {
     const deferred = await store.markRetrying({ jobId: job.id, workerId, claimToken, nextAttemptAt, error: boundJobErrorMessage(error), attempt })

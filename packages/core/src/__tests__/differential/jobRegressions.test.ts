@@ -140,6 +140,53 @@ describe("unknown-definition deferral survives a transient release failure", () 
   })
 })
 
+describe("hand-back time is stamped from the clock when each store call is issued", () => {
+  // Found by job dispatcher "random interleavings" (seed 4259685034, run 1229): a release failed after store latency while the
+  // worker's clock skew moved by -9 ms, so the retried release carried max(previous, now + lease) = +61 ms instead of +60 ms.
+  const ghost = () => claimed({ jobType: "ghost", maxAttempts: 1, lastError: null })
+
+  function skewedSetup(job: StoredJob) {
+    let reading = NOW.getTime()
+    const skewedClock = { now: () => new Date(reading), sleep: async () => undefined }
+    const store = {
+      claimDue: vi.fn(async () => [job]),
+      renewLease: vi.fn(async () => true),
+      markSucceeded: vi.fn(async () => ({ applied: true as const })),
+      markRetrying: vi.fn(async () => ({ applied: true as const })),
+      markFailed: vi.fn(async () => ({ applied: true as const })),
+      release: vi.fn(async () => ({ applied: true as const })),
+    }
+    const dispatch = () => dispatchDueJobs({ store: store as unknown as JobStore, registry: createJobRegistry(), workerId: "w", leaseDurationMs: 60, claimLimit: 1, requester: { scope: "system" }, clock: skewedClock })
+    return { store, dispatch, move: (deltaMs: number) => { reading += deltaMs } }
+  }
+
+  const nextAttemptsOf = (mock: { mock: { calls: unknown[][] } }): number[] => mock.mock.calls.map((call) => (call[0] as { nextAttemptAt: Date }).nextAttemptAt.getTime())
+
+  it("stamps the retried release with the clock reading at the retry, even when the clock moved backwards during the failed call", async () => {
+    const { store, dispatch, move } = skewedSetup(ghost())
+    // The first release takes 8 ms to fail, and the worker's clock skew changes by -9 ms meanwhile: the clock reads 1 ms earlier.
+    store.release.mockImplementationOnce(async () => { move(8 - 9); throw new Error("store unavailable") })
+    expect(await dispatch()).toMatchObject({ retried: 1, leaseLost: 0, deadLettered: 0 })
+    // Before the fix the second call was clamped to the first call's stamp: [NOW + 60, NOW + 60] instead of [NOW + 60, NOW - 1 + 60].
+    expect(nextAttemptsOf(store.release)).toEqual([NOW.getTime() + 60, NOW.getTime() - 1 + 60])
+  })
+
+  it("stamps the retried release with a later reading when the failed call was slow", async () => {
+    const { store, dispatch, move } = skewedSetup(ghost())
+    store.release.mockImplementationOnce(async () => { move(36); throw new Error("store unavailable") })
+    expect(await dispatch()).toMatchObject({ retried: 1 })
+    expect(nextAttemptsOf(store.release)).toEqual([NOW.getTime() + 60, NOW.getTime() + 36 + 60])
+  })
+
+  it("stamps the markRetrying fallback with the clock reading when it is issued", async () => {
+    const { store, dispatch, move } = skewedSetup(ghost())
+    store.release.mockImplementation(async () => { move(5); throw new Error("store down") })
+    expect(await dispatch()).toMatchObject({ retried: 1 })
+    expect(nextAttemptsOf(store.release)).toEqual([NOW.getTime() + 60, NOW.getTime() + 5 + 60])
+    expect(nextAttemptsOf(store.markRetrying)).toEqual([NOW.getTime() + 10 + 60])
+  })
+})
+
 describe("job fingerprint and the attempt budget", () => {
   const job: NewJob = { executionScope: { kind: "system", systemKey: "framework" }, jobType: "job", jobVersion: 1, payload: { a: 1 }, runAt: NOW, idempotencyKey: "k" }
 
