@@ -165,6 +165,7 @@
       "packages/core/src/__tests__/differential/scheduleCalculator.differential.test.ts::cron parse accepts exactly the oracle's expressions with identical field sets": 1,
       "packages/core/src/__tests__/differential/scheduleCalculator.differential.test.ts::cron whitespace padding changes neither validity nor the next occurrence": 1,
       "packages/core/src/__tests__/differential/scheduleCalculator.differential.test.ts::getNextOccurrence equals the minute-by-minute oracle": 1,
+      "packages/core/src/__tests__/differential/scheduleCalculator.differential.test.ts::getNextOccurrence equals the oracle for UTC instants in years 1-199": 1,
       "packages/core/src/__tests__/differential/scheduleCalculator.differential.test.ts::getNextOccurrence with reject disambiguation throws exactly like the oracle": 1,
       "packages/core/src/__tests__/differential/scheduleCalculator.differential.test.ts::matchesCron equals oracle wall-clock matching in the process zone": 1,
       "packages/core/src/__tests__/differential/scheduleCalculator.differential.test.ts::next occurrence is a right-continuous step function with minute-aligned results": 1,
