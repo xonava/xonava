@@ -101,14 +101,17 @@ export function applyWorkflowStep(instance: WorkflowInstance, result: WorkflowSt
   const variables = Object.freeze({ ...instance.variables, ...(result.kind === "retry" ? {} : result.variables ?? {}) })
   assertWorkflowDurableValue(variables)
   const base = { ...instance, ...released, variables, revision: instance.revision + 1, updatedAt: now }
+  // A forward result is the step succeeding: a failure recorded for an earlier attempt (the stalled-attempt TIMEOUT marker) is spent and
+  // must not outlive it. `retry` keeps the record (the step has not succeeded), as do the failure/compensation transitions.
+  const forward = { ...base, failure: null }
   switch (result.kind) {
-    case "next": return seal({ ...base, status: "pending", currentStep: result.step, stepAttempt: 0, compensationStack: result.compensation ? [...instance.compensationStack, result.compensation] : instance.compensationStack, waitingSignal: null, wakeAt: null })
+    case "next": return seal({ ...forward, status: "pending", currentStep: result.step, stepAttempt: 0, compensationStack: result.compensation ? [...instance.compensationStack, result.compensation] : instance.compensationStack, waitingSignal: null, wakeAt: null })
     // A durable wait or sleep is a successful step outcome, not a failed
     // attempt: the resumed step starts a fresh attempt budget. Only retries
     // (scheduleWorkflowRetry / `retry`) keep counting.
-    case "wait": return seal({ ...base, status: "waiting", stepAttempt: 0, waitingSignal: result.signal, wakeAt: null })
-    case "sleep": return seal({ ...base, status: "waiting", stepAttempt: 0, waitingSignal: null, wakeAt: result.wakeAt })
-    case "complete": return seal({ ...base, status: "succeeded", outcome: "succeeded", waitingSignal: null, wakeAt: null })
+    case "wait": return seal({ ...forward, status: "waiting", stepAttempt: 0, waitingSignal: result.signal, wakeAt: null })
+    case "sleep": return seal({ ...forward, status: "waiting", stepAttempt: 0, waitingSignal: null, wakeAt: result.wakeAt })
+    case "complete": return seal({ ...forward, status: "succeeded", outcome: "succeeded", waitingSignal: null, wakeAt: null })
     // An immediate re-run. The attempt counter is advanced by the store when it
     // claims the instance; dispatchers use scheduleWorkflowRetry for backoff.
     case "retry": return seal({ ...base, status: instance.status === "compensating" ? "compensating" : "pending", wakeAt: null })

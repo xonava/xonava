@@ -1,4 +1,5 @@
 import { ConfigurationError, ValidationError, compareCodePoints, evaluatePredicate, type PredicateNode } from "../domain"
+import { parseIsoInstant } from "../kernel/isoInstant"
 import { snapshotRuleData } from "./snapshot"
 import type { CompiledRuleSet, RuleAction, RuleDefinition, RuleEvaluationResult, RuleEvaluationTraceEntry, RuleMatch, RuleSetDefinition } from "./types"
 
@@ -24,7 +25,8 @@ const OPS = new Set(["eq", "neq", "contains", "startsWith", "endsWith", "isEmpty
 
 function instant(value: string | undefined, label: string): number | undefined {
   if (value === undefined) return undefined
-  const parsed = Date.parse(value)
+  const parsed = parseIsoInstant(value)
+  // Strict parse first (the `Date.parse` round trip alone accepts expanded-year forms such as "+010000-01-01T00:00:00.000Z"), then the canonical-form check.
   if (!Number.isFinite(parsed) || new Date(parsed).toISOString() !== value) throw new ConfigurationError(`${label} must be a canonical ISO-8601 instant`)
   return parsed
 }

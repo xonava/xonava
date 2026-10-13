@@ -112,6 +112,35 @@ describe("regressions found by the workflow differentials", () => {
     expect(() => defineWorkflow(undefined as unknown as WorkflowDefinition)).toThrow(WorkflowDefinitionError)
   })
 
+  it("a forward result clears a failure recorded for an earlier attempt, and nothing else does", () => {
+    // Found by review: after a stalled attempt recorded a TIMEOUT failure and the idempotent step was re-run successfully, the
+    // instance advanced (or succeeded) while `failure` still held the stale TIMEOUT record.
+    const timeout = createWorkflowFailure({ code: "TIMEOUT", message: "late", step: "a", phase: "execute", attempt: 1, at })
+    const stalled = instance({ status: "pending", stepAttempt: 2, failure: timeout })
+    for (const result of [{ kind: "next", step: "b" }, { kind: "wait", signal: "go" }, { kind: "sleep", wakeAt: at }, { kind: "complete" }] as WorkflowStepResult[]) {
+      expect(applyWorkflowStep(stalled, result, at).failure, result.kind).toBeNull()
+    }
+    // A retry has not succeeded: the record (and so stalled-attempt detection) survives it.
+    expect(applyWorkflowStep(stalled, { kind: "retry", error: "x" }, at).failure).toEqual(timeout)
+    // Failure and compensation keep or replace the record.
+    const compensating = instance({ status: "compensating", compensationStack: ["undo"], failure: timeout })
+    expect(applyWorkflowStep(compensating, { kind: "retry", error: "x" }, at).failure).toEqual(timeout)
+    expect(applyWorkflowStep(stalled, { kind: "fail", error: "x" }, at).failure).toMatchObject({ code: "STEP_FAILED" })
+  })
+
+  it("a stalled attempt's TIMEOUT failure is cleared once the resumed idempotent step succeeds", async () => {
+    for (const outcome of [{ k: "next", to: "b" }, { k: "wait", sig: "go" }, { k: "sleep", delay: 5000 }, { k: "complete" }] as Behavior[]) {
+      const { store, built, clock } = await runOnce(world(step([{ k: "stall" }, outcome], { idempotent: true })))
+      expect(store.rows.get("i0"), "stalled first").toMatchObject({ status: "waiting", failure: { code: "TIMEOUT", phase: "execute", step: "a", attempt: 1 } })
+      await clock.jumpTo(clock.current + 10_000)
+      await drive(dispatchWorkflows({ store, registry: built.registry, workerId: "w1", claimLimit: 1, leaseDurationMs: 1000, stepTimeoutMs: 50, cancellationGraceMs: 20, clock, random: () => 0.5 }), clock)
+      const row = store.rows.get("i0")!
+      expect(built.log.filter((entry) => entry.step === "a" && entry.phase === "execute"), outcome.k).toHaveLength(2)
+      expect(row.status, outcome.k).not.toBe("failed")
+      expect(row.failure, outcome.k).toBeNull()
+    }
+  })
+
   // Not fixed (design decision for the store contract, see the report): a signal that is delivered while the
   // instance is still running its previous step is recorded as a receipt but wakes nothing, and the step's own
   // `wait` for that signal name then parks the instance until a *new* signal id arrives. Re-sending the same
