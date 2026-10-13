@@ -77,6 +77,17 @@ export function printCoverage(label: string): void {
 }
 export function coverageCount(prefix: string): number { return [...COVERAGE].filter(([key]) => key.startsWith(prefix)).reduce((sum, [, value]) => sum + value, 0) }
 
+/**
+ * The index of the case a generator is producing: the harness' run index, which it does not hand to the generator. A property calls its
+ * generator once per run, in order, starting at DIFFERENTIAL_RUN when a single run is replayed, so counting calls reproduces the index.
+ * Generators use it to rotate scripted cases by run index, so the coverage every driver asserts is reached by construction, for any seed.
+ */
+export function runIndexer(): () => number {
+  const only = process.env.DIFFERENTIAL_RUN
+  let next = only === undefined || only === "" ? 0 : Number(only)
+  return () => next++
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // Canonical views
 
@@ -210,7 +221,7 @@ function generateOp(rng: Rng, instanceCount: number): Op {
  */
 function sagaPrefix(rng: Rng, light: boolean): Op[] {
   const ops: Op[] = []
-  const commit = (inst: number, kind: number, comp?: string): Op => ({ t: "commit", sel: { inst, back: 0, mutate: "ok", aim: true }, kind, vars: undefined, sig: "go", wake: "future", step: rng.pick(STEPS), comp, text: "saga failure" })
+  const commit = (inst: number, kind: number, comp?: string): Op => ({ t: "commit", sel: { inst, back: 0, mutate: "ok", aim: true }, kind, vars: undefined, sig: "go", wake: "future", step: "b", comp, text: "saga failure" })
   const rounds = light ? ([[0, "a"], [10, undefined], [5, undefined]] as const) : ([[0, "a"], [0, "b"], [10, undefined], [5, undefined], [5, undefined], [5, undefined]] as const)
   for (const [kind, comp] of rounds) {
     for (const inst of light ? [0] : [0, 1]) ops.push({ t: "claim", worker: inst, limit: 10, lease: 60_000 }, commit(inst, kind, comp))
@@ -233,30 +244,89 @@ function earlyPrefix(rng: Rng): Op[] {
   ]
 }
 
-/** A wait, then a delivery of the awaited name: the delivery consumes the receipt and wakes the instance. */
+/** A wait committed with a stale fence (refused), the wait itself, then a delivery of the awaited name: the delivery consumes the receipt and wakes the instance. */
 function wakePrefix(rng: Rng): Op[] {
   const name = rng.pick(["go", "stop"])
+  const wait = (mutate: Mutation): Op => ({ t: "commit", sel: { inst: 0, back: 0, mutate, aim: true }, kind: 3, vars: undefined, sig: name, wake: "future", step: "a", comp: undefined, text: "x" })
   return [
     { t: "claim", worker: 0, limit: 10, lease: 60_000 },
-    { t: "commit", sel: { inst: 0, back: 0, mutate: "ok", aim: true }, kind: 3, vars: undefined, sig: name, wake: "future", step: "a", comp: undefined, text: "x" },
+    wait("token"),
+    wait("ok"),
     { t: "signal", inst: 0, name, id: "fresh", payload: { wake: true }, aim: true },
   ]
 }
 
+/**
+ * Instances that finish, and what is then done to them: a signal for a pending instance is buffered, one for a succeeded or a cancelled instance is
+ * dropped (as is one for an instance that does not exist), cancelling a finished instance is refused, cancelling a running one is not.
+ */
+function finishedPrefix(rng: Rng, instanceCount: number): Op[] {
+  const send = (inst: number, aim = false): Op => ({ t: "signal", inst, name: rng.pick(SIGNALS), id: "fresh", payload: { after: "finish" }, aim })
+  return [
+    send(0),
+    { t: "claim", worker: 0, limit: 10, lease: 60_000 },
+    { t: "commit", sel: { inst: 0, back: 0, mutate: "ok", aim: false }, kind: 8, vars: undefined, sig: "go", wake: "future", step: "b", comp: undefined, text: "x" },
+    send(0),
+    { t: "cancel", inst: 0, aim: false },
+    { t: "cancel", inst: 1, aim: false },
+    send(1),
+    send(instanceCount),
+  ]
+}
+
+/**
+ * Every transition kind, a stale and a live fence check, lease renewal, a lapsed lease and a due timer (fast transports only: it needs four
+ * instances and about forty operations). The kinds are the indexes into FORWARD_KINDS.
+ */
+function sweepPrefix(): Op[] {
+  const fence = (inst: number, mutate: Mutation = "ok"): Selector => ({ inst, back: 0, mutate, aim: false })
+  const commit = (inst: number, kind: number): Op => ({ t: "commit", sel: fence(inst), kind, vars: undefined, sig: "go", wake: "future", step: "b", comp: undefined, text: "sweep" })
+  const claim = (worker: number): Op => ({ t: "claim", worker, limit: 10, lease: 60_000 })
+  return [
+    claim(0),
+    { t: "assert", sel: fence(0) }, { t: "assert", sel: fence(1, "token") }, { t: "renew", sel: fence(2), extend: 120_000 },
+    commit(0, 6), commit(1, 8), commit(2, 12),
+    // The lease of the fourth instance lapses; another worker takes it over.
+    { t: "expire", inst: 3, aim: false },
+    claim(1), commit(3, 11),
+    // The timers of the instances that sleep, were stalled or wait for a retry fall due; they are claimed again.
+    { t: "due", inst: 0, aim: false }, { t: "due", inst: 2, aim: false }, { t: "due", inst: 3, aim: false },
+    claim(2), commit(0, 14), commit(2, 9), commit(3, 13),
+  ]
+}
+
+/**
+ * Scripted cases come first in a fixed rotation by run index, so the coverage the driver asserts is reached by construction for any seed;
+ * the remaining runs are free (a random opening and, on fast transports, any combination of the saga / early / wake prefixes).
+ * A scripted case opens deterministically (every instance started, nothing claimed) so that its prefix meets the state it was written for.
+ */
+const LIGHT_ROTATION = ["saga", "early", "wake", "finished", "free", "free"] as const
+const FAST_ROTATION = ["saga", "early", "wake", "finished", "sweep", "free", "free", "free"] as const
+
 function generateCase(maxOps: number, instanceCount: number): (rng: Rng) => Case {
+  const nextRun = runIndexer()
   return (rng) => {
+    const run = nextRun()
+    const light = instanceCount < INSTANCES
+    const rotation = light ? LIGHT_ROTATION : FAST_ROTATION
+    const slot = rotation[run % rotation.length]!
     const length = Math.max(6, Math.floor(maxOps / 2) + rng.int(Math.floor(maxOps / 2) + 1))
     // Start every instance up front most of the time; the generator's own start ops cover late starts.
-    const ops: Op[] = rng.bool(0.9) ? Array.from({ length: instanceCount }, (_, inst): Op => ({ t: "start", inst, vars: randomObject(rng, 2) })) : []
-    if (ops.length > 0 && rng.bool(0.8)) ops.push({ t: "claim", worker: rng.int(3), limit: rng.pick([1, 2, 10]), lease: 60_000 })
-    if (ops.length > 0) {
-      const light = instanceCount < INSTANCES
-      // Slow transports get a single scripted prefix per case (their budget is a few dozen statements); fast ones may combine them.
-      if (light) { const pick = rng.int(5); ops.push(...(pick === 0 ? sagaPrefix(rng, true) : pick === 1 ? earlyPrefix(rng) : pick === 2 ? wakePrefix(rng) : [])) } else {
-        if (rng.bool(0.4)) ops.push(...sagaPrefix(rng, false))
-        if (rng.bool(0.4)) ops.push(...earlyPrefix(rng))
-        if (rng.bool(0.3)) ops.push(...wakePrefix(rng))
-      }
+    const ops: Op[] = slot !== "free" || rng.bool(0.9) ? Array.from({ length: instanceCount }, (_, inst): Op => ({ t: "start", inst, vars: randomObject(rng, 2) })) : []
+    switch (slot) {
+      case "saga": ops.push(...sagaPrefix(rng, light)); break
+      case "early": ops.push(...earlyPrefix(rng)); break
+      case "wake": ops.push(...wakePrefix(rng)); break
+      case "finished": ops.push(...finishedPrefix(rng, instanceCount)); break
+      case "sweep": ops.push(...sweepPrefix()); break
+      default:
+        if (ops.length > 0 && rng.bool(0.8)) ops.push({ t: "claim", worker: rng.int(3), limit: rng.pick([1, 2, 10]), lease: 60_000 })
+        // Fast transports may combine the prefixes (slow ones have a budget of a few dozen statements per case and get none here).
+        if (ops.length > 0 && !light) {
+          if (rng.bool(0.4)) ops.push(...sagaPrefix(rng, false))
+          if (rng.bool(0.4)) ops.push(...earlyPrefix(rng))
+          if (rng.bool(0.3)) ops.push(...wakePrefix(rng))
+        }
     }
     while (ops.length < length) ops.push(generateOp(rng, instanceCount))
     return { ops, instances: instanceCount }

@@ -5,7 +5,7 @@ import {
 } from "core/workflow"
 import { forAllAsync, type Rng } from "../../../core/src/__tests__/differential/harness.js"
 import { drive, ManualClock, MemoryWorkflowStore, signalLedgerViolations } from "../../../core/src/__tests__/differential/workflowFixtures.js"
-import { canonical, coverage, coverageCount, PROPERTY_TIMEOUT_MS, SCOPE, type WorkflowStoreDriver } from "./workflowStoreDifferential.js"
+import { canonical, coverage, coverageCount, PROPERTY_TIMEOUT_MS, runIndexer, SCOPE, type WorkflowStoreDriver } from "./workflowStoreDifferential.js"
 
 /**
  * Real concurrency against the real workflow store: several dispatchers (core's `dispatchWorkflows`, the production claim -> step -> fenced
@@ -33,7 +33,8 @@ const SETTLE_DEADLINE_MS = 90_000
 const SLEEP_MS = 12
 
 interface StepScript { wait: "go" | "stop" | null; sleep: boolean; flaky: number; comp: boolean; fail: boolean }
-interface Delivery { inst: number; name: string; delay: number; dupes: number; ghost: boolean }
+/** `early`: delivered before any dispatcher runs (so the receipt is buffered when the wait commits); `parked`: delivered once the instance is parked on the name (so the delivery wakes it). */
+interface Delivery { inst: number; name: string; delay: number; dupes: number; ghost: boolean; mode?: "early" | "parked" }
 interface ChainCase { scripts: StepScript[][]; workers: { limit: number; concurrency: number }[]; deliverers: number; deliveries: Delivery[] }
 
 interface Invocation { id: string; step: string; phase: "execute" | "compensate"; attempt: number; signalId: string | null; waited: boolean; slept: boolean }
@@ -69,8 +70,36 @@ function buildRegistry(log: Invocation[], nowMs: () => number) {
   return registry
 }
 
+/**
+ * Whether a run is the scripted case: every tenth run, from run 0, so every batch of runs contains it. Which interleavings occur in the free
+ * runs depends on timing; the scripted case reaches each asserted interleaving by construction (see `scriptedChain`).
+ */
+const SCRIPTED_EVERY = 10
+
+/**
+ * Two instances of two steps each. The first waits for "go", which is delivered before the dispatchers start (the commit of the wait consumes
+ * the buffered receipt), then its second step is flaky once (a retry) and fails, which compensates the first step. The second waits for "stop",
+ * which is delivered once it is parked (the delivery wakes it), then waits for a "go" nobody sends (it is left waiting). A signal for an instance
+ * that does not exist is dropped.
+ */
+function scriptedChain(light: boolean): ChainCase {
+  const step = (over: Partial<StepScript>): StepScript => ({ wait: null, sleep: false, flaky: 0, comp: false, fail: false, ...over })
+  return {
+    scripts: [[step({ wait: "go", comp: true }), step({ flaky: 1, fail: true })], [step({ wait: "stop" }), step({ wait: "go" })]],
+    workers: [{ limit: 2, concurrency: 2 }, { limit: 1, concurrency: 1 }],
+    deliverers: 2,
+    deliveries: [
+      { inst: 0, name: "go", delay: 0, dupes: 0, ghost: false, mode: "early" },
+      { inst: 1, name: "stop", delay: 0, dupes: light ? 0 : 1, ghost: false, mode: "parked" },
+      { inst: 0, name: "go", delay: 0, dupes: 0, ghost: true },
+    ],
+  }
+}
+
 function generateChainCase(light: boolean) {
+  const nextRun = runIndexer()
   return (rng: Rng): ChainCase => {
+    if (nextRun() % SCRIPTED_EVERY === 0) return scriptedChain(light)
     const instances = light ? 1 + (rng.bool(0.3) ? 1 : 0) : 1 + rng.int(4)
     const length = light ? 2 : STEP_COUNT
     const scripts = Array.from({ length: instances }, () => Array.from({ length }, (_, index): StepScript => ({
@@ -160,6 +189,35 @@ async function runChain(driver: WorkflowStoreDriver, input: ChainCase): Promise<
   const control = driver.store
   for (const [index, script] of input.scripts.entries()) await control.start({ id: ids[index]!, workflowType: "chain", workflowVersion: 1, executionScope: SCOPE, initialStep: "p0", variables: { s: script } })
 
+  // Deliveries: each deliverer sends its share one after the other (with the scripted pause), so deliverers race each other and the workers.
+  interface Outcome { id: string; inst: number; name: string; results: Array<{ delivered: boolean; duplicate: boolean }> }
+  const outcomes: Outcome[] = []
+  const parkedDeadline = Date.now() + SETTLE_DEADLINE_MS
+  const send = async (delivery: Delivery, id: string, laneIndex: number): Promise<void> => {
+    await delay(delivery.delay)
+    const instanceId = delivery.ghost ? `${tag}-ghost` : ids[delivery.inst]!
+    if (delivery.mode === "parked") {
+      for (;;) {
+        const row = await control.get(instanceId)
+        if (row && row.status === "waiting" && row.wakeAt === null && row.leaseOwner === null && row.waitingSignal === delivery.name) break
+        if (Date.now() > parkedDeadline) throw new Error(`${instanceId} never parked on ${delivery.name}: ${JSON.stringify(row)}`)
+        await delay(light ? 30 : 3)
+      }
+    }
+    const payload = { n: Number(id.split("sig")[1]), name: delivery.name }
+    const sends = Array.from({ length: 1 + delivery.dupes }, (_, copy) => deliverStores[(laneIndex + copy) % deliverStores.length]!.deliverSignal({ id, instanceId, name: delivery.name, payload }))
+    outcomes.push({ id, inst: delivery.ghost ? -1 : delivery.inst, name: delivery.name, results: await Promise.all(sends) })
+  }
+  const early: Array<{ delivery: Delivery; id: string }> = []
+  const lanes = Array.from({ length: input.deliverers }, () => [] as Array<{ delivery: Delivery; id: string }>)
+  input.deliveries.forEach((delivery, index) => {
+    const entry = { delivery, id: `${tag}-sig${index}` }
+    if (delivery.mode === "early") return void early.push(entry)
+    lanes[index % input.deliverers]!.push(entry)
+  })
+  // Early deliveries are complete before the first dispatch.
+  for (const { delivery, id } of early) await send(delivery, id, 0)
+
   const stop = { value: false }
   const totals: WorkflowDispatchResult = { ...ZERO }
   const workers = input.workers.map(async (worker, index) => {
@@ -170,19 +228,8 @@ async function runChain(driver: WorkflowStoreDriver, input: ChainCase): Promise<
     }
   })
 
-  // Deliveries: each deliverer sends its share one after the other (with the scripted pause), so deliverers race each other and the workers.
-  interface Outcome { id: string; inst: number; name: string; results: Array<{ delivered: boolean; duplicate: boolean }> }
-  const outcomes: Outcome[] = []
-  const lanes = Array.from({ length: input.deliverers }, () => [] as Array<{ delivery: Delivery; id: string }>)
-  input.deliveries.forEach((delivery, index) => lanes[index % input.deliverers]!.push({ delivery, id: `${tag}-sig${index}` }))
   const deliverers = lanes.map(async (lane, laneIndex) => {
-    for (const { delivery, id } of lane) {
-      await delay(delivery.delay)
-      const instanceId = delivery.ghost ? `${tag}-ghost` : ids[delivery.inst]!
-      const payload = { n: Number(id.split("sig")[1]), name: delivery.name }
-      const sends = Array.from({ length: 1 + delivery.dupes }, (_, copy) => deliverStores[(laneIndex + copy) % deliverStores.length]!.deliverSignal({ id, instanceId, name: delivery.name, payload }))
-      outcomes.push({ id, inst: delivery.ghost ? -1 : delivery.inst, name: delivery.name, results: await Promise.all(sends) })
-    }
+    for (const { delivery, id } of lane) await send(delivery, id, laneIndex)
   })
 
   const deadline = Date.now() + SETTLE_DEADLINE_MS

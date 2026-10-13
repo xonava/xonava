@@ -30,6 +30,8 @@ export interface SignalBufferingHarness {
 }
 
 const scope = { kind: "tenant", tenantId: "t1" } as const
+/** Race iterations that are ordered instead: one where the delivery wins and one where the commit does. */
+const ORDERED_ITERATIONS = 2
 
 export async function startInstance(store: WorkflowStore, id: string): Promise<void> {
   await store.start({ id, workflowType: "signals", workflowVersion: 1, executionScope: scope, initialStep: "approve", variables: {} })
@@ -267,19 +269,34 @@ export function registerWorkflowSignalBufferingTests(getHarness: () => SignalBuf
     const after = (ms: number): Promise<void> => (ms === 0 ? Promise.resolve() : new Promise((resolve) => setTimeout(resolve, ms)))
     const ids: string[] = []
     // Which side consumed the oldest receipt: the wait's commit (the receipt was buffered first: final revision = fence + 1) or the
-    // delivery (the instance was already parked: final revision = fence + 2). The test proves nothing unless both interleavings occurred.
+    // delivery (the instance was already parked: final revision = fence + 2). The test proves nothing unless both interleavings occurred, so the
+    // first two iterations are ordered on purpose (delivery completes before the commit starts, then the other way round); only the rest race.
     let consumedByCommit = 0
     let consumedByDelivery = 0
-    for (let index = 0; index < iterations; index++) {
+    for (let index = 0; index < iterations + ORDERED_ITERATIONS; index++) {
       const id = `${prefix}-race-${index}`
       ids.push(id)
       await startInstance(store, id)
       const { claim: running, fence } = await claim(store, id)
       const deliveries = index % 3 === 2 ? [`${id}-a`, `${id}-b`] : [`${id}-a`]
-      const [commit, ...delivered] = await Promise.all([
-        after(rng.int(4)).then(() => store.commit(fence, waitFor(running.instance, "go"))),
-        ...deliveries.map((signal) => after(rng.int(4)).then(() => store.deliverSignal({ id: signal, instanceId: id, name: "go", payload: { signal } }))),
-      ])
+      const commitWait = (): Promise<boolean> => store.commit(fence, waitFor(running.instance, "go"))
+      const deliver = (signal: string) => store.deliverSignal({ id: signal, instanceId: id, name: "go", payload: { signal } })
+      let commit: boolean
+      let delivered: Array<{ delivered: boolean; duplicate: boolean }>
+      if (index === 0) {
+        delivered = []
+        for (const signal of deliveries) delivered.push(await deliver(signal))
+        commit = await commitWait()
+      } else if (index === 1) {
+        commit = await commitWait()
+        delivered = []
+        for (const signal of deliveries) delivered.push(await deliver(signal))
+      } else {
+        ;[commit, ...delivered] = await Promise.all([
+          after(rng.int(4)).then(commitWait),
+          ...deliveries.map((signal) => after(rng.int(4)).then(() => deliver(signal))),
+        ])
+      }
       expect(commit, `commit ${id}`).toBe(true)
       for (const result of delivered) expect(result, `delivery ${id}`).toEqual({ delivered: true, duplicate: false })
       const final = await store.get(id)
@@ -299,7 +316,7 @@ export function registerWorkflowSignalBufferingTests(getHarness: () => SignalBuf
     }
     expect(consumedByCommit, "iterations where the commit consumed the buffered receipt").toBeGreaterThan(0)
     expect(consumedByDelivery, "iterations where the delivery consumed the receipt of the parked instance").toBeGreaterThan(0)
-    process.stderr.write(`[${prefix}] race interleavings: commit-consumed=${consumedByCommit} delivery-consumed=${consumedByDelivery} of ${iterations}\n`)
+    process.stderr.write(`[${prefix}] race interleavings: commit-consumed=${consumedByCommit} delivery-consumed=${consumedByDelivery} of ${iterations + ORDERED_ITERATIONS}\n`)
     expect(await ledgerViolations(harness, ids)).toEqual([])
   }, 120_000)
 }
