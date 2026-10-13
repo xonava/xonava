@@ -8,7 +8,9 @@ import { ConfigurationError } from "../domain/errors"
  * The delay after failed attempt `n` (1-based) is
  *   base = min(maxDelayMs, initialDelayMs * backoffMultiplier^(n-1))
  * and with `jitter: "equal"` it is `base/2 + random * base/2` (rounded down),
- * which spreads retries without ever retrying immediately.
+ * which spreads retries without ever retrying immediately: whenever the base
+ * is positive the delay is at least 1 ms. Only an explicit `initialDelayMs: 0`
+ * policy (an opt-in no-delay schedule) yields a 0 ms delay.
  */
 export interface BackoffPolicy {
   /** Total attempts including the first one. */
@@ -57,7 +59,9 @@ export function computeBackoffDelayMs(policy: BackoffPolicy, failedAttempt: numb
   const exponent = Math.min(failedAttempt - 1, 64)
   const base = Math.min(policy.maxDelayMs, policy.initialDelayMs * Math.pow(policy.backoffMultiplier, exponent))
   if (policy.jitter === "none") return Math.floor(base)
+  // A small base (1 ms) would otherwise floor to 0 ms, an immediate retry.
+  const floor = base > 0 ? 1 : 0
   let sample = random()
   if (typeof sample !== "number" || !Number.isFinite(sample) || sample < 0 || sample >= 1) sample = 0.5
-  return Math.floor(base / 2 + (sample * base) / 2)
+  return Math.max(floor, Math.floor(base / 2 + (sample * base) / 2))
 }

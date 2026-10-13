@@ -32,13 +32,13 @@ function offsetMs(timeZone: string, at: number): number {
   return match[1] === "-" ? -total : total
 }
 
-/** Local calendar date via offset arithmetic; null when the local year is before 1 CE; undefined when the local date is beyond what Date arithmetic can express (no verdict). */
+/** Local calendar date via offset arithmetic; null when the local year is outside 1..9999; undefined when the local date is beyond what Date arithmetic can express (no verdict). */
 function oraclePeriod(reset: SequenceResetPeriod, at: number, timeZone: string): string | null | undefined {
   if (reset === "never") return "all"
   const local = new Date(at + offsetMs(timeZone, at))
   if (Number.isNaN(local.getTime())) return at > 0 ? undefined : null
   const year = local.getUTCFullYear()
-  if (year < 1) return null
+  if (year < 1 || year > 9999) return null
   const pad = (n: number, width: number): string => String(n).padStart(width, "0")
   const y = pad(year, 4)
   if (reset === "year") return y
@@ -73,7 +73,7 @@ describe("sequence period bucketing", () => {
     }), (c) => {
       const expected = oraclePeriod(c.reset, c.at, c.zone)
       if (expected === undefined) return
-      if (expected === null) expect(() => sequencePeriod(c.reset, new Date(c.at), c.zone), "local year before 1 CE").toThrow(ConfigurationError)
+      if (expected === null) expect(() => sequencePeriod(c.reset, new Date(c.at), c.zone), "local year outside 1..9999").toThrow(ConfigurationError)
       else expect(sequencePeriod(c.reset, new Date(c.at), c.zone)).toBe(expected)
     }, { runs: 600, describe: (c) => `${JSON.stringify(c)} (${Number.isNaN(new Date(c.at).getTime()) ? "invalid" : new Date(c.at).toISOString()})` })
   })

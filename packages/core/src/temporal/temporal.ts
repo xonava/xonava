@@ -36,8 +36,9 @@ export async function reconstructAsOf<TState extends Readonly<Record<string, unk
   let currentRevision = 0, currentState: TState | null = null, replayed = 0, cursor = 0
   if (base) { const checked = validateTemporalSnapshot<TState>(base); if (checked.scopeId !== target.scopeId || checked.entityType !== target.entityType || checked.entityId !== target.entityId) throw new ConfigurationError("Temporal store returned a snapshot outside the request"); if (checked.occurredAt > asOf) throw new ConfigurationError("Temporal store returned a future snapshot"); currentRevision = checked.revision; cursor = checked.revision; currentState = checked.state }
   while (true) {
-    const page = await store.revisions(target, { afterRevision: cursor, asOf, limit: Math.min(pageSize, max - replayed) })
-    if (!page || !Array.isArray(page.items) || typeof page.hasMore !== "boolean" || (page.hasMore && page.items.length === 0)) throw new ConfigurationError("Temporal store returned an invalid revision page")
+    const limit = Math.min(pageSize, max - replayed)
+    const page = await store.revisions(target, { afterRevision: cursor, asOf, limit })
+    if (!page || !Array.isArray(page.items) || typeof page.hasMore !== "boolean" || (page.hasMore && page.items.length === 0) || page.items.length > limit) throw new ConfigurationError("Temporal store returned an invalid revision page")
     for (const raw of page.items) {
       const item = validateTemporalRevision<TState>(raw)
       if (item.scopeId !== target.scopeId || item.entityType !== target.entityType || item.entityId !== target.entityId || item.occurredAt > asOf) throw new ConfigurationError("Temporal store returned a revision outside the request")

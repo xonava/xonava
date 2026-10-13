@@ -28,7 +28,7 @@ const UNITS: Record<string, number> = {
 
 /** Hand-rolled scan (no regex): 1-9 ASCII digits, optional whitespace, a known unit, case-insensitive, outer whitespace trimmed. */
 function oracleWindow(value: unknown): number | null {
-  if (typeof value === "number") return Number.isFinite(value) && value > 0 ? value : null
+  if (typeof value === "number") return Number.isSafeInteger(value) && value > 0 ? value : null
   if (typeof value !== "string") return null
   const isWs = (ch: string): boolean => WS.includes(ch) || ch === "\r" || ch === "\v" || ch === "\f" || ch === " " || ch === " " || ch === " " || ch === " " || ch === " " || ch === " " || ch === "　"
   const chars = [...value]
@@ -107,8 +107,8 @@ function generateScenario(rng: Rng): Scenario {
   return {
     via: enforce ? "enforce" : "check",
     key: rng.bool(bad ? 0.2 : 0.01) ? rng.pick(["", "  ", "\t", 5 as unknown]) : "k",
-    limit: rng.bool(bad ? 0.3 : 0.02) ? rng.pick([0, -1, NaN, Infinity, 1.5]) : rng.pick([1, 2, 3, 10]),
-    window: enforce ? (rng.bool(bad ? 0.3 : 0.05) ? generateWindowText(rng) : rng.pick(["1 second", "5m", 1000, 60_000, "2 hours"])) : (rng.bool(bad ? 0.3 : 0.02) ? rng.pick([0, -5, NaN, Infinity]) : rng.pick([1, 1000, 60_000])),
+    limit: rng.bool(bad ? 0.3 : 0.02) ? rng.pick([0, -1, NaN, Infinity, 1.5, 2.5, 1e300, Number.MAX_SAFE_INTEGER + 1]) : rng.pick([1, 2, 3, 10]),
+    window: enforce ? (rng.bool(bad ? 0.3 : 0.05) ? generateWindowText(rng) : rng.pick(["1 second", "5m", 1000, 60_000, "2 hours"])) : (rng.bool(bad ? 0.3 : 0.02) ? rng.pick([0, -5, NaN, Infinity, 0.5, 1e300, Number.MAX_SAFE_INTEGER + 1]) : rng.pick([1, 1000, 60_000])),
     algorithm: maybe(rng, 0.6, () => (rng.bool(bad ? 0.2 : 0.02) ? "leaky-bucket" : rng.pick(ALGORITHMS))),
     cost: maybe(rng, 0.4, () => (rng.bool(bad ? 0.3 : 0.02) ? rng.pick([0, -1, 1.5, NaN, Number.MAX_SAFE_INTEGER + 1]) : rng.pick([1, 1, 2, 5]))),
     consistency: maybe(rng, 0.5, () => (rng.bool(bad ? 0.2 : 0.02) ? "weak" : rng.pick(["atomic", "best-effort"] as const))),
@@ -168,8 +168,8 @@ function distinct(values: unknown[]): unknown[] { return [...new Set(values.filt
 function verdictFor(s: Scenario): Verdict {
   const problems: Array<typeof ValidationError | typeof ConfigurationError> = []
   if (typeof s.key !== "string" || s.key.trim().length === 0) problems.push(ValidationError)
-  if (!(typeof s.limit === "number" && Number.isFinite(s.limit) && s.limit > 0)) problems.push(ConfigurationError)
-  const windowMs = s.via === "enforce" ? oracleWindow(s.window) : (typeof s.window === "number" && Number.isFinite(s.window) && s.window > 0 ? s.window : null)
+  if (!(typeof s.limit === "number" && Number.isSafeInteger(s.limit) && s.limit > 0)) problems.push(ConfigurationError)
+  const windowMs = s.via === "enforce" ? oracleWindow(s.window) : (typeof s.window === "number" && Number.isSafeInteger(s.window) && s.window > 0 ? s.window : null)
   if (windowMs === null) problems.push(ConfigurationError)
   const algorithm = s.algorithm ?? "fixed-window"
   if (!isAlgorithm(algorithm)) problems.push(ConfigurationError)

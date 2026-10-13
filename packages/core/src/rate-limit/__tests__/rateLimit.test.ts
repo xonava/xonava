@@ -23,6 +23,21 @@ describe("rate-limit ports", () => {
     expect(() => parseTimeWindowMs("0 minutes")).toThrow()
   })
 
+  it("requires positive safe integers for limit, cost and window (configuration errors)", async () => {
+    for (const limit of [2.5, 0.5, 1e300, Number.MAX_SAFE_INTEGER + 1, Infinity, NaN, 0, -1]) {
+      await expect(checkRateLimit({ store: store(1), key: "key", limit, windowMs: 1000 }), `limit ${limit}`).rejects.toBeInstanceOf(ConfigurationError)
+      await expect(enforceRateLimit({ store: store(1), key: "key", config: { max: limit, timeWindow: 1000 } }), `max ${limit}`).rejects.toBeInstanceOf(ConfigurationError)
+    }
+    for (const windowMs of [1.5, 0.5, 1e300, Number.MAX_SAFE_INTEGER + 1, Infinity, NaN, 0, -1]) {
+      await expect(checkRateLimit({ store: store(1), key: "key", limit: 3, windowMs }), `windowMs ${windowMs}`).rejects.toBeInstanceOf(ConfigurationError)
+      expect(() => parseTimeWindowMs(windowMs), `timeWindow ${windowMs}`).toThrow(ConfigurationError)
+    }
+    await expect(checkRateLimit({ store: store(1), key: "key", limit: Number.MAX_SAFE_INTEGER, windowMs: Number.MAX_SAFE_INTEGER })).resolves.toMatchObject({ allowed: true })
+    expect(parseTimeWindowMs(Number.MAX_SAFE_INTEGER)).toBe(Number.MAX_SAFE_INTEGER)
+    // A blank key stays a request-input (validation) error.
+    await expect(checkRateLimit({ store: store(1), key: " ", limit: 3, windowMs: 1000 })).rejects.toBeInstanceOf(ValidationError)
+  })
+
   it("returns remaining capacity and supports explicit consistency", async () => {
     await expect(checkRateLimit({ store: store(2), key: "key", limit: 3, windowMs: 1000 })).resolves.toMatchObject({ allowed: true, remaining: 1 })
     await expect(checkRateLimit({ store: store(2, false), key: "key", limit: 3, windowMs: 1000, consistency: "atomic" })).rejects.toThrow()

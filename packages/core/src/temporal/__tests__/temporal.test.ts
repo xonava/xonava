@@ -20,6 +20,17 @@ describe("temporal reconstruction",()=>{
   it("rejects invalid lifecycle transitions",async()=>{await expect(reconstructAsOf(store([rev(1,"2026-01-01",{n:1},"updated")]),resource,new Date("2026-02-01"))).rejects.toThrow(/begin with creation/);await expect(reconstructAsOf(store([rev(1,"2026-01-01",{n:1}),rev(2,"2026-01-02",null,"deleted"),rev(3,"2026-01-03",{n:2},"updated")]),resource,new Date("2026-02-01"))).rejects.toThrow(/restored/)})
 })
 
+describe("temporal revision page bound",()=>{
+  it("rejects a page with more revisions than the requested limit, even when the extras are valid and contiguous",async()=>{
+    const items=[rev(1,"2026-01-01",{n:1}),rev(2,"2026-01-02",{n:2}),rev(3,"2026-01-03",{n:3})]
+    const oversized={...store(items),revisions:vi.fn(async()=>({items,hasMore:false}))}
+    await expect(reconstructAsOf(oversized,resource,new Date("2026-02-01"),{pageSize:2})).rejects.toThrow(/invalid revision page/)
+    expect(oversized.revisions).toHaveBeenCalledWith(resource,expect.objectContaining({limit:2}))
+    // A page that exactly fills the limit is still accepted.
+    await expect(reconstructAsOf(store(items),resource,new Date("2026-02-01"),{pageSize:2})).resolves.toMatchObject({revision:3,replayedRevisions:3})
+  })
+})
+
 describe("temporal snapshot identity (final pass)",()=>{
   it("rejects a snapshot for another resource",async()=>{
     const foreign={scopeId:resource.scopeId,entityType:"other",entityId:"x9",revision:5,occurredAt:new Date("2026-01-01T00:00:00Z"),state:{secret:1}}

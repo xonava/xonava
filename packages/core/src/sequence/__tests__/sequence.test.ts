@@ -19,6 +19,26 @@ describe("sequence service", () => {
   it("rejects invalid provider output", async () => { await expect(allocateSequence({ next: async () => 0 }, { scopeId: "tenant" as never, definition: { name: "case" } })).rejects.toThrow("invalid value") })
 })
 
+describe("sequence allocation time range", () => {
+  it("rejects local years above 9999 and accepts the last representable 4-digit instant", async () => {
+    // With an empty separator, year 2026 value 305 and year 20263 value 5 (padding 2) would both format as "2026305".
+    const memory = { next: async () => 5 }
+    const definition = { name: "inv", reset: "year" as const, periodFormat: "compact" as const, periodSeparator: "", padding: 2 }
+    const scopeId = "tenant" as never
+    await expect(allocateSequence(memory, { scopeId, definition, at: new Date(Date.UTC(20263, 5, 1)) })).rejects.toBeInstanceOf(ConfigurationError)
+    await expect(allocateSequence(memory, { scopeId, definition, at: new Date(8.64e15) })).rejects.toBeInstanceOf(ConfigurationError)
+    for (const reset of ["year", "month", "day"] as const) {
+      expect(() => sequencePeriod(reset, new Date(Date.UTC(10000, 0, 1)))).toThrow(ConfigurationError)
+      expect(sequencePeriod(reset, new Date(Date.UTC(9999, 11, 31, 23, 59, 59, 999)))).toMatch(/^9999/)
+    }
+    // The zone decides: 9999-12-31T20:00Z is already year 10000 in UTC+5:30, still 9999 in UTC.
+    expect(() => sequencePeriod("year", new Date(Date.UTC(9999, 11, 31, 20)), "Asia/Kolkata")).toThrow(ConfigurationError)
+    expect(sequencePeriod("year", new Date(Date.UTC(9999, 11, 31, 20)))).toBe("9999")
+    // A counter that never resets has no period and is unaffected.
+    expect(sequencePeriod("never", new Date(8.64e15))).toBe("all")
+  })
+})
+
 describe("sequence time zones and period formatting", () => {
   const memory = () => { const counters = new Map<string, number>(); return { next: async (scope: string, name: string, period: string) => { const key = `${scope}|${name}|${period}`; const value = (counters.get(key) ?? 0) + 1; counters.set(key, value); return value } } }
 
