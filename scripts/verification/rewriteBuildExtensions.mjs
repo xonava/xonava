@@ -4,7 +4,10 @@ async function walk(directory) {
   for (const name of await readdir(directory)) {
     const path = join(directory, name)
     if ((await stat(path)).isDirectory()) await walk(path)
-    else if (name.endsWith(".js")) {
+    else if (name.endsWith(".js") || name.endsWith(".d.ts")) {
+      // Declarations need the same runtime specifiers: NodeNext resolution rejects extensionless
+      // relative imports in .d.ts files too.
+      const declaration = name.endsWith(".d.ts")
       const source = await readFile(path, "utf8")
       const pattern = /(from\s+["']|import\s*\(["']|^\s*import\s+["'])(\.\.?\/[^"']+?)(["'])/gm
       let rewritten = ""
@@ -16,12 +19,12 @@ async function walk(directory) {
         if (/\.(?:js|json|node)$/.test(specifier)) {
           rewritten += all
         } else {
-          const adjacentFile = resolve(dirname(path), `${specifier}.js`)
+          const adjacentFile = resolve(dirname(path), `${specifier}${declaration ? ".d.ts" : ".js"}`)
           let suffix = ".js"
           try {
             await access(adjacentFile)
           } catch {
-            const directoryIndex = resolve(dirname(path), specifier, "index.js")
+            const directoryIndex = resolve(dirname(path), specifier, declaration ? "index.d.ts" : "index.js")
             await access(directoryIndex)
             suffix = "/index.js"
           }

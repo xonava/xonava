@@ -1,8 +1,20 @@
 {
   "name": "xonava-workspace",
   "version": "2.0.0-rc.2",
+  "description": "Monorepo for Xonava, an experimental TypeScript server framework: @xonava/core, @xonava/adapters and @xonava/testing.",
   "private": true,
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xonava/xonava.git"
+  },
+  "homepage": "https://github.com/xonava/xonava#readme",
+  "bugs": {
+    "url": "https://github.com/xonava/xonava/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "type": "module",
   "workspaces": [
     "packages/core",

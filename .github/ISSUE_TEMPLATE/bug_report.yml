@@ -1,0 +1,95 @@
+name: Bug report
+description: Report something that does not work as documented or as expected
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please do not report security vulnerabilities here;
+        use the private reporting link on the issue chooser instead.
+
+  - type: dropdown
+    id: package
+    attributes:
+      label: Package
+      description: Which package or area does the bug affect?
+      options:
+        - "@xonava/core"
+        - "@xonava/adapters"
+        - "@xonava/testing"
+        - docs
+        - other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The package version you are using (for example 2.0.0-rc.2), or the commit SHA if you build from source.
+      placeholder: 2.0.0-rc.2
+    validations:
+      required: true
+
+  - type: dropdown
+    id: database
+    attributes:
+      label: Database
+      description: Which persistence provider was involved, if any?
+      options:
+        - PostgreSQL
+        - MySQL
+        - Cloudflare D1
+        - None
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js version
+      description: Output of `node --version`. The project requires Node.js 22 or later.
+      placeholder: v22.22.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? Describe the bug in a few sentences.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: |
+        The smallest code or steps that reproduce the bug. A failing test case is ideal.
+        Do not include real credentials, database URLs, or personal data.
+      render: typescript
+      placeholder: |
+        // paste a minimal, self-contained example here
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-actual
+    attributes:
+      label: Expected vs actual behavior
+      description: What did you expect to happen, and what happened instead?
+      placeholder: |
+        Expected: ...
+        Actual: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or stack trace
+      description: Relevant log output or error stack trace, if any. This will be formatted automatically.
+      render: shell
