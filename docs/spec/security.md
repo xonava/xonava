@@ -18,4 +18,4 @@ Row authorization precedes field projection/mutation checks. Obligations emitted
 
 Unauthenticated and unauthorized outcomes remain distinguishable internally but MUST avoid protected existence disclosure. Invalid policy is configuration failure, not an allow decision. Conformance includes hostile caller scopes, tenant crossing, policy tampering, missing facts, ABAC normalization/evaluation, field visibility/writes, obligations, delegation attenuation, TOCTOU races, and redaction.
 
-Traceability: `core/domain`, `core/security`, scoped persistence, adversarial/TOCTOU suites, S1 and V1 evidence.
+Traceability: `@xonava/core/domain`, `@xonava/core/security`, scoped persistence, adversarial/TOCTOU suites, S1 and V1 evidence.

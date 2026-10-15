@@ -8,4 +8,4 @@ A returned fact has a non-empty key equal to the requested key, typed value, OPT
 
 ## Errors and conformance
 
-Invalid keys, value types/numbers, reasons, key mismatch, timestamps, or expiry ordering are validation failures; provider failure follows explicit fail behavior. H1 certifies the core structural contract. Provider conformance must separately prove trusted-clock expiry enforcement, reevaluation, absence/default behavior, provider failure behavior, and authorization separation. Traceability: `core/feature-flags`; H1.
+Invalid keys, value types/numbers, reasons, key mismatch, timestamps, or expiry ordering are validation failures; provider failure follows explicit fail behavior. H1 certifies the core structural contract. Provider conformance must separately prove trusted-clock expiry enforcement, reevaluation, absence/default behavior, provider failure behavior, and authorization separation. Traceability: `@xonava/core/feature-flags`; H1.

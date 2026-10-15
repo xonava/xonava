@@ -1,16 +1,16 @@
 /* eslint-disable @typescript-eslint/require-await */
-import type { OperationDefinition, MutationOperationContext, PreparationOperationContext, AuthorizationOperationContext } from "core/operation"
+import type { OperationDefinition, MutationOperationContext, PreparationOperationContext, AuthorizationOperationContext } from "@xonava/core/operation"
 import {
   ConfigurationError,
   ConflictError,
   NotFoundError,
   Predicate,
   projectResponseRecord,
-} from "core/domain"
+} from "@xonava/core/domain"
 import { createFrameworkWriteHandler } from "../createFrameworkWriteHandler"
 import { frameworkJson } from "../handleFrameworkCoreError"
 import type { CrudShared, DeleteOperationInput, SelectableRow } from "./types"
-import { assertEntityVersion } from "core/serialization"
+import { assertEntityVersion } from "@xonava/core/serialization"
 import { internalRepositoryForDescriptor } from "../../repository/dynamicRepository"
 import { parseIfMatchVersion } from "./update"
 import {

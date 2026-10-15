@@ -1,5 +1,5 @@
-import { isEntityVersion, type EntityVersion } from "core/serialization"
-import type { IdempotencyAcquireResult, IdempotencyRequest } from "core/events"
+import { isEntityVersion, type EntityVersion } from "@xonava/core/serialization"
+import type { IdempotencyAcquireResult, IdempotencyRequest } from "@xonava/core/events"
 
 export function serializeInvalidations(invalidations: readonly string[] | undefined): string | null {
   if (!invalidations || invalidations.length === 0) return null

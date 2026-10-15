@@ -1,3 +1,3 @@
-import { enforceRateLimit } from "core/rate-limit"
-import { createNoopTelemetry } from "core/telemetry"
+import { enforceRateLimit } from "@xonava/core/rate-limit"
+import { createNoopTelemetry } from "@xonava/core/telemetry"
 export const capabilities = [enforceRateLimit, createNoopTelemetry]

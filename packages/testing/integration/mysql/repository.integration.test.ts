@@ -1,8 +1,8 @@
 import {describe,expect,it} from "vitest"
-import {Predicate,type ExecutionScope} from "core/domain"
-import type { VersionedEntityDescriptor } from "core/persistence"
-import { createTenantScopedPersistenceProvider } from "core/persistence"
-import {createDrizzleMySqlPersistenceProvider,DrizzleMySqlEntityRegistry} from "adapters/drizzle-mysql"
+import {Predicate,type ExecutionScope} from "@xonava/core/domain"
+import type { VersionedEntityDescriptor } from "@xonava/core/persistence"
+import { createTenantScopedPersistenceProvider } from "@xonava/core/persistence"
+import {createDrizzleMySqlPersistenceProvider,DrizzleMySqlEntityRegistry} from "@xonava/adapters/drizzle-mysql"
 import {mysqlRecords} from "../../fixtures/mysql/schema.js"
 import {openMySqlFixture} from "./database.js"
 interface RecordRow{id:string;tenantId:string;name:string;version:number;value:unknown}

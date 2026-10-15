@@ -1,4 +1,4 @@
-import { BusinessRuleError, ConflictError, FrameworkCoreError, PersistenceError, RetryablePersistenceError, TimeoutError, ValidationError } from "core/domain"
+import { BusinessRuleError, ConflictError, FrameworkCoreError, PersistenceError, RetryablePersistenceError, TimeoutError, ValidationError } from "@xonava/core/domain"
 export type DrizzleDialect="postgresql"|"d1"|"mysql"
 const MAX_CAUSE_DEPTH=6
 /** Yields the error and each object in its `cause` chain (bounded). */

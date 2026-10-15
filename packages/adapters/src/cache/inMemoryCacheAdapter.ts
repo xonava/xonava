@@ -1,5 +1,5 @@
-import type { CacheAdapter } from "core/cache"
-import { ConfigurationError } from "core/domain"
+import type { CacheAdapter } from "@xonava/core/cache"
+import { ConfigurationError } from "@xonava/core/domain"
 import { assertCacheTtl, decodeCacheValue, encodeCacheValue } from "./cacheValueCodec"
 
 const TAG_PREFIX = "__tag__"

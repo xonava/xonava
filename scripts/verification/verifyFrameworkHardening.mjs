@@ -7,8 +7,8 @@ const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url))
 const manifestPath = join(repositoryRoot, "scripts/verification/approvedFrameworkExports.json")
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"))
 const packageDirectories = new Map([
-  ["core", "packages/core"],
-  ["adapters", "packages/adapters"],
+  ["@xonava/core", "packages/core"],
+  ["@xonava/adapters", "packages/adapters"],
 ])
 const failures = []
 

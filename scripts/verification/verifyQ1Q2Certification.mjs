@@ -10,8 +10,8 @@ const q2Directory = resolve(root, "q2")
 const run = (args) => execFileSync("npm", args, { cwd: process.cwd(), stdio: "inherit", env: process.env, shell: process.platform === "win32" })
 
 run(["run", "typecheck"])
-run(["run", "test", "-w", "core", "--", "--run", "src/query/__tests__/queryContracts.test.ts"])
-run(["run", "test", "-w", "adapters", "--", "--run", "src/drizzle-shared/__tests__/cursorPagination.test.ts", "src/http/crudHandlers/__tests__/cursorParameters.test.ts"])
+run(["run", "test", "-w", "@xonava/core", "--", "--run", "src/query/__tests__/queryContracts.test.ts"])
+run(["run", "test", "-w", "@xonava/adapters", "--", "--run", "src/drizzle-shared/__tests__/cursorPagination.test.ts", "src/http/crudHandlers/__tests__/cursorParameters.test.ts"])
 
 const sources = [
   "packages/core/src/query/queryBudget.ts", "packages/core/src/query/projection.ts", "packages/core/src/query/readConsistency.ts",

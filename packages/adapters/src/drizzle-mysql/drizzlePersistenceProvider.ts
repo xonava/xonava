@@ -2,9 +2,9 @@ import {classifyTransactionFailure,transactionTimeoutError} from "../drizzle-sha
 import {hasMySqlErrorCode,normalizeDrizzleError} from "../drizzle-shared/errors"
 import {sql} from "drizzle-orm"
 import type {AnyMySqlTable} from "drizzle-orm/mysql-core"
-import {ConfigurationError,PersistenceError} from "core/domain"
-import type { EntityDescriptor, InteractiveTransactionProvider, PersistenceProvider, TransactionOptions, UnversionedEntityDescriptor, UnversionedRepository, VersionedEntityDescriptor, VersionedRepository } from "core/persistence"
-import type { PersistenceCapabilities } from "core/persistence"
+import {ConfigurationError,PersistenceError} from "@xonava/core/domain"
+import type { EntityDescriptor, InteractiveTransactionProvider, PersistenceProvider, TransactionOptions, UnversionedEntityDescriptor, UnversionedRepository, VersionedEntityDescriptor, VersionedRepository } from "@xonava/core/persistence"
+import type { PersistenceCapabilities } from "@xonava/core/persistence"
 import {createDrizzleMySqlRepository,type MySqlDatabaseLike} from "./drizzleRepository"
 import type {DrizzleColumnMap} from "../drizzle-shared/predicateCompiler"
 import {CachePrefixLedger,resolveRegistration,type RegistrableEntity} from "../drizzle-shared/entityRegistration"
@@ -144,7 +144,7 @@ export function createDrizzleMySqlPersistenceProvider(args:DrizzleMySqlPersisten
   // conditionalAbacUpdate: updateOneWhere ANDs the compiled predicate into the single UPDATE statement.
   // transactionTimeouts: session max_execution_time/innodb_lock_wait_timeout plus a KILL QUERY watchdog,
   // which needs a pool to send KILL from a separate connection.
-  const capabilities:PersistenceCapabilities={interactiveTransactions:true,atomicBatch:false,returningInsert:false,readSessions:false,jsonQueries:true,exactDecimal:false,persistentConnection:true,conditionalAbacUpdate:true,transactionTimeouts:killPool!==undefined,maxPageSize:maxPageSize??100,execution:Object.freeze({"transaction.interactive":{status:"proven",evidence:"framework-conformance/mysql1/mysql-guarantees.json"},"transaction.atomicBatch":{status:"unsupported"},"locking.pessimistic":{status:"unsupported"},"bulk.versioned.atomic":{status:"unsupported"},"bulk.versioned.partial":{status:"unsupported"},"read.streaming":{status:"unsupported"},"read.boundedPagedScan":{status:"proven",evidence:"framework-conformance/mysql1/mysql-guarantees.json"}})}
+  const capabilities:PersistenceCapabilities={interactiveTransactions:true,atomicBatch:false,returningInsert:false,readSessions:false,jsonQueries:true,exactDecimal:false,persistentConnection:true,conditionalAbacUpdate:true,transactionTimeouts:killPool!==undefined,maxPageSize:maxPageSize??100,execution:Object.freeze({"transaction.interactive":{status:"proven",evidence:"framework-conformance/release/mysql-guarantees.json"},"transaction.atomicBatch":{status:"unsupported"},"locking.pessimistic":{status:"unsupported"},"bulk.versioned.atomic":{status:"unsupported"},"bulk.versioned.partial":{status:"unsupported"},"read.streaming":{status:"unsupported"},"read.boundedPagedScan":{status:"proven",evidence:"framework-conformance/mysql1/mysql-guarantees.json"}})}
   const build=(db:MySqlDatabaseLike,nested:boolean):InteractiveTransactionProvider=>{
     function repository<T,TId=string>(entity:VersionedEntityDescriptor<T>):VersionedRepository<T,TId>
     function repository<T,TId=string>(entity:UnversionedEntityDescriptor<T>):UnversionedRepository<T,TId>

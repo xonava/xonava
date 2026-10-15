@@ -1,5 +1,5 @@
 import { describe, it } from "vitest"
-import { DrizzleD1WorkflowStore } from "adapters/drizzle-d1"
+import { DrizzleD1WorkflowStore } from "@xonava/adapters/drizzle-d1"
 import { temporaryD1Fixture } from "./database.js"
 import { assertWorkflowDurableState } from "../shared/workflowDurableState.js"
 

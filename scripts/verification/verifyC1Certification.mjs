@@ -6,8 +6,8 @@ const runId = process.env.FRAMEWORK_CONFORMANCE_RUN_ID ?? "local-c1"
 const directory = resolve("artifacts/framework-conformance", runId, "c1")
 const run = args => execFileSync("npm", args, { cwd: process.cwd(), stdio: "inherit", env: process.env, shell: process.platform === "win32" })
 run(["run", "typecheck"])
-run(["run", "test", "-w", "core", "--", "--run", "src/certification/__tests__/c1Contracts.test.ts", "src/entity/__tests__/e1Contracts.test.ts"])
-run(["run", "test", "-w", "adapters", "--", "--run", "src/server/__tests__/idempotencyFinalizer.test.ts", "src/cache/__tests__/sharedGenerationCacheAdapter.test.ts", "src/drizzle-pg/__tests__/cacheGenerationAtomicity.integration.test.ts", "src/drizzle-d1/__tests__/d1CacheGenerationAtomicity.integration.test.ts"])
+run(["run", "test", "-w", "@xonava/core", "--", "--run", "src/certification/__tests__/c1Contracts.test.ts", "src/entity/__tests__/e1Contracts.test.ts"])
+run(["run", "test", "-w", "@xonava/adapters", "--", "--run", "src/server/__tests__/idempotencyFinalizer.test.ts", "src/cache/__tests__/sharedGenerationCacheAdapter.test.ts", "src/drizzle-pg/__tests__/cacheGenerationAtomicity.integration.test.ts", "src/drizzle-d1/__tests__/d1CacheGenerationAtomicity.integration.test.ts"])
 const sources = ["packages/core/src/cache/generation.ts", "packages/core/src/events/durability/idempotency.ts", "packages/core/src/entity/compileEntity.ts", "packages/adapters/src/cache/dbTagGenerationStore.ts", "packages/adapters/src/server/idempotencyFinalizer.ts", "packages/adapters/src/http/createFrameworkWriteHandler.ts"]
 const sourceManifest = await Promise.all(sources.map(async path => ({ path, sha256: createHash("sha256").update(await readFile(resolve(path))).digest("hex") })))
 await mkdir(directory, { recursive: true })

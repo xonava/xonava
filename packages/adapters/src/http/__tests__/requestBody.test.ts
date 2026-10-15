@@ -4,7 +4,7 @@ import { createFrameworkWriteHandler } from "../createFrameworkWriteHandler"
 import { canonicalRequestNormalization } from "./canonicalRequest"
 import { parseJsonBodySafely, parseUniqueQueryParameters, resolveRequestMetadata } from "../requestBody"
 import type { FrameworkAdapterDeps } from "../../server"
-import type { PersistenceProvider } from "core/persistence"
+import type { PersistenceProvider } from "@xonava/core/persistence"
 import { resolveTrustedClientIp } from "../trustedClientIp"
 
 const persistence = {} as PersistenceProvider

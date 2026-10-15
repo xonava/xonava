@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest"
-import type { EntityDescriptor, PersistenceProvider } from "core/persistence"
+import type { EntityDescriptor, PersistenceProvider } from "@xonava/core/persistence"
 import {
   bindAbacSecurityDigest,
   deriveAbacSecurityDigest,
   type AbacPolicyBundle,
   type VerifiedAbacPolicyBundle,
-} from "core/domain"
+} from "@xonava/core/domain"
 import { createCrudHandlersInternal } from "../createCrudHandlers"
 import { createFrameworkWriteHandler } from "../createFrameworkWriteHandler"
 import type { FrameworkAdapterDeps } from "../../server"

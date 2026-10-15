@@ -1,18 +1,51 @@
 {
-  "name": "adapters",
+  "name": "@xonava/adapters",
   "version": "2.0.0-rc.2",
+  "description": "Adapters for the server framework: PostgreSQL, MySQL, and Cloudflare D1 persistence via Drizzle, Express, Fastify, and Hono HTTP bindings, and cache and storage adapters.",
+  "keywords": [
+    "server",
+    "framework",
+    "adapters",
+    "postgresql",
+    "mysql",
+    "cloudflare-d1",
+    "drizzle",
+    "express",
+    "fastify",
+    "hono",
+    "cache",
+    "storage"
+  ],
+  "homepage": "https://github.com/Suriyaprakash-Somu/engine#readme",
+  "bugs": {
+    "url": "https://github.com/Suriyaprakash-Somu/engine/issues"
+  },
+  "license": "MIT",
+  "author": "Suriyaprakash Somu",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Suriyaprakash-Somu/engine.git",
+    "directory": "packages/adapters"
+  },
   "type": "module",
-  "private": true,
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "build": "tsc -b tsconfig.build.json --force && node ../../scripts/verification/rewriteBuildExtensions.mjs .",
+    "build": "tsc -b tsconfig.build.json --force && node ../../scripts/verification/rewriteBuildExtensions.mjs ../core .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src --max-warnings=0",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "prepack": "npm run build"
   },
   "exports": {
     "./fastify": {
@@ -62,9 +95,13 @@
   },
   "peerDependencies": {
     "@types/express": "^5.0.0",
+    "@types/pg": "^8.15.5",
+    "drizzle-orm": "^0.45.2",
     "express": "^5.0.0",
     "fastify": "^5.0.0",
-    "hono": "^4.0.0"
+    "hono": "^4.0.0",
+    "mysql2": "^3.24.4",
+    "pg": "^8.16.3"
   },
   "peerDependenciesMeta": {
     "fastify": {
@@ -78,13 +115,19 @@
     },
     "@types/express": {
       "optional": true
+    },
+    "@types/pg": {
+      "optional": true
+    },
+    "mysql2": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
     }
   },
   "dependencies": {
-    "core": "*",
-    "drizzle-orm": "^0.45.2",
-    "mysql2": "^3.24.4",
-    "pg": "^8.16.3",
+    "@xonava/core": "2.0.0-rc.2",
     "uuidv7": "^1.2.1",
     "zod": "^4.3.6"
   },
@@ -92,9 +135,12 @@
     "@types/express": "^5.0.6",
     "@types/pg": "^8.15.5",
     "@types/supertest": "^6.0.3",
+    "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
     "fastify": "^5.12.5",
     "hono": "^4.13.8",
+    "mysql2": "^3.24.4",
+    "pg": "^8.16.3",
     "supertest": "^7.2.2",
     "vitest": "^4.0.0"
   }

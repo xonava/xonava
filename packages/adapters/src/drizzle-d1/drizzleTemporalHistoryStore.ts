@@ -1,5 +1,5 @@
-import type { NewTemporalRevision, TemporalHistoryStore, TemporalResource, TemporalRevision, TemporalRevisionPage, TemporalSnapshot } from "core/temporal"
-import { validateTemporalRevision, validateTemporalSnapshot } from "core/temporal"
+import type { NewTemporalRevision, TemporalHistoryStore, TemporalResource, TemporalRevision, TemporalRevisionPage, TemporalSnapshot } from "@xonava/core/temporal"
+import { validateTemporalRevision, validateTemporalSnapshot } from "@xonava/core/temporal"
 export interface D1TemporalStatement { bind(...values: unknown[]): D1TemporalStatement; run(): Promise<{ meta?: { changes?: number } }>; all(): Promise<{ results?: Record<string, unknown>[] }>; first(): Promise<Record<string, unknown> | null> }
 interface D1Like { prepare(sql: string): D1TemporalStatement; batch(statements: D1TemporalStatement[]): Promise<unknown[]> }
 const parse = <T>(value: unknown): T => JSON.parse(String(value)) as T

@@ -1,4 +1,4 @@
-import { ConfigurationError } from "core/domain"
+import { ConfigurationError } from "@xonava/core/domain"
 
 /**
  * Normalize Postgres result shapes to extract affected-rows count.

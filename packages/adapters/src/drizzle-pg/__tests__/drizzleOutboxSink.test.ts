@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
 import { pgTable, text } from "drizzle-orm/pg-core"
-import { ConfigurationError } from "core/domain"
+import { ConfigurationError } from "@xonava/core/domain"
 import { DrizzleOutboxSink, computeOutboxFingerprint } from "../drizzleOutboxSink"
 import type { DrizzleSessionLike } from "../drizzleRepository"
-import type { OutboxRecord } from "core/events"
-import { canonicalizeValue } from "core/serialization"
+import type { OutboxRecord } from "@xonava/core/events"
+import { canonicalizeValue } from "@xonava/core/serialization"
 
 const tenantOutboxTable = pgTable("outbox_events", {
   id: text("id"),

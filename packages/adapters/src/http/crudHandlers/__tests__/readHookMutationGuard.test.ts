@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { EntityDescriptor, PersistenceProvider, ReadOnlyPersistenceProvider } from "core/persistence"
+import type { EntityDescriptor, PersistenceProvider, ReadOnlyPersistenceProvider } from "@xonava/core/persistence"
 import { createDetailHandler } from "../detail"
 import { createListHandler } from "../list"
 import type { CrudShared } from "../types"
@@ -54,7 +54,7 @@ function makePersistence(supportTx = false) {
 
 type HookSide = (context: {
   persistence: ReadOnlyPersistenceProvider
-  operation?: import("core/operation").ReadOperationContext
+  operation?: import("@xonava/core/operation").ReadOperationContext
 }) => unknown
 
 function makeShared(overrides: {

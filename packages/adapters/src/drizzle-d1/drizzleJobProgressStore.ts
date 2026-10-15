@@ -1,5 +1,5 @@
-import { ConflictError, StaleClaimError } from "core/domain"
-import { decodeStoredJobCheckpoint, validateJobProgress, type JobProgress, type JobProgressFence, type JobProgressPort } from "core/execution"
+import { ConflictError, StaleClaimError } from "@xonava/core/domain"
+import { decodeStoredJobCheckpoint, validateJobProgress, type JobProgress, type JobProgressFence, type JobProgressPort } from "@xonava/core/execution"
 import type { D1AtomicDatabase } from "./d1AtomicRecordBackend"
 
 export class DrizzleD1JobProgressStore implements JobProgressPort {

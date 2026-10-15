@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { ConfigurationError } from "core/domain"
+import { ConfigurationError } from "@xonava/core/domain"
 import { assertMySqlUtcSession } from "../mysqlPredicate"
 
 const session = (winter: unknown, summer: unknown) => ({ query: async () => [[{ winter, summer }], []] as [unknown, unknown] })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { DrizzleD1JobProgressStore } from "adapters/drizzle-d1"
+import { DrizzleD1JobProgressStore } from "@xonava/adapters/drizzle-d1"
 import { temporaryD1Fixture } from "./database.js"
 
 describe("J1 D1 durable progress", () => {

@@ -1,4 +1,0 @@
-{"property":"temporal reconstruction vs scan","seed":2278251833,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:38:03.135Z"}
-{"property":"temporal argument validation","seed":2278251833,"scale":5,"baseRuns":120,"runs":600,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:38:03.173Z"}
-{"property":"temporal revision validity","seed":2278251833,"scale":5,"baseRuns":500,"runs":2500,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:38:03.310Z"}
-{"property":"temporal snapshot validity","seed":2278251833,"scale":5,"baseRuns":150,"runs":750,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:38:03.340Z"}

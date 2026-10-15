@@ -1,5 +1,5 @@
-import { assertUniqueCacheKeyPrefixes } from "core/entity"
-import type { EntityDescriptor } from "core/persistence"
+import { assertUniqueCacheKeyPrefixes } from "@xonava/core/entity"
+import type { EntityDescriptor } from "@xonava/core/persistence"
 
 /** The part of a compiled entity definition (`defineEntity()` result) the registries read. */
 export interface CompiledEntityRegistration<T> {

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { drizzle } from "drizzle-orm/d1"
 import { getTableColumns } from "drizzle-orm"
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
-import { createDrizzleD1Adapter, createDrizzleJobStore } from "adapters/drizzle-d1"
+import { createDrizzleD1Adapter, createDrizzleJobStore } from "@xonava/adapters/drizzle-d1"
 import { applyD1Migration } from "../../fixtures/d1/bootstrap.js"
 import { temporaryD1Fixture, type D1Fixture } from "./database.js"
 

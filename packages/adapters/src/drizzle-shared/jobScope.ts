@@ -1,5 +1,5 @@
-import { ConfigurationError } from "core/domain"
-import { CorruptJobMetadataError, type JobExecutionScope, type JobScope } from "core/execution"
+import { ConfigurationError } from "@xonava/core/domain"
+import { CorruptJobMetadataError, type JobExecutionScope, type JobScope } from "@xonava/core/execution"
 
 export function decodePersistedJobFingerprint(value: unknown): string {
   if (typeof value !== "string" || value.length === 0) {

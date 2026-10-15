@@ -131,7 +131,7 @@ export async function df1Suites(repositoryRoot) {
   const suites = [{
     id: "core",
     kind: "core",
-    workspace: "core",
+    workspace: "@xonava/core",
     workspaceDirectory: "packages/core",
     config: undefined,
     testFiles: coreTests,
@@ -147,7 +147,7 @@ export async function df1Suites(repositoryRoot) {
     suites.push({
       id: adapter,
       kind: "database",
-      workspace: "testing",
+      workspace: "@xonava/testing",
       workspaceDirectory: "packages/testing",
       config: "vitest.integration.config.ts",
       testFiles,
@@ -482,8 +482,8 @@ export function replayInstructions(seed, scales) {
   return {
     seed,
     environment: "DIFFERENTIAL_SEED=<seed> DIFFERENTIAL_SCALE=<suite scale> [DIFFERENTIAL_RUN=<run from the failure report>]",
-    core: `DIFFERENTIAL_SEED=${seed} DIFFERENTIAL_SCALE=${scales.core} npm run test -w core -- --testTimeout=1800000 src/__tests__/differential`,
-    database: `DIFFERENTIAL_SEED=${seed} DIFFERENTIAL_SCALE=${scales.database} npm run test -w testing -- --config vitest.integration.config.ts --testTimeout=1800000 integration/<pg|mysql|d1>/richParity.integration.test.ts`,
+    core: `DIFFERENTIAL_SEED=${seed} DIFFERENTIAL_SCALE=${scales.core} npm run test -w @xonava/core -- --testTimeout=1800000 src/__tests__/differential`,
+    database: `DIFFERENTIAL_SEED=${seed} DIFFERENTIAL_SCALE=${scales.database} npm run test -w @xonava/testing -- --config vitest.integration.config.ts --testTimeout=1800000 integration/<pg|mysql|d1>/richParity.integration.test.ts`,
     singleCase: "Add DIFFERENTIAL_RUN=<n> from a failure's 'Replay:' line to rerun exactly that (shrunk) case.",
   }
 }

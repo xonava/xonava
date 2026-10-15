@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
-import { ConfigurationError } from "core/domain"
-import type { EntityDescriptor } from "core/persistence"
-import { DrizzleEntityRegistry } from "adapters/drizzle-d1"
+import { ConfigurationError } from "@xonava/core/domain"
+import type { EntityDescriptor } from "@xonava/core/persistence"
+import { DrizzleEntityRegistry } from "@xonava/adapters/drizzle-d1"
 
 const table = sqliteTable("registry_rows", {
   id: text("id").primaryKey(),

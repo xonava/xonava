@@ -1,6 +1,6 @@
 import type {Pool,PoolConnection} from "mysql2/promise"
 import {uuidv7} from "uuidv7"
-import type { FencedLease, InboxKey, InboxRecord, LeaseResourceKey, OutboxDeliveryKey, OutboxDeliveryRecord } from "core/events"
+import type { FencedLease, InboxKey, InboxRecord, LeaseResourceKey, OutboxDeliveryKey, OutboxDeliveryRecord } from "@xonava/core/events"
 import {FencedInboxStore,FencedOutboxStore,type AtomicRecordBackend} from "../drizzle-shared/fencedDeliveryStateMachine"
 import {FencedLeaseStore,type AtomicLeaseBackend} from "../drizzle-shared/fencedLeaseStore"
 import {mysqlQualifiedTable,resolveMySqlTableNames,type MySqlTableOptions} from "./mysqlIdentifiers"

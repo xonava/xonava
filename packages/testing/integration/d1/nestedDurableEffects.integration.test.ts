@@ -1,7 +1,7 @@
 import { describe, it } from "vitest"
 import { drizzle } from "drizzle-orm/d1"
 import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
-import { createDrizzleAuditSinkFactory, createDrizzleOutboxSinkFactory, createDrizzlePersistenceProvider, DrizzleEntityRegistry } from "adapters/drizzle-d1"
+import { createDrizzleAuditSinkFactory, createDrizzleOutboxSinkFactory, createDrizzlePersistenceProvider, DrizzleEntityRegistry } from "@xonava/adapters/drizzle-d1"
 import { openD1Fixture } from "./database.js"
 import { assertNestedDurableEffectsRefusedWithoutTransactions, nestedItemEntity } from "../shared/nestedDurableEffects.js"
 

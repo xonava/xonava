@@ -1,12 +1,40 @@
 {
-  "name": "testing",
+  "name": "@xonava/testing",
   "version": "2.0.0-rc.2",
+  "description": "Conformance contracts and test kit for verifying server framework adapters against persistence, cache, concurrency, and access-policy guarantees.",
+  "keywords": [
+    "server",
+    "framework",
+    "testing",
+    "conformance",
+    "contracts",
+    "test-kit",
+    "adapters",
+    "vitest"
+  ],
+  "homepage": "https://github.com/Suriyaprakash-Somu/engine#readme",
+  "bugs": {
+    "url": "https://github.com/Suriyaprakash-Somu/engine/issues"
+  },
+  "license": "MIT",
+  "author": "Suriyaprakash Somu",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Suriyaprakash-Somu/engine.git",
+    "directory": "packages/testing"
+  },
   "type": "module",
-  "private": true,
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -42,7 +70,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -b tsconfig.build.json --force && node ../../scripts/verification/rewriteBuildExtensions.mjs .",
+    "build": "tsc -b tsconfig.build.json --force && node ../../scripts/verification/rewriteBuildExtensions.mjs ../core ../adapters .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src tests fixtures integration crash conformance --max-warnings=0",
     "test": "vitest run",
@@ -61,21 +89,22 @@
     "test:race:mysql": "vitest run --config vitest.integration.config.ts integration/mysql/race.integration.test.ts integration/mysql/job.integration.test.ts integration/mysql/schedule.integration.test.ts integration/mysql/temporal.integration.test.ts integration/mysql/sequence.integration.test.ts",
     "test:crash:pg": "vitest run --config vitest.integration.config.ts crash/pg.crash.test.ts",
     "test:crash:d1": "vitest run --config vitest.integration.config.ts crash/d1.crash.test.ts",
-    "test:crash:mysql": "vitest run --config vitest.integration.config.ts crash/mysql.crash.test.ts"
+    "test:crash:mysql": "vitest run --config vitest.integration.config.ts crash/mysql.crash.test.ts",
+    "prepack": "npm run build"
   },
   "peerDependencies": {
     "vitest": "^4.1.7"
   },
   "devDependencies": {
     "@types/pg": "8.23.1",
+    "@xonava/adapters": "2.0.0-rc.2",
+    "drizzle-orm": "0.45.2",
     "miniflare": "3.20250718.3",
+    "mysql2": "^3.24.4",
+    "pg": "8.23.0",
     "vitest": "^4.1.7"
   },
   "dependencies": {
-    "adapters": "*",
-    "core": "*",
-    "drizzle-orm": "0.45.2",
-    "mysql2": "^3.24.4",
-    "pg": "8.23.0"
+    "@xonava/core": "2.0.0-rc.2"
   }
 }

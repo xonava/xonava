@@ -1,5 +1,5 @@
 import {describe,expect,it} from "vitest"
-import { checkRateLimit } from "core/rate-limit"
+import { checkRateLimit } from "@xonava/core/rate-limit"
 import {InMemoryCacheAdapter} from "../inMemoryCacheAdapter"
 import {InMemoryRateLimitStore} from "../inMemoryRateLimitStore"
 

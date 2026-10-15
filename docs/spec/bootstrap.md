@@ -6,7 +6,7 @@ Bootstrap MUST validate definitions, dependencies, capability requirements, form
 
 Runtime registration and readiness MUST not allow an implementation to claim an unproven capability.
 
-Dependency graphs MUST reject missing nodes and cycles and produce deterministic order. Registries MUST reject duplicate stable identities. Runtime bindings MUST match compiled route/entity/operation requirements and must not mutate sealed definitions. Entity definitions that declare a resolved cache key prefix (`config.cache.keyPrefix`) MUST have an application-unique prefix: compilation MUST fail with a configuration error naming both entities when two share one. Applications assembling compiled entity definitions directly SHOULD apply the same check (`assertUniqueEntityCachePrefixes`, `core/entity`). Readiness changes after startup MUST be represented explicitly rather than silently serving with missing required dependencies.
+Dependency graphs MUST reject missing nodes and cycles and produce deterministic order. Registries MUST reject duplicate stable identities. Runtime bindings MUST match compiled route/entity/operation requirements and must not mutate sealed definitions. Entity definitions that declare a resolved cache key prefix (`config.cache.keyPrefix`) MUST have an application-unique prefix: compilation MUST fail with a configuration error naming both entities when two share one. Applications assembling compiled entity definitions directly SHOULD apply the same check (`assertUniqueEntityCachePrefixes`, `@xonava/core/entity`). Readiness changes after startup MUST be represented explicitly rather than silently serving with missing required dependencies.
 
 ## Errors and conformance
 

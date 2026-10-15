@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { Predicate, bindAbacSecurityDigest, createAbacAuthorizer, evaluatePredicate, type NormalizedAbacPolicy, type PredicateNode } from "core/domain"
-import { DEFAULT_QUERY_BUDGET, validateQueryPlan, type QueryPlan } from "core/query"
-import type { ListResult } from "core/query"
-import type { VersionedEntityDescriptor, VersionedRepository } from "core/persistence"
+import { Predicate, bindAbacSecurityDigest, createAbacAuthorizer, evaluatePredicate, type NormalizedAbacPolicy, type PredicateNode } from "@xonava/core/domain"
+import { DEFAULT_QUERY_BUDGET, validateQueryPlan, type QueryPlan } from "@xonava/core/query"
+import type { ListResult } from "@xonava/core/query"
+import type { VersionedEntityDescriptor, VersionedRepository } from "@xonava/core/persistence"
 import { createAuthorizedRepository } from "../authorizedRepository"
 
 /**

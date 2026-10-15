@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
-import type { PersistenceProvider } from "core/persistence"
-import type { MutationOperationContext } from "core/operation"
+import type { PersistenceProvider } from "@xonava/core/persistence"
+import type { MutationOperationContext } from "@xonava/core/operation"
 import { authorizeFrameworkModule, canUseOwnerBypass, toCrudContext, toCrudReadContext } from "../shared"
 import type { FrameworkAdapterDeps } from "../../../server"
 import { normalizeFrameworkRequest } from "../../scopeResolution"

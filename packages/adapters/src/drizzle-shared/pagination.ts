@@ -1,5 +1,5 @@
-import type { OffsetPaginationPlan } from "core/query"
-import { ValidationError } from "core/domain"
+import type { OffsetPaginationPlan } from "@xonava/core/query"
+import { ValidationError } from "@xonava/core/domain"
 
 export const DEFAULT_PAGE_SIZE = 20
 export const DEFAULT_MAX_PAGE_SIZE = 100

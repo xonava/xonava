@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { CacheService } from "core/cache"
-import { ConfigurationError, ValidationError } from "core/domain"
+import { CacheService } from "@xonava/core/cache"
+import { ConfigurationError, ValidationError } from "@xonava/core/domain"
 import { CacheBackedRateLimitStore } from "../cacheBackedRateLimitStore"
 import { InMemoryCacheAdapter } from "../inMemoryCacheAdapter"
 import { KvCacheAdapter } from "../kvCacheAdapter"

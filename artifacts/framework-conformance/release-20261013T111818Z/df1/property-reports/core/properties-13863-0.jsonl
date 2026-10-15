@@ -1,2 +1,0 @@
-{"property":"workflow dispatcher model equivalence","seed":2278251833,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:23.657Z"}
-{"property":"workflow dispatcher concurrent claims","seed":2278251833,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:37:29.755Z"}

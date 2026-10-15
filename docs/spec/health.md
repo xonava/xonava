@@ -10,4 +10,4 @@ Each component has a unique non-empty key, status (`healthy`, `degraded`, or `un
 
 ## Security, errors, and conformance
 
-Results MUST be safe for their intended trust level and MUST NOT disclose credentials, raw provider errors, or topology beyond policy. Checks MUST obey timeout/cancellation and MUST not mutate business state. Invalid/duplicate components or times are validation failures. Conformance covers every aggregation branch, liveness/readiness separation, duplicate/empty keys, invalid times, immutability, timeout, and redaction. Traceability: `core/health`; H1.
+Results MUST be safe for their intended trust level and MUST NOT disclose credentials, raw provider errors, or topology beyond policy. Checks MUST obey timeout/cancellation and MUST not mutate business state. Invalid/duplicate components or times are validation failures. Conformance covers every aggregation branch, liveness/readiness separation, duplicate/empty keys, invalid times, immutability, timeout, and redaction. Traceability: `@xonava/core/health`; H1.

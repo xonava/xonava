@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { Predicate, evaluatePredicate } from "core/domain"
+import { Predicate, evaluatePredicate } from "@xonava/core/domain"
 
 export function runPredicateContractTests(label: string): void {
   describe(`Predicate contract: ${label}`, () => {

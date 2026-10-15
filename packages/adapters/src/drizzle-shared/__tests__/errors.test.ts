@@ -1,6 +1,6 @@
 import { describe,expect,it } from "vitest"
 import { isUniqueViolation, normalizeDrizzleError } from "../errors"
-import { BusinessRuleError,ConflictError,FrameworkCoreError,PersistenceError,RetryablePersistenceError,TimeoutError,ValidationError } from "core/domain"
+import { BusinessRuleError,ConflictError,FrameworkCoreError,PersistenceError,RetryablePersistenceError,TimeoutError,ValidationError } from "@xonava/core/domain"
 
 describe("ER1 Drizzle error normalization",()=>{
   it("maps PostgreSQL and D1 machine codes",()=>{expect(normalizeDrizzleError(Object.assign(new Error("secret SQL"),{code:"23505"}),"postgresql")).toBeInstanceOf(ConflictError);expect(normalizeDrizzleError(Object.assign(new Error("secret SQL"),{code:"SQLITE_BUSY"}),"d1")).toBeInstanceOf(RetryablePersistenceError)})

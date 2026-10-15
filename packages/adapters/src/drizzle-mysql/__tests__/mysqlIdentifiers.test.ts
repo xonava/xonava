@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { ConfigurationError } from "core/domain"
+import { ConfigurationError } from "@xonava/core/domain"
 import { MySqlDialect } from "drizzle-orm/mysql-core"
 import { mysqlIdentifier, mysqlQualifiedTable, mysqlQualifiedTableSql, resolveMySqlTableNames, resolveMySqlTables } from "../mysqlIdentifiers"
 import { DrizzleMySqlJobStore } from "../drizzleJobStore"

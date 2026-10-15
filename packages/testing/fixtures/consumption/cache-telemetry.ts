@@ -1,3 +1,3 @@
-import { CacheService } from "core/cache"
-import { createNoopTelemetry } from "core/telemetry"
+import { CacheService } from "@xonava/core/cache"
+import { createNoopTelemetry } from "@xonava/core/telemetry"
 export const capabilities = [CacheService, createNoopTelemetry]

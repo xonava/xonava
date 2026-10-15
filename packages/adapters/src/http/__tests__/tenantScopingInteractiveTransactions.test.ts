@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 import { createFrameworkWriteHandler } from "../createFrameworkWriteHandler"
 import type { FrameworkAdapterDeps, TrustedFrameworkSession } from "../../server"
 import { allowAllAbacBundle, allowAllModuleFacts, canonicalRequestNormalization, trustedSession } from "./canonicalRequest"
-import { createTenantScopedPersistenceProvider, type PersistenceProvider, type EntityDescriptor } from "core/persistence"
+import { createTenantScopedPersistenceProvider, type PersistenceProvider, type EntityDescriptor } from "@xonava/core/persistence"
 import { internalRepositoryForDescriptor, type InternalDynamicRepository } from "../../repository/dynamicRepository"
 
 type TestRow = {
@@ -87,7 +87,7 @@ function createHandler(session: TrustedFrameworkSession, repo: InternalDynamicRe
       kind: "mutation",
       atomicity: { kind: "standard", mode: "required" },
       authorization: { authorize: async () => ({ allowed: true }) },
-      execute: async ({ operation }: { operation: import("core/operation").MutationOperationContext }) => {
+      execute: async ({ operation }: { operation: import("@xonava/core/operation").MutationOperationContext }) => {
         const scopedRepo = internalRepositoryForDescriptor(operation.persistence, testEntity)
         await scopedRepo.findById("row-1")
         return { id: "row-1", name: "test" }

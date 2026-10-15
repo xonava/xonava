@@ -1,5 +1,5 @@
-import { OptimisticConcurrencyError } from "core/domain"
-import type { AtomicBatchPlan, EntityDescriptor, PersistenceProvider, UnversionedRepository } from "core/persistence"
+import { OptimisticConcurrencyError } from "@xonava/core/domain"
+import type { AtomicBatchPlan, EntityDescriptor, PersistenceProvider, UnversionedRepository } from "@xonava/core/persistence"
 import {
   runAtomicBatchContractTests,
   runJobStoreConcurrencyContractTests,
@@ -8,10 +8,10 @@ import {
   runScheduleConcurrencyContractTests,
   runReleaseInvariantTests,
 } from "../src/index"
-import { createTenantScopedPersistenceProvider } from "core/persistence"
-import type { JobStore, ScheduleStore, StoredJob } from "core/execution"
-import type { FencedScheduleClaim } from "core/execution"
-import type { OutboxRecord, OutboxSink } from "core/events"
+import { createTenantScopedPersistenceProvider } from "@xonava/core/persistence"
+import type { JobStore, ScheduleStore, StoredJob } from "@xonava/core/execution"
+import type { FencedScheduleClaim } from "@xonava/core/execution"
+import type { OutboxRecord, OutboxSink } from "@xonava/core/events"
 
 const auditRecord = {
   id: "audit-contract-1",

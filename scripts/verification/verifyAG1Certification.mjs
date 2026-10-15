@@ -1,8 +1,8 @@
 import { certificationContext, createSourceManifest, runNpm, verifiedScenarioEvidence, writeCertificationArtifact } from "./certificationSupport.mjs"
 const { runId, directory } = certificationContext("local-ag1", "ag1")
-runNpm(["run", "typecheck", "-w", "core"])
-runNpm(["run", "lint", "-w", "core"])
-runNpm(["run", "test", "-w", "core", "--", "--run", "src/aggregate/__tests__/aggregate.test.ts"])
+runNpm(["run", "typecheck", "-w", "@xonava/core"])
+runNpm(["run", "lint", "-w", "@xonava/core"])
+runNpm(["run", "test", "-w", "@xonava/core", "--", "--run", "src/aggregate/__tests__/aggregate.test.ts"])
 const testFile = "packages/core/src/aggregate/__tests__/aggregate.test.ts"
 const scenarios = await verifiedScenarioEvidence([
   { id: "compiled-boundary", testFile, testName: "compiles an immutable named boundary" },

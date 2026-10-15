@@ -5,8 +5,8 @@ import {
   createAbacAuthorizer,
   type NormalizedAbacPolicy,
   type VerifiedAbacPolicyBundle,
-} from "core/domain"
-import type { PersistenceProvider, VersionedRepository, UnversionedEntityDescriptor, VersionedEntityDescriptor } from "core/persistence"
+} from "@xonava/core/domain"
+import type { PersistenceProvider, VersionedRepository, UnversionedEntityDescriptor, VersionedEntityDescriptor } from "@xonava/core/persistence"
 
 interface TenantRow {
   id: string

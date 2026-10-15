@@ -1,7 +1,7 @@
 import type {Pool,ResultSetHeader,RowDataPacket} from "mysql2/promise"
-import {ConflictError,StaleClaimError} from "core/domain"
+import {ConflictError,StaleClaimError} from "@xonava/core/domain"
 import {resolveMySqlTables,type MySqlTableOptions} from "./mysqlIdentifiers"
-import {decodeStoredJobCheckpoint,validateJobProgress,type JobProgress,type JobProgressFence,type JobProgressPort} from "core/execution"
+import {decodeStoredJobCheckpoint,validateJobProgress,type JobProgress,type JobProgressFence,type JobProgressPort} from "@xonava/core/execution"
 
 /** Production table names; `jobs` is the fence table read under FOR UPDATE. */
 export const MYSQL_JOB_PROGRESS_TABLES=Object.freeze({jobProgress:"job_progress",jobs:"jobs"})

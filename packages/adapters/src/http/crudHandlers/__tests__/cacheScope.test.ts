@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest"
-import type { CacheAdapter } from "core/cache"
-import type { EntityDescriptor, PersistenceProvider } from "core/persistence"
+import type { CacheAdapter } from "@xonava/core/cache"
+import type { EntityDescriptor, PersistenceProvider } from "@xonava/core/persistence"
 import {
   bindAbacSecurityDigest,
   type AbacPolicyBundle,
-} from "core/domain"
+} from "@xonava/core/domain"
 import {
   InMemoryCacheAdapter,
   SharedGenerationCacheAdapter,

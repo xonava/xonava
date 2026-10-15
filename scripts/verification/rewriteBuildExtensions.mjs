@@ -1,13 +1,12 @@
 import { access, readdir, readFile, stat, writeFile } from "node:fs/promises"
 import { dirname, join, resolve } from "node:path"
-const root = join(process.argv[2] ?? ".", "dist")
 async function walk(directory) {
   for (const name of await readdir(directory)) {
     const path = join(directory, name)
     if ((await stat(path)).isDirectory()) await walk(path)
     else if (name.endsWith(".js")) {
       const source = await readFile(path, "utf8")
-      const pattern = /(from\s+["']|import\s*\(["'])(\.\.?\/[^"']+?)(["'])/g
+      const pattern = /(from\s+["']|import\s*\(["']|^\s*import\s+["'])(\.\.?\/[^"']+?)(["'])/gm
       let rewritten = ""
       let cursor = 0
       for (const match of source.matchAll(pattern)) {
@@ -35,4 +34,6 @@ async function walk(directory) {
     }
   }
 }
-await walk(root)
+// Referenced projects are re-emitted by `tsc -b --force`, so callers pass every package whose
+// dist the build touched, not only their own.
+for (const packageDirectory of process.argv.length > 2 ? process.argv.slice(2) : ["."]) await walk(join(packageDirectory, "dist"))

@@ -1,24 +1,24 @@
 import { z } from "zod"
-import type { AuditSink, OutboxSink } from "core/events"
-import type { CacheAdapter } from "core/cache"
-import type { PersistenceProvider } from "core/persistence"
-import type { RuntimeCapabilities } from "core/bootstrap"
-import type { ValidationSchema } from "core/kernel"
-import type { EntityVersion } from "core/serialization"
+import type { AuditSink, OutboxSink } from "@xonava/core/events"
+import type { CacheAdapter } from "@xonava/core/cache"
+import type { PersistenceProvider } from "@xonava/core/persistence"
+import type { RuntimeCapabilities } from "@xonava/core/bootstrap"
+import type { ValidationSchema } from "@xonava/core/kernel"
+import type { EntityVersion } from "@xonava/core/serialization"
 import type {
   CapabilityCheckConfig,
   CrudLifecycle,
   EntityScopeDefinition,
-} from "core/entity"
-import type { EntityDescriptor } from "core/persistence"
-import type { RequestContext } from "core/domain"
+} from "@xonava/core/entity"
+import type { EntityDescriptor } from "@xonava/core/persistence"
+import type { RequestContext } from "@xonava/core/domain"
 import type { FrameworkAdapterDeps, FrameworkRequestNormalization } from "../../server"
 import type {
   CrudScopeConfig,
   ScopedFrameworkValidatedContext,
 } from "../createFrameworkWriteHandler"
-import type { FilterFieldMeta } from "core/domain"
-import type { CursorIntegrityPort } from "core/query"
+import type { FilterFieldMeta } from "@xonava/core/domain"
+import type { CursorIntegrityPort } from "@xonava/core/query"
 
 export type SelectableRow = Record<string, unknown>
 export type AuditObject = Record<string, unknown>
@@ -43,11 +43,11 @@ export type MutationOutsideReadScope = {
 export type MutationResult<TRow> = { record: TRow } | MutationOutsideReadScope
 
 export type RateLimitConfigs = {
-  list?: import("core/entity").EntityRateLimitSetting
-  detail?: import("core/entity").EntityRateLimitSetting
-  create?: import("core/entity").EntityRateLimitSetting
-  update?: import("core/entity").EntityRateLimitSetting
-  delete?: import("core/entity").EntityRateLimitSetting
+  list?: import("@xonava/core/entity").EntityRateLimitSetting
+  detail?: import("@xonava/core/entity").EntityRateLimitSetting
+  create?: import("@xonava/core/entity").EntityRateLimitSetting
+  update?: import("@xonava/core/entity").EntityRateLimitSetting
+  delete?: import("@xonava/core/entity").EntityRateLimitSetting
 }
 export type ValidationSchemas = {
   idParams?: ValidationSchema
@@ -61,7 +61,7 @@ export interface AuditConfig {
   emitOn?: ("create" | "update" | "delete")[]
   includeValues?: boolean
   readAudit?: boolean
-  fieldClassification?: import("core/events").AuditFieldClassifications
+  fieldClassification?: import("@xonava/core/events").AuditFieldClassifications
   required?: boolean
   auditGuarantee?: "atomic" | "durable" | "best-effort"
   requiredStateSemantics?: "committed-state"
@@ -81,7 +81,7 @@ export interface CrudRoutesConfig {
   delete: boolean
 }
 
-export type EntityQueryLimitsWithBytes = import("core/entity").EntityQueryLimits & {
+export type EntityQueryLimitsWithBytes = import("@xonava/core/entity").EntityQueryLimits & {
   maxFilterJsonBytes?: number
   maxSortJsonBytes?: number
   maxFilterValueBytes?: number
@@ -103,7 +103,7 @@ export interface CrudOptions<
   policy: CapabilityCheckConfig
   cache: { enabled?: boolean; tag: string; keyPrefix: string }
   getCacheAdapter: () => Promise<CacheAdapter>
-  getRateLimitStore?: () => Promise<import("core/rate-limit").RateLimitStore>
+  getRateLimitStore?: () => Promise<import("@xonava/core/rate-limit").RateLimitStore>
   createPersistence: (context: RequestContext) => PersistenceProvider
   auditSinkFactory?: (context: RequestContext, persistence?: PersistenceProvider) => AuditSink
   outboxSinkFactory?: (context: RequestContext, persistence?: PersistenceProvider) => OutboxSink
@@ -115,7 +115,7 @@ export interface CrudOptions<
   audit?: AuditConfig
   searchableColumns?: string[]
   queryLimits?: EntityQueryLimitsWithBytes
-  searchStrategy?: import("core/entity").EntitySearchStrategy
+  searchStrategy?: import("@xonava/core/entity").EntitySearchStrategy
   filterableColumns?: string[]
   sortableColumns?: string[]
   filterFieldMeta?: Record<string, FilterFieldMeta>
@@ -148,7 +148,7 @@ export type ReadQuery = {
   before?: string
   limit?: number
   fields?: string
-  consistency?: import("core/query").ReadConsistency
+  consistency?: import("@xonava/core/query").ReadConsistency
 }
 
 export type CrudShared<
@@ -172,11 +172,11 @@ export type CrudShared<
   ) => string[] | Promise<string[]>
   buildReadTags: (context: RequestContext) => string[]
   resolveDefaultSort: () =>
-    import("core/query").SortSpec[] | undefined
+    import("@xonava/core/query").SortSpec[] | undefined
   enforceReadRateLimit: (
     route: "list" | "detail",
     config:
-      import("core/entity").EntityRateLimitSetting | undefined,
+      import("@xonava/core/entity").EntityRateLimitSetting | undefined,
     request: Request,
     context: RequestContext
   ) => Promise<void>
@@ -186,12 +186,12 @@ export type CrudShared<
   ) => Promise<import("../../server").AbacBundle | undefined>
   buildReadScope: (bundle: import("../../server").AbacBundle | undefined) => {
     filter:
-      import("core/domain").PredicateNode | undefined
+      import("@xonava/core/domain").PredicateNode | undefined
     cacheScopeKey?: string
   }
   resolveReadScopeForContext: (context: RequestContext) => Promise<{
     filter:
-      import("core/domain").PredicateNode | undefined
+      import("@xonava/core/domain").PredicateNode | undefined
     cacheScopeKey?: string
   }>
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { ZodError } from "zod"
-import { CapabilityError, ForbiddenError, OptimisticConcurrencyError, RetryablePersistenceError, UnauthorizedError, ValidationError } from "core/domain"
+import { CapabilityError, ForbiddenError, OptimisticConcurrencyError, RetryablePersistenceError, UnauthorizedError, ValidationError } from "@xonava/core/domain"
 import { createFrameworkErrorHandler } from "../handleFrameworkCoreError"
 import { RequestBodyTooLargeError, UnsupportedMediaTypeError } from "../requestBody"
 

@@ -1,4 +1,4 @@
-import { ConfigurationError } from "core/domain"
+import { ConfigurationError } from "@xonava/core/domain"
 
 export type D1BatchLimit = "maxBindParams" | "maxStatementBytes" | "maxBatchItems"
 

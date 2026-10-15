@@ -1,6 +1,6 @@
 import {describe,expect,it} from "vitest"
-import type { InboxKey, InboxRecord, OutboxDeliveryRecord } from "core/events"
-import {createMySqlInboxStore,createMySqlLeaseStore,createMySqlOutboxStore} from "adapters/drizzle-mysql"
+import type { InboxKey, InboxRecord, OutboxDeliveryRecord } from "@xonava/core/events"
+import {createMySqlInboxStore,createMySqlLeaseStore,createMySqlOutboxStore} from "@xonava/adapters/drizzle-mysql"
 import {openMySqlFixture} from "./database.js"
 
 const scopeId="tenant:t1" as never

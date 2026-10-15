@@ -8,8 +8,8 @@ const directory = resolve("artifacts/framework-conformance", runId, "tx1")
 const run = args => execFileSync("npm", args, { cwd: process.cwd(), stdio: "inherit", env: process.env, shell: process.platform === "win32" })
 
 run(["run", "typecheck"])
-run(["run", "test", "-w", "core", "--", "--run", "src/certification/__tests__/tx1Contracts.test.ts", "src/bootstrap/__tests__/runtimeCapabilities.test.ts"])
-run(["run", "test", "-w", "adapters", "--", "--run", "src/drizzle-pg/__tests__/drizzlePersistenceProvider.test.ts", "src/drizzle-d1/__tests__/drizzlePersistenceProvider.test.ts"])
+run(["run", "test", "-w", "@xonava/core", "--", "--run", "src/certification/__tests__/tx1Contracts.test.ts", "src/bootstrap/__tests__/runtimeCapabilities.test.ts"])
+run(["run", "test", "-w", "@xonava/adapters", "--", "--run", "src/drizzle-pg/__tests__/drizzlePersistenceProvider.test.ts", "src/drizzle-d1/__tests__/drizzlePersistenceProvider.test.ts"])
 
 const sources = [
   "packages/core/src/persistence/capabilities.ts",

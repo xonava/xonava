@@ -2,7 +2,7 @@ import pg from "pg"
 import { afterAll, beforeAll, describe, it } from "vitest"
 import { drizzle } from "drizzle-orm/node-postgres"
 import { integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core"
-import { createDrizzleAuditSinkFactory, createDrizzleOutboxSinkFactory, createDrizzlePersistenceProvider } from "adapters/drizzle-pg"
+import { createDrizzleAuditSinkFactory, createDrizzleOutboxSinkFactory, createDrizzlePersistenceProvider } from "@xonava/adapters/drizzle-pg"
 import { pgCertificationUrl } from "./database.js"
 import { assertNestedDurableEffects, mapNestedOutboxRecord } from "../shared/nestedDurableEffects.js"
 

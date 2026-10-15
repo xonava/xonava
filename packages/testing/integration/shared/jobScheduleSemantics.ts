@@ -1,5 +1,5 @@
 import { expect } from "vitest"
-import { createJobRegistry, dispatchDueJobs, JOB_MAX_ATTEMPTS_FROM_DEFINITION, materializeDueSchedules, type DispatcherClock, type JobRequester, type JobStore, type ScheduleStore } from "core/execution"
+import { createJobRegistry, dispatchDueJobs, JOB_MAX_ATTEMPTS_FROM_DEFINITION, materializeDueSchedules, type DispatcherClock, type JobRequester, type JobStore, type ScheduleStore } from "@xonava/core/execution"
 
 const system = { kind: "system", systemKey: "framework" } as const
 const requester: JobRequester = { scope: "system" }

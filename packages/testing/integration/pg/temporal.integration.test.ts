@@ -1,7 +1,7 @@
 import pg from "pg"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { DrizzlePgTemporalHistoryStore } from "adapters/drizzle-pg"
-import { reconstructAsOf } from "core/temporal"
+import { DrizzlePgTemporalHistoryStore } from "@xonava/adapters/drizzle-pg"
+import { reconstructAsOf } from "@xonava/core/temporal"
 import { openPgFixture, pgCertificationUrl } from "./database.js"
 
 describe("temporal PostgreSQL integration", () => {

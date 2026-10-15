@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { DrizzleD1SequenceStore, DrizzleD1TemporalHistoryStore } from "adapters/drizzle-d1"
+import { DrizzleD1SequenceStore, DrizzleD1TemporalHistoryStore } from "@xonava/adapters/drizzle-d1"
 import { temporaryD1Fixture } from "./database.js"
 describe("D1 temporal and sequence races", () => {
   it("serializes both allocators under contention", async () => {

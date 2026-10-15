@@ -9,12 +9,12 @@ const run = args => execFileSync("npm", args, { cwd: process.cwd(), stdio: "inhe
 
 if (!process.env.FRAMEWORK_TEST_PG_URL && !process.env.DATABASE_URL) throw new Error("J1 certification requires a real PostgreSQL URL")
 run(["run", "typecheck"])
-run(["run", "test", "-w", "core", "--", "--run", "src/execution/__tests__/jobRegistry.test.ts", "src/execution/__tests__/j1Contracts.test.ts", "src/execution/__tests__/dispatcher.test.ts", "src/execution/__tests__/scheduleDispatcher.test.ts"])
+run(["run", "test", "-w", "@xonava/core", "--", "--run", "src/execution/__tests__/jobRegistry.test.ts", "src/execution/__tests__/j1Contracts.test.ts", "src/execution/__tests__/dispatcher.test.ts", "src/execution/__tests__/scheduleDispatcher.test.ts"])
 // Keep the real runtimes in separate Vitest processes. On Windows, workerd can
 // abort during concurrent PostgreSQL/native runtime startup even though each
 // adapter is healthy in isolation.
-run(["run", "test", "-w", "testing", "--", "--config", "vitest.integration.config.ts", "integration/pg/j1.integration.test.ts"])
-run(["run", "test", "-w", "testing", "--", "--config", "vitest.integration.config.ts", "integration/d1/j1.integration.test.ts"])
+run(["run", "test", "-w", "@xonava/testing", "--", "--config", "vitest.integration.config.ts", "integration/pg/j1.integration.test.ts"])
+run(["run", "test", "-w", "@xonava/testing", "--", "--config", "vitest.integration.config.ts", "integration/d1/j1.integration.test.ts"])
 
 const sources = [
   "packages/core/src/execution/types.ts",

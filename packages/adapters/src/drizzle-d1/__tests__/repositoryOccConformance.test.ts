@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest"
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
-import { Predicate, ConfigurationError, OptimisticConcurrencyError, NotFoundError } from "core/domain"
-import type { VersionedRepository } from "core/persistence"
-import { createDrizzleRepository, type DrizzleSessionLike, type DrizzleUpdateResult } from "adapters/drizzle-d1"
-import type { DrizzleColumnMap } from "adapters/drizzle-d1"
+import { Predicate, ConfigurationError, OptimisticConcurrencyError, NotFoundError } from "@xonava/core/domain"
+import type { VersionedRepository } from "@xonava/core/persistence"
+import { createDrizzleRepository, type DrizzleSessionLike, type DrizzleUpdateResult } from "@xonava/adapters/drizzle-d1"
+import type { DrizzleColumnMap } from "@xonava/adapters/drizzle-d1"
 
 const productTable = sqliteTable("products", {
   id: text("id"),

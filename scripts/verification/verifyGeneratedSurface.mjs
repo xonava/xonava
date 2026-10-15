@@ -43,6 +43,13 @@ for (const packageName of ["core", "adapters", "testing"]) {
   for (const path of await files(resolve(`packages/${packageName}/dist`))) {
     if (/\.(?:js|d\.ts)$/.test(path)) {
       const generated = await readFile(path, "utf8")
+      // Node ESM does not resolve extensionless relative specifiers, so published code that
+      // keeps one fails to load for every consumer.
+      if (path.endsWith(".js")) {
+        for (const match of generated.matchAll(/(?:from\s+["']|import\s*\(["']|^\s*import\s+["'])(\.\.?\/[^"']+?)["']/gm)) {
+          if (!/\.(?:js|json)$/.test(match[1])) failures.push(`${relative(process.cwd(), path)} imports extensionless ${match[1]}`)
+        }
+      }
       for (const forbidden of forbiddenGeneratedReferences) {
         if (forbidden.pattern.test(generated)) {
           failures.push(`${relative(process.cwd(), path)} contains ${forbidden.label}`)

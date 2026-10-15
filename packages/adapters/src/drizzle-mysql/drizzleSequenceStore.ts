@@ -1,5 +1,5 @@
-import type { ExecutionScopeId } from "core/domain"
-import type { SequenceStore } from "core/sequence"
+import type { ExecutionScopeId } from "@xonava/core/domain"
+import type { SequenceStore } from "@xonava/core/sequence"
 import { resolveMySqlTables, type MySqlTableOptions } from "./mysqlIdentifiers"
 interface MySqlResult { insertId?: number }
 export interface MySqlSequenceConnection { query(sql: string, values?: unknown[]): Promise<[unknown, unknown]> }

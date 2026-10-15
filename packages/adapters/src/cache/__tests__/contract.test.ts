@@ -1,4 +1,4 @@
-import { runCacheAdapterContractTests } from "testing"
+import { runCacheAdapterContractTests } from "@xonava/testing"
 import { InMemoryCacheAdapter } from "../inMemoryCacheAdapter"
 import { SharedGenerationCacheAdapter } from "../sharedGenerationCacheAdapter"
 

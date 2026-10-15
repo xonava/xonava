@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { Predicate, evaluatePredicate } from "core/domain"
+import { Predicate, evaluatePredicate } from "@xonava/core/domain"
 
 describe("release property harness", () => {
   it("is deterministic across seeded generated predicate cases", () => {

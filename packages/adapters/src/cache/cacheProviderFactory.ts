@@ -1,5 +1,5 @@
-import { ConfigurationError } from "core/domain"
-import type { CacheAdapter } from "core/cache"
+import { ConfigurationError } from "@xonava/core/domain"
+import type { CacheAdapter } from "@xonava/core/cache"
 
 /**
  * Declares which backing engine builds the default cache adapter. Capabilities

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { defineEntity } from "core/entity"
+import { defineEntity } from "@xonava/core/entity"
 import { CRUD } from "../crud"
 import { canonicalRequestNormalization, trustedSession } from "./canonicalRequest"
 

@@ -2,8 +2,8 @@ import { pgTable, integer, text } from "drizzle-orm/pg-core"
 import { PgDialect } from "drizzle-orm/pg-core/dialect"
 import { sql, type AnyColumn, type SQL } from "drizzle-orm"
 import { describe, expect, it, vi } from "vitest"
-import { ConfigurationError, Predicate, ValidationError } from "core/domain"
-import { createDrizzlePersistenceProvider, createDrizzleRepository, type DrizzleSessionLike, DrizzleEntityRegistry, type PgDatabaseLike } from "adapters/drizzle-pg"
+import { ConfigurationError, Predicate, ValidationError } from "@xonava/core/domain"
+import { createDrizzlePersistenceProvider, createDrizzleRepository, type DrizzleSessionLike, DrizzleEntityRegistry, type PgDatabaseLike } from "@xonava/adapters/drizzle-pg"
 
 const table = pgTable("pagination_rows", { id: text("id").primaryKey(), name: text("name"), version: integer("version") })
 const entity = { name: "pagination", primaryKey: "id", fields: { id: { type: "string" }, name: { type: "string" }, version: { type: "number" } } } as const

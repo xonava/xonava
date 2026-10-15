@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return */
 import { describe, expect, it, vi } from "vitest"
-import { ConfigurationError, ForbiddenError, Predicate, evaluatePredicate, type FieldReadOverride } from "core/domain"
+import { ConfigurationError, ForbiddenError, Predicate, evaluatePredicate, type FieldReadOverride } from "@xonava/core/domain"
 import { createAuthorizedRepository } from "../authorizedRepository"
 import { TrustedPersistenceRouter } from "../persistenceRouter"
 

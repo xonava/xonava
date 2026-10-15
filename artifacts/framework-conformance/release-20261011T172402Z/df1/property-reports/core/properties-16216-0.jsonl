@@ -1,4 +1,0 @@
-{"property":"query budget verdict","seed":1299113930,"scale":5,"baseRuns":3000,"runs":15000,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:27.084Z"}
-{"property":"query validation is pure","seed":1299113930,"scale":5,"baseRuns":500,"runs":2500,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:27.277Z"}
-{"property":"canonical json round trip","seed":1299113930,"scale":5,"baseRuns":1000,"runs":5000,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:28.422Z"}
-{"property":"plan snapshot","seed":1299113930,"scale":5,"baseRuns":600,"runs":3000,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:29.086Z"}

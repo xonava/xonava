@@ -6,8 +6,8 @@ const runId = process.env.FRAMEWORK_CONFORMANCE_RUN_ID ?? "local-s1"
 const directory = resolve("artifacts/framework-conformance", runId, "s1")
 const run = args => execFileSync("npm", args, { cwd: process.cwd(), stdio: "inherit", env: process.env, shell: process.platform === "win32" })
 run(["run", "typecheck"])
-run(["run", "test", "-w", "core", "--", "--run", "src/security", "src/operation/__tests__/authorizationPlanEnforcement.test.ts", "src/domain/__tests__/authority.test.ts", "src/domain/__tests__/frameworkAuthorization.test.ts", "src/domain/__tests__/abacAuthorizer.test.ts", "src/domain/__tests__/abacNormalization.test.ts"])
-run(["run", "test", "-w", "adapters", "--", "--run", "src/http/crudHandlers/__tests__/authorizationTrustBoundary.test.ts", "src/http/crudHandlers/__tests__/fieldVisibilityAdversarial.test.ts", "src/http/crudHandlers/__tests__/updateToctou.test.ts"])
+run(["run", "test", "-w", "@xonava/core", "--", "--run", "src/security", "src/operation/__tests__/authorizationPlanEnforcement.test.ts", "src/domain/__tests__/authority.test.ts", "src/domain/__tests__/frameworkAuthorization.test.ts", "src/domain/__tests__/abacAuthorizer.test.ts", "src/domain/__tests__/abacNormalization.test.ts"])
+run(["run", "test", "-w", "@xonava/adapters", "--", "--run", "src/http/crudHandlers/__tests__/authorizationTrustBoundary.test.ts", "src/http/crudHandlers/__tests__/fieldVisibilityAdversarial.test.ts", "src/http/crudHandlers/__tests__/updateToctou.test.ts"])
 const sources = ["packages/core/src/security/authorizedExecutionPlan.ts", "packages/core/src/operation/authorizationPlanEnforcement.ts", "packages/core/src/operation/standardOperationPipeline.ts", "packages/core/src/operation/atomicBatchOperationPipeline.ts", "packages/core/src/domain/frameworkAuthorization.ts", "packages/core/src/security/authorizationFacts.ts", "packages/core/src/domain/authority.ts", "packages/core/src/query/projection.ts"]
 const sourceManifest = await Promise.all(sources.map(async path => ({ path, sha256: createHash("sha256").update(await readFile(resolve(path))).digest("hex") })))
 await mkdir(directory, { recursive: true })

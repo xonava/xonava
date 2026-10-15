@@ -1,6 +1,6 @@
 import {afterAll,beforeAll,beforeEach,describe,expect,it} from "vitest"
 import type {Pool} from "mysql2/promise"
-import {DrizzleMySqlJobStore,MYSQL_JOB_LEASE_EXHAUSTED_REASON,type DrizzleMySqlJobStoreOptions} from "adapters/drizzle-mysql"
+import {DrizzleMySqlJobStore,MYSQL_JOB_LEASE_EXHAUSTED_REASON,type DrizzleMySqlJobStoreOptions} from "@xonava/adapters/drizzle-mysql"
 import {altName,clearAltDatabase,openAltDatabase} from "./altDatabase.js"
 
 const system={scope:"system" as const}

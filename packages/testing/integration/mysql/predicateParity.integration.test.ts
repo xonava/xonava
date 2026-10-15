@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import mysql from "mysql2/promise"
 import { drizzle } from "drizzle-orm/mysql2"
 import { boolean, double, int, mysqlTable, varchar } from "drizzle-orm/mysql-core"
-import { assertMySqlBinaryCollation, compileDrizzlePredicate } from "adapters/drizzle-mysql"
+import { assertMySqlBinaryCollation, compileDrizzlePredicate } from "@xonava/adapters/drizzle-mysql"
 import { findParityMismatches, parityDataset } from "../shared/predicateParity.js"
 import { mysqlCertificationUrl } from "./database.js"
 

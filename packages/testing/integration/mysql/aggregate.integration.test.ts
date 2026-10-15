@@ -1,5 +1,5 @@
-import type { PersistenceProvider } from "core/persistence"
-import { compileAggregate, runAggregateTransaction } from "core/aggregate"
+import type { PersistenceProvider } from "@xonava/core/persistence"
+import { compileAggregate, runAggregateTransaction } from "@xonava/core/aggregate"
 import { describe, expect, it } from "vitest"
 import { openMySqlFixture } from "./database.js"
 type State = { order: { total: number }; payments: { amount: number }[] }

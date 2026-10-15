@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { CacheAdapter } from "core/cache"
+import type { CacheAdapter } from "@xonava/core/cache"
 
 export interface CacheAdapterContractOptions {
   createAdapter: () => CacheAdapter

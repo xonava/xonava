@@ -1,5 +1,5 @@
-import type { CompiledRouteBinding } from "core/bootstrap"
-import { bindAbacSecurityDigest, type ExecutionScope, type Principal } from "core/domain"
+import type { CompiledRouteBinding } from "@xonava/core/bootstrap"
+import { bindAbacSecurityDigest, type ExecutionScope, type Principal } from "@xonava/core/domain"
 import type { FrameworkAuthorizationEntitlements } from "../../server"
 import type {
   FrameworkRequestNormalization,

@@ -1,6 +1,6 @@
 import type { DrizzleD1Database } from "drizzle-orm/d1"
 import { getTableColumns, is, sql, SQL, type AnyColumn, type SQLChunk } from "drizzle-orm"
-import { ConfigurationError } from "core/domain"
+import { ConfigurationError } from "@xonava/core/domain"
 import { SQLiteAsyncDialect, type AnySQLiteTable } from "drizzle-orm/sqlite-core"
 import type { DrizzleSessionLike, DrizzleUpdateResult } from "./drizzleRepository"
 import { d1DriverValue, getAffectedRows } from "./d1Utils"

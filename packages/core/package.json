@@ -1,49 +1,167 @@
 {
-  "name": "core",
+  "name": "@xonava/core",
   "version": "2.0.0-rc.2",
+  "description": "Zero-dependency core of the server framework: runtime-neutral semantics and contracts for entities, operations, persistence, events, workflows, and access policy.",
+  "keywords": [
+    "server",
+    "framework",
+    "domain",
+    "entity",
+    "persistence",
+    "events",
+    "workflow",
+    "abac",
+    "contracts",
+    "zero-dependency"
+  ],
+  "homepage": "https://github.com/Suriyaprakash-Somu/engine#readme",
+  "bugs": {
+    "url": "https://github.com/Suriyaprakash-Somu/engine/issues"
+  },
+  "license": "MIT",
+  "author": "Suriyaprakash Somu",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Suriyaprakash-Somu/engine.git",
+    "directory": "packages/core"
+  },
   "type": "module",
-  "private": true,
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "tsc -b tsconfig.build.json --force && node ../../scripts/verification/rewriteBuildExtensions.mjs .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src --max-warnings=0",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "prepack": "npm run build"
   },
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
-    "./aggregate": { "types": "./dist/aggregate/index.d.ts", "default": "./dist/aggregate/index.js" },
-    "./domain": { "types": "./dist/domain/index.d.ts", "default": "./dist/domain/index.js" },
-    "./entity": { "types": "./dist/entity/index.d.ts", "default": "./dist/entity/index.js" },
-    "./execution": { "types": "./dist/execution/index.d.ts", "default": "./dist/execution/index.js" },
-    "./events": { "types": "./dist/events/index.d.ts", "default": "./dist/events/index.js" },
-    "./operation": { "types": "./dist/operation/index.d.ts", "default": "./dist/operation/index.js" },
-    "./kernel": { "types": "./dist/kernel/index.d.ts", "default": "./dist/kernel/index.js" },
-    "./cache": { "types": "./dist/cache/index.d.ts", "default": "./dist/cache/index.js" },
-    "./rate-limit": { "types": "./dist/rate-limit/index.d.ts", "default": "./dist/rate-limit/index.js" },
-    "./telemetry": { "types": "./dist/telemetry/index.d.ts", "default": "./dist/telemetry/index.js" },
-    "./temporal": { "types": "./dist/temporal/index.d.ts", "default": "./dist/temporal/index.js" },
-    "./quota": { "types": "./dist/quota/index.d.ts", "default": "./dist/quota/index.js" },
-    "./resilience": { "types": "./dist/resilience/index.d.ts", "default": "./dist/resilience/index.js" },
-    "./rules": { "types": "./dist/rules/index.d.ts", "default": "./dist/rules/index.js" },
-    "./sequence": { "types": "./dist/sequence/index.d.ts", "default": "./dist/sequence/index.js" },
-    "./object-store": { "types": "./dist/object-store/index.d.ts", "default": "./dist/object-store/index.js" },
-    "./health": { "types": "./dist/health/index.d.ts", "default": "./dist/health/index.js" },
-    "./secrets": { "types": "./dist/secrets/index.d.ts", "default": "./dist/secrets/index.js" },
-    "./feature-flags": { "types": "./dist/feature-flags/index.d.ts", "default": "./dist/feature-flags/index.js" },
-    "./business-calendar": { "types": "./dist/business-calendar/index.d.ts", "default": "./dist/business-calendar/index.js" },
-    "./persistence": { "types": "./dist/persistence/index.d.ts", "default": "./dist/persistence/index.js" },
-    "./query": { "types": "./dist/query/index.d.ts", "default": "./dist/query/index.js" },
-    "./read-model": { "types": "./dist/read-model/index.d.ts", "default": "./dist/read-model/index.js" },
-    "./security": { "types": "./dist/security/index.d.ts", "default": "./dist/security/index.js" },
-    "./bootstrap": { "types": "./dist/bootstrap/index.d.ts", "default": "./dist/bootstrap/index.js" },
-    "./serialization": { "types": "./dist/serialization/index.d.ts", "default": "./dist/serialization/index.js" },
-    "./storage": { "types": "./dist/storage/index.d.ts", "default": "./dist/storage/index.js" },
-    "./workflow": { "types": "./dist/workflow/index.d.ts", "default": "./dist/workflow/index.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./aggregate": {
+      "types": "./dist/aggregate/index.d.ts",
+      "default": "./dist/aggregate/index.js"
+    },
+    "./domain": {
+      "types": "./dist/domain/index.d.ts",
+      "default": "./dist/domain/index.js"
+    },
+    "./entity": {
+      "types": "./dist/entity/index.d.ts",
+      "default": "./dist/entity/index.js"
+    },
+    "./execution": {
+      "types": "./dist/execution/index.d.ts",
+      "default": "./dist/execution/index.js"
+    },
+    "./events": {
+      "types": "./dist/events/index.d.ts",
+      "default": "./dist/events/index.js"
+    },
+    "./operation": {
+      "types": "./dist/operation/index.d.ts",
+      "default": "./dist/operation/index.js"
+    },
+    "./kernel": {
+      "types": "./dist/kernel/index.d.ts",
+      "default": "./dist/kernel/index.js"
+    },
+    "./cache": {
+      "types": "./dist/cache/index.d.ts",
+      "default": "./dist/cache/index.js"
+    },
+    "./rate-limit": {
+      "types": "./dist/rate-limit/index.d.ts",
+      "default": "./dist/rate-limit/index.js"
+    },
+    "./telemetry": {
+      "types": "./dist/telemetry/index.d.ts",
+      "default": "./dist/telemetry/index.js"
+    },
+    "./temporal": {
+      "types": "./dist/temporal/index.d.ts",
+      "default": "./dist/temporal/index.js"
+    },
+    "./quota": {
+      "types": "./dist/quota/index.d.ts",
+      "default": "./dist/quota/index.js"
+    },
+    "./resilience": {
+      "types": "./dist/resilience/index.d.ts",
+      "default": "./dist/resilience/index.js"
+    },
+    "./rules": {
+      "types": "./dist/rules/index.d.ts",
+      "default": "./dist/rules/index.js"
+    },
+    "./sequence": {
+      "types": "./dist/sequence/index.d.ts",
+      "default": "./dist/sequence/index.js"
+    },
+    "./object-store": {
+      "types": "./dist/object-store/index.d.ts",
+      "default": "./dist/object-store/index.js"
+    },
+    "./health": {
+      "types": "./dist/health/index.d.ts",
+      "default": "./dist/health/index.js"
+    },
+    "./secrets": {
+      "types": "./dist/secrets/index.d.ts",
+      "default": "./dist/secrets/index.js"
+    },
+    "./feature-flags": {
+      "types": "./dist/feature-flags/index.d.ts",
+      "default": "./dist/feature-flags/index.js"
+    },
+    "./business-calendar": {
+      "types": "./dist/business-calendar/index.d.ts",
+      "default": "./dist/business-calendar/index.js"
+    },
+    "./persistence": {
+      "types": "./dist/persistence/index.d.ts",
+      "default": "./dist/persistence/index.js"
+    },
+    "./query": {
+      "types": "./dist/query/index.d.ts",
+      "default": "./dist/query/index.js"
+    },
+    "./read-model": {
+      "types": "./dist/read-model/index.d.ts",
+      "default": "./dist/read-model/index.js"
+    },
+    "./security": {
+      "types": "./dist/security/index.d.ts",
+      "default": "./dist/security/index.js"
+    },
+    "./bootstrap": {
+      "types": "./dist/bootstrap/index.d.ts",
+      "default": "./dist/bootstrap/index.js"
+    },
+    "./serialization": {
+      "types": "./dist/serialization/index.d.ts",
+      "default": "./dist/serialization/index.js"
+    },
+    "./storage": {
+      "types": "./dist/storage/index.d.ts",
+      "default": "./dist/storage/index.js"
+    },
+    "./workflow": {
+      "types": "./dist/workflow/index.d.ts",
+      "default": "./dist/workflow/index.js"
+    }
   },
   "sideEffects": false,
   "dependencies": {},

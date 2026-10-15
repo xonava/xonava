@@ -1,17 +1,17 @@
-import { CacheService, buildKey, serializeCacheKeyPart } from "core/cache"
-import { buildAuditRecord } from "core/events"
+import { CacheService, buildKey, serializeCacheKeyPart } from "@xonava/core/cache"
+import { buildAuditRecord } from "@xonava/core/events"
 import { internalRepositoryForDescriptor } from "../../repository/dynamicRepository"
 import {
   createOperationContext,
   runOperation,
   type OperationDefinition,
-} from "core/operation"
+} from "@xonava/core/operation"
 import {
   Predicate,
   projectResponseRecord,
   resolveFieldReadOverrides,
   NotFoundError,
-} from "core/domain"
+} from "@xonava/core/domain"
 import {
   frameworkJson,
   createFrameworkErrorHandler,

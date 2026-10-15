@@ -1,5 +1,5 @@
 import {sql,type SQL} from "drizzle-orm"
-import {ConfigurationError} from "core/domain"
+import {ConfigurationError} from "@xonava/core/domain"
 
 /** MySQL identifiers accepted for database (schema) and table names: an ASCII word of at most 64 characters. */
 export const MYSQL_IDENTIFIER_PATTERN=/^[A-Za-z_][A-Za-z0-9_]{0,63}$/

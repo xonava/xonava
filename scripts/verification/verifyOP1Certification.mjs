@@ -6,8 +6,8 @@ const runId = process.env.FRAMEWORK_CONFORMANCE_RUN_ID ?? "local-op1"
 const directory = resolve("artifacts/framework-conformance", runId, "op1")
 const run = args => execFileSync("npm", args, { cwd: process.cwd(), stdio: "inherit", env: process.env, shell: process.platform === "win32" })
 run(["run", "typecheck"])
-run(["run", "test", "-w", "core", "--", "--run", "src/operation"])
-run(["run", "test", "-w", "adapters", "--", "--run", "src/http/crudHandlers/__tests__/hookContextSecurity.test.ts", "src/http/crudHandlers/__tests__/mutationHookReadOnly.test.ts"])
+run(["run", "test", "-w", "@xonava/core", "--", "--run", "src/operation"])
+run(["run", "test", "-w", "@xonava/adapters", "--", "--run", "src/http/crudHandlers/__tests__/hookContextSecurity.test.ts", "src/http/crudHandlers/__tests__/mutationHookReadOnly.test.ts"])
 const sources = ["packages/core/src/operation/deadline.ts", "packages/core/src/operation/executionBudget.ts", "packages/core/src/operation/operationInvoker.ts", "packages/core/src/operation/operationServices.ts", "packages/core/src/operation/operationContext.ts", "packages/core/src/operation/standardOperationPipeline.ts", "packages/core/src/operation/atomicBatchOperationPipeline.ts", "packages/adapters/src/http/createFrameworkWriteHandler.ts"]
 const sourceManifest = await Promise.all(sources.map(async path => ({ path, sha256: createHash("sha256").update(await readFile(resolve(path))).digest("hex") })))
 await mkdir(directory, { recursive: true })

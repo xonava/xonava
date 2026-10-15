@@ -1,8 +1,8 @@
-import { Predicate, type PredicateNode, type PredicateOp, type PredicatePrimitive, type PredicateRangeValue, type PredicateValue } from "core/domain"
-import type { FilterFieldMeta, FilterFieldType } from "core/domain"
-import { ConfigurationError, ValidationError } from "core/domain"
-import type { EntitySearchStrategy } from "core/entity"
-import { DEFAULT_QUERY_BUDGET, type SortSpec } from "core/query"
+import { Predicate, type PredicateNode, type PredicateOp, type PredicatePrimitive, type PredicateRangeValue, type PredicateValue } from "@xonava/core/domain"
+import type { FilterFieldMeta, FilterFieldType } from "@xonava/core/domain"
+import { ConfigurationError, ValidationError } from "@xonava/core/domain"
+import type { EntitySearchStrategy } from "@xonava/core/entity"
+import { DEFAULT_QUERY_BUDGET, type SortSpec } from "@xonava/core/query"
 
 export type { FilterFieldMeta, FilterFieldType }
 

@@ -1,6 +1,6 @@
 import pg from "pg"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { DrizzlePgWorkflowStore } from "adapters/drizzle-pg"
+import { DrizzlePgWorkflowStore } from "@xonava/adapters/drizzle-pg"
 import { bootstrapPostgresFixture, readPostgresMigration } from "../../fixtures/postgres/bootstrap.js"
 import { openPgFixture, pgCertificationUrl } from "./database.js"
 import { registerWorkflowSignalBufferingTests, type DbReceipt, type SignalBufferingHarness } from "../shared/workflowSignalBuffering.js"

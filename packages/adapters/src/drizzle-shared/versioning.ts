@@ -1,7 +1,7 @@
 import type { AnyColumn } from "drizzle-orm"
-import { assertEntityVersion, assertEntityVersionCanIncrement } from "core/serialization"
-import type { EntityDescriptor } from "core/persistence"
-import { ConfigurationError } from "core/domain"
+import { assertEntityVersion, assertEntityVersionCanIncrement } from "@xonava/core/serialization"
+import type { EntityDescriptor } from "@xonava/core/persistence"
+import { ConfigurationError } from "@xonava/core/domain"
 type DrizzleColumnMap = Record<string, AnyColumn>
 
 export function requireMappedVersionColumn<T>(

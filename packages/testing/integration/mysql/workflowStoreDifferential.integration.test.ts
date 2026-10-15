@@ -1,7 +1,7 @@
 import mysql from "mysql2/promise"
 import type { Pool, RowDataPacket } from "mysql2/promise"
 import { afterAll, beforeAll, describe } from "vitest"
-import { DrizzleMySqlWorkflowStore } from "adapters/drizzle-mysql"
+import { DrizzleMySqlWorkflowStore } from "@xonava/adapters/drizzle-mysql"
 import { bootstrapMySqlFixture } from "../../fixtures/mysql/bootstrap.js"
 import { mysqlCertificationUrl } from "./database.js"
 import { defineStoreContractDifferential, printCoverage, type DbReceipt, type WorkflowStoreDriver } from "../shared/workflowStoreDifferential.js"

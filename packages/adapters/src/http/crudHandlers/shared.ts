@@ -1,7 +1,7 @@
-import { enforceRateLimit, type RateLimitConfig, type RateLimitPolicy, type RateLimitStore } from "core/rate-limit"
-import type { EntityVersion } from "core/serialization"
+import { enforceRateLimit, type RateLimitConfig, type RateLimitPolicy, type RateLimitStore } from "@xonava/core/rate-limit"
+import type { EntityVersion } from "@xonava/core/serialization"
 import { internalRepositoryForDescriptor } from "../../repository/dynamicRepository"
-import type { EntityRateLimitSetting } from "core/entity"
+import type { EntityRateLimitSetting } from "@xonava/core/entity"
 import {
   assertFrameworkAuthorization,
   ConfigurationError,
@@ -14,9 +14,9 @@ import {
   deepFreeze,
   type PredicateNode,
   type RequestContext,
-} from "core/domain"
-import type { CrudRouteKey } from "core/entity"
-import { createReadOnlyPersistenceProvider, createTenantScopedPersistenceProvider, encodeTenantCacheTag, type PersistenceProvider } from "core/persistence"
+} from "@xonava/core/domain"
+import type { CrudRouteKey } from "@xonava/core/entity"
+import { createReadOnlyPersistenceProvider, createTenantScopedPersistenceProvider, encodeTenantCacheTag, type PersistenceProvider } from "@xonava/core/persistence"
 import { CacheBackedRateLimitStore } from "../../cache"
 import type {
   CrudMutationHookContext,
@@ -24,7 +24,7 @@ import type {
   CrudReadHookContext,
   CrudMutationHookOperation,
   CrudReadHookOperation,
-} from "core/entity"
+} from "@xonava/core/entity"
 import type {
   PostCommitContext,
   AtomicBatchPreparationContext,
@@ -32,7 +32,7 @@ import type {
   PreparationOperationContext,
   ReadOperationContext,
   RepresentationContext,
-} from "core/operation"
+} from "@xonava/core/operation"
 import type { FrameworkRequestNormalization } from "../../server"
 import { normalizeFrameworkRequest } from "../scopeResolution"
 import type {
@@ -298,7 +298,7 @@ export async function enforceFinalWrite<
   changedFields: string[]
 }): Promise<void> {
   const enforcer = "enforceAbac" in args.operation
-    ? (args.operation as { readonly enforceAbac?: import("core/security").AbacWriteEnforcer }).enforceAbac
+    ? (args.operation as { readonly enforceAbac?: import("@xonava/core/security").AbacWriteEnforcer }).enforceAbac
     : undefined
   if (enforcer) {
     enforcer.enforce(args.action, args.record, args.changedFields)
@@ -663,7 +663,7 @@ export function createShared<
   const enforceReadRateLimit = async (
     route: "list" | "detail",
     config:
-      import("core/entity").EntityRateLimitSetting | undefined,
+      import("@xonava/core/entity").EntityRateLimitSetting | undefined,
     request: Request,
     context: RequestContext
   ) => {

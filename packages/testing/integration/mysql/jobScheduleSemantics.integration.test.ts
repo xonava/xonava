@@ -1,6 +1,6 @@
 import { describe, it } from "vitest"
 import type { RowDataPacket } from "mysql2/promise"
-import { DrizzleMySqlJobStore, DrizzleMySqlScheduleStore } from "adapters/drizzle-mysql"
+import { DrizzleMySqlJobStore, DrizzleMySqlScheduleStore } from "@xonava/adapters/drizzle-mysql"
 import { openMySqlFixture } from "./database.js"
 import { assertDefinitionMaxAttempts, assertScheduleOccurrencesAndBackoff, assertUnknownDefinitionDeferral } from "../shared/jobScheduleSemantics.js"
 

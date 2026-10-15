@@ -1,4 +1,0 @@
-{"property":"post-image updateManyWhere portable mandatory predicates, patches with NULL","seed":1299113930,"scale":5,"baseRuns":1200,"runs":6000,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:23.623Z"}
-{"property":"post-image updateManyWhere full operator set, patches with NULL","seed":1299113930,"scale":5,"baseRuns":1200,"runs":6000,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:24.628Z"}
-{"property":"post-image updateManyWhere portable mandatory predicates, patches with NULL and undefined","seed":1299113930,"scale":5,"baseRuns":1200,"runs":6000,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:25.699Z"}
-{"property":"post-image updateOneWhereReturning","seed":1299113930,"scale":5,"baseRuns":800,"runs":4000,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:26.190Z"}

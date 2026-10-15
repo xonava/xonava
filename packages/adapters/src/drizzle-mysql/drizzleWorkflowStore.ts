@@ -1,8 +1,8 @@
 import type {Pool,PoolConnection,RowDataPacket,ResultSetHeader} from "mysql2/promise"
 import {uuidv7} from "uuidv7"
-import type { StartWorkflowInput, WorkflowFence, WorkflowStore } from "core/workflow"
-import type {WorkflowClaim,WorkflowInstance,WorkflowSignal} from "core/workflow"
-import {assertWorkflowDurableValue,isWorkflowSignalWait} from "core/workflow"
+import type { StartWorkflowInput, WorkflowFence, WorkflowStore } from "@xonava/core/workflow"
+import type {WorkflowClaim,WorkflowInstance,WorkflowSignal} from "@xonava/core/workflow"
+import {assertWorkflowDurableValue,isWorkflowSignalWait} from "@xonava/core/workflow"
 import {resolveMySqlTables,type MySqlTableOptions} from "./mysqlIdentifiers"
 import {decodeWorkflowFailure,encodeWorkflowFailure} from "../drizzle-shared/workflowFailureCodec"
 

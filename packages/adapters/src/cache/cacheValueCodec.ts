@@ -1,4 +1,4 @@
-import { ConfigurationError } from "core/domain"
+import { ConfigurationError } from "@xonava/core/domain"
 
 /**
  * Tagged JSON codec shared by every cache adapter so a value round-trips

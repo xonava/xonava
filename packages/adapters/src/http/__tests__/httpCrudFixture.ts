@@ -1,8 +1,8 @@
 import { vi } from "vitest"
 import { z } from "zod"
-import { defineEntity } from "core/entity"
-import { evaluatePredicate, type PredicateNode } from "core/domain"
-import type { PersistenceProvider } from "core/persistence"
+import { defineEntity } from "@xonava/core/entity"
+import { evaluatePredicate, type PredicateNode } from "@xonava/core/domain"
+import type { PersistenceProvider } from "@xonava/core/persistence"
 import { CRUD } from "../crud"
 import { allowAllAbacBundle, allowAllModuleFacts, canonicalRequestNormalization, trustedSession } from "./canonicalRequest"
 

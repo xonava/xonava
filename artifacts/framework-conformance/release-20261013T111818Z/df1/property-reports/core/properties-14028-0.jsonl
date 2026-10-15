@@ -1,3 +1,0 @@
-{"property":"quota decision consistency","seed":2278251833,"scale":5,"baseRuns":500,"runs":2500,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:38:02.116Z"}
-{"property":"quota request validity","seed":2278251833,"scale":5,"baseRuns":700,"runs":3500,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:38:02.510Z"}
-{"property":"quota subject encoding injective","seed":2278251833,"scale":5,"baseRuns":600,"runs":3000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T11:38:02.790Z"}

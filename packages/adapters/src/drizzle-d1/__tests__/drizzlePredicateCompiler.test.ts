@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { SQLiteSyncDialect, sqliteTable, text } from "drizzle-orm/sqlite-core"
-import { Predicate, simplifyPredicate } from "core/domain"
-import { compileDrizzlePredicate } from "adapters/drizzle-d1"
+import { Predicate, simplifyPredicate } from "@xonava/core/domain"
+import { compileDrizzlePredicate } from "@xonava/adapters/drizzle-d1"
 
 const drugFormulary = sqliteTable("drug_formulary", {
   id: text("id"),

@@ -1,6 +1,6 @@
 import { pgSchemaName } from "./pgSchemaName"
-import type { ExecutionScopeId } from "core/domain"
-import type { SequenceStore } from "core/sequence"
+import type { ExecutionScopeId } from "@xonava/core/domain"
+import type { SequenceStore } from "@xonava/core/sequence"
 import type { PgTemporalClient } from "./drizzleTemporalHistoryStore.js"
 export class DrizzlePgSequenceStore implements SequenceStore {
   constructor(private readonly db: PgTemporalClient, private readonly schema = "public") { pgSchemaName(schema) }

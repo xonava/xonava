@@ -1,5 +1,5 @@
 import { ZodError } from "zod"
-import { FrameworkCoreError, type FrameworkCoreErrorCode } from "core/domain"
+import { FrameworkCoreError, type FrameworkCoreErrorCode } from "@xonava/core/domain"
 import { InvalidJsonError, RequestBodyTooLargeError, UnsupportedMediaTypeError } from "./requestBody"
 
 export function frameworkJson<T>(data: T, init: ResponseInit = {}) {

@@ -4,7 +4,7 @@ import { Hono } from "hono"
 import express from "express"
 import supertest from "supertest"
 import { z } from "zod"
-import { ForbiddenError, ValidationError } from "core/domain"
+import { ForbiddenError, ValidationError } from "@xonava/core/domain"
 import { createFastifyHandler, fastifyCrudPlugin } from "../../fastify"
 import { createHonoHandler, createHonoCrudApp } from "../../hono"
 import { createExpressHandler, createExpressCrudRouter } from "../../express"
@@ -13,7 +13,7 @@ import { resolveAdapterHttpMetadata, type HttpHandler, type HttpCrudHandlers } f
 import { httpCrudFixture } from "./httpCrudFixture"
 import { createFrameworkWriteHandler } from "../createFrameworkWriteHandler"
 import { allowAllAbacBundle, allowAllModuleFacts, canonicalRequestNormalization } from "./canonicalRequest"
-import type { IdempotencyPort } from "core/events"
+import type { IdempotencyPort } from "@xonava/core/events"
 
 const origin = 'https://api.example.test'
 const cleanup: Array<() => Promise<unknown>> = []

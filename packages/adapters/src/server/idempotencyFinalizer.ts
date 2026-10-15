@@ -1,5 +1,5 @@
-import { emitTelemetry, explicitlySafeTelemetryAttributes, type TelemetryPort } from "core/telemetry"
-import type { ClaimedPendingInvalidation, FinalizerPort as CoreFinalizerPort } from "core/events"
+import { emitTelemetry, explicitlySafeTelemetryAttributes, type TelemetryPort } from "@xonava/core/telemetry"
+import type { ClaimedPendingInvalidation, FinalizerPort as CoreFinalizerPort } from "@xonava/core/events"
 export type FinalizerPort = CoreFinalizerPort
 function emit(value:TelemetryPort|undefined,name:string,severity:"info"|"error",attributes:Record<string,string|number|boolean>):void{if(value)emitTelemetry(value,{name,severity,timestamp:new Date(),attributes:explicitlySafeTelemetryAttributes(attributes)})}
 

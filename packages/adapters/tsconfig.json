@@ -5,11 +5,11 @@
     "noEmit": true,
     "skipLibCheck": true,
     "paths": {
-      "core": ["../core/src"],
-      "core/*": ["../core/src/*"],
-      "adapters": ["./src"],
-      "adapters/*": ["./src/*"],
-      "testing": ["../testing/src"]
+      "@xonava/core": ["../core/src"],
+      "@xonava/core/*": ["../core/src/*"],
+      "@xonava/adapters": ["./src"],
+      "@xonava/adapters/*": ["./src/*"],
+      "@xonava/testing": ["../testing/src"]
     }
   },
   "include": ["src"]

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
-import type { AtomicBatchPlan, AtomicBatchProvider, VersionedEntityDescriptor, PersistenceProvider } from "core/persistence"
-import type { AuditRecord, AuditSink, IdempotencyPort, OutboxRecord, OutboxSink } from "core/events"
+import type { AtomicBatchPlan, AtomicBatchProvider, VersionedEntityDescriptor, PersistenceProvider } from "@xonava/core/persistence"
+import type { AuditRecord, AuditSink, IdempotencyPort, OutboxRecord, OutboxSink } from "@xonava/core/events"
 
 export interface IdempotencyTransitionContractOptions<TResult = unknown> {
   createStore: () => IdempotencyPort<TResult>

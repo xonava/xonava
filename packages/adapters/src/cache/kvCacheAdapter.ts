@@ -1,5 +1,5 @@
-import { CacheAdapterError, type CacheAdapter } from "core/cache"
-import { ValidationError } from "core/domain"
+import { CacheAdapterError, type CacheAdapter } from "@xonava/core/cache"
+import { ValidationError } from "@xonava/core/domain"
 import { assertCacheTtl, decodeCacheValue, encodeCacheValue } from "./cacheValueCodec"
 
 declare class KVNamespace {

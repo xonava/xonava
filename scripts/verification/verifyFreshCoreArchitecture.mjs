@@ -25,7 +25,7 @@ const workspaceManifest = JSON.parse(await readFile("package.json", "utf8"))
 if (coreManifest.sideEffects !== false) failures.push("core/package.json must declare sideEffects:false")
 if (Object.hasOwn(coreManifest.exports, "./" + "ports")) failures.push("obsolete broad port subpath must not be public")
 if (JSON.stringify(workspaceManifest.workspaces) !== JSON.stringify(["packages/core", "packages/adapters", "packages/testing"])) failures.push("workspace list is not canonical")
-if (coreManifest.name !== "core" || adapterManifest.name !== "adapters" || testingManifest.name !== "testing") failures.push("package identities are not canonical")
+if (coreManifest.name !== "@xonava/core" || adapterManifest.name !== "@xonava/adapters" || testingManifest.name !== "@xonava/testing") failures.push("package identities are not canonical")
 if (Object.keys(coreManifest.dependencies ?? {}).length !== 0) failures.push("core must have zero runtime dependencies")
 if (adapterManifest.dependencies?.core !== "*" || testingManifest.dependencies?.core !== "*" || testingManifest.dependencies?.adapters !== "*") failures.push("package dependency direction is not canonical")
 try { await access("packages/core/src/ports"); failures.push("obsolete physical packages/core/src/ports directory exists") } catch {}

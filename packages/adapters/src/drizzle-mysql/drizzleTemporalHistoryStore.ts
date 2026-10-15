@@ -1,6 +1,6 @@
-import type { NewTemporalRevision, TemporalHistoryStore, TemporalResource, TemporalRevision, TemporalRevisionPage, TemporalSnapshot } from "core/temporal"
-import { validateTemporalRevision, validateTemporalSnapshot } from "core/temporal"
-import { ConflictError } from "core/domain"
+import type { NewTemporalRevision, TemporalHistoryStore, TemporalResource, TemporalRevision, TemporalRevisionPage, TemporalSnapshot } from "@xonava/core/temporal"
+import { validateTemporalRevision, validateTemporalSnapshot } from "@xonava/core/temporal"
+import { ConflictError } from "@xonava/core/domain"
 import { resolveMySqlTables, type MySqlTableOptions } from "./mysqlIdentifiers"
 export interface MySqlTemporalConnection { query(sql: string, values?: unknown[]): Promise<[unknown, unknown]>; beginTransaction?(): Promise<void>; commit?(): Promise<void>; rollback?(): Promise<void>; release?(): void }
 export interface MySqlTemporalPool extends MySqlTemporalConnection { getConnection(): Promise<MySqlTemporalConnection> }

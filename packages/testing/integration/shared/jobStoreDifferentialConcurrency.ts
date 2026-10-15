@@ -1,5 +1,5 @@
 import { expect, it } from "vitest"
-import { createJobRegistry, dispatchDueJobs, type JobDefinition } from "core/execution"
+import { createJobRegistry, dispatchDueJobs, type JobDefinition } from "@xonava/core/execution"
 import { createRng, forAllAsync, type Rng } from "../../../core/src/__tests__/differential/harness.js"
 import {
   HOUR, LifecycleRunner, PROPERTY_TIMEOUT_MS, T0, coverage, type JobStoreDifferentialDriver, type RawJobRow,

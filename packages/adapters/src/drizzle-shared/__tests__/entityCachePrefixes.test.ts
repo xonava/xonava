@@ -3,11 +3,11 @@ import { z } from "zod"
 import { int, mysqlTable, varchar } from "drizzle-orm/mysql-core"
 import { integer as pgInteger, pgTable, text as pgText } from "drizzle-orm/pg-core"
 import { integer as sqliteInteger, sqliteTable, text as sqliteText } from "drizzle-orm/sqlite-core"
-import { ConfigurationError } from "core/domain"
-import { defineEntity } from "core/entity"
-import { DrizzleEntityRegistry as D1Registry } from "adapters/drizzle-d1"
+import { ConfigurationError } from "@xonava/core/domain"
+import { defineEntity } from "@xonava/core/entity"
+import { DrizzleEntityRegistry as D1Registry } from "@xonava/adapters/drizzle-d1"
 import { DrizzleMySqlEntityRegistry } from "../../drizzle-mysql/drizzlePersistenceProvider"
-import { DrizzleEntityRegistry as PgRegistry } from "adapters/drizzle-pg"
+import { DrizzleEntityRegistry as PgRegistry } from "@xonava/adapters/drizzle-pg"
 
 type Row = { id: string; tenantId: string; name: string; version: number }
 

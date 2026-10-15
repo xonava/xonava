@@ -16,4 +16,4 @@ Framework-built mandatory scopes (structural and ABAC scopes) narrow a query but
 
 ## Security and conformance
 
-Authority attenuation MUST never add capabilities. Field access MUST be evaluated after row authorization. Classification MUST constrain disclosure/telemetry. Conformance covers hostile values, normalization, predicate evaluation, bundle integrity, tier decisions, attenuation, and redaction. Traceability: `core/domain`; S1/V1.
+Authority attenuation MUST never add capabilities. Field access MUST be evaluated after row authorization. Classification MUST constrain disclosure/telemetry. Conformance covers hostile values, normalization, predicate evaluation, bundle integrity, tier decisions, attenuation, and redaction. Traceability: `@xonava/core/domain`; S1/V1.

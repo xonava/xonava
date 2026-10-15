@@ -1,12 +1,12 @@
 import type { AnyPgTable, PgTransactionConfig } from "drizzle-orm/pg-core"
-import type { InteractiveTransactionProvider, TransactionOptions, PersistenceProvider } from "core/persistence"
-import type { PersistenceCapabilities } from "core/persistence"
-import type { EntityDescriptor, UnversionedEntityDescriptor, UnversionedRepository, VersionedEntityDescriptor, VersionedRepository } from "core/persistence"
+import type { InteractiveTransactionProvider, TransactionOptions, PersistenceProvider } from "@xonava/core/persistence"
+import type { PersistenceCapabilities } from "@xonava/core/persistence"
+import type { EntityDescriptor, UnversionedEntityDescriptor, UnversionedRepository, VersionedEntityDescriptor, VersionedRepository } from "@xonava/core/persistence"
 import type { DrizzleSessionLike } from "./drizzleRepository"
 import { createDrizzleRepository } from "./drizzleRepository"
 import type { DrizzleColumnMap } from "../drizzle-shared/predicateCompiler"
 import { CachePrefixLedger, resolveRegistration, type RegistrableEntity } from "../drizzle-shared/entityRegistration"
-import { ConfigurationError } from "core/domain"
+import { ConfigurationError } from "@xonava/core/domain"
 import { sql } from "drizzle-orm"
 import { classifyTransactionFailure, statementTimeoutMs } from "../drizzle-shared/transactionOutcome"
 import { createPgSession, type PgDatabaseLike } from "./pgSession"
@@ -115,7 +115,7 @@ export function createDrizzlePersistenceProvider(args: PgProviderArgs): Interact
     transactionTimeouts: true,
     maxPageSize: maxPageSize ?? 100,
     execution: Object.freeze({
-      "transaction.interactive": { status: "proven", evidence: "framework-conformance/v1/pg-guarantees.json" },
+      "transaction.interactive": { status: "proven", evidence: "framework-conformance/release/pg-guarantees.json" },
       "transaction.atomicBatch": { status: "unsupported" },
       "locking.pessimistic": { status: "unsupported" },
       "bulk.versioned.atomic": { status: "unsupported" },

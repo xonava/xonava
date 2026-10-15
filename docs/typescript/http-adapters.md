@@ -1,15 +1,15 @@
 # HTTP framework adapters
 
-The `adapters/fastify`, `adapters/hono`, and `adapters/express` entry points bind the existing Fetch-based `CRUD()` and `createFrameworkWriteHandler()` handlers to Fastify 5, Hono 4, and Express 5. Authorization, scope resolution, validation, optimistic concurrency, rate limiting, and idempotency stay in the existing HTTP handlers.
+The `@xonava/adapters/fastify`, `@xonava/adapters/hono`, and `@xonava/adapters/express` entry points bind the existing Fetch-based `CRUD()` and `createFrameworkWriteHandler()` handlers to Fastify 5, Hono 4, and Express 5. Authorization, scope resolution, validation, optimistic concurrency, rate limiting, and idempotency stay in the existing HTTP handlers.
 
-Install only the framework you use. Framework dependencies are optional peers and are not imported by `adapters` or `adapters/http`. Express TypeScript users also need `@types/express` 5. Node adapters require Node 22 or later; Hono's entry point uses Web APIs and has no Node transport imports.
+Install only the framework you use. Framework dependencies are optional peers and are not imported by `@xonava/adapters` or `@xonava/adapters/http`. Express TypeScript users also need `@types/express` 5. Node adapters require Node 22 or later; Hono's entry point uses Web APIs and has no Node transport imports.
 
 ## Fastify
 
 ```ts
 import Fastify from 'fastify'
-import { CRUD, resolveAdapterHttpMetadata } from 'adapters/http'
-import { fastifyCrudPlugin } from 'adapters/fastify'
+import { CRUD, resolveAdapterHttpMetadata } from '@xonava/adapters/http'
+import { fastifyCrudPlugin } from '@xonava/adapters/fastify'
 
 // definition is a compiled defineEntity() result; runtime is your existing CrudRuntime.
 const handlers = CRUD(definition, {
@@ -31,7 +31,7 @@ The plugin installs an encapsulated raw Buffer parser so malformed JSON, UTF-8, 
 For individual handlers, use `createFastifyHandler(handler, options)`. Register raw parsing in the same encapsulated plugin as those routes:
 
 ```ts
-import { createFastifyHandler } from 'adapters/fastify'
+import { createFastifyHandler } from '@xonava/adapters/fastify'
 
 await app.register(async scoped => {
   scoped.removeAllContentTypeParsers()
@@ -49,7 +49,7 @@ Do not attach a Fastify body schema or a hook that replaces raw bodies with pars
 
 ```ts
 import { Hono } from 'hono'
-import { createHonoCrudApp, createHonoHandler } from 'adapters/hono'
+import { createHonoCrudApp, createHonoHandler } from '@xonava/adapters/hono'
 
 const app = new Hono()
 app.route('/people', createHonoCrudApp(handlers))
@@ -65,7 +65,7 @@ For runtime connection metadata, pass `resolveHttpMetadata(context)` in the opti
 
 ```ts
 import express from 'express'
-import { createExpressCrudRouter, createExpressHandler } from 'adapters/express'
+import { createExpressCrudRouter, createExpressHandler } from '@xonava/adapters/express'
 
 const app = express()
 app.use('/people', createExpressCrudRouter(handlers, {
@@ -114,7 +114,7 @@ To integrate Node peer addresses, set `runtime.adapterDeps.resolveHttpMetadata` 
 Run the transport and real-framework tests with:
 
 ```sh
-npm run test -w adapters -- src/http/__tests__/frameworkAdapters.test.ts src/http/__tests__/nodeTransport.test.ts
+npm run test -w @xonava/adapters -- src/http/__tests__/frameworkAdapters.test.ts src/http/__tests__/nodeTransport.test.ts
 npm run typecheck
 npm run lint
 npm run build

@@ -2,10 +2,10 @@ import { drizzle } from "drizzle-orm/node-postgres"
 import { pgTable, integer, text, timestamp, varchar, uniqueIndex } from "drizzle-orm/pg-core"
 import { Pool } from "pg"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
-import { CacheService } from "core/cache"
+import { CacheService } from "@xonava/core/cache"
 import { internalRepositoryForDescriptor } from "../../repository/dynamicRepository"
-import type { AuditRecord, OutboxRecord } from "core/events"
-import type { EntityDescriptor } from "core/persistence"
+import type { AuditRecord, OutboxRecord } from "@xonava/core/events"
+import type { EntityDescriptor } from "@xonava/core/persistence"
 import {
   createDbTagGenerationStore,
   InMemoryCacheAdapter,
@@ -23,9 +23,8 @@ import {
 const databaseUrl = process.env.FRAMEWORK_PG_DATABASE_URL
   ?? process.env.FRAMEWORK_TEST_PG_URL
   ?? process.env.DATABASE_URL
-  ?? "postgresql://postgres:postgres@localhost:5432/clinic_integration_test"
-const enabled = process.env.FRAMEWORK_PG_INTEGRATION === "1"
-  || process.env.FRAMEWORK_TEST_PG_URL !== undefined
+const enabled = databaseUrl !== undefined
+  && (process.env.FRAMEWORK_PG_INTEGRATION === "1" || process.env.FRAMEWORK_TEST_PG_URL !== undefined)
 
 const businessTable = pgTable("framework_cache_atomicity_rows", {
   id: text("id").primaryKey(),

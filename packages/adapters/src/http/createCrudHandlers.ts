@@ -7,9 +7,9 @@ import { createUpdateHandler } from "./crudHandlers/update"
 import { createDeleteHandler } from "./crudHandlers/delete"
 import { buildScopeCacheTags, createShared } from "./crudHandlers/shared"
 import { defaultIdParams, type CrudOptions, type CrudRoutesConfig, type CrudShared, type SelectableRow } from "./crudHandlers/types"
-import type { RequestContext } from "core/domain"
-import type { RuntimeCapabilities } from "core/bootstrap"
-import type { SortSpec } from "core/query"
+import type { RequestContext } from "@xonava/core/domain"
+import type { RuntimeCapabilities } from "@xonava/core/bootstrap"
+import type { SortSpec } from "@xonava/core/query"
 import { frameworkJson } from "./handleFrameworkCoreError"
 
 export type { CrudOptions }

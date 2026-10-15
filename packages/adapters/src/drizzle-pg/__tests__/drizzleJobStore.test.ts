@@ -3,10 +3,10 @@ import { describe, expect, it, vi } from "vitest"
 import { integer, pgTable, text } from "drizzle-orm/pg-core"
 import { PgDialect } from "drizzle-orm/pg-core/dialect"
 import type { SQL } from "drizzle-orm/sql/sql"
-import { ConfigurationError } from "core/domain"
-import { JobIdempotencyConflictError, buildJobFingerprintInput, fingerprintJob } from "core/execution"
-import { canonicalizeValue } from "core/serialization"
-import { createDrizzleJobStore, type DrizzleSessionLike } from "adapters/drizzle-pg"
+import { ConfigurationError } from "@xonava/core/domain"
+import { JobIdempotencyConflictError, buildJobFingerprintInput, fingerprintJob } from "@xonava/core/execution"
+import { canonicalizeValue } from "@xonava/core/serialization"
+import { createDrizzleJobStore, type DrizzleSessionLike } from "@xonava/adapters/drizzle-pg"
 
 const jobsTable = pgTable("platform_jobs", {
   id: text("id"),

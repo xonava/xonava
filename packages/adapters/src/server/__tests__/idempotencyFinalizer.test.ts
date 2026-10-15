@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import type { FinalizerPort, PendingInvalidation } from "core/events"
+import type { FinalizerPort, PendingInvalidation } from "@xonava/core/events"
 import { drainPendingInvalidations } from "../../server/idempotencyFinalizer"
 
 const pending: PendingInvalidation = {

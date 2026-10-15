@@ -10,13 +10,13 @@ import {
   type ExecutionScope,
   type ExecutionScopeId,
   type RequestContext,
-} from "core/domain"
+} from "@xonava/core/domain"
 import {
   compiledRouteBindingRef,
   type CompiledRouteBinding,
   type CompiledScopeResolverBinding,
-} from "core/bootstrap"
-import { resolveVerifiedScope, type UntrustedScopeResolutionInput } from "core/security"
+} from "@xonava/core/bootstrap"
+import { resolveVerifiedScope, type UntrustedScopeResolutionInput } from "@xonava/core/security"
 import type { ScopeAdmissionEvidence, TrustedFrameworkSession } from "../server/frameworkAdapterDeps.js"
 
 export type { ScopeAdmissionEvidence, TrustedFrameworkSession } from "../server/frameworkAdapterDeps.js"

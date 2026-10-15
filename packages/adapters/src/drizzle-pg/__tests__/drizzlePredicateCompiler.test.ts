@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { PgDialect } from "drizzle-orm/pg-core/dialect"
-import { Predicate, simplifyPredicate } from "core/domain"
-import { compileDrizzlePredicate } from "adapters/drizzle-pg"
+import { Predicate, simplifyPredicate } from "@xonava/core/domain"
+import { compileDrizzlePredicate } from "@xonava/adapters/drizzle-pg"
 import { integer, pgTable, text } from "drizzle-orm/pg-core"
 
 const dialect = new PgDialect()
