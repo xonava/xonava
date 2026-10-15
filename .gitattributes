@@ -1,0 +1,4 @@
+* text=auto eol=lf
+package-lock.json linguist-generated=true
+artifacts/** linguist-generated=true
+ci-artifacts/** linguist-generated=true

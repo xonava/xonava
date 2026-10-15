@@ -1,6 +1,14 @@
 # @xonava/core
 
-Language-neutral framework semantics and their TypeScript reference contracts. Core has zero runtime dependencies, native ES module exports, and one subpath per capability. The package root is intentionally small.
+Zero-dependency core of the Xonava server framework: runtime-neutral semantics and TypeScript contracts for entities, operations, persistence, events, workflows, and access policy.
+
+[![npm version](https://img.shields.io/npm/v/@xonava/core)](https://www.npmjs.com/package/@xonava/core)
+[![license: MIT](https://img.shields.io/npm/l/@xonava/core)](https://github.com/xonava/xonava/blob/main/LICENSE)
+[![node >=22](https://img.shields.io/node/v/@xonava/core)](https://nodejs.org)
+
+> **Experimental.** Version `2.0.0-rc.2` is a release candidate, and public APIs may still change before `2.0.0`. See [Known limitations](https://github.com/xonava/xonava/blob/main/docs/KNOWN-LIMITATIONS.md) before you adopt it.
+
+Core has no runtime dependencies, ships native ES modules, and exposes one subpath per capability. Importing one subpath does not initialize bootstrap, workflow, HTTP, or a database provider. Concrete database, HTTP, cache, and storage implementations live in [`@xonava/adapters`](https://www.npmjs.com/package/@xonava/adapters).
 
 ## Install
 
@@ -8,11 +16,24 @@ Language-neutral framework semantics and their TypeScript reference contracts. C
 npm install @xonava/core
 ```
 
-Requires Node.js 22 or later.
+Requires Node.js 22 or later. The package is ESM only.
 
 ## Usage
 
-Import the capability you need from its subpath. Importing one subpath does not initialize bootstrap, workflow, HTTP, or a database provider.
+Import the capability you need from its subpath and supply the contract implementation it requires. There is no global container.
+
+A cache service over any `CacheAdapter`:
+
+```ts
+import { CacheService, type CacheAdapter } from "@xonava/core/cache";
+
+declare const adapter: CacheAdapter; // supply an implementation, for example from @xonava/adapters/cache
+const cache = new CacheService({ adapter, defaultTtlMs: 30_000 });
+await cache.set("account:42", { enabled: true });
+const account = await cache.get<{ enabled: boolean }>("account:42");
+```
+
+An atomic rate-limit check:
 
 ```ts
 import { checkRateLimit, type AtomicRateLimitStore } from "@xonava/core/rate-limit";
@@ -23,7 +44,9 @@ const decision = await checkRateLimit({
 });
 ```
 
-## Subpath exports
+## Entry points
+
+The package root is intentionally small. Everything else is a subpath.
 
 | Import | Purpose |
 | --- | --- |
@@ -62,11 +85,13 @@ Only the paths in the package `exports` map are public. Do not deep-import `src`
 ## Documentation
 
 - [Documentation index](https://github.com/xonava/xonava/blob/main/docs/README.md)
-- [Specification](https://github.com/xonava/xonava/blob/main/docs/spec/README.md)
-- [TypeScript profile](https://github.com/xonava/xonava/blob/main/docs/typescript/README.md)
+- [Getting started](https://github.com/xonava/xonava/blob/main/docs/guides/getting-started.md)
 - [Core usage](https://github.com/xonava/xonava/blob/main/docs/typescript/core-usage.md)
+- [TypeScript profile](https://github.com/xonava/xonava/blob/main/docs/typescript/README.md)
+- [Specification](https://github.com/xonava/xonava/blob/main/docs/spec/README.md)
 - [Public exports](https://github.com/xonava/xonava/blob/main/docs/reference/package-exports.md)
+- [Known limitations](https://github.com/xonava/xonava/blob/main/docs/KNOWN-LIMITATIONS.md)
 
 ## License
 
-MIT
+[MIT](https://github.com/xonava/xonava/blob/main/LICENSE)
