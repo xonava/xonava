@@ -71,8 +71,18 @@ It writes evidence under `artifacts/framework-conformance/`. That directory is t
   `feat/` (new capability), `fix/` (bug fix), `docs/`, `test/`, `refactor/`, `perf/`, `chore/` (tooling,
   dependencies, repository housekeeping), and `release/<version>` when preparing a release. Example:
   `fix/mysql-schedule-retire`.
-- Delete the branch after its pull request merges.
-- When `dev` is complete and passes the release gate below, open a pull request from `dev` to `main`.
+- External contributors fork the repository, create the working branch in their fork from `dev`, and open
+  the pull request against `xonava/xonava`'s `dev` branch.
+- Working branches are deleted automatically when their pull request merges.
+- When `dev` is complete and passes the release gate above, a maintainer opens a pull request from `dev` to
+  `main`.
+
+Branch protection:
+
+| Branch | Rules |
+| --- | --- |
+| `main` | Changes only through a pull request; no force pushes; cannot be deleted |
+| `dev` | No force pushes; cannot be deleted |
 
 ## Pull requests
 
