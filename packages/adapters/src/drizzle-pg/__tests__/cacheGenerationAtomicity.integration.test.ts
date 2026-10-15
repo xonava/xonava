@@ -23,9 +23,8 @@ import {
 const databaseUrl = process.env.FRAMEWORK_PG_DATABASE_URL
   ?? process.env.FRAMEWORK_TEST_PG_URL
   ?? process.env.DATABASE_URL
-  ?? "postgresql://postgres:postgres@localhost:5432/clinic_integration_test"
-const enabled = process.env.FRAMEWORK_PG_INTEGRATION === "1"
-  || process.env.FRAMEWORK_TEST_PG_URL !== undefined
+const enabled = databaseUrl !== undefined
+  && (process.env.FRAMEWORK_PG_INTEGRATION === "1" || process.env.FRAMEWORK_TEST_PG_URL !== undefined)
 
 const businessTable = pgTable("framework_cache_atomicity_rows", {
   id: text("id").primaryKey(),

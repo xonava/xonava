@@ -52,4 +52,17 @@ Only package export-map paths are supported APIs. Private source/dist paths are 
 | `@xonava/adapters/cache` | Reference cache adapters |
 | `@xonava/adapters/storage` | Reference object storage |
 
-`@xonava/testing` is workspace certification infrastructure and currently has no package export map. Stability follows the version policy; new/removal/semantic changes to public paths require an API/version decision.
+## Testing
+
+| Subpath | Purpose |
+|---|---|
+| `@xonava/testing` | All suite runners |
+| `@xonava/testing/repositories` | Repository contract suite |
+| `@xonava/testing/predicates` | Predicate contract suite |
+| `@xonava/testing/abac` | ABAC invariant suite |
+| `@xonava/testing/contracts/persistence-provider` | Persistence provider contract suite |
+| `@xonava/testing/contracts/atomic-batch` | Atomic batch contract suite |
+| `@xonava/testing/contracts/cache-adapter` | Cache adapter contract suite |
+| `@xonava/testing/contracts/shared-conformance` | Shared conformance suites |
+
+Stability follows the version policy; new/removal/semantic changes to public paths require an API/version decision.

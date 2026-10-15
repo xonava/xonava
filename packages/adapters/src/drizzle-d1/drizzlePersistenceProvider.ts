@@ -427,7 +427,7 @@ export function createDrizzlePersistenceProvider(args: DrizzlePersistenceProvide
     execution: Object.freeze({
       "transaction.interactive": { status: "unsupported" },
       "transaction.atomicBatch": adapter
-        ? { status: "proven", evidence: "framework-conformance/v1/d1-guarantees.json" }
+        ? { status: "proven", evidence: "framework-conformance/release/d1-guarantees.json" }
         : { status: "unsupported" },
       "locking.pessimistic": { status: "unsupported" },
       "bulk.versioned.atomic": { status: "unsupported" },

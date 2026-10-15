@@ -16,3 +16,4 @@ Thumbs.db
 # are committed. Local runs (local-*) are scratch output that tests regenerate, so they are ignored.
 # See docs/governance/artifact-retention.md.
 artifacts/framework-conformance/local-*/
+artifacts/framework-conformance/canonical-*/

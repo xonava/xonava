@@ -115,7 +115,7 @@ export function createDrizzlePersistenceProvider(args: PgProviderArgs): Interact
     transactionTimeouts: true,
     maxPageSize: maxPageSize ?? 100,
     execution: Object.freeze({
-      "transaction.interactive": { status: "proven", evidence: "framework-conformance/v1/pg-guarantees.json" },
+      "transaction.interactive": { status: "proven", evidence: "framework-conformance/release/pg-guarantees.json" },
       "transaction.atomicBatch": { status: "unsupported" },
       "locking.pessimistic": { status: "unsupported" },
       "bulk.versioned.atomic": { status: "unsupported" },

@@ -8,7 +8,7 @@ Reusable fixtures and contract suites for `@xonava/core` and `@xonava/adapters`.
 npm install -D @xonava/testing vitest
 ```
 
-`vitest` ^4.1.7 is a peer dependency and runs the suites.
+`vitest` ^4.1.7 is a peer dependency and runs the suites. Requires Node.js 22 or later.
 
 ## Exports
 
