@@ -1,12 +1,41 @@
 {
   "name": "testing",
   "version": "2.0.0-rc.2",
+  "description": "Conformance contracts and test kit for verifying server framework adapters against persistence, cache, concurrency, and access-policy guarantees.",
+  "keywords": [
+    "server",
+    "framework",
+    "testing",
+    "conformance",
+    "contracts",
+    "test-kit",
+    "adapters",
+    "vitest"
+  ],
+  "homepage": "https://github.com/Suriyaprakash-Somu/engine#readme",
+  "bugs": {
+    "url": "https://github.com/Suriyaprakash-Somu/engine/issues"
+  },
+  "license": "MIT",
+  "author": "Suriyaprakash Somu",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Suriyaprakash-Somu/engine.git",
+    "directory": "packages/testing"
+  },
   "type": "module",
   "private": true,
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -68,14 +97,14 @@
   },
   "devDependencies": {
     "@types/pg": "8.23.1",
+    "drizzle-orm": "0.45.2",
     "miniflare": "3.20250718.3",
+    "mysql2": "^3.24.4",
+    "pg": "8.23.0",
     "vitest": "^4.1.7"
   },
   "dependencies": {
     "adapters": "*",
-    "core": "*",
-    "drizzle-orm": "0.45.2",
-    "mysql2": "^3.24.4",
-    "pg": "8.23.0"
+    "core": "*"
   }
 }
