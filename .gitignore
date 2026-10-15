@@ -12,5 +12,7 @@ coverage/
 .DS_Store
 Thumbs.db
 
-# Certification evidence under artifacts/ is intentional governance output.
-# Do not ignore it broadly; ad-hoc runs should use an external temporary path.
+# Certification evidence: only named release runs (artifacts/framework-conformance/release-<id>/)
+# are committed. Local runs (local-*) are scratch output that tests regenerate, so they are ignored.
+# See docs/governance/artifact-retention.md.
+artifacts/framework-conformance/local-*/

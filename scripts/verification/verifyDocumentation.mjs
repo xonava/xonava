@@ -19,7 +19,7 @@ async function filesBelow(directory) {
 const allDocs = (await filesBelow(docsRoot)).filter((path) => extname(path) === ".md")
 const workspaceDocs = [
   join(root, "README.md"),
-  join(root, "FRAMEWORK-RELEASE-VERIFICATION.md"),
+  join(root, "CHANGELOG.md"),
   join(root, "packages/core/README.md"),
   join(root, "packages/adapters/README.md"),
   join(root, "packages/testing/README.md"),

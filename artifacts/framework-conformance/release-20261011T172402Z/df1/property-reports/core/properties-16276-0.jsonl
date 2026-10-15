@@ -1,4 +1,0 @@
-{"property":"job progress: percent bounds","seed":1299113930,"scale":5,"baseRuns":100,"runs":500,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:33.068Z"}
-{"property":"job progress: checkpoint size is measured in canonical UTF-8 bytes","seed":1299113930,"scale":5,"baseRuns":100,"runs":500,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:33.587Z"}
-{"property":"job progress: stored checkpoint decoding","seed":1299113930,"scale":5,"baseRuns":100,"runs":500,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:33.638Z"}
-{"property":"job progress: fence compares every field","seed":1299113930,"scale":5,"baseRuns":100,"runs":500,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:33.659Z"}

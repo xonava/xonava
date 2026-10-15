@@ -3,7 +3,7 @@ import { extname, join, relative, resolve } from "node:path"
 
 const root = process.cwd()
 const roots = ["packages", "scripts/verification", "docs", "artifacts", "release", "spec"]
-const rootFiles = [".gitignore", "eslint.config.mjs", "README.md", "FRAMEWORK-RELEASE-VERIFICATION.md", "package.json", "package-lock.json", "tsconfig.base.json"]
+const rootFiles = [".gitignore", "CHANGELOG.md", "eslint.config.mjs", "README.md", "package.json", "package-lock.json", "tsconfig.base.json"]
 const ignoredSegments = new Set(["node_modules", ".npm-cache"])
 
 async function walk(path) {

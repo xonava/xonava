@@ -1,6 +1,0 @@
-{"property":"sequence period vs offset oracle","seed":1299113930,"scale":5,"baseRuns":600,"runs":3000,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:31.961Z"}
-{"property":"sequence periods nest and are monotone","seed":1299113930,"scale":5,"baseRuns":150,"runs":750,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:32.268Z"}
-{"property":"sequence invalid allocation time","seed":1299113930,"scale":5,"baseRuns":60,"runs":300,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:32.275Z"}
-{"property":"sequence definition validity","seed":1299113930,"scale":5,"baseRuns":600,"runs":3000,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:32.532Z"}
-{"property":"sequence formatting round trip","seed":1299113930,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:33.203Z"}
-{"property":"sequence allocation contract","seed":1299113930,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:33.252Z"}

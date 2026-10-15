@@ -1,4 +1,0 @@
-{"property":"schedule dispatcher matches the reference model over random operation sequences","seed":1299113930,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:35:37.704Z"}
-{"property":"schedule queue_all backlog drains into exactly one job per due occurrence","seed":1299113930,"scale":5,"baseRuns":70,"runs":350,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:06.066Z"}
-{"property":"schedule failing payload backs off and recovers on the same occurrence","seed":1299113930,"scale":5,"baseRuns":100,"runs":500,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:07.259Z"}
-{"property":"schedule dispatcher rejects invalid options before claiming","seed":1299113930,"scale":5,"baseRuns":150,"runs":750,"replayRun":null,"passed":true,"recordedAt":"2026-10-11T17:36:07.316Z"}
