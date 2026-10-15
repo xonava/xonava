@@ -40,15 +40,15 @@ runCacheAdapterContractTests("my cache", {
 
 ## Scope of the published package
 
-The published package contains the compiled `dist` output and this README. The database integration, race, and crash suites and the database fixtures are not included. They run from a repository checkout against real databases. See [CONTRIBUTING.md](https://github.com/Suriyaprakash-Somu/engine/blob/main/CONTRIBUTING.md).
+The published package contains the compiled `dist` output and this README. The database integration, race, and crash suites and the database fixtures are not included. They run from a repository checkout against real databases. See [CONTRIBUTING.md](https://github.com/xonava/xonava/blob/main/CONTRIBUTING.md).
 
 Passing a contract suite does not prove that a provider meets every guarantee. Real-provider guarantees require configured real runtimes.
 
 ## Documentation
 
-- [Testing architecture](https://github.com/Suriyaprakash-Somu/engine/blob/main/docs/typescript/testing.md)
-- [Certification guide](https://github.com/Suriyaprakash-Somu/engine/blob/main/docs/guides/certification.md)
-- [Writing and testing adapters](https://github.com/Suriyaprakash-Somu/engine/blob/main/docs/guides/writing-and-testing-adapters.md)
+- [Testing architecture](https://github.com/xonava/xonava/blob/main/docs/typescript/testing.md)
+- [Certification guide](https://github.com/xonava/xonava/blob/main/docs/guides/certification.md)
+- [Writing and testing adapters](https://github.com/xonava/xonava/blob/main/docs/guides/writing-and-testing-adapters.md)
 
 ## License
 

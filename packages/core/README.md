@@ -61,11 +61,11 @@ Only the paths in the package `exports` map are public. Do not deep-import `src`
 
 ## Documentation
 
-- [Documentation index](https://github.com/Suriyaprakash-Somu/engine/blob/main/docs/README.md)
-- [Specification](https://github.com/Suriyaprakash-Somu/engine/blob/main/docs/spec/README.md)
-- [TypeScript profile](https://github.com/Suriyaprakash-Somu/engine/blob/main/docs/typescript/README.md)
-- [Core usage](https://github.com/Suriyaprakash-Somu/engine/blob/main/docs/typescript/core-usage.md)
-- [Public exports](https://github.com/Suriyaprakash-Somu/engine/blob/main/docs/reference/package-exports.md)
+- [Documentation index](https://github.com/xonava/xonava/blob/main/docs/README.md)
+- [Specification](https://github.com/xonava/xonava/blob/main/docs/spec/README.md)
+- [TypeScript profile](https://github.com/xonava/xonava/blob/main/docs/typescript/README.md)
+- [Core usage](https://github.com/xonava/xonava/blob/main/docs/typescript/core-usage.md)
+- [Public exports](https://github.com/xonava/xonava/blob/main/docs/reference/package-exports.md)
 
 ## License
 
