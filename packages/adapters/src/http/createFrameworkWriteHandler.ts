@@ -1,26 +1,26 @@
-import type { ValidationSchema } from "core/kernel"
-import { createOperationContext } from "core/operation"
-import { CanonicalJsonError } from "core/serialization"
-import { enforceRateLimit, type RateLimitConfig, type RateLimitStore } from "core/rate-limit"
-import { isAtomicBatchIdempotencyPort, isDurableIdempotencyPort, isTransactionalIdempotencyPort, type IdempotencyCommitItem, type IdempotencyResourceIdentity } from "core/events"
-import type { AbacWriteEnforcer } from "core/security"
-import { emitTelemetry, explicitlySafeTelemetryAttributes } from "core/telemetry"
-import { ConfigurationError, ConflictError, ForbiddenError, UnauthorizedError, ValidationError, assertVerifiedAbacBundle, createAbacAuthorizer, type RequestContext } from "core/domain"
+import type { ValidationSchema } from "@xonava/core/kernel"
+import { createOperationContext } from "@xonava/core/operation"
+import { CanonicalJsonError } from "@xonava/core/serialization"
+import { enforceRateLimit, type RateLimitConfig, type RateLimitStore } from "@xonava/core/rate-limit"
+import { isAtomicBatchIdempotencyPort, isDurableIdempotencyPort, isTransactionalIdempotencyPort, type IdempotencyCommitItem, type IdempotencyResourceIdentity } from "@xonava/core/events"
+import type { AbacWriteEnforcer } from "@xonava/core/security"
+import { emitTelemetry, explicitlySafeTelemetryAttributes } from "@xonava/core/telemetry"
+import { ConfigurationError, ConflictError, ForbiddenError, UnauthorizedError, ValidationError, assertVerifiedAbacBundle, createAbacAuthorizer, type RequestContext } from "@xonava/core/domain"
 import { redactPhiDeep } from "./redact"
 import type { FrameworkAdapterDeps, FrameworkRequestNormalization } from "../server"
 import { assertFrameworkAdapterDeps } from "../server"
-import type { OperationDefinition } from "core/operation"
-import { runOperation } from "core/operation"
-import type { CapabilityCheckConfig } from "core/entity"
-import type { AtomicBatchItem, PersistenceProvider } from "core/persistence"
-import { createTenantScopedIdempotencyPort, createTenantScopedPersistenceProvider, encodeTenantIdempotencyScope } from "core/persistence"
-import type { RuntimeCapabilities } from "core/bootstrap"
+import type { OperationDefinition } from "@xonava/core/operation"
+import { runOperation } from "@xonava/core/operation"
+import type { CapabilityCheckConfig } from "@xonava/core/entity"
+import type { AtomicBatchItem, PersistenceProvider } from "@xonava/core/persistence"
+import { createTenantScopedIdempotencyPort, createTenantScopedPersistenceProvider, encodeTenantIdempotencyScope } from "@xonava/core/persistence"
+import type { RuntimeCapabilities } from "@xonava/core/bootstrap"
 import { CacheBackedRateLimitStore } from "../cache"
-import { CacheService } from "core/cache"
+import { CacheService } from "@xonava/core/cache"
 import { createFrameworkErrorHandler, frameworkJson } from "./handleFrameworkCoreError"
 import { parseJsonBodySafely, parseUniqueQueryParameters, resolveRequestMetadata } from "./requestBody"
-import type { CacheAdapter } from "core/cache"
-import type { AuditSink, OutboxSink } from "core/events"
+import type { CacheAdapter } from "@xonava/core/cache"
+import type { AuditSink, OutboxSink } from "@xonava/core/events"
 import { boundRateLimitKeyMaterial, buildIdempotencyScopeIdentity, buildIdempotencySecurityContext, deserializeResponse, fingerprintJson, legacyFingerprintJson, MAX_IDEMPOTENCY_KEY_LENGTH, serializeResponse, type SerializedResponse, type SerializedResponseIdempotencyPort } from "./idempotency"
 import { authorizeFrameworkModule, normalizeCrudRequest, tenantIdFromContext } from "./crudHandlers/shared"
 
@@ -135,7 +135,7 @@ export function createFrameworkWriteHandler<
   moduleKey: string
   action: "create" | "update" | "delete"
   validation?: ScopedFrameworkValidation
-   rateLimit?: { config: RateLimitConfig; consistency?: "atomic" | "best-effort"; failureMode?: import("core/rate-limit").RateLimitFailureMode; key?: (request: Request, context: RequestContext) => string }
+   rateLimit?: { config: RateLimitConfig; consistency?: "atomic" | "best-effort"; failureMode?: import("@xonava/core/rate-limit").RateLimitFailureMode; key?: (request: Request, context: RequestContext) => string }
    getRateLimitStore?: () => Promise<RateLimitStore>
   getCacheAdapter?: () => Promise<CacheAdapter>
    runtimeCapabilities?: RuntimeCapabilities
@@ -391,7 +391,7 @@ export function createFrameworkWriteHandler<
             fingerprint: await fingerprintClientMutation(fingerprintMaterial),
             leaseDurationMs: 30_000,
           }
-          const port: import("core/events").IdempotencyPort<SerializedResponse> = tenantId
+          const port: import("@xonava/core/events").IdempotencyPort<SerializedResponse> = tenantId
             ? (() => {
                return createTenantScopedIdempotencyPort(
                  deps.createIdempotencyPort<SerializedResponse>({ context: requestContext }),

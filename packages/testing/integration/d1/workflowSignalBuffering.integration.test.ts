@@ -1,10 +1,10 @@
 import { Miniflare } from "miniflare"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { DrizzleD1WorkflowStore } from "adapters/drizzle-d1"
+import { DrizzleD1WorkflowStore } from "@xonava/adapters/drizzle-d1"
 import { applyD1Migration, readD1Migration, d1MigrationStatements } from "../../fixtures/d1/bootstrap.js"
 import { temporaryD1Fixture, type D1Fixture } from "./database.js"
 import { tolerateStaleConnections } from "./staleConnection.js"
-import { applyWorkflowStep } from "core/workflow"
+import { applyWorkflowStep } from "@xonava/core/workflow"
 import { claim, ledgerViolations, registerWorkflowSignalBufferingTests, startInstance, type DbReceipt, type SignalBufferingHarness } from "../shared/workflowSignalBuffering.js"
 
 const scope = { kind: "tenant", tenantId: "t1" } as const

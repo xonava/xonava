@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { Miniflare } from "miniflare"
 import { drizzle } from "drizzle-orm/d1"
 import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core"
-import { compileDrizzlePredicate } from "adapters/drizzle-d1"
+import { compileDrizzlePredicate } from "@xonava/adapters/drizzle-d1"
 import { tolerateStaleConnections } from "./staleConnection.js"
 import { findParityMismatches, parityDataset } from "../shared/predicateParity.js"
 

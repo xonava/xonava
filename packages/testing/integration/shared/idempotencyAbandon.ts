@@ -1,5 +1,5 @@
 import { expect } from "vitest"
-import type { IdempotencyPort, IdempotencyRequest } from "core/events"
+import type { IdempotencyPort, IdempotencyRequest } from "@xonava/core/events"
 
 /**
  * Contract for IdempotencyPort.abandon: it releases only an uncommitted

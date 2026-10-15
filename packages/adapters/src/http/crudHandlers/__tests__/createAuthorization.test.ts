@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
 import { describe, expect, it, vi } from "vitest"
-import type { EntityDescriptor, PersistenceProvider } from "core/persistence"
-import { ForbiddenError } from "core/domain"
+import type { EntityDescriptor, PersistenceProvider } from "@xonava/core/persistence"
+import { ForbiddenError } from "@xonava/core/domain"
 import { assertProtectedCreateFields } from "../shared"
 import type { FrameworkAdapterDeps, TrustedFrameworkSession } from "../../../server"
 import { createFrameworkWriteHandler } from "../../createFrameworkWriteHandler"

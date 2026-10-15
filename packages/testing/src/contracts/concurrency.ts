@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
-import type { JobStore } from "core/execution"
-import type { ScheduleStore } from "core/execution"
-import type { OutboxRecord, OutboxSink } from "core/events"
+import type { JobStore } from "@xonava/core/execution"
+import type { ScheduleStore } from "@xonava/core/execution"
+import type { OutboxRecord, OutboxSink } from "@xonava/core/events"
 
 export interface JobStoreConcurrencyContractOptions {
   createStore: () => JobStore

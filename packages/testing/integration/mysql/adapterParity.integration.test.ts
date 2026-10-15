@@ -1,9 +1,9 @@
 import {describe,expect,it} from "vitest"
 import type {Pool,PoolConnection} from "mysql2/promise"
 import {mysqlTable,varchar} from "drizzle-orm/mysql-core"
-import {Predicate} from "core/domain"
-import type {UnversionedEntityDescriptor} from "core/persistence"
-import {createDrizzleMySqlPersistenceProvider,createDrizzleMySqlRepository,DrizzleMySqlEntityRegistry,DrizzleMySqlJobStore,DrizzleMySqlWorkflowStore,MySqlAtomicLeaseBackend} from "adapters/drizzle-mysql"
+import {Predicate} from "@xonava/core/domain"
+import type {UnversionedEntityDescriptor} from "@xonava/core/persistence"
+import {createDrizzleMySqlPersistenceProvider,createDrizzleMySqlRepository,DrizzleMySqlEntityRegistry,DrizzleMySqlJobStore,DrizzleMySqlWorkflowStore,MySqlAtomicLeaseBackend} from "@xonava/adapters/drizzle-mysql"
 import {mysqlRecords} from "../../fixtures/mysql/schema.js"
 import {openMySqlFixture} from "./database.js"
 

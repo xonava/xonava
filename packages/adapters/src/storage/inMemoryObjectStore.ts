@@ -1,5 +1,5 @@
-import { assertObjectRequestActive, validateObjectKey, type ObjectBytes, type ObjectMetadata, type ObjectReadResult, type ObjectReference, type ObjectStore, type PutObjectInput } from "core/object-store"
-import { ValidationError } from "core/domain"
+import { assertObjectRequestActive, validateObjectKey, type ObjectBytes, type ObjectMetadata, type ObjectReadResult, type ObjectReference, type ObjectStore, type PutObjectInput } from "@xonava/core/object-store"
+import { ValidationError } from "@xonava/core/domain"
 
 interface Entry { readonly bytes: Uint8Array; readonly metadata: ObjectMetadata }
 const identity = (reference: ObjectReference) => `${reference.bucket ?? ""}\0${reference.key}`

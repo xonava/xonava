@@ -20,7 +20,7 @@
  *  - nextRunAt values are made unique per row, because the stores order by nextRunAt only (ties are unspecified).
  */
 import { expect } from "vitest"
-import { assertDurableIdentifier, scheduleOccurrencesConsumed, type FencedScheduleClaim, type ScheduleStore } from "core/execution"
+import { assertDurableIdentifier, scheduleOccurrencesConsumed, type FencedScheduleClaim, type ScheduleStore } from "@xonava/core/execution"
 import { forAllAsync, scaledRuns, type Rng } from "../../../core/src/__tests__/differential/harness.js"
 
 // ---------------------------------------------------------------------------------------------------------------------

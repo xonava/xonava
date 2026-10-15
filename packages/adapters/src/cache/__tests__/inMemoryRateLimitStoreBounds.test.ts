@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { ConfigurationError, UnavailableError } from "core/domain"
-import { checkRateLimit } from "core/rate-limit"
+import { ConfigurationError, UnavailableError } from "@xonava/core/domain"
+import { checkRateLimit } from "@xonava/core/rate-limit"
 import { InMemoryRateLimitStore } from "../inMemoryRateLimitStore"
 
 function bucketCount(store: InMemoryRateLimitStore): number {

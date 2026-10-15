@@ -1,6 +1,6 @@
 import { runRepositoryContractTests } from "../repository-contracts"
 import { runTenantOccContractTests } from "./shared-conformance"
-import type { PersistenceProvider } from "core/persistence"
+import type { PersistenceProvider } from "@xonava/core/persistence"
 
 export interface PersistenceProviderContractOptions {
   createProvider: () => PersistenceProvider

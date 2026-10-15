@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
 import { integer, pgTable, text } from "drizzle-orm/pg-core"
-import { ConfigurationError } from "core/domain"
-import type { EntityDescriptor } from "core/persistence"
-import { DrizzleEntityRegistry } from "adapters/drizzle-pg"
+import { ConfigurationError } from "@xonava/core/domain"
+import type { EntityDescriptor } from "@xonava/core/persistence"
+import { DrizzleEntityRegistry } from "@xonava/adapters/drizzle-pg"
 
 const table = pgTable("registry_rows", {
   id: text("id").primaryKey(),

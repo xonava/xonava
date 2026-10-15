@@ -1,7 +1,7 @@
 # Writing and testing an adapter
 
 1. Select the neutral contract and read its normative specification.
-2. Import only its public `core/<capability>` entry point.
+2. Import only its public `@xonava/core/<capability>` entry point.
 3. Map provider operations and errors without weakening semantics.
 4. Declare only capabilities the implementation actually guarantees.
 5. Add provider-local unit/integration tests.

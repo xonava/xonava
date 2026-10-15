@@ -1,6 +1,6 @@
 import pg from "pg"
 import { afterAll, beforeAll, describe, it } from "vitest"
-import { DrizzlePgWorkflowStore } from "adapters/drizzle-pg"
+import { DrizzlePgWorkflowStore } from "@xonava/adapters/drizzle-pg"
 import { openPgFixture, pgCertificationUrl } from "./database.js"
 import { assertWorkflowStoreGuards } from "../shared/workflowStoreGuards.js"
 

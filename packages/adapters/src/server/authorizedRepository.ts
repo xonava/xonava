@@ -1,9 +1,9 @@
-import { Predicate, ConfigurationError, ForbiddenError, assertFieldQueryAccess, assertVerifiedAbacBundle, markTrustedPredicate, resolveFieldQueryDenials, type PredicateNode } from "core/domain"
-import { FIELD_READ_DEFAULT_KEY, projectResponseRecord, type AbacAuthorizer, type FieldReadOverride, type VerifiedAbacPolicyBundle } from "core/domain"
-import { assertEntityVersion, type EntityVersion } from "core/serialization"
-import type { EntityDescriptor, VersionedRepository } from "core/persistence"
-import type { ListResult, SortSpec } from "core/query"
-import type { OffsetPaginationPlan } from "core/query"
+import { Predicate, ConfigurationError, ForbiddenError, assertFieldQueryAccess, assertVerifiedAbacBundle, markTrustedPredicate, resolveFieldQueryDenials, type PredicateNode } from "@xonava/core/domain"
+import { FIELD_READ_DEFAULT_KEY, projectResponseRecord, type AbacAuthorizer, type FieldReadOverride, type VerifiedAbacPolicyBundle } from "@xonava/core/domain"
+import { assertEntityVersion, type EntityVersion } from "@xonava/core/serialization"
+import type { EntityDescriptor, VersionedRepository } from "@xonava/core/persistence"
+import type { ListResult, SortSpec } from "@xonava/core/query"
+import type { OffsetPaginationPlan } from "@xonava/core/query"
 
 export interface AuthorizedRepository<TRow extends Record<string, unknown>, TId = string> {  findMany(args?: {
     filter?: PredicateNode

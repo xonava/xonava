@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, expect, it, vi } from "vitest"
-import type { EntityDescriptor, PersistenceProvider } from "core/persistence"
-import { Predicate, bindAbacSecurityDigest, createAbacAuthorizer, evaluatePredicate, type AbacPolicyBundle, type VerifiedAbacPolicyBundle, type NormalizedAbacPolicy } from "core/domain"
+import type { EntityDescriptor, PersistenceProvider } from "@xonava/core/persistence"
+import { Predicate, bindAbacSecurityDigest, createAbacAuthorizer, evaluatePredicate, type AbacPolicyBundle, type VerifiedAbacPolicyBundle, type NormalizedAbacPolicy } from "@xonava/core/domain"
 import { z } from "zod"
 import { createDeleteHandler } from "../delete"
 import { createUpdateHandler } from "../update"

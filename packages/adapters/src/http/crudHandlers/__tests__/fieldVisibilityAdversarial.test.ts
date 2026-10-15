@@ -1,12 +1,12 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { describe, expect, it } from "vitest"
-import type { EntityDescriptor, PersistenceProvider } from "core/persistence"
+import type { EntityDescriptor, PersistenceProvider } from "@xonava/core/persistence"
 import {
   Predicate,
   bindAbacSecurityDigest,
   type AbacPolicyBundle,
   type NormalizedAbacPolicy,
-} from "core/domain"
+} from "@xonava/core/domain"
 import { createDetailHandler } from "../detail"
 import { createListHandler } from "../list"
 import type { CrudShared } from "../types"

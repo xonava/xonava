@@ -1,2 +1,2 @@
-import { validateObjectKey } from "core/object-store"
+import { validateObjectKey } from "@xonava/core/object-store"
 export const capability = validateObjectKey

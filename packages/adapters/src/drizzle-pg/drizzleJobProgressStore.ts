@@ -1,8 +1,8 @@
 import { pgSchemaName } from "./pgSchemaName"
 import type { Pool } from "pg"
-import { ConfigurationError, ConflictError, StaleClaimError } from "core/domain"
+import { ConfigurationError, ConflictError, StaleClaimError } from "@xonava/core/domain"
 import type { DrizzleColumnMap } from "../drizzle-shared/predicateCompiler"
-import { decodeStoredJobCheckpoint, validateJobProgress, type JobProgress, type JobProgressFence, type JobProgressPort } from "core/execution"
+import { decodeStoredJobCheckpoint, validateJobProgress, type JobProgress, type JobProgressFence, type JobProgressPort } from "@xonava/core/execution"
 
 /** Physical jobs-table columns that fence progress writes on the live claim. */
 export interface JobProgressFenceColumns {

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, expect, it } from "vitest"
 import { internalRepositoryForDescriptor } from "../../../repository/dynamicRepository"
-import type { EntityDescriptor, PersistenceProvider } from "core/persistence"
+import type { EntityDescriptor, PersistenceProvider } from "@xonava/core/persistence"
 import { z } from "zod"
 import { createCreateHandler } from "../create"
 import type { CrudShared } from "../types"

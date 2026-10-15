@@ -1,9 +1,9 @@
 import {afterAll,beforeAll,beforeEach,describe,expect,it} from "vitest"
 import type {Pool} from "mysql2/promise"
-import type {InboxKey,InboxRecord,OutboxDeliveryRecord} from "core/events"
-import {ConfigurationError} from "core/domain"
-import {applyWorkflowStep} from "core/workflow"
-import {createMySqlInboxStore,createMySqlLeaseStore,createMySqlOutboxStore,createMySqlTagGenerationStore,DrizzleMySqlJobProgressStore,DrizzleMySqlJobStore,DrizzleMySqlScheduleStore,DrizzleMySqlSequenceStore,DrizzleMySqlTemporalHistoryStore,DrizzleMySqlWorkflowStore} from "adapters/drizzle-mysql"
+import type {InboxKey,InboxRecord,OutboxDeliveryRecord} from "@xonava/core/events"
+import {ConfigurationError} from "@xonava/core/domain"
+import {applyWorkflowStep} from "@xonava/core/workflow"
+import {createMySqlInboxStore,createMySqlLeaseStore,createMySqlOutboxStore,createMySqlTagGenerationStore,DrizzleMySqlJobProgressStore,DrizzleMySqlJobStore,DrizzleMySqlScheduleStore,DrizzleMySqlSequenceStore,DrizzleMySqlTemporalHistoryStore,DrizzleMySqlWorkflowStore} from "@xonava/adapters/drizzle-mysql"
 import {altName,clearAltDatabase,openAltDatabase} from "./altDatabase.js"
 
 const system={scope:"system" as const}

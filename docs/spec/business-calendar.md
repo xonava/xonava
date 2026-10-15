@@ -8,4 +8,4 @@ The range endpoints MUST be valid and strictly increasing. Every returned window
 
 ## Conformance
 
-Invalid requests/ranges/windows are validation failures; unknown calendar behavior and provider failure MUST be explicit. Test empty results, working/non-working days, exact boundaries, invalid/reversed ranges, unordered/overlapping/out-of-range windows, holidays, exceptions, next-day behavior, defensive timestamps, and timezone transitions. Traceability: `core/business-calendar`; H1.
+Invalid requests/ranges/windows are validation failures; unknown calendar behavior and provider failure MUST be explicit. Test empty results, working/non-working days, exact boundaries, invalid/reversed ranges, unordered/overlapping/out-of-range windows, holidays, exceptions, next-day behavior, defensive timestamps, and timezone transitions. Traceability: `@xonava/core/business-calendar`; H1.

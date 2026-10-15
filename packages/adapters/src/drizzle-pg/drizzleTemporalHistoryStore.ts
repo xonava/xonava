@@ -1,8 +1,8 @@
 import { pgSchemaName } from "./pgSchemaName"
 import { pgDate } from "./pgUtils"
-import type { NewTemporalRevision, TemporalHistoryStore, TemporalResource, TemporalRevision, TemporalRevisionPage, TemporalSnapshot } from "core/temporal"
-import { validateTemporalRevision, validateTemporalSnapshot } from "core/temporal"
-import { ConflictError } from "core/domain"
+import type { NewTemporalRevision, TemporalHistoryStore, TemporalResource, TemporalRevision, TemporalRevisionPage, TemporalSnapshot } from "@xonava/core/temporal"
+import { validateTemporalRevision, validateTemporalSnapshot } from "@xonava/core/temporal"
+import { ConflictError } from "@xonava/core/domain"
 
 interface PgResult { rows: Record<string, unknown>[] }
 export interface PgTemporalClient { query(text: string, values?: unknown[]): Promise<PgResult> }

@@ -1,5 +1,5 @@
 import type { SQL } from "drizzle-orm"
-import type { PredicateNode } from "core/domain"
+import type { PredicateNode } from "@xonava/core/domain"
 import { compileDrizzlePredicate as compileShared, type DrizzleColumnMap, type PredicateCompilerOptions } from "../drizzle-shared/predicateCompiler"
 
 /** D1/SQLite predicate compilation; defaults to SQLite text semantics. */

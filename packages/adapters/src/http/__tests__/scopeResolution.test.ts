@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
-import { createAnonymousPrincipal, ForbiddenError, type ExecutionScope, type ExecutionScopeId, type Principal } from "core/domain"
-import { type CompiledRouteBinding, type CompiledScopeResolverBinding } from "core/bootstrap"
-import { createVerifiedScopeResolution, type ScopeResolver } from "core/security"
+import { createAnonymousPrincipal, ForbiddenError, type ExecutionScope, type ExecutionScopeId, type Principal } from "@xonava/core/domain"
+import { type CompiledRouteBinding, type CompiledScopeResolverBinding } from "@xonava/core/bootstrap"
+import { createVerifiedScopeResolution, type ScopeResolver } from "@xonava/core/security"
 import { normalizeFrameworkRequest, type ScopeAdmissionEvidence, type TrustedFrameworkSession } from "../scopeResolution"
 
 const NOW = new Date("2026-09-10T00:00:01.000Z")

@@ -1,9 +1,9 @@
-import { ConfigurationError, ConflictError, type DurableAuthorityProvenanceV1 } from "core/domain"
-import type { InboxKey, InboxPort, InboxRecord, OutboxDeliveryKey, OutboxDeliveryRecord, OutboxStore } from "core/events"
+import { ConfigurationError, ConflictError, type DurableAuthorityProvenanceV1 } from "@xonava/core/domain"
+import type { InboxKey, InboxPort, InboxRecord, OutboxDeliveryKey, OutboxDeliveryRecord, OutboxStore } from "@xonava/core/events"
 import {
   acknowledgeInboxRecord, appendOutboxDelivery, claimInboxRecord, claimOutboxDelivery, deadLetterInboxRecord, markOutboxDeliveryPublished,
   observeInboxRecord, recordOutboxDeliveryFailure, renewInboxClaim, replayInboxRecord, scheduleInboxRetry,
-} from "core/events"
+} from "@xonava/core/events"
 
 export interface AtomicRecordBackend<TKey, TRecord> {
   readonly transactional: boolean

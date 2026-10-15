@@ -1,7 +1,7 @@
 import pg from "pg"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import type { InboxKey, InboxRecord, OutboxDeliveryKey, OutboxDeliveryRecord } from "core/events"
-import { PgAtomicRecordBackend, createDrizzlePgInboxStore, createDrizzlePgOutboxStore } from "adapters/drizzle-pg"
+import type { InboxKey, InboxRecord, OutboxDeliveryKey, OutboxDeliveryRecord } from "@xonava/core/events"
+import { PgAtomicRecordBackend, createDrizzlePgInboxStore, createDrizzlePgOutboxStore } from "@xonava/adapters/drizzle-pg"
 import { openPgFixture, pgCertificationUrl } from "./database.js"
 
 const scopeId = "tenant:t1" as never

@@ -8,8 +8,8 @@ const runId=process.env.FRAMEWORK_CONFORMANCE_RUN_ID??"local-o1"
 const directory=resolve("artifacts/framework-conformance",runId,"o1")
 const run=args=>execFileSync("npm",args,{cwd:process.cwd(),stdio:"inherit",env:process.env,shell:process.platform==="win32"})
 run(["run","typecheck"])
-run(["run","test","-w","core","--","--run","src/storage/__tests__/attachment.test.ts","src/object-store/__tests__/objectStore.test.ts"])
-run(["run","test","-w","adapters","--","--run","src/storage/__tests__/inMemoryObjectStore.test.ts"])
+run(["run","test","-w","@xonava/core","--","--run","src/storage/__tests__/attachment.test.ts","src/object-store/__tests__/objectStore.test.ts"])
+run(["run","test","-w","@xonava/adapters","--","--run","src/storage/__tests__/inMemoryObjectStore.test.ts"])
 const sources=["packages/core/src/object-store/objectStore.ts","packages/core/src/storage/attachment.ts","packages/core/src/bootstrap/runtimeCapabilities.ts","packages/adapters/src/storage/inMemoryObjectStore.ts"]
 const sourceManifest=await Promise.all(sources.map(async path=>({path,sha256:createHash("sha256").update(await readFile(resolve(path))).digest("hex")})))
 const scenarios=["uint8array-put-get","web-readable-stream-put","head-metadata","delete","content-length-validation","checksum-metadata","cancellation","deadline","scoped-attachment-metadata","object-store-capability-presence","optional-signed-reference-contract"]

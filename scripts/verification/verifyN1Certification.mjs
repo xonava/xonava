@@ -1,7 +1,7 @@
 import { certificationContext, createSourceManifest, runNpm, verifiedScenarioEvidence, writeCertificationArtifact } from "./certificationSupport.mjs"
 const { runId, directory } = certificationContext("local-n1", "n1")
-runNpm(["run", "typecheck", "-w", "core"])
-runNpm(["run", "test", "-w", "core", "--", "--run", "src/sequence/__tests__/sequence.test.ts"])
+runNpm(["run", "typecheck", "-w", "@xonava/core"])
+runNpm(["run", "test", "-w", "@xonava/core", "--", "--run", "src/sequence/__tests__/sequence.test.ts"])
 const testFile = "packages/core/src/sequence/__tests__/sequence.test.ts"
 const sourceManifest = await createSourceManifest(["packages/core/src/sequence/types.ts", "packages/core/src/sequence/sequence.ts", "packages/core/src/sequence/index.ts", testFile, "docs/spec/sequence.md"])
 const scenarios = await verifiedScenarioEvidence([

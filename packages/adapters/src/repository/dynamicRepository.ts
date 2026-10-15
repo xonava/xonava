@@ -1,5 +1,5 @@
-import type { DeleteOptions, EntityDescriptor, InsertRepository, PersistenceProvider, ReadOnlyPersistenceProvider, ReadOnlyRepository, ReadRepository, UnversionedEntityDescriptor, UpdateWhereOptions, VersionedEntityDescriptor } from "core/persistence"
-import type { PredicateNode } from "core/domain"
+import type { DeleteOptions, EntityDescriptor, InsertRepository, PersistenceProvider, ReadOnlyPersistenceProvider, ReadOnlyRepository, ReadRepository, UnversionedEntityDescriptor, UpdateWhereOptions, VersionedEntityDescriptor } from "@xonava/core/persistence"
+import type { PredicateNode } from "@xonava/core/domain"
 
 /** Adapter-internal boundary for compiled descriptors whose version kind is known only at runtime. */
 export interface InternalDynamicRepository<T, TId = string> extends ReadRepository<T, TId>, InsertRepository<T> {

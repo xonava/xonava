@@ -1,6 +1,6 @@
-import { assertOutboxScope, type OutboxRecord } from "core/events"
-import { canonicalJsonString, legacyJavaScriptOrderJsonString } from "core/serialization"
-import { ConfigurationError, ConflictError } from "core/domain"
+import { assertOutboxScope, type OutboxRecord } from "@xonava/core/events"
+import { canonicalJsonString, legacyJavaScriptOrderJsonString } from "@xonava/core/serialization"
+import { ConfigurationError, ConflictError } from "@xonava/core/domain"
 
 /**
  * v3: canonical JSON in RFC 8785 key order. v2 serialized integer-like object

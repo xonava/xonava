@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from "vitest"
 import { z } from "zod"
-import { defineEntity } from "core/entity"
+import { defineEntity } from "@xonava/core/entity"
 import {
   bindAbacSecurityDigest,
   evaluatePredicate,
   RetryablePersistenceError,
   UnavailableError,
   type PredicateNode,
-} from "core/domain"
+} from "@xonava/core/domain"
 import { CRUD } from "../crud"
 import { defaultListQuerySchema } from "../crudHandlers/types"
 import { createFrameworkErrorHandler } from "../handleFrameworkCoreError"

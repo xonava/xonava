@@ -7,8 +7,8 @@ const runId = process.env.FRAMEWORK_CONFORMANCE_RUN_ID ?? "local-e1"
 const directory = resolve("artifacts/framework-conformance", runId, "e1")
 const run = args => execFileSync("npm", args, { cwd: process.cwd(), stdio: "inherit", env: process.env, shell: process.platform === "win32" })
 run(["run", "typecheck"])
-run(["run", "test", "-w", "core", "--", "--run", "src/entity"])
-run(["run", "test", "-w", "adapters", "--", "--run", "src/http/__tests__/CRUD.compiledEntity.test.ts", "src/http/crudHandlers/__tests__/e1CompiledScope.test.ts"])
+run(["run", "test", "-w", "@xonava/core", "--", "--run", "src/entity"])
+run(["run", "test", "-w", "@xonava/adapters", "--", "--run", "src/http/__tests__/CRUD.compiledEntity.test.ts", "src/http/crudHandlers/__tests__/e1CompiledScope.test.ts"])
 
 const sources = ["packages/core/src/serialization/durableCodec.ts", "packages/core/src/entity/entityScope.ts", "packages/core/src/entity/lifecycle.ts", "packages/core/src/entity/scalars/index.ts", "packages/core/src/domain/dataClassification.ts", "packages/core/src/entity/defineEntity.ts", "packages/core/src/entity/compileEntity.ts", "packages/core/src/entity/validateEntity.ts", "packages/core/src/entity/capabilityCheck.ts", "packages/adapters/src/http/crud.ts"]
 const sourceManifest = await Promise.all(sources.map(async path => ({ path, sha256: createHash("sha256").update(await readFile(resolve(path))).digest("hex") })))

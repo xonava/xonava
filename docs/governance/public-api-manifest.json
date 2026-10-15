@@ -3,16 +3,16 @@
   "schemaVersion": 1,
   "line": "2.0",
   "packages": {
-    "core": [
+    "@xonava/core": [
       ".", "./aggregate", "./bootstrap", "./business-calendar", "./cache", "./domain", "./entity", "./events",
       "./execution", "./feature-flags", "./health", "./kernel", "./object-store", "./operation",
       "./persistence", "./query", "./quota", "./rate-limit", "./read-model", "./resilience", "./rules",
       "./security", "./secrets", "./sequence", "./serialization", "./storage", "./telemetry", "./temporal", "./workflow"
     ],
-    "adapters": [
+    "@xonava/adapters": [
       ".", "./cache", "./drizzle-d1", "./drizzle-mysql", "./drizzle-pg", "./express", "./fastify", "./hono", "./http", "./server", "./storage"
     ],
-    "testing": [
+    "@xonava/testing": [
       ".", "./abac", "./contracts/atomic-batch", "./contracts/cache-adapter",
       "./contracts/persistence-provider", "./contracts/shared-conformance", "./predicates",
       "./repositories"

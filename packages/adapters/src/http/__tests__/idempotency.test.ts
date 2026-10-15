@@ -2,11 +2,11 @@ import { describe, expect, it, vi, type Mock } from "vitest"
 import { createFrameworkWriteHandler } from "../createFrameworkWriteHandler"
 import { IDEMPOTENCY_FINGERPRINT_VERSION, deserializeResponse, fingerprintJson, legacyFingerprintJson, serializeResponse, type SerializedResponse, type SerializedResponseIdempotencyPort } from "../idempotency"
 import type { FrameworkAdapterDeps } from "../../server"
-import type { IdempotencyPort } from "core/events"
-import type { PersistenceProvider } from "core/persistence"
-import { bindAbacSecurityDigest, encodeExecutionScopeId } from "core/domain"
-import { encodeTenantIdempotencyScope } from "core/persistence"
-import { canonicalizeValue } from "core/serialization"
+import type { IdempotencyPort } from "@xonava/core/events"
+import type { PersistenceProvider } from "@xonava/core/persistence"
+import { bindAbacSecurityDigest, encodeExecutionScopeId } from "@xonava/core/domain"
+import { encodeTenantIdempotencyScope } from "@xonava/core/persistence"
+import { canonicalizeValue } from "@xonava/core/serialization"
 import { allowAllAbacBundle, allowAllModuleFacts, canonicalRequestNormalization, trustedSession } from "./canonicalRequest"
 
 const persistence = {
@@ -31,7 +31,7 @@ function createDeps(port: SerializedResponseIdempotencyPort, tenantId?: string):
   return deps
 }
 
-function createPort(acquire: SerializedResponseIdempotencyPort["acquire"]): import("core/events").TransactionalIdempotencyPort<SerializedResponse> {
+function createPort(acquire: SerializedResponseIdempotencyPort["acquire"]): import("@xonava/core/events").TransactionalIdempotencyPort<SerializedResponse> {
   return { acquire, renew: vi.fn(async () => undefined), markCommittedInTransaction: vi.fn(async () => undefined), complete: vi.fn(async () => undefined) }
 }
 

@@ -1,5 +1,5 @@
-import type { ValidationSchema } from "core/kernel"
-import { ValidationError } from "core/domain"
+import type { ValidationSchema } from "@xonava/core/kernel"
+import { ValidationError } from "@xonava/core/domain"
 import type { HttpRequestMetadata } from "./trustedClientIp"
 
 export const DEFAULT_MAX_JSON_BODY_BYTES = 1024 * 1024

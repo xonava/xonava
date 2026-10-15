@@ -1,6 +1,6 @@
 import type {AnyMySqlTable} from "drizzle-orm/mysql-core"
-import type { AuditRecord, AuditSink, AuditSinkFactory } from "core/events"
-import type { PersistenceProvider } from "core/persistence"
+import type { AuditRecord, AuditSink, AuditSinkFactory } from "@xonava/core/events"
+import type { PersistenceProvider } from "@xonava/core/persistence"
 import type {MySqlDatabaseLike} from "./drizzleRepository"
 import {getDrizzleMySqlSession} from "./drizzlePersistenceProvider"
 

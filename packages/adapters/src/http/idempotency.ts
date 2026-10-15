@@ -1,6 +1,6 @@
-import type { IdempotencyCompletion, IdempotencyPort, IdempotencyRequest } from "core/events"
-import { canonicalJsonString, legacyJavaScriptOrderJsonString } from "core/serialization"
-import type { RequestContext } from "core/domain"
+import type { IdempotencyCompletion, IdempotencyPort, IdempotencyRequest } from "@xonava/core/events"
+import { canonicalJsonString, legacyJavaScriptOrderJsonString } from "@xonava/core/serialization"
+import type { RequestContext } from "@xonava/core/domain"
 
 /**
  * v3: canonical JSON in RFC 8785 key order. v2 serialized integer-like object

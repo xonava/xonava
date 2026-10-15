@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
-import type { InboxKey, InboxRecord, OutboxDeliveryKey, OutboxDeliveryRecord } from "core/events"
-import { D1AtomicRecordBackend, DrizzleD1InboxStore, createDrizzleD1OutboxStore } from "adapters/drizzle-d1"
+import type { InboxKey, InboxRecord, OutboxDeliveryKey, OutboxDeliveryRecord } from "@xonava/core/events"
+import { D1AtomicRecordBackend, DrizzleD1InboxStore, createDrizzleD1OutboxStore } from "@xonava/adapters/drizzle-d1"
 import { temporaryD1Fixture } from "./database.js"
 
 const scopeId = "tenant:t1" as never

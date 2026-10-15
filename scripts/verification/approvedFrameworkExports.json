@@ -2,7 +2,7 @@
   "schema": "framework.public-exports",
   "schemaVersion": 1,
   "packages": {
-    "core": [
+    "@xonava/core": [
       ".",
       "./aggregate",
       "./bootstrap",
@@ -33,7 +33,7 @@
       "./temporal",
       "./workflow"
     ],
-    "adapters": [
+    "@xonava/adapters": [
       ".",
       "./cache",
       "./drizzle-d1",
@@ -48,7 +48,7 @@
     ]
   },
   "rootSymbols": {
-    "core": [
+    "@xonava/core": [
       "BrandedEntityDefinition",
       "CompiledEntityDefinition",
       "EntityDefinition",
@@ -64,7 +64,7 @@
       "runOperation",
       "runOperationDetailed"
     ],
-    "adapters": ["CRUD"]
+    "@xonava/adapters": ["CRUD"]
   },
   "forbiddenPublicSymbols": [
     "repositoryForDynamicDescriptor",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
-import type { EntityDescriptor, PersistenceProvider, TenantScopedAtomicBatchProvider } from "core/persistence"
-import { Predicate, type PredicateNode } from "core/domain"
+import type { EntityDescriptor, PersistenceProvider, TenantScopedAtomicBatchProvider } from "@xonava/core/persistence"
+import { Predicate, type PredicateNode } from "@xonava/core/domain"
 import { z } from "zod"
 import { createCreateHandler } from "../create"
 import { createDeleteHandler } from "../delete"

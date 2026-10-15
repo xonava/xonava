@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/require-await */
-import type { OperationDefinition, MutationOperationContext, PreparationOperationContext, AuthorizationOperationContext } from "core/operation"
+import type { OperationDefinition, MutationOperationContext, PreparationOperationContext, AuthorizationOperationContext } from "@xonava/core/operation"
 import {
   ConfigurationError,
   assertAbacSecurityDigest,
@@ -11,12 +11,12 @@ import {
   projectResponseRecord,
   resolveFieldReadOverrides,
   type PredicateNode,
-} from "core/domain"
+} from "@xonava/core/domain"
 import { createFrameworkWriteHandler } from "../createFrameworkWriteHandler"
 import { frameworkJson } from "../handleFrameworkCoreError"
 import type { CrudShared, MutationResult, SelectableRow, UpdateOperationInput } from "./types"
-import { assertEntityVersion, type EntityVersion } from "core/serialization"
-import type { AbacWriteEnforcer } from "core/security"
+import { assertEntityVersion, type EntityVersion } from "@xonava/core/serialization"
+import type { AbacWriteEnforcer } from "@xonava/core/security"
 import { internalRepositoryForDescriptor } from "../../repository/dynamicRepository"
 import {
   auditEmit,

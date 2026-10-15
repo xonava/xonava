@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { int, mysqlTable, varchar } from "drizzle-orm/mysql-core"
-import { ConfigurationError } from "core/domain"
-import type { EntityDescriptor } from "core/persistence"
+import { ConfigurationError } from "@xonava/core/domain"
+import type { EntityDescriptor } from "@xonava/core/persistence"
 import { DrizzleMySqlEntityRegistry, createDrizzleMySqlPersistenceProvider } from "../drizzlePersistenceProvider"
 
 const table = mysqlTable("registry_rows", { id: varchar("id", { length: 100 }).primaryKey(), name: varchar("name", { length: 100 }).notNull(), version: int("version").notNull() })

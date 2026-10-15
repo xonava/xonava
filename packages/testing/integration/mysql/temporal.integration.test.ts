@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { DrizzleMySqlTemporalHistoryStore } from "adapters/drizzle-mysql"
-import { reconstructAsOf } from "core/temporal"
+import { DrizzleMySqlTemporalHistoryStore } from "@xonava/adapters/drizzle-mysql"
+import { reconstructAsOf } from "@xonava/core/temporal"
 import { openMySqlFixture } from "./database.js"
 
 describe("temporal MySQL integration", () => {

@@ -1,4 +1,4 @@
-import { Predicate, evaluatePredicate, type PredicateNode, type PredicatePrimitive } from "core/domain"
+import { Predicate, evaluatePredicate, type PredicateNode, type PredicatePrimitive } from "@xonava/core/domain"
 
 /**
  * Shared differential harness for the normative predicate semantics: every

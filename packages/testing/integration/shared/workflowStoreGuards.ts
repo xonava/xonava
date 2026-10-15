@@ -1,5 +1,5 @@
 import { expect } from "vitest"
-import { applyWorkflowStep, cancelWorkflow, scheduleWorkflowRetry, type WorkflowStore } from "core/workflow"
+import { applyWorkflowStep, cancelWorkflow, scheduleWorkflowRetry, type WorkflowStore } from "@xonava/core/workflow"
 
 async function claimOne(store: WorkflowStore, id: string) {
   const claims = await store.claimDue({ workerId: "guards", limit: 10, leaseDurationMs: 60_000 })

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { encodeExecutionScopeId, freezeRequestContext, type Principal, type RequestContext } from "core/domain"
+import { encodeExecutionScopeId, freezeRequestContext, type Principal, type RequestContext } from "@xonava/core/domain"
 import { authorizeFrameworkModule } from "../shared"
 import { assertFrameworkAdapterDeps, type FrameworkAdapterDeps } from "../../../server"
 import { allowAllAbacBundle } from "../../__tests__/canonicalRequest"

@@ -1,7 +1,7 @@
-import { evaluatePredicate, OptimisticConcurrencyError, type PredicateNode } from "core/domain"
-import { createTenantScopedPersistenceProvider } from "core/persistence"
-import type { PersistenceProvider, EntityDescriptor, UnversionedRepository, DeleteOptions, UpdateWhereOptions } from "core/persistence"
-import type { QueryOptions, ListResult } from "core/query"
+import { evaluatePredicate, OptimisticConcurrencyError, type PredicateNode } from "@xonava/core/domain"
+import { createTenantScopedPersistenceProvider } from "@xonava/core/persistence"
+import type { PersistenceProvider, EntityDescriptor, UnversionedRepository, DeleteOptions, UpdateWhereOptions } from "@xonava/core/persistence"
+import type { QueryOptions, ListResult } from "@xonava/core/query"
 import { runRepositoryContractTests } from "../src/repository-contracts"
 import { runTenantAbacConformanceTests } from "../src/tenant-abac-contracts"
 

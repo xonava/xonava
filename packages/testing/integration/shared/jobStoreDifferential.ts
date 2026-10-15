@@ -1,6 +1,6 @@
 import { appendFileSync } from "node:fs"
 import { expect, it } from "vitest"
-import type { JobStore, StoredJob, JobTransitionResult } from "core/execution"
+import type { JobStore, StoredJob, JobTransitionResult } from "@xonava/core/execution"
 import { forAllAsync, scaledRuns } from "../../../core/src/__tests__/differential/harness.js"
 import {
   BOGUS_TOKEN, HOUR, RefStore, T0, canonicalJson, describeOps, executionScopeOf, generateOps, requesterOf, shrinkOps,

@@ -8,4 +8,4 @@ Snapshots MUST contain every declared member exactly once and MUST NOT contain u
 
 The aggregate layer does not implement a commit mechanism, load entities itself, compensate already-committed external effects, or replace OCC. Callers MUST use authoritative scoped repositories, preserve OCC fences, and keep external effects behind the existing outbox/workflow mechanisms. Atomic-batch callers MUST construct the proposed snapshot from the exact commands they submit.
 
-AG1 conformance covers compilation, phase behavior, exact membership, deterministic transition checks, scoped transaction use, serializable defaults, rollback on failure, provider capability refusal, and exception normalization. Traceability: `core/aggregate`; AG1.
+AG1 conformance covers compilation, phase behavior, exact membership, deterministic transition checks, scoped transaction use, serializable defaults, rollback on failure, provider capability refusal, and exception normalization. Traceability: `@xonava/core/aggregate`; AG1.

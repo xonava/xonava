@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { Predicate } from "core/domain"
+import { Predicate } from "@xonava/core/domain"
 import { buildStructuralScope } from "../shared"
 
 describe("E1 compiled structural scope consumption", () => {

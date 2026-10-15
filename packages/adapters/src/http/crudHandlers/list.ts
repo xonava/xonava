@@ -1,11 +1,11 @@
-import { CacheService, buildKey, serializeCacheKeyPart } from "core/cache"
-import { buildAuditRecord } from "core/events"
+import { CacheService, buildKey, serializeCacheKeyPart } from "@xonava/core/cache"
+import { buildAuditRecord } from "@xonava/core/events"
 import { internalRepositoryForDescriptor } from "../../repository/dynamicRepository"
 import {
   createOperationContext,
   runOperation,
   type OperationDefinition,
-} from "core/operation"
+} from "@xonava/core/operation"
 import {
   ForbiddenError,
   ValidationError,
@@ -15,7 +15,7 @@ import {
   resolveFieldQueryDenials,
   resolveFieldReadOverrides,
   type PredicateNode,
-} from "core/domain"
+} from "@xonava/core/domain"
 import { DEFAULT_MAX_QUERY_JSON_BYTES, filtersToPredicate, parseSortString } from "../filterInterop"
 import { fingerprintJson } from "../idempotency"
 import { parseUniqueQueryParameters, resolveRequestMetadata } from "../requestBody"
@@ -24,7 +24,7 @@ import {
   createFrameworkErrorHandler,
 } from "../handleFrameworkCoreError"
 import { defaultListQuerySchema, type CrudShared, type ReadQuery, type SelectableRow } from "./types"
-import { assertCursorBinding, assertStableCursorSort, compileQueryBudget, decodeCursor, encodeCursor, validateQueryPlan, type CursorPageInfo, type CursorPayloadV1, type ProjectionSpec } from "core/query"
+import { assertCursorBinding, assertStableCursorSort, compileQueryBudget, decodeCursor, encodeCursor, validateQueryPlan, type CursorPageInfo, type CursorPayloadV1, type ProjectionSpec } from "@xonava/core/query"
 import {
   buildStructuralScope,
   deriveSecurityCachePartition,

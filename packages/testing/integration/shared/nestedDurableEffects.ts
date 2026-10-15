@@ -1,8 +1,8 @@
 import { expect } from "vitest"
-import { BusinessRuleError, encodeExecutionScopeId } from "core/domain"
-import type { AuditSinkFactory, OutboxRecord, OutboxSinkFactory } from "core/events"
-import { createOperationContext, runOperation, type StandardMutationOperationDefinition } from "core/operation"
-import type { PersistenceProvider, UnversionedEntityDescriptor } from "core/persistence"
+import { BusinessRuleError, encodeExecutionScopeId } from "@xonava/core/domain"
+import type { AuditSinkFactory, OutboxRecord, OutboxSinkFactory } from "@xonava/core/events"
+import { createOperationContext, runOperation, type StandardMutationOperationDefinition } from "@xonava/core/operation"
+import type { PersistenceProvider, UnversionedEntityDescriptor } from "@xonava/core/persistence"
 
 export interface NestedItem { id: string; name: string }
 export const nestedItemEntity: UnversionedEntityDescriptor<NestedItem> = { name: "nestedItem", primaryKey: "id", fields: { id: { type: "string" }, name: { type: "string" } } }

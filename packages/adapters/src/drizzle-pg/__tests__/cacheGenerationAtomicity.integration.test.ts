@@ -2,10 +2,10 @@ import { drizzle } from "drizzle-orm/node-postgres"
 import { pgTable, integer, text, timestamp, varchar, uniqueIndex } from "drizzle-orm/pg-core"
 import { Pool } from "pg"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
-import { CacheService } from "core/cache"
+import { CacheService } from "@xonava/core/cache"
 import { internalRepositoryForDescriptor } from "../../repository/dynamicRepository"
-import type { AuditRecord, OutboxRecord } from "core/events"
-import type { EntityDescriptor } from "core/persistence"
+import type { AuditRecord, OutboxRecord } from "@xonava/core/events"
+import type { EntityDescriptor } from "@xonava/core/persistence"
 import {
   createDbTagGenerationStore,
   InMemoryCacheAdapter,

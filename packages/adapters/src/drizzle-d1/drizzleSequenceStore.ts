@@ -1,5 +1,5 @@
-import type { ExecutionScopeId } from "core/domain"
-import type { SequenceStore } from "core/sequence"
+import type { ExecutionScopeId } from "@xonava/core/domain"
+import type { SequenceStore } from "@xonava/core/sequence"
 export interface D1SequenceStatement { bind(...values: unknown[]): D1SequenceStatement; first<T = Record<string, unknown>>(): Promise<T | null> }
 export interface D1SequenceDatabase { prepare(sql: string): D1SequenceStatement; batch?(statements: D1SequenceStatement[]): Promise<unknown[]> }
 export class DrizzleD1SequenceStore implements SequenceStore {

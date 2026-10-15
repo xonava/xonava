@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { CacheAdapterError } from "core/cache"
+import { CacheAdapterError } from "@xonava/core/cache"
 import { CacheBackedRateLimitStore } from "../cacheBackedRateLimitStore"
 import { InMemoryRateLimitStore } from "../inMemoryRateLimitStore"
 import { InMemoryCacheAdapter } from "../inMemoryCacheAdapter"

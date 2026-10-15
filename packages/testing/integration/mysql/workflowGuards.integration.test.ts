@@ -1,5 +1,5 @@
 import { describe, it } from "vitest"
-import { DrizzleMySqlWorkflowStore } from "adapters/drizzle-mysql"
+import { DrizzleMySqlWorkflowStore } from "@xonava/adapters/drizzle-mysql"
 import { openMySqlFixture } from "./database.js"
 import { assertWorkflowStoreGuards } from "../shared/workflowStoreGuards.js"
 

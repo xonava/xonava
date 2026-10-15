@@ -1,5 +1,5 @@
-import { Predicate, createAbacAuthorizer, markTrustedPredicate, evaluatePredicate, evaluatePredicateTruth, type NormalizedAbacPolicy, type PredicateNode, type PredicatePrimitive } from "core/domain"
-import { validateQueryPlan, type ListResult, type QueryOptions, type SortSpec } from "core/query"
+import { Predicate, createAbacAuthorizer, markTrustedPredicate, evaluatePredicate, evaluatePredicateTruth, type NormalizedAbacPolicy, type PredicateNode, type PredicatePrimitive } from "@xonava/core/domain"
+import { validateQueryPlan, type ListResult, type QueryOptions, type SortSpec } from "@xonava/core/query"
 import { createRng, forAllAsync, hashSeed, scaledRuns, type Rng } from "../../../core/src/__tests__/differential/harness.js"
 import { DIFFERENTIAL_FIELDS, generateCondition, generatePredicate, generateRecord, shrinkPredicate, type DifferentialField, type ValueDomains } from "../../../core/src/__tests__/differential/arbitraries.js"
 import { ABAC_ACTIONS, bindPolicies, describePolicyCase, generatePolicies, shrinkPolicies } from "../../../core/src/__tests__/differential/abacArbitraries.js"

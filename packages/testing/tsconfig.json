@@ -4,10 +4,10 @@
     "baseUrl": ".",
     "noEmit": true,
     "paths": {
-      "core": ["../core/src"],
-      "core/*": ["../core/src/*"],
-      "adapters": ["../adapters/src"],
-      "adapters/*": ["../adapters/src/*"]
+      "@xonava/core": ["../core/src"],
+      "@xonava/core/*": ["../core/src/*"],
+      "@xonava/adapters": ["../adapters/src"],
+      "@xonava/adapters/*": ["../adapters/src/*"]
     }
   },
   "include": ["src", "tests", "fixtures", "integration", "crash", "conformance/guarantees", "v1", "vitest.integration.config.ts"]

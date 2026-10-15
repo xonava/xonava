@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { createDrizzlePgLeaseStore } from "../../drizzle-pg/drizzleLeaseStore"
 import { createDrizzleD1LeaseStore } from "../../drizzle-d1/drizzleLeaseStore"
-import type { FencedLease, LeaseResourceKey } from "core/events"
+import type { FencedLease, LeaseResourceKey } from "@xonava/core/events"
 import type { AtomicLeaseBackend } from "../fencedLeaseStore"
 
 class Backend implements AtomicLeaseBackend {

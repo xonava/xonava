@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest"
 import { integer, pgTable, text } from "drizzle-orm/pg-core"
-import { Predicate, ConfigurationError, OptimisticConcurrencyError, NotFoundError } from "core/domain"
-import type { VersionedRepository } from "core/persistence"
-import { createDrizzleRepository, type DrizzleSessionLike } from "adapters/drizzle-pg"
-import type { DrizzleColumnMap } from "adapters/drizzle-pg"
+import { Predicate, ConfigurationError, OptimisticConcurrencyError, NotFoundError } from "@xonava/core/domain"
+import type { VersionedRepository } from "@xonava/core/persistence"
+import { createDrizzleRepository, type DrizzleSessionLike } from "@xonava/adapters/drizzle-pg"
+import type { DrizzleColumnMap } from "@xonava/adapters/drizzle-pg"
 
 const productTable = pgTable("products", {
   id: text("id"),

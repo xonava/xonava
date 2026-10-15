@@ -1,2 +1,2 @@
-import { createNoopTelemetry } from "core/telemetry"
+import { createNoopTelemetry } from "@xonava/core/telemetry"
 export const capability = createNoopTelemetry

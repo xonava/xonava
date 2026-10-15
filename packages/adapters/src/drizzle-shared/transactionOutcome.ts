@@ -1,4 +1,4 @@
-import { FrameworkCoreError, TimeoutError, TransactionRolledBackError } from "core/domain"
+import { FrameworkCoreError, TimeoutError, TransactionRolledBackError } from "@xonava/core/domain"
 import { normalizeDrizzleError, type DrizzleDialect } from "./errors"
 
 function machineCode(error: unknown): string | number | undefined {

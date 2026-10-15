@@ -1,6 +1,6 @@
 import { getTableColumns, sql, type AnyColumn, type SQL } from "drizzle-orm"
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core"
-import { ConfigurationError } from "core/domain"
+import { ConfigurationError } from "@xonava/core/domain"
 
 const SQLITE_EPOCH_MS = "(julianday('now') - 2440587.5) * 86400000"
 

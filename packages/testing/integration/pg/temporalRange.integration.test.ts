@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import pg from "pg"
 import { drizzle } from "drizzle-orm/node-postgres"
 import { date, integer, pgTable, timestamp } from "drizzle-orm/pg-core"
-import { Predicate, type PredicateNode } from "core/domain"
+import { Predicate, type PredicateNode } from "@xonava/core/domain"
 import { DrizzlePredicateCompiler } from "../../../adapters/src/drizzle-shared/predicateCompiler.js"
 import { pgCertificationUrl } from "./database.js"
 

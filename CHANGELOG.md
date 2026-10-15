@@ -38,7 +38,7 @@ limitations and deployment requirements.
 - **Rate limiting.** More window units.
 - **Telemetry.** A bounded, non-throwing structured logger. Redaction of `jwt`, `bearer`, `session`,
   `signature`, and `auth`/`otp` keys.
-- **Kernel.** One `Clock` and `TimerClock` in `core/kernel`. The other clock abstractions are defined in
+- **Kernel.** One `Clock` and `TimerClock` in `@xonava/core/kernel`. The other clock abstractions are defined in
   terms of them.
 
 ### Changed

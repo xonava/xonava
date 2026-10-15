@@ -1,5 +1,5 @@
-import { ConfigurationError, StaleClaimError } from "core/domain"
-import type { FencedLease, LeasePort, LeaseResourceKey } from "core/events"
+import { ConfigurationError, StaleClaimError } from "@xonava/core/domain"
+import type { FencedLease, LeasePort, LeaseResourceKey } from "@xonava/core/events"
 import { validateLeaseDuration, validateLeaseOwner } from "./lease"
 
 export interface AtomicLeaseBackend {

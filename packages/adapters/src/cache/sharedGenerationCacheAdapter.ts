@@ -1,4 +1,4 @@
-import type { CacheAdapter } from "core/cache"
+import type { CacheAdapter } from "@xonava/core/cache"
 import type { TagGenerationStore } from "./dbTagGenerationStore"
 
 export interface SharedGenerationCacheAdapterArgs {

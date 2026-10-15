@@ -1,6 +1,6 @@
 import pg from "pg"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { DrizzlePgJobProgressStore } from "adapters/drizzle-pg"
+import { DrizzlePgJobProgressStore } from "@xonava/adapters/drizzle-pg"
 import { openPgFixture, pgCertificationUrl } from "./database.js"
 
 describe("J1 PostgreSQL durable progress", () => {

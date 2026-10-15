@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import pg from "pg"
 import { drizzle } from "drizzle-orm/node-postgres"
 import { boolean, doublePrecision, integer, pgTable, text } from "drizzle-orm/pg-core"
-import { compileDrizzlePredicate } from "adapters/drizzle-pg"
+import { compileDrizzlePredicate } from "@xonava/adapters/drizzle-pg"
 import { findParityMismatches, parityDataset } from "../shared/predicateParity.js"
 import { pgCertificationUrl } from "./database.js"
 

@@ -1,5 +1,5 @@
 {
-  "name": "core",
+  "name": "@xonava/core",
   "version": "2.0.0-rc.2",
   "description": "Zero-dependency core of the server framework: runtime-neutral semantics and contracts for entities, operations, persistence, events, workflows, and access policy.",
   "keywords": [
@@ -26,7 +26,6 @@
     "directory": "packages/core"
   },
   "type": "module",
-  "private": true,
   "files": [
     "dist",
     "README.md",
@@ -43,7 +42,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src --max-warnings=0",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "prepack": "npm run build"
   },
   "exports": {
     ".": {

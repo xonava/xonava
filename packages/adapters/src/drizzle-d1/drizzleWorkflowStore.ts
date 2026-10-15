@@ -1,6 +1,6 @@
-import type { StartWorkflowInput, WorkflowFence, WorkflowStore } from "core/workflow"
-import type { WorkflowClaim, WorkflowInstance, WorkflowSignal } from "core/workflow"
-import { assertWorkflowDurableValue, isWorkflowSignalWait } from "core/workflow"
+import type { StartWorkflowInput, WorkflowFence, WorkflowStore } from "@xonava/core/workflow"
+import type { WorkflowClaim, WorkflowInstance, WorkflowSignal } from "@xonava/core/workflow"
+import { assertWorkflowDurableValue, isWorkflowSignalWait } from "@xonava/core/workflow"
 import { decodeWorkflowFailure, encodeWorkflowFailure } from "../drizzle-shared/workflowFailureCodec"
 
 interface D1Result { success: boolean; meta?: { changes?: number }; results?: Record<string, unknown>[] }

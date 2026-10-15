@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
-import type { EntityDescriptor, PersistenceProvider } from "core/persistence"
-import { Predicate, bindAbacSecurityDigest, evaluatePredicate, type NormalizedAbacPolicy, type PredicateNode, type VerifiedAbacPolicyBundle } from "core/domain"
+import type { EntityDescriptor, PersistenceProvider } from "@xonava/core/persistence"
+import { Predicate, bindAbacSecurityDigest, evaluatePredicate, type NormalizedAbacPolicy, type PredicateNode, type VerifiedAbacPolicyBundle } from "@xonava/core/domain"
 import { z } from "zod"
 import { createUpdateHandler } from "../update"
 import type { CrudShared } from "../types"

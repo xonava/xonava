@@ -1,5 +1,5 @@
-import type { AuditRecord, AuditSink, AuditSinkFactory } from "core/events"
-import type { PersistenceProvider } from "core/persistence"
+import type { AuditRecord, AuditSink, AuditSinkFactory } from "@xonava/core/events"
+import type { PersistenceProvider } from "@xonava/core/persistence"
 import type { DrizzleSessionLike } from "./drizzleRepository"
 import type { AnyPgTable } from "drizzle-orm/pg-core"
 import { getDrizzleSession } from "./drizzlePersistenceProvider"

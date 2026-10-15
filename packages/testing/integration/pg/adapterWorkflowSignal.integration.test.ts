@@ -1,6 +1,6 @@
 import pg from "pg"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { DrizzlePgWorkflowStore } from "adapters/drizzle-pg"
+import { DrizzlePgWorkflowStore } from "@xonava/adapters/drizzle-pg"
 import { openPgFixture, pgCertificationUrl } from "./database.js"
 
 describe("PostgreSQL workflow signal delivery to a missing instance", () => {

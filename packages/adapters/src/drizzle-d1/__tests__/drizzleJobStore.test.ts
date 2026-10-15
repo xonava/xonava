@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest"
 import { SQLiteSyncDialect, integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
 import type { SQL } from "drizzle-orm/sql/sql"
-import { ConfigurationError } from "core/domain"
-import { createDrizzleJobStore, type DrizzleSessionLike } from "adapters/drizzle-d1"
+import { ConfigurationError } from "@xonava/core/domain"
+import { createDrizzleJobStore, type DrizzleSessionLike } from "@xonava/adapters/drizzle-d1"
 
 const jobsTable = sqliteTable("platform_jobs", {
   id: text("id"),

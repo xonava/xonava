@@ -8,7 +8,7 @@ Use GitHub private vulnerability reporting: go to the repository's **Security** 
 
 Include:
 
-- The affected package (`core`, `adapters`, or `testing`) and version.
+- The affected package (`@xonava/core`, `@xonava/adapters`, or `@xonava/testing`) and version.
 - A description of the issue and its impact.
 - Steps to reproduce, or a minimal test case.
 

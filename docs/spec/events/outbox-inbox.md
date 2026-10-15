@@ -6,7 +6,7 @@ An inbox key binds consumer, message and execution scope. Claim, completion, ret
 
 ## Delivery state machines (normative)
 
-The transitions are defined once as pure functions in `core/events` (`claimOutboxDelivery`, `markOutboxDeliveryPublished`, `recordOutboxDeliveryFailure`, `observeInboxRecord`, `claimInboxRecord`, `renewInboxClaim`, `acknowledgeInboxRecord`, `scheduleInboxRetry`, `deadLetterInboxRecord`, `replayInboxRecord`). Stores MUST apply them atomically against the current record and MUST NOT define their own transition rules.
+The transitions are defined once as pure functions in `@xonava/core/events` (`claimOutboxDelivery`, `markOutboxDeliveryPublished`, `recordOutboxDeliveryFailure`, `observeInboxRecord`, `claimInboxRecord`, `renewInboxClaim`, `acknowledgeInboxRecord`, `scheduleInboxRetry`, `deadLetterInboxRecord`, `replayInboxRecord`). Stores MUST apply them atomically against the current record and MUST NOT define their own transition rules.
 
 - **Claimable:** `pending`, `retry_scheduled` once `nextAttemptAt` has passed, or `claimed` with an expired lease. Claiming increments `attempt` and issues a fresh token.
 - **Fencing:** every transition after a claim requires the live, unexpired token; otherwise it fails with `STALE_CLAIM`.

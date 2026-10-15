@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm"
 import type { DrizzleD1Database } from "drizzle-orm/d1"
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core"
 import type { AnyPgTable, PgDatabase, PgTransaction } from "drizzle-orm/pg-core"
-import { CacheAdapterError } from "core/cache"
+import { CacheAdapterError } from "@xonava/core/cache"
 
 /**
  * A single shared atomic counter table in the application DB (D1 or

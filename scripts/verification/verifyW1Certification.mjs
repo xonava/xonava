@@ -9,9 +9,9 @@ const directory = resolve("artifacts/framework-conformance", runId, "w1")
 const run = args => execFileSync("npm", args, { cwd: process.cwd(), stdio: "inherit", env: process.env, shell: process.platform === "win32" })
 if (!process.env.FRAMEWORK_TEST_PG_URL && !process.env.DATABASE_URL) throw new Error("W1 certification requires a real PostgreSQL URL")
 run(["run","typecheck"])
-run(["run","test","-w","core","--","--run","src/workflow/__tests__/workflow.test.ts"])
-run(["run","test","-w","testing","--","--config","vitest.integration.config.ts","integration/pg/w1.integration.test.ts"])
-run(["run","test","-w","testing","--","--config","vitest.integration.config.ts","integration/d1/w1.integration.test.ts"])
+run(["run","test","-w","@xonava/core","--","--run","src/workflow/__tests__/workflow.test.ts"])
+run(["run","test","-w","@xonava/testing","--","--config","vitest.integration.config.ts","integration/pg/w1.integration.test.ts"])
+run(["run","test","-w","@xonava/testing","--","--config","vitest.integration.config.ts","integration/d1/w1.integration.test.ts"])
 const sources=["packages/core/src/workflow/types.ts","packages/core/src/workflow/workflowDefinition.ts","packages/core/src/workflow/workflowRegistry.ts","packages/core/src/workflow/workflowStateMachine.ts","packages/core/src/workflow/workflowContext.ts","packages/core/src/workflow/workflowDispatcher.ts","packages/core/src/workflow/store.ts","packages/adapters/src/drizzle-pg/drizzleWorkflowStore.ts","packages/adapters/src/drizzle-d1/drizzleWorkflowStore.ts","packages/testing/integration/pg/w1.integration.test.ts","packages/testing/integration/d1/w1.integration.test.ts"]
 const sourceManifest=await Promise.all(sources.map(async path=>({path,sha256:createHash("sha256").update(await readFile(resolve(path))).digest("hex")})))
 const scenarios=["crash-between-step-and-next-claim","duplicate-signal","retry","compensation","stale-worker-fence","workflow-version-migration","cancellation-while-waiting","durable-timer","bounded-durable-variables","multi-datasource-step-sequencing","postgres-atomic-transition","d1-atomic-transition"]

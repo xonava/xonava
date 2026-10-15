@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { DrizzleD1TemporalHistoryStore } from "adapters/drizzle-d1"
-import { reconstructAsOf } from "core/temporal"
+import { DrizzleD1TemporalHistoryStore } from "@xonava/adapters/drizzle-d1"
+import { reconstructAsOf } from "@xonava/core/temporal"
 import { temporaryD1Fixture } from "./database.js"
 
 describe("temporal D1 integration", () => {

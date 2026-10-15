@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
-import { bindAbacSecurityDigest, buildTieredPolicyOutcome, evaluateAbacRecordAction, buildActionScope, Predicate } from "core/domain"
-import type { AbacPolicyBundle } from "core/domain"
+import { bindAbacSecurityDigest, buildTieredPolicyOutcome, evaluateAbacRecordAction, buildActionScope, Predicate } from "@xonava/core/domain"
+import type { AbacPolicyBundle } from "@xonava/core/domain"
 
 const emptyConditions = {
   version: 2 as const,

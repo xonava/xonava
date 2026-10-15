@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/require-await */
 import { uuidv7 } from "uuidv7"
-import type { AtomicBatchPreparationContext, OperationDefinition, MutationOperationContext, PreparationOperationContext, AuthorizationOperationContext } from "core/operation"
-import { assertEntityVersion, type EntityVersion } from "core/serialization"
+import type { AtomicBatchPreparationContext, OperationDefinition, MutationOperationContext, PreparationOperationContext, AuthorizationOperationContext } from "@xonava/core/operation"
+import { assertEntityVersion, type EntityVersion } from "@xonava/core/serialization"
 import { internalRepositoryForDescriptor } from "../../repository/dynamicRepository"
 import {
   ConfigurationError,
@@ -9,7 +9,7 @@ import {
   projectResponseRecord,
   resolveFieldReadOverrides,
   type RequestContext,
-} from "core/domain"
+} from "@xonava/core/domain"
 import { createFrameworkWriteHandler } from "../createFrameworkWriteHandler"
 import { frameworkJson } from "../handleFrameworkCoreError"
 import type { CrudShared, CreateOperationInput, MutationResult, SelectableRow } from "./types"

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
-import type { OutboxRecord } from "core/events"
-import { ConfigurationError } from "core/domain"
+import type { OutboxRecord } from "@xonava/core/events"
+import { ConfigurationError } from "@xonava/core/domain"
 import type { DrizzleSessionLike } from "../drizzleRepository"
 import { DrizzleOutboxSink } from "../drizzleOutboxSink"
 

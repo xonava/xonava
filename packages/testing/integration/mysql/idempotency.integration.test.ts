@@ -1,6 +1,6 @@
 import {describe,expect,it} from "vitest"
-import type { VersionedEntityDescriptor } from "core/persistence"
-import {createDrizzleMySqlIdempotencyStore,createDrizzleMySqlPersistenceProvider,DrizzleMySqlEntityRegistry,getDrizzleMySqlSession} from "adapters/drizzle-mysql"
+import type { VersionedEntityDescriptor } from "@xonava/core/persistence"
+import {createDrizzleMySqlIdempotencyStore,createDrizzleMySqlPersistenceProvider,DrizzleMySqlEntityRegistry,getDrizzleMySqlSession} from "@xonava/adapters/drizzle-mysql"
 import {mysqlIdempotency,mysqlRecords} from "../../fixtures/mysql/schema.js"
 import {openMySqlFixture} from "./database.js"
 

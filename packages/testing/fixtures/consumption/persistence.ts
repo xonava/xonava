@@ -1,2 +1,2 @@
-import { supportsAtomicBatch } from "core/persistence"
+import { supportsAtomicBatch } from "@xonava/core/persistence"
 export const capability = supportsAtomicBatch

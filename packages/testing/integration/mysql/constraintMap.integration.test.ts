@@ -1,11 +1,11 @@
 import { bigint, mysqlTable, varchar } from "drizzle-orm/mysql-core"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
-import { ConfigurationError, ConflictError } from "core/domain"
-import type { VersionedEntityDescriptor } from "core/persistence"
-import { createDrizzleMySqlPersistenceProvider, createDrizzleMySqlRepository, DrizzleMySqlEntityRegistry } from "adapters/drizzle-mysql"
+import { ConfigurationError, ConflictError } from "@xonava/core/domain"
+import type { VersionedEntityDescriptor } from "@xonava/core/persistence"
+import { createDrizzleMySqlPersistenceProvider, createDrizzleMySqlRepository, DrizzleMySqlEntityRegistry } from "@xonava/adapters/drizzle-mysql"
 import mysql from "mysql2/promise"
 import { drizzle } from "drizzle-orm/mysql2"
-import type { MySqlDatabaseLike } from "adapters/drizzle-mysql"
+import type { MySqlDatabaseLike } from "@xonava/adapters/drizzle-mysql"
 import { mysqlCertificationUrl } from "./database.js"
 
 const accounts = mysqlTable("constraint_map_accounts", { id: varchar("id", { length: 100 }).primaryKey(), email: varchar("email", { length: 255 }).notNull(), handle: varchar("handle", { length: 100 }).notNull(), version: bigint("version", { mode: "number" }).notNull().default(1) })

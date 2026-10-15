@@ -1,7 +1,7 @@
-import { ConfigurationError, encodeExecutionScopeId } from "core/domain"
-import type { DatasourceCapabilities, DatasourceKey, DatasourceRoutingRequest, PersistenceRouter } from "core/persistence"
-import type { ScopedPersistenceProvider } from "core/persistence"
-import type { ExecutionScope } from "core/domain"
+import { ConfigurationError, encodeExecutionScopeId } from "@xonava/core/domain"
+import type { DatasourceCapabilities, DatasourceKey, DatasourceRoutingRequest, PersistenceRouter } from "@xonava/core/persistence"
+import type { ScopedPersistenceProvider } from "@xonava/core/persistence"
+import type { ExecutionScope } from "@xonava/core/domain"
 
 export interface PersistenceRouteBinding {
   readonly capabilities: DatasourceCapabilities

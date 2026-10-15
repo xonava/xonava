@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, it } from "vitest"
 import { drizzle } from "drizzle-orm/d1"
 import { getTableColumns } from "drizzle-orm"
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
-import { createDrizzleD1Adapter, createDrizzleJobStore, createDrizzleScheduleStore } from "adapters/drizzle-d1"
+import { createDrizzleD1Adapter, createDrizzleJobStore, createDrizzleScheduleStore } from "@xonava/adapters/drizzle-d1"
 import { openD1Fixture, type D1Fixture } from "./database.js"
 import { assertConcurrentClaimInvariants, assertScheduleStoreMatchesReference, scaledTimeoutMs, type ScheduleDriver } from "../shared/scheduleStoreDifferential.js"
 import {

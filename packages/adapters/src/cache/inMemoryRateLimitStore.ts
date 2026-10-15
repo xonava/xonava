@@ -1,5 +1,5 @@
-import { ConfigurationError, UnavailableError } from "core/domain"
-import type { AtomicRateLimitStore, RateLimitConsumeRequest, RateLimitStoreCapabilities } from "core/rate-limit"
+import { ConfigurationError, UnavailableError } from "@xonava/core/domain"
+import type { AtomicRateLimitStore, RateLimitConsumeRequest, RateLimitStoreCapabilities } from "@xonava/core/rate-limit"
 
 export const DEFAULT_IN_MEMORY_RATE_LIMIT_MAX_BUCKETS = 100_000
 /** Buckets inspected for expiry per call (and per call while at capacity). */

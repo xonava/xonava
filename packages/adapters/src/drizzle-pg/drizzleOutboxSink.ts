@@ -1,9 +1,9 @@
-import { assertOutboxScope, type OutboxRecord, type OutboxSink, type OutboxSinkFactory } from "core/events"
-import type { PersistenceProvider } from "core/persistence"
+import { assertOutboxScope, type OutboxRecord, type OutboxSink, type OutboxSinkFactory } from "@xonava/core/events"
+import type { PersistenceProvider } from "@xonava/core/persistence"
 import type { DrizzleSessionLike } from "./drizzleRepository"
 import type { AnyPgTable } from "drizzle-orm/pg-core"
 import { getTableColumns, sql, type AnyColumn } from "drizzle-orm"
-import { ConfigurationError } from "core/domain"
+import { ConfigurationError } from "@xonava/core/domain"
 import { getDrizzleSession } from "./drizzlePersistenceProvider"
 import { assertOutboxFingerprintMatches, assertOutboxProtectedFields, fingerprintOutboxRecord, outboxProvenanceColumn } from "../drizzle-shared/outbox"
 export type OutboxFingerprintRecord = Pick<OutboxRecord, "type" | "version" | "scopeId" | "aggregateType" | "aggregateId" | "payload">

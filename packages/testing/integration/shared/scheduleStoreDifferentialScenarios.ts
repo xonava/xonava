@@ -4,7 +4,7 @@
  * when the store regresses. Shared by the PostgreSQL, MySQL and D1 suites.
  */
 import { expect } from "vitest"
-import { materializeDueSchedules, type JobStore, type ScheduleStore } from "core/execution"
+import { materializeDueSchedules, type JobStore, type ScheduleStore } from "@xonava/core/execution"
 import { clearRows, insertRow, readRows, updateRow, type RefRow, type ScheduleDriver } from "./scheduleStoreDifferential.js"
 
 const T0 = Date.UTC(2031, 0, 1)

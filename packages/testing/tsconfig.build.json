@@ -10,10 +10,10 @@
     "outDir": "dist",
     "baseUrl": ".",
     "paths": {
-      "core": ["../core/dist/index.d.ts"],
-      "core/*": ["../core/dist/*"],
-      "adapters": ["../adapters/dist/index.d.ts"],
-      "adapters/*": ["../adapters/dist/*"]
+      "@xonava/core": ["../core/dist/index.d.ts"],
+      "@xonava/core/*": ["../core/dist/*"],
+      "@xonava/adapters": ["../adapters/dist/index.d.ts"],
+      "@xonava/adapters/*": ["../adapters/dist/*"]
     }
   },
   "references": [

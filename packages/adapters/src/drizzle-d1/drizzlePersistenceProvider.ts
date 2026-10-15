@@ -2,19 +2,19 @@ import { and, eq, getTableName, sql, type AnyColumn } from "drizzle-orm"
 import { sqliteTable, text, type AnySQLiteTable } from "drizzle-orm/sqlite-core"
 import type { RunnableQuery } from "drizzle-orm/runnable-query"
 import type { DrizzleD1Database } from "drizzle-orm/d1"
-import { assertEntityVersionCanIncrement, type EntityVersion } from "core/serialization"
-import type { PersistenceCapabilities } from "core/persistence"
-import type { AtomicBatchPlan, AtomicBatchProvider, AtomicBatchResult, EntityDescriptor, PersistenceProvider, TenantScopedAtomicBatchCommandEncoder, TenantScopedWriteCommand, UnversionedEntityDescriptor, UnversionedRepository, VersionedEntityDescriptor, VersionedRepository } from "core/persistence"
-import type { AuditRecord, OutboxRecord } from "core/events"
+import { assertEntityVersionCanIncrement, type EntityVersion } from "@xonava/core/serialization"
+import type { PersistenceCapabilities } from "@xonava/core/persistence"
+import type { AtomicBatchPlan, AtomicBatchProvider, AtomicBatchResult, EntityDescriptor, PersistenceProvider, TenantScopedAtomicBatchCommandEncoder, TenantScopedWriteCommand, UnversionedEntityDescriptor, UnversionedRepository, VersionedEntityDescriptor, VersionedRepository } from "@xonava/core/persistence"
+import type { AuditRecord, OutboxRecord } from "@xonava/core/events"
 import type { DrizzleD1Adapter } from "./d1Session"
 import type { DrizzleSessionLike } from "./drizzleRepository"
 import { createDrizzleD1Adapter } from "./d1Session"
 import { createDrizzleRepository } from "./drizzleRepository"
 import type { DrizzleColumnMap } from "../drizzle-shared/predicateCompiler"
-import { ConfigurationError, ConflictError, FrameworkCoreError, ImmutableFieldViolationError, TenantScopeViolationError } from "core/domain"
-import { assertOutboxScope } from "core/events"
+import { ConfigurationError, ConflictError, FrameworkCoreError, ImmutableFieldViolationError, TenantScopeViolationError } from "@xonava/core/domain"
+import { assertOutboxScope } from "@xonava/core/events"
 import { normalizeDrizzleError } from "../drizzle-shared/errors"
-import { Predicate } from "core/domain"
+import { Predicate } from "@xonava/core/domain"
 import { DrizzlePredicateCompiler, type PredicateCompilerOptions } from "../drizzle-shared/predicateCompiler"
 import { CachePrefixLedger, resolveRegistration, type RegistrableEntity } from "../drizzle-shared/entityRegistration"
 
@@ -729,7 +729,7 @@ export function createDrizzlePersistenceProvider(args: DrizzlePersistenceProvide
       }
       // Align batch results back to plan items (an idempotency item expands to
       // an assertion + a receipt statement).
-      const perItemResults: import("core/persistence").AtomicBatchItemResult[] = []
+      const perItemResults: import("@xonava/core/persistence").AtomicBatchItemResult[] = []
       let offset = 0
       for (const [itemIndex, item] of plan.items.entries()) {
         const count = statementEntries.filter((entry) => entry.itemIndex === itemIndex).length || 1

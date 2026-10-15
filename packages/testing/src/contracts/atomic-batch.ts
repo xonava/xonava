@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest"
-import type { AtomicBatchCapableProvider, AtomicBatchPlan, PersistenceProvider } from "core/persistence"
+import type { AtomicBatchCapableProvider, AtomicBatchPlan, PersistenceProvider } from "@xonava/core/persistence"
 
 export interface AtomicBatchContractOptions<TCommand> {
   createProvider: () => PersistenceProvider

@@ -41,8 +41,8 @@ const forbidden = [
 const coreManifest = JSON.parse(await readFile(join(root, "packages/core/package.json"), "utf8"))
 const adapterManifest = JSON.parse(await readFile(join(root, "packages/adapters/package.json"), "utf8"))
 const allowedImports = new Set([
-  ...Object.keys(coreManifest.exports).map((key) => key === "." ? "core" : `core${key.slice(1)}`),
-  ...Object.keys(adapterManifest.exports).map((key) => key === "." ? "adapters" : `adapters${key.slice(1)}`),
+  ...Object.keys(coreManifest.exports).map((key) => key === "." ? "@xonava/core" : `@xonava/core${key.slice(1)}`),
+  ...Object.keys(adapterManifest.exports).map((key) => key === "." ? "@xonava/adapters" : `@xonava/adapters${key.slice(1)}`),
 ])
 
 const failures = []
@@ -58,7 +58,7 @@ for (const path of canonical) {
     if (clean && !existsSync(resolve(dirname(path), clean))) failures.push(`${display}: broken link ${target}`)
   }
 
-  for (const match of source.matchAll(/from\s+["'](core(?:\/[^"']+)?|adapters(?:\/[^"']+)?)["']/g)) {
+  for (const match of source.matchAll(/from\s+["'](@xonava\/core(?:\/[^"']+)?|@xonava\/adapters(?:\/[^"']+)?)["']/g)) {
     if (!allowedImports.has(match[1])) failures.push(`${display}: non-public package import ${match[1]}`)
   }
 

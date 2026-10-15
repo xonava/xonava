@@ -4,7 +4,7 @@ For setup, verification commands, and database test requirements, see [CONTRIBUT
 
 ## Placement
 
-Place a fundamental invariant with no higher dependency in `core/kernel`. Put neutral capability contracts and behavior in the corresponding core capability. Put provider- and runtime-specific code in `adapters`. Put conformance and certification infrastructure in `testing` or `scripts/verification`.
+Place a fundamental invariant with no higher dependency in `@xonava/core/kernel`. Put neutral capability contracts and behavior in the corresponding core capability. Put provider- and runtime-specific code in `@xonava/adapters`. Put conformance and certification infrastructure in `@xonava/testing` or `scripts/verification`.
 
 ## Rules
 

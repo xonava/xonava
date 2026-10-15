@@ -1,7 +1,7 @@
 import pg from "pg"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { DrizzlePgTemporalHistoryStore, DrizzlePgWorkflowStore } from "adapters/drizzle-pg"
-import { scheduleWorkflowRetry } from "core/workflow"
+import { DrizzlePgTemporalHistoryStore, DrizzlePgWorkflowStore } from "@xonava/adapters/drizzle-pg"
+import { scheduleWorkflowRetry } from "@xonava/core/workflow"
 import { readPostgresMigration } from "../../fixtures/postgres/bootstrap.js"
 import { pgCertificationUrl } from "./database.js"
 

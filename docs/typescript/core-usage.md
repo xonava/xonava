@@ -3,7 +3,7 @@
 Core capabilities do not require a global container. Supply the contract implementation required by the capability.
 
 ```ts
-import { CacheService, type CacheAdapter } from "core/cache";
+import { CacheService, type CacheAdapter } from "@xonava/core/cache";
 
 declare const adapter: CacheAdapter;
 const cache = new CacheService({ adapter, defaultTtlMs: 30_000 });
@@ -12,7 +12,7 @@ const account = await cache.get<{ enabled: boolean }>("account:42");
 ```
 
 ```ts
-import { checkRateLimit, type AtomicRateLimitStore } from "core/rate-limit";
+import { checkRateLimit, type AtomicRateLimitStore } from "@xonava/core/rate-limit";
 
 declare const store: AtomicRateLimitStore;
 const decision = await checkRateLimit({

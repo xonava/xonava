@@ -1,5 +1,5 @@
 import type {Pool,RowDataPacket,ResultSetHeader} from "mysql2/promise"
-import { CacheAdapterError } from "core/cache"
+import { CacheAdapterError } from "@xonava/core/cache"
 import type {TagGenerationStore} from "../cache/dbTagGenerationStore"
 import {resolveMySqlTables,type MySqlTableOptions} from "./mysqlIdentifiers"
 

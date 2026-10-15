@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe } from "vitest"
-import { DrizzleD1WorkflowStore } from "adapters/drizzle-d1"
+import { DrizzleD1WorkflowStore } from "@xonava/adapters/drizzle-d1"
 import { openD1Fixture, type D1Fixture } from "./database.js"
 import { defineStoreContractDifferential, printCoverage, type DbReceipt, type WorkflowStoreDriver } from "../shared/workflowStoreDifferential.js"
 import { defineWorkflowConcurrency } from "../shared/workflowStoreDifferentialConcurrency.js"

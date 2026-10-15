@@ -1,5 +1,5 @@
 import { expect, it } from "vitest"
-import { applyWorkflowStep, cancelWorkflow, scheduleWorkflowRetry, type WorkflowInstance, type WorkflowStore } from "core/workflow"
+import { applyWorkflowStep, cancelWorkflow, scheduleWorkflowRetry, type WorkflowInstance, type WorkflowStore } from "@xonava/core/workflow"
 import { createRng, hashSeed, scaledRuns } from "../../../core/src/__tests__/differential/harness.js"
 import { signalLedgerViolations } from "../../../core/src/__tests__/differential/workflowFixtures.js"
 

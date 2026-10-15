@@ -1,7 +1,7 @@
 import mysql from "mysql2/promise"
 import type { Pool, RowDataPacket } from "mysql2/promise"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { DrizzleMySqlJobStore } from "adapters/drizzle-mysql"
+import { DrizzleMySqlJobStore } from "@xonava/adapters/drizzle-mysql"
 import { applyMySqlJobPartitionHeadIndexMigration, readMySqlMigrationStatements } from "../../fixtures/mysql/bootstrap.js"
 import { mysqlCertificationUrl } from "./database.js"
 

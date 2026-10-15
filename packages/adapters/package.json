@@ -1,5 +1,5 @@
 {
-  "name": "adapters",
+  "name": "@xonava/adapters",
   "version": "2.0.0-rc.2",
   "description": "Adapters for the server framework: PostgreSQL, MySQL, and Cloudflare D1 persistence via Drizzle, Express, Fastify, and Hono HTTP bindings, and cache and storage adapters.",
   "keywords": [
@@ -28,7 +28,6 @@
     "directory": "packages/adapters"
   },
   "type": "module",
-  "private": true,
   "files": [
     "dist",
     "README.md",
@@ -41,11 +40,12 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsc -b tsconfig.build.json --force && node ../../scripts/verification/rewriteBuildExtensions.mjs .",
+    "build": "tsc -b tsconfig.build.json --force && node ../../scripts/verification/rewriteBuildExtensions.mjs ../core .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src --max-warnings=0",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "prepack": "npm run build"
   },
   "exports": {
     "./fastify": {
@@ -127,7 +127,7 @@
     }
   },
   "dependencies": {
-    "core": "*",
+    "@xonava/core": "2.0.0-rc.2",
     "uuidv7": "^1.2.1",
     "zod": "^4.3.6"
   },

@@ -1,7 +1,7 @@
 import mysql from "mysql2/promise"
 import type { Pool, RowDataPacket } from "mysql2/promise"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { DrizzleMySqlWorkflowStore } from "adapters/drizzle-mysql"
+import { DrizzleMySqlWorkflowStore } from "@xonava/adapters/drizzle-mysql"
 import { applyMySqlSignalBufferingMigration, readMySqlMigrationStatements } from "../../fixtures/mysql/bootstrap.js"
 import { mysqlCertificationUrl, openMySqlFixture } from "./database.js"
 import { registerWorkflowSignalBufferingTests, type DbReceipt, type SignalBufferingHarness } from "../shared/workflowSignalBuffering.js"

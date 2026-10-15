@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import { createFrameworkWriteHandler } from "../createFrameworkWriteHandler"
 import type { FrameworkAdapterDeps } from "../../server"
 import { allowAllAbacBundle, canonicalRequestNormalization } from "./canonicalRequest"
-import type { PersistenceProvider } from "core/persistence"
+import type { PersistenceProvider } from "@xonava/core/persistence"
 
 const rateLimit = { config: { max: 1, timeWindow: "1 minute" }, consistency: "best-effort" as const }
 

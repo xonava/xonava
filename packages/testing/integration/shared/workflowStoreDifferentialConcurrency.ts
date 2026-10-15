@@ -2,7 +2,7 @@ import { expect, it } from "vitest"
 import {
   createWorkflowRegistry, defineWorkflow, dispatchWorkflows,
   type WorkflowDispatchResult, type WorkflowFence, type WorkflowInstance, type WorkflowStepContext, type WorkflowStepDefinition, type WorkflowStepResult, type WorkflowStore,
-} from "core/workflow"
+} from "@xonava/core/workflow"
 import { forAllAsync, type Rng } from "../../../core/src/__tests__/differential/harness.js"
 import { drive, ManualClock, MemoryWorkflowStore, signalLedgerViolations } from "../../../core/src/__tests__/differential/workflowFixtures.js"
 import { canonical, coverage, coverageCount, PROPERTY_TIMEOUT_MS, runIndexer, SCOPE, type WorkflowStoreDriver } from "./workflowStoreDifferential.js"

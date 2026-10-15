@@ -2,7 +2,7 @@ import pg from "pg"
 import { describe, it } from "vitest"
 import { drizzle } from "drizzle-orm/node-postgres"
 import { jsonb, pgSchema, text, timestamp } from "drizzle-orm/pg-core"
-import { createDrizzlePgIdempotencyStore } from "adapters/drizzle-pg"
+import { createDrizzlePgIdempotencyStore } from "@xonava/adapters/drizzle-pg"
 import { pgCertificationUrl } from "./database.js"
 import { assertIdempotencyAbandonContract } from "../shared/idempotencyAbandon.js"
 

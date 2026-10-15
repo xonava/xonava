@@ -1,6 +1,6 @@
-import { StaleClaimError } from "core/domain"
+import { StaleClaimError } from "@xonava/core/domain"
 import { FencedInboxStore, FencedOutboxStore, type AtomicRecordBackend } from "../drizzle-shared/fencedDeliveryStateMachine"
-import type { InboxKey, InboxRecord, OutboxDeliveryKey, OutboxDeliveryRecord } from "core/events"
+import type { InboxKey, InboxRecord, OutboxDeliveryKey, OutboxDeliveryRecord } from "@xonava/core/events"
 import { D1AtomicRecordBackend, type D1Statement } from "./d1AtomicRecordBackend"
 
 export class DrizzleD1InboxStore extends FencedInboxStore {

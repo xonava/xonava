@@ -1,6 +1,6 @@
 import { certificationContext, createSourceManifest, runNpm, verifiedScenarioEvidence, writeCertificationArtifact } from "./certificationSupport.mjs"
 const { runId, directory }=certificationContext("local-b1","b1");const run=runNpm
-run(["run","typecheck"]);run(["run","lint","-w","core"]);run(["run","test","-w","core","--","--run","src/certification/__tests__/tx1Contracts.test.ts","src/certification/__tests__/b1Contracts.test.ts"])
+run(["run","typecheck"]);run(["run","lint","-w","@xonava/core"]);run(["run","test","-w","@xonava/core","--","--run","src/certification/__tests__/tx1Contracts.test.ts","src/certification/__tests__/b1Contracts.test.ts"])
 const sources=["packages/core/src/persistence/bulk.ts","packages/core/src/persistence/streaming.ts"];const sourceManifest=await createSourceManifest(sources)
 const scenarios=["bounded-bulk-input","duplicate-id-rejection","per-row-expected-version","partial-result-mode","atomic-no-partial-application","result-count-integrity","result-order-integrity","bounded-stream-batches","bounded-stream-total","sequential-batch-numbers","lazy-cancellation","deadline-enforcement"]
 const b1="packages/core/src/certification/__tests__/b1Contracts.test.ts",tx1="packages/core/src/certification/__tests__/tx1Contracts.test.ts"

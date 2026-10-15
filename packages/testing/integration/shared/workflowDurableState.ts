@@ -1,5 +1,5 @@
 import { expect } from "vitest"
-import { applyWorkflowStep, createWorkflowRegistry, defineWorkflow, dispatchWorkflows, type WorkflowStepContext, type WorkflowStepResult, type WorkflowStore } from "core/workflow"
+import { applyWorkflowStep, createWorkflowRegistry, defineWorkflow, dispatchWorkflows, type WorkflowStepContext, type WorkflowStepResult, type WorkflowStore } from "@xonava/core/workflow"
 
 const scope = { kind: "tenant", tenantId: "t1" } as const
 const decode = (value: unknown) => value as Record<string, unknown>

@@ -1,4 +1,4 @@
-import { ConfigurationError } from "core/domain"
+import { ConfigurationError } from "@xonava/core/domain"
 
 /** Validates a PostgreSQL schema identifier before it is interpolated into SQL. */
 export function pgSchemaName(schema: string): string {

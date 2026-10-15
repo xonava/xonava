@@ -8,4 +8,4 @@ Upload authorization and object commit are distinct from attaching the resulting
 
 ## Conformance
 
-Test scope isolation, hostile metadata, missing objects, checksum/size constraints, signed expiry, upload-finalization mismatch, shared references, lifecycle/orphan compensation, and authorization. Traceability: `core/storage`; O1.
+Test scope isolation, hostile metadata, missing objects, checksum/size constraints, signed expiry, upload-finalization mismatch, shared references, lifecycle/orphan compensation, and authorization. Traceability: `@xonava/core/storage`; O1.

@@ -1,6 +1,6 @@
 import { eq, and, sql, type AnyColumn } from "drizzle-orm"
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core"
-import type { AtomicBatchIdempotencyPort, ClaimedPendingInvalidation, IdempotencyAcquireResult, IdempotencyCompletion, IdempotencyCommitItem, IdempotencyFinalizationPort, IdempotencyRequest } from "core/events"
+import type { AtomicBatchIdempotencyPort, ClaimedPendingInvalidation, IdempotencyAcquireResult, IdempotencyCompletion, IdempotencyCommitItem, IdempotencyFinalizationPort, IdempotencyRequest } from "@xonava/core/events"
 import type { DrizzleSessionLike } from "./drizzleRepository"
 import { d1CurrentEpochMilliseconds, d1EpochMillisecondsAfter, getAffectedRows } from "./d1Utils"
 import { parseInvalidations, resolveExistingIdempotency } from "../drizzle-shared/idempotency"
@@ -113,7 +113,7 @@ export class DrizzleD1IdempotencyStore<TResult>
     ))
   }
 
-  createCommitBatchItem(completion: IdempotencyCommitItem): import("core/persistence").AtomicBatchItem<unknown> {
+  createCommitBatchItem(completion: IdempotencyCommitItem): import("@xonava/core/persistence").AtomicBatchItem<unknown> {
     // The atomic item is a durable commit receipt: stable identity + durable
     // obligations only. The provider pairs it with a DB-enforced ownership
     // assertion that aborts the whole batch on a stale token, and never stores

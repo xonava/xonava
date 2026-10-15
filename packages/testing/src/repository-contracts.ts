@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest"
-import { Predicate } from "core/domain"
-import type { PersistenceProvider, VersionedEntityDescriptor, VersionedRepository } from "core/persistence"
+import { Predicate } from "@xonava/core/domain"
+import type { PersistenceProvider, VersionedEntityDescriptor, VersionedRepository } from "@xonava/core/persistence"
 
 interface TestEntity {
   id: string

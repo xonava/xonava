@@ -1,11 +1,11 @@
-# @SCOPE/core
+# @xonava/core
 
 Language-neutral framework semantics and their TypeScript reference contracts. Core has zero runtime dependencies, native ES module exports, and one subpath per capability. The package root is intentionally small.
 
 ## Install
 
 ```sh
-npm install @SCOPE/core
+npm install @xonava/core
 ```
 
 Requires Node.js 22 or later.
@@ -15,9 +15,9 @@ Requires Node.js 22 or later.
 Import the capability you need from its subpath. Importing one subpath does not initialize bootstrap, workflow, HTTP, or a database provider.
 
 ```ts
-import { checkRateLimit, type AtomicRateLimitStore } from "@SCOPE/core/rate-limit";
+import { checkRateLimit, type AtomicRateLimitStore } from "@xonava/core/rate-limit";
 
-declare const store: AtomicRateLimitStore; // supply an implementation, for example from @SCOPE/adapters/cache
+declare const store: AtomicRateLimitStore; // supply an implementation, for example from @xonava/adapters/cache
 const decision = await checkRateLimit({
   store, key: "tenant:t1:user:u1", limit: 100, windowMs: 60_000,
 });
@@ -27,35 +27,35 @@ const decision = await checkRateLimit({
 
 | Import | Purpose |
 | --- | --- |
-| `@SCOPE/core` | Entity definition and compilation, and operation creation and execution |
-| `@SCOPE/core/aggregate` | Named consistency boundaries and transactional cross-entity invariants |
-| `@SCOPE/core/kernel` | Validation and definition integrity |
-| `@SCOPE/core/domain` | Errors, principals, authority, predicates, and ABAC primitives |
-| `@SCOPE/core/entity` | Entity definitions, compilation, scope, lifecycle, and scalars |
-| `@SCOPE/core/cache` | Cache service, adapter contract, and generation semantics |
-| `@SCOPE/core/rate-limit` | Rate-limit stores, decisions, and enforcement |
-| `@SCOPE/core/telemetry` | Neutral telemetry port, events, and safe attributes |
-| `@SCOPE/core/temporal` | Temporal revisions, snapshots, stores, and point-in-time reconstruction |
-| `@SCOPE/core/quota` | Quota contracts |
-| `@SCOPE/core/resilience` | Retry and circuit-breaker policy |
-| `@SCOPE/core/rules` | Deterministic, versioned, and effective-dated business-rule evaluation |
-| `@SCOPE/core/sequence` | Transaction-bound scoped sequential-number allocation and formatting |
-| `@SCOPE/core/object-store` | Object-store contract |
-| `@SCOPE/core/health` | Health contracts |
-| `@SCOPE/core/secrets` | Opaque secret contract |
-| `@SCOPE/core/feature-flags` | Trusted feature facts |
-| `@SCOPE/core/business-calendar` | Business-calendar contract |
-| `@SCOPE/core/persistence` | Provider and repository contracts, routing, scoping, bulk and streaming, and capabilities |
-| `@SCOPE/core/query` | Query plans, budgets, projection, consistency, pagination, cursors, and search |
-| `@SCOPE/core/read-model` | Read-model definition and execution |
-| `@SCOPE/core/events` | Events, and audit, idempotency, inbox, outbox, and lease contracts |
-| `@SCOPE/core/operation` | Operations, services, context, budgets, deadlines, and execution |
-| `@SCOPE/core/execution` | Jobs, schedules, retry, progress, and dispatch |
-| `@SCOPE/core/workflow` | Workflow definitions, state machine, dispatcher, and store |
-| `@SCOPE/core/security` | Scope resolution and authorized execution plans |
-| `@SCOPE/core/storage` | Attachment contract |
-| `@SCOPE/core/bootstrap` | Definition compilation, dependency and readiness checks, and runtime plan |
-| `@SCOPE/core/serialization` | Canonical JSON, fingerprints, envelopes, codecs, and versions |
+| `@xonava/core` | Entity definition and compilation, and operation creation and execution |
+| `@xonava/core/aggregate` | Named consistency boundaries and transactional cross-entity invariants |
+| `@xonava/core/kernel` | Validation and definition integrity |
+| `@xonava/core/domain` | Errors, principals, authority, predicates, and ABAC primitives |
+| `@xonava/core/entity` | Entity definitions, compilation, scope, lifecycle, and scalars |
+| `@xonava/core/cache` | Cache service, adapter contract, and generation semantics |
+| `@xonava/core/rate-limit` | Rate-limit stores, decisions, and enforcement |
+| `@xonava/core/telemetry` | Neutral telemetry port, events, and safe attributes |
+| `@xonava/core/temporal` | Temporal revisions, snapshots, stores, and point-in-time reconstruction |
+| `@xonava/core/quota` | Quota contracts |
+| `@xonava/core/resilience` | Retry and circuit-breaker policy |
+| `@xonava/core/rules` | Deterministic, versioned, and effective-dated business-rule evaluation |
+| `@xonava/core/sequence` | Transaction-bound scoped sequential-number allocation and formatting |
+| `@xonava/core/object-store` | Object-store contract |
+| `@xonava/core/health` | Health contracts |
+| `@xonava/core/secrets` | Opaque secret contract |
+| `@xonava/core/feature-flags` | Trusted feature facts |
+| `@xonava/core/business-calendar` | Business-calendar contract |
+| `@xonava/core/persistence` | Provider and repository contracts, routing, scoping, bulk and streaming, and capabilities |
+| `@xonava/core/query` | Query plans, budgets, projection, consistency, pagination, cursors, and search |
+| `@xonava/core/read-model` | Read-model definition and execution |
+| `@xonava/core/events` | Events, and audit, idempotency, inbox, outbox, and lease contracts |
+| `@xonava/core/operation` | Operations, services, context, budgets, deadlines, and execution |
+| `@xonava/core/execution` | Jobs, schedules, retry, progress, and dispatch |
+| `@xonava/core/workflow` | Workflow definitions, state machine, dispatcher, and store |
+| `@xonava/core/security` | Scope resolution and authorized execution plans |
+| `@xonava/core/storage` | Attachment contract |
+| `@xonava/core/bootstrap` | Definition compilation, dependency and readiness checks, and runtime plan |
+| `@xonava/core/serialization` | Canonical JSON, fingerprints, envelopes, codecs, and versions |
 
 Only the paths in the package `exports` map are public. Do not deep-import `src` or `dist`.
 

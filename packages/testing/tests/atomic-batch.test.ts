@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { supportsAtomicBatch, type AtomicBatchPlan, type AtomicBatchProvider, type PersistenceProvider } from "core/persistence"
+import { supportsAtomicBatch, type AtomicBatchPlan, type AtomicBatchProvider, type PersistenceProvider } from "@xonava/core/persistence"
 
 type CreateUser = { kind: "create-user"; email: string }
 

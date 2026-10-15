@@ -1,5 +1,5 @@
-import { Predicate, ValidationError, type PredicateNode } from "core/domain"
-import type { CursorDirection, CursorValue, SortSpec } from "core/query"
+import { Predicate, ValidationError, type PredicateNode } from "@xonava/core/domain"
+import type { CursorDirection, CursorValue, SortSpec } from "@xonava/core/query"
 
 export interface CursorBoundary {
   readonly direction: CursorDirection

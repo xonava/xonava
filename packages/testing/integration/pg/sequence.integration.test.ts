@@ -1,7 +1,7 @@
 import pg from "pg"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { DrizzlePgSequenceStore } from "adapters/drizzle-pg"
-import { allocateSequence } from "core/sequence"
+import { DrizzlePgSequenceStore } from "@xonava/adapters/drizzle-pg"
+import { allocateSequence } from "@xonava/core/sequence"
 import { openPgFixture, pgCertificationUrl } from "./database.js"
 describe("sequence PostgreSQL integration", () => {
   const pool = new pg.Pool({ connectionString: pgCertificationUrl(), max: 24 })

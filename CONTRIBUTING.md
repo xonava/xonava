@@ -21,7 +21,7 @@ npm install
 | `npm run typecheck` | Type-checks every workspace |
 | `npm run lint` | Lints every workspace with zero warnings allowed |
 | `npm test` | Runs the unit suites of every workspace. It needs no database. |
-| `npm run test:coverage -w core` | Runs core unit tests with coverage thresholds |
+| `npm run test:coverage -w @xonava/core` | Runs core unit tests with coverage thresholds |
 | `npm run verify:docs` | Checks documentation links, public import paths, and canonical references |
 
 ## Database test suites

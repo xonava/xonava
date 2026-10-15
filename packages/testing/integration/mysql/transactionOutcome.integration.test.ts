@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
-import type { VersionedEntityDescriptor } from "core/persistence"
-import { createOperationContext, runOperation } from "core/operation"
-import { PersistenceError } from "core/domain"
-import { createDrizzleMySqlPersistenceProvider, DrizzleMySqlEntityRegistry } from "adapters/drizzle-mysql"
+import type { VersionedEntityDescriptor } from "@xonava/core/persistence"
+import { createOperationContext, runOperation } from "@xonava/core/operation"
+import { PersistenceError } from "@xonava/core/domain"
+import { createDrizzleMySqlPersistenceProvider, DrizzleMySqlEntityRegistry } from "@xonava/adapters/drizzle-mysql"
 import { mysqlRecords } from "../../fixtures/mysql/schema.js"
 import { openMySqlFixture } from "./database.js"
 

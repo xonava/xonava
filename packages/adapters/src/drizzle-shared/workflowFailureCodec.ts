@@ -1,4 +1,4 @@
-import type { WorkflowFailure } from "core/workflow"
+import type { WorkflowFailure } from "@xonava/core/workflow"
 
 /** Durable JSON form of a workflow failure record, shared by every SQL workflow store. */
 export function encodeWorkflowFailure(failure: WorkflowFailure | null | undefined): string | null {

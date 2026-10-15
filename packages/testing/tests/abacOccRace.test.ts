@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { Predicate, evaluatePredicate, evaluateAbacRecordAction, hasRecordDependentFieldWrite } from "core/domain"
-import type { AbacPolicyBundle, NormalizedAbacPolicy } from "core/domain"
+import { Predicate, evaluatePredicate, evaluateAbacRecordAction, hasRecordDependentFieldWrite } from "@xonava/core/domain"
+import type { AbacPolicyBundle, NormalizedAbacPolicy } from "@xonava/core/domain"
 
 const noConditions = {
   version: 2 as const,

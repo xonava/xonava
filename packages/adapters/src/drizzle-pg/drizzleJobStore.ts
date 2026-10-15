@@ -1,5 +1,5 @@
 import { and, desc, eq, getTableColumns, gt, inArray, isNull, lte, lt, ne, or, sql, asc, type AnyColumn, type SQL } from "drizzle-orm"
-import { ConfigurationError, ConflictError } from "core/domain"
+import { ConfigurationError, ConflictError } from "@xonava/core/domain"
 import type { AnyPgTable } from "drizzle-orm/pg-core"
 import type {
   JobStore,
@@ -17,9 +17,9 @@ import type {
   EnqueueJobArgs,
   StoredJob,
   JobTransitionResult,
-} from "core/execution"
-import { assertRequesterCanEnqueueScope, assertJobScopeCanEnqueue, assertDurableJob, assertDurableIdentifier, requesterJobScope, requesterTenantId, scheduleCorrelationId, CorruptJobMetadataError, JobIdempotencyConflictError } from "core/execution"
-import { buildJobFingerprintInput, decodeStoredJobMaxAttempts, encodeStoredJobMaxAttempts, fingerprintJob, jobFingerprintMatches } from "core/execution"
+} from "@xonava/core/execution"
+import { assertRequesterCanEnqueueScope, assertJobScopeCanEnqueue, assertDurableJob, assertDurableIdentifier, requesterJobScope, requesterTenantId, scheduleCorrelationId, CorruptJobMetadataError, JobIdempotencyConflictError } from "@xonava/core/execution"
+import { buildJobFingerprintInput, decodeStoredJobMaxAttempts, encodeStoredJobMaxAttempts, fingerprintJob, jobFingerprintMatches } from "@xonava/core/execution"
 import { decodePersistedJobFingerprint, decodePersistedJobScope, encodeJobScope } from "../drizzle-shared/jobScope"
 import { uuidv7 } from "uuidv7"
 import type { DrizzleColumnMap } from "../drizzle-shared/predicateCompiler"

@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, it } from "vitest"
 import { getTableColumns } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-postgres"
 import { boolean, integer, pgSchema, text, timestamp } from "drizzle-orm/pg-core"
-import { createDrizzleJobStore, createDrizzleScheduleStore, createPgSession } from "adapters/drizzle-pg"
+import { createDrizzleJobStore, createDrizzleScheduleStore, createPgSession } from "@xonava/adapters/drizzle-pg"
 import { pgCertificationUrl } from "./database.js"
 import { assertConcurrentClaimInvariants, assertScheduleStoreMatchesReference, scaledTimeoutMs, type ScheduleDriver } from "../shared/scheduleStoreDifferential.js"
 import {

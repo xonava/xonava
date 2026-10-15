@@ -1,8 +1,8 @@
 import { certificationContext, createSourceManifest, runNpm, verifiedScenarioEvidence, writeCertificationArtifact } from "./certificationSupport.mjs"
 const { runId, directory } = certificationContext("local-ht1", "ht1")
-runNpm(["run", "typecheck", "-w", "adapters"])
-runNpm(["run", "lint", "-w", "adapters"])
-runNpm(["run", "test", "-w", "adapters", "--", "--run", "src/http/__tests__/frameworkAdapters.test.ts", "src/http/__tests__/nodeTransport.test.ts"])
+runNpm(["run", "typecheck", "-w", "@xonava/adapters"])
+runNpm(["run", "lint", "-w", "@xonava/adapters"])
+runNpm(["run", "test", "-w", "@xonava/adapters", "--", "--run", "src/http/__tests__/frameworkAdapters.test.ts", "src/http/__tests__/nodeTransport.test.ts"])
 const framework = "packages/adapters/src/http/__tests__/frameworkAdapters.test.ts", transport = "packages/adapters/src/http/__tests__/nodeTransport.test.ts"
 const scenarios = await verifiedScenarioEvidence([
   { id: "idempotent-replay", testFile: framework, testName: "replays an actual idempotent framework write without executing it" },

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { compileCursorPredicate, executionSort, normalizeCursorWindow } from "../cursorPagination"
-import { evaluatePredicate } from "core/domain"
+import { evaluatePredicate } from "@xonava/core/domain"
 
 describe("shared PG/D1 keyset pagination", () => {
   const sort = [{ field: "createdAt", direction: "asc" as const, nulls: "last" as const }, { field: "id", direction: "asc" as const }]

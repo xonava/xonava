@@ -1,6 +1,6 @@
 import { describe, it } from "vitest"
 import { bigint, datetime, json, mysqlTable, varchar } from "drizzle-orm/mysql-core"
-import { createDrizzleMySqlAuditSinkFactory, createDrizzleMySqlOutboxSinkFactory, createDrizzleMySqlPersistenceProvider, DrizzleMySqlEntityRegistry } from "adapters/drizzle-mysql"
+import { createDrizzleMySqlAuditSinkFactory, createDrizzleMySqlOutboxSinkFactory, createDrizzleMySqlPersistenceProvider, DrizzleMySqlEntityRegistry } from "@xonava/adapters/drizzle-mysql"
 import { openMySqlFixture } from "./database.js"
 import { assertNestedDurableEffects, mapNestedOutboxRecord, nestedItemEntity } from "../shared/nestedDurableEffects.js"
 

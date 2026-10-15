@@ -1,5 +1,5 @@
 import {describe,expect,it} from "vitest"
-import {DrizzleMySqlJobStore} from "adapters/drizzle-mysql"
+import {DrizzleMySqlJobStore} from "@xonava/adapters/drizzle-mysql"
 import {openMySqlFixture} from "./database.js"
 
 const requester={scope:"tenant" as const,tenantId:"t1",actorId:"user-1"}

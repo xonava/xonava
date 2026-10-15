@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { createDrizzleD1InboxStore, createDrizzleD1OutboxStore } from "../../drizzle-d1/drizzleInboxStore"
 import { createDrizzlePgInboxStore } from "../../drizzle-pg/drizzleInboxStore"
-import type { InboxKey, InboxRecord, OutboxDeliveryKey, OutboxDeliveryRecord } from "core/events"
+import type { InboxKey, InboxRecord, OutboxDeliveryKey, OutboxDeliveryRecord } from "@xonava/core/events"
 import type { AtomicRecordBackend } from "../fencedDeliveryStateMachine"
 
 class MemoryBackend<K, R> implements AtomicRecordBackend<K, R> {

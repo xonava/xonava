@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
-import { ConfigurationError, ValidationError } from "core/domain"
+import { ConfigurationError, ValidationError } from "@xonava/core/domain"
 import { DEFAULT_MAX_JSON_BODY_BYTES, RequestBodyTooLargeError } from "./requestBody"
 import { setAdapterHttpMetadata, type HttpAdapterOptions } from "./frameworkAdapter"
 

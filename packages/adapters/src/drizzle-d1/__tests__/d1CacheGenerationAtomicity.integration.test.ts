@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest"
 import { getTableName } from "drizzle-orm"
 import { sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
 import { createDrizzlePersistenceProvider, DrizzleEntityRegistry, D1_IDEMPOTENCY_ASSERTION_CAPABILITY, type DrizzleD1Command } from "../index"
-import type { AtomicBatchPlan, AtomicBatchResult } from "core/persistence"
+import type { AtomicBatchPlan, AtomicBatchResult } from "@xonava/core/persistence"
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core"
 
 type Statement = { toSQL: () => { sql: string; params: readonly unknown[] }; run: (db: DatabaseSync) => unknown }

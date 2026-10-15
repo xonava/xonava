@@ -2,8 +2,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
 import mysql from "mysql2/promise"
 import { drizzle } from "drizzle-orm/mysql2"
 import { date, datetime, int, mysqlTable } from "drizzle-orm/mysql-core"
-import { Predicate, type PredicateNode } from "core/domain"
-import { compileDrizzlePredicate } from "adapters/drizzle-mysql"
+import { Predicate, type PredicateNode } from "@xonava/core/domain"
+import { compileDrizzlePredicate } from "@xonava/adapters/drizzle-mysql"
 import { mysqlCertificationUrl } from "./database.js"
 
 /**

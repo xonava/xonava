@@ -16,7 +16,7 @@ import {
   type AnyColumn,
   type SQL,
 } from "drizzle-orm"
-import { parseRfc3339Timestamp } from "core/domain"
+import { parseRfc3339Timestamp } from "@xonava/core/domain"
 import type {
   PredicateCompiler,
   PredicateCondition,
@@ -24,7 +24,7 @@ import type {
   PredicatePrimitive,
   PredicateRangeValue,
   PredicateValue,
-} from "core/domain"
+} from "@xonava/core/domain"
 
 export type DrizzleColumnMap = Record<string, AnyColumn>
 

@@ -1,5 +1,5 @@
-import { buildKey, type CacheAdapter } from "core/cache"
-import type { AtomicRateLimitStore, RateLimitStore } from "core/rate-limit"
+import { buildKey, type CacheAdapter } from "@xonava/core/cache"
+import type { AtomicRateLimitStore, RateLimitStore } from "@xonava/core/rate-limit"
 
 interface Bucket {
   count: number

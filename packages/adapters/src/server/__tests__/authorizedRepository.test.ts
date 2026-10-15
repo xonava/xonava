@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return, @typescript-eslint/unbound-method */
 import { describe, it, expect, vi } from "vitest"
-import { Predicate, evaluatePredicate, bindAbacSecurityDigest, createAbacAuthorizer, type VerifiedAbacPolicyBundle } from "core/domain"
+import { Predicate, evaluatePredicate, bindAbacSecurityDigest, createAbacAuthorizer, type VerifiedAbacPolicyBundle } from "@xonava/core/domain"
 import { createAuthorizedRepository } from "../authorizedRepository"
-import type { AbacAuthorizer, AbacCollectionDecision, NormalizedAbacPolicy } from "core/domain"
-import type { VersionedEntityDescriptor, VersionedRepository } from "core/persistence"
+import type { AbacAuthorizer, AbacCollectionDecision, NormalizedAbacPolicy } from "@xonava/core/domain"
+import type { VersionedEntityDescriptor, VersionedRepository } from "@xonava/core/persistence"
 
 interface TestRow {
   id: string

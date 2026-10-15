@@ -1,4 +1,4 @@
-import type { JobExecutionScope, JobRequester } from "core/execution"
+import type { JobExecutionScope, JobRequester } from "@xonava/core/execution"
 import type { Rng } from "../../../core/src/__tests__/differential/harness.js"
 
 /**

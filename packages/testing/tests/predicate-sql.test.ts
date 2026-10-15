@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { Predicate, evaluatePredicate } from "core/domain"
+import { Predicate, evaluatePredicate } from "@xonava/core/domain"
 
 describe("JavaScript predicate evaluation", () => {
   const record = {

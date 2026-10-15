@@ -3,7 +3,7 @@ import { expect, it } from "vitest"
 import {
   applyWorkflowStep, completeCompensation, createWorkflowFailure, failCompensation, failWorkflowStep, markWorkflowAttemptStalled, releaseWorkflowClaim, scheduleWorkflowRetry,
   type WorkflowClaim, type WorkflowFence, type WorkflowInstance, type WorkflowSignal, type WorkflowStepResult, type WorkflowStore,
-} from "core/workflow"
+} from "@xonava/core/workflow"
 import { forAllAsync, scaledRuns, type Rng } from "../../../core/src/__tests__/differential/harness.js"
 import { ManualClock, MemoryWorkflowStore, signalLedgerViolations } from "../../../core/src/__tests__/differential/workflowFixtures.js"
 

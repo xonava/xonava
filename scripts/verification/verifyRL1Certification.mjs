@@ -1,9 +1,9 @@
 import { certificationContext, createSourceManifest, runNpm, verifiedScenarioEvidence, writeCertificationArtifact } from "./certificationSupport.mjs"
 
 const { runId, directory } = certificationContext("local-rl1", "rl1")
-runNpm(["run", "typecheck", "-w", "core"])
-runNpm(["run", "lint", "-w", "core"])
-runNpm(["run", "test", "-w", "core", "--", "--run", "src/rules/__tests__/ruleEngine.test.ts", "src/certification/__tests__/rl1Contracts.test.ts"])
+runNpm(["run", "typecheck", "-w", "@xonava/core"])
+runNpm(["run", "lint", "-w", "@xonava/core"])
+runNpm(["run", "test", "-w", "@xonava/core", "--", "--run", "src/rules/__tests__/ruleEngine.test.ts", "src/certification/__tests__/rl1Contracts.test.ts"])
 
 const testFile = "packages/core/src/rules/__tests__/ruleEngine.test.ts"
 const certificationFile = "packages/core/src/certification/__tests__/rl1Contracts.test.ts"

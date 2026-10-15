@@ -3,7 +3,7 @@ import { getTableColumns } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-postgres"
 import { integer, pgSchema, text, timestamp } from "drizzle-orm/pg-core"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { createDrizzleJobStore, createPgSession } from "adapters/drizzle-pg"
+import { createDrizzleJobStore, createPgSession } from "@xonava/adapters/drizzle-pg"
 import { readPostgresMigration } from "../../fixtures/postgres/bootstrap.js"
 import { pgCertificationUrl } from "./database.js"
 

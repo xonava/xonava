@@ -1,6 +1,6 @@
 import {describe,expect,it} from "vitest"
-import {applyWorkflowStep} from "core/workflow"
-import {DrizzleMySqlWorkflowStore} from "adapters/drizzle-mysql"
+import {applyWorkflowStep} from "@xonava/core/workflow"
+import {DrizzleMySqlWorkflowStore} from "@xonava/adapters/drizzle-mysql"
 import {openMySqlFixture} from "./database.js"
 
 describe("MYSQL1 workflow store",()=>{

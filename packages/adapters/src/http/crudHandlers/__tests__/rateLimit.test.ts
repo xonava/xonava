@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { normalizeEntityRateLimitSetting } from "../shared"
-import type { EntityRateLimitSetting } from "core/entity"
+import type { EntityRateLimitSetting } from "@xonava/core/entity"
 
 describe("normalizeEntityRateLimitSetting", () => {
   it.each(["atomic", "best-effort"] as const)(

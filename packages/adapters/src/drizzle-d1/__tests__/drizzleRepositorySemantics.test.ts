@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest"
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
-import { ConfigurationError, OptimisticConcurrencyError, Predicate, ValidationError } from "core/domain"
-import type { VersionedRepository } from "core/persistence"
-import { createDrizzleRepository, type DrizzleSessionLike, type DrizzleUpdateResult } from "adapters/drizzle-d1"
-import type { DrizzleColumnMap } from "adapters/drizzle-d1"
+import { ConfigurationError, OptimisticConcurrencyError, Predicate, ValidationError } from "@xonava/core/domain"
+import type { VersionedRepository } from "@xonava/core/persistence"
+import { createDrizzleRepository, type DrizzleSessionLike, type DrizzleUpdateResult } from "@xonava/adapters/drizzle-d1"
+import type { DrizzleColumnMap } from "@xonava/adapters/drizzle-d1"
 
 const drugFormulary = sqliteTable("drug_formulary", {
   id: text("id"),

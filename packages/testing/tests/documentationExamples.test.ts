@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest"
-import { CacheService, type CacheAdapter } from "core/cache"
-import { checkRateLimit, type AtomicRateLimitStore } from "core/rate-limit"
-import { createNoopTelemetry, emitTelemetry, explicitlySafeTelemetryAttributes } from "core/telemetry"
-import { validateObjectKey } from "core/object-store"
-import { supportsInteractiveTransactions } from "core/persistence"
-import { validateQueryPlan } from "core/query"
-import { createOperation } from "core/operation"
-import { defineWorkflow } from "core/workflow"
+import { CacheService, type CacheAdapter } from "@xonava/core/cache"
+import { checkRateLimit, type AtomicRateLimitStore } from "@xonava/core/rate-limit"
+import { createNoopTelemetry, emitTelemetry, explicitlySafeTelemetryAttributes } from "@xonava/core/telemetry"
+import { validateObjectKey } from "@xonava/core/object-store"
+import { supportsInteractiveTransactions } from "@xonava/core/persistence"
+import { validateQueryPlan } from "@xonava/core/query"
+import { createOperation } from "@xonava/core/operation"
+import { defineWorkflow } from "@xonava/core/workflow"
 
 describe("canonical documentation examples", () => {
   it("compiles and executes capability-only cache usage", async () => {

@@ -1,7 +1,7 @@
 import type {Pool,ResultSetHeader,RowDataPacket} from "mysql2/promise"
 import {uuidv7} from "uuidv7"
-import type {FencedAdvanceScheduleArgs,FencedReleaseScheduleArgs,FencedScheduleClaim,RenewScheduleLeaseArgs,ScheduleStore} from "core/execution"
-import {assertDurableIdentifier,scheduleOccurrencesConsumed,type ClaimDueSchedulesArgs,type ScheduleClaim} from "core/execution"
+import type {FencedAdvanceScheduleArgs,FencedReleaseScheduleArgs,FencedScheduleClaim,RenewScheduleLeaseArgs,ScheduleStore} from "@xonava/core/execution"
+import {assertDurableIdentifier,scheduleOccurrencesConsumed,type ClaimDueSchedulesArgs,type ScheduleClaim} from "@xonava/core/execution"
 import {resolveMySqlTables,type MySqlTableOptions} from "./mysqlIdentifiers"
 import {decodePersistedJobScope} from "../drizzle-shared/jobScope"
 

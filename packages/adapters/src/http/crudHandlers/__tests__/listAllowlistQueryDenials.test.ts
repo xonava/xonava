@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
-import type { EntityDescriptor, PersistenceProvider } from "core/persistence"
-import { Predicate, bindAbacSecurityDigest, type AbacPolicyBundle, type NormalizedAbacPolicy } from "core/domain"
+import type { EntityDescriptor, PersistenceProvider } from "@xonava/core/persistence"
+import { Predicate, bindAbacSecurityDigest, type AbacPolicyBundle, type NormalizedAbacPolicy } from "@xonava/core/domain"
 import { createListHandler } from "../list"
 import type { CrudShared } from "../types"
 import { canonicalRequestNormalization, trustedSession } from "../../__tests__/canonicalRequest"

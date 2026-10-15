@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, expect, it, vi } from "vitest"
 import { z } from "zod"
-import type { EntityDescriptor, PersistenceProvider } from "core/persistence"
+import type { EntityDescriptor, PersistenceProvider } from "@xonava/core/persistence"
 import { createUpdateHandler } from "../update"
 import type { CrudShared } from "../types"
 import { canonicalRequestNormalization, trustedSession } from "../../__tests__/canonicalRequest"

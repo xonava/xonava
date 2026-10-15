@@ -1,6 +1,6 @@
 import {describe,expect,it} from "vitest"
-import type { VersionedEntityDescriptor } from "core/persistence"
-import {createDrizzleMySqlAuditSinkFactory,createDrizzleMySqlOutboxSinkFactory,createDrizzleMySqlPersistenceProvider,createMySqlTagGenerationStore,DrizzleMySqlEntityRegistry,DrizzleMySqlJobProgressStore} from "adapters/drizzle-mysql"
+import type { VersionedEntityDescriptor } from "@xonava/core/persistence"
+import {createDrizzleMySqlAuditSinkFactory,createDrizzleMySqlOutboxSinkFactory,createDrizzleMySqlPersistenceProvider,createMySqlTagGenerationStore,DrizzleMySqlEntityRegistry,DrizzleMySqlJobProgressStore} from "@xonava/adapters/drizzle-mysql"
 import {mysqlAudit,mysqlOutbox,mysqlRecords} from "../../fixtures/mysql/schema.js"
 import {openMySqlFixture} from "./database.js"
 

@@ -1,6 +1,6 @@
 import { getTableConfig, type AnySQLiteTable } from "drizzle-orm/sqlite-core"
 import type { AnyColumn } from "drizzle-orm"
-import { ConfigurationError } from "core/domain"
+import { ConfigurationError } from "@xonava/core/domain"
 
 export type D1OutboxColumns = AnySQLiteTable & {
   id?: AnyColumn

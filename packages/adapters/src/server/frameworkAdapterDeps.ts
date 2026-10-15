@@ -1,11 +1,11 @@
-import { ConfigurationError, type AuthoritativeStoreDelegationHop, type VerifiedAbacPolicyBundle, type ModuleAuthorizationFacts, type RequestContext } from "core/domain"
+import { ConfigurationError, type AuthoritativeStoreDelegationHop, type VerifiedAbacPolicyBundle, type ModuleAuthorizationFacts, type RequestContext } from "@xonava/core/domain"
 import type { HttpRequestMetadata } from "../http/trustedClientIp"
 import type { TrustedClientIpResolver } from "../http/requestBody"
-import type { IdempotencyPort } from "core/events"
-import type { RateLimitStore } from "core/rate-limit"
-import type { TelemetryPort } from "core/telemetry"
-import type { AuthorityOrigin, DelegationHop, ExecutionIdentity, ExecutionScope, ExecutionScopeId, PolicyEvidence } from "core/domain"
-import type { CompiledRouteBinding, CompiledScopeResolverBinding } from "core/bootstrap"
+import type { IdempotencyPort } from "@xonava/core/events"
+import type { RateLimitStore } from "@xonava/core/rate-limit"
+import type { TelemetryPort } from "@xonava/core/telemetry"
+import type { AuthorityOrigin, DelegationHop, ExecutionIdentity, ExecutionScope, ExecutionScopeId, PolicyEvidence } from "@xonava/core/domain"
+import type { CompiledRouteBinding, CompiledScopeResolverBinding } from "@xonava/core/bootstrap"
 
 export type AbacBundle = VerifiedAbacPolicyBundle
 

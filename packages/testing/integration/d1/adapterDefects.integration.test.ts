@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it } from "vitest"
 import { drizzle } from "drizzle-orm/d1"
 import { integer, sqliteTable, text, uniqueIndex, type AnySQLiteTable } from "drizzle-orm/sqlite-core"
-import { ConfigurationError, ConflictError, encodeExecutionScopeId, Predicate } from "core/domain"
-import type { AuditRecord, OutboxRecord } from "core/events"
-import { JobIdempotencyConflictError } from "core/execution"
+import { ConfigurationError, ConflictError, encodeExecutionScopeId, Predicate } from "@xonava/core/domain"
+import type { AuditRecord, OutboxRecord } from "@xonava/core/events"
+import { JobIdempotencyConflictError } from "@xonava/core/execution"
 import {
   createDrizzleD1Adapter, createDrizzleJobStore, createDrizzlePersistenceProvider, D1_IDEMPOTENCY_ASSERTION_CAPABILITY,
   DrizzleEntityRegistry, type DrizzleD1Command,
-} from "adapters/drizzle-d1"
-import type { AtomicBatchPlan, AtomicBatchResult, PersistenceProvider, TenantScopedAtomicBatchCommandEncoder } from "core/persistence"
+} from "@xonava/adapters/drizzle-d1"
+import type { AtomicBatchPlan, AtomicBatchResult, PersistenceProvider, TenantScopedAtomicBatchCommandEncoder } from "@xonava/core/persistence"
 import { openD1Fixture, type D1Fixture } from "./database.js"
 
 const ts = (name: string) => integer(name, { mode: "timestamp_ms" })

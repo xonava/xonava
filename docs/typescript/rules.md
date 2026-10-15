@@ -1,10 +1,10 @@
 # Business rules
 
-Import the rule engine from `core/rules`. Compile definitions once during bootstrap and evaluate them with trusted facts and an explicit trusted timestamp.
+Import the rule engine from `@xonava/core/rules`. Compile definitions once during bootstrap and evaluate them with trusted facts and an explicit trusted timestamp.
 
 ```ts
-import { Predicate } from "core/domain"
-import { compileRuleSet, evaluateRuleSet } from "core/rules"
+import { Predicate } from "@xonava/core/domain"
+import { compileRuleSet, evaluateRuleSet } from "@xonava/core/rules"
 
 const eligibility = compileRuleSet({
   key: "orders.eligibility",

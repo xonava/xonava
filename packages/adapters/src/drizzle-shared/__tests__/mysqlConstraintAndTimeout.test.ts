@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { ConflictError, RetryablePersistenceError, TimeoutError, TransactionRolledBackError } from "core/domain"
+import { ConflictError, RetryablePersistenceError, TimeoutError, TransactionRolledBackError } from "@xonava/core/domain"
 import { hasMySqlErrorCode, mysqlConstraintField, mysqlDuplicateKeyName, normalizeDrizzleError } from "../errors"
 import { classifyTransactionFailure, transactionTimeoutError } from "../transactionOutcome"
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { DrizzleD1WorkflowStore } from "adapters/drizzle-d1"
-import { createWorkflowRegistry, defineWorkflow, dispatchWorkflows, type WorkflowStepResult } from "core/workflow"
+import { DrizzleD1WorkflowStore } from "@xonava/adapters/drizzle-d1"
+import { createWorkflowRegistry, defineWorkflow, dispatchWorkflows, type WorkflowStepResult } from "@xonava/core/workflow"
 import { temporaryD1Fixture } from "./database.js"
 
 const noDelay = { maxAttempts: 2, initialDelayMs: 0, backoffMultiplier: 1, maxDelayMs: 0, jitter: "none" as const }

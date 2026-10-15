@@ -3,8 +3,8 @@ import { describe, expect, it, vi, type Mock } from "vitest"
 import { createFrameworkWriteHandler } from "../createFrameworkWriteHandler"
 import { deserializeResponse, type SerializedResponse, type SerializedResponseIdempotencyPort } from "../idempotency"
 import type { FrameworkAdapterDeps } from "../../server"
-import type { IdempotencyPort, TransactionalIdempotencyPort } from "core/events"
-import type { PersistenceProvider } from "core/persistence"
+import type { IdempotencyPort, TransactionalIdempotencyPort } from "@xonava/core/events"
+import type { PersistenceProvider } from "@xonava/core/persistence"
 import { allowAllAbacBundle, allowAllModuleFacts, canonicalRequestNormalization } from "./canonicalRequest"
 
 const persistence = {
@@ -32,7 +32,7 @@ function createPort(acquireFn: SerializedResponseIdempotencyPort["acquire"]): Tr
   }
 }
 
-function createHandler(deps: FrameworkAdapterDeps, execute: ReturnType<typeof vi.fn>, recoverCommittedResponse?: (args: { resource: { entity: string; id: string; version?: number }; context: import("core/domain").RequestContext }) => Promise<unknown>, invalidations?: string[], resourceVersion?: number) {
+function createHandler(deps: FrameworkAdapterDeps, execute: ReturnType<typeof vi.fn>, recoverCommittedResponse?: (args: { resource: { entity: string; id: string; version?: number }; context: import("@xonava/core/domain").RequestContext }) => Promise<unknown>, invalidations?: string[], resourceVersion?: number) {
   return createFrameworkWriteHandler({
     adapterDeps: deps,
     requestNormalization: canonicalRequestNormalization(undefined, "test.module"),

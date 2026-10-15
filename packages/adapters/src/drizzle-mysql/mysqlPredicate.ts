@@ -1,6 +1,6 @@
 import type { SQL } from "drizzle-orm"
-import type { PredicateNode } from "core/domain"
-import { ConfigurationError } from "core/domain"
+import type { PredicateNode } from "@xonava/core/domain"
+import { ConfigurationError } from "@xonava/core/domain"
 import { compileDrizzlePredicate as compileShared, type DrizzleColumnMap, type PredicateCompilerOptions } from "../drizzle-shared/predicateCompiler"
 
 /** MySQL predicate compilation; defaults to case-sensitive, code-point text comparison. */
