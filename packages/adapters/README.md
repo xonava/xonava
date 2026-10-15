@@ -40,7 +40,7 @@ Only the paths in the package `exports` map are public. Do not deep-import `src`
 
 ## Example
 
-`handlers` is the result of `CRUD(definition, runtime)` from `@xonava/adapters/http`, where `definition` is a compiled `defineEntity()` result. See the [HTTP framework guide](https://github.com/Suriyaprakash-Somu/engine/blob/main/docs/typescript/http-adapters.md) for the Fastify and Express equivalents.
+`handlers` is the result of `CRUD(definition, runtime)` from `@xonava/adapters/http`, where `definition` is a compiled `defineEntity()` result. See the [HTTP framework guide](https://github.com/xonava/xonava/blob/main/docs/typescript/http-adapters.md) for the Fastify and Express equivalents.
 
 ```ts
 import { Hono } from 'hono'
@@ -54,15 +54,15 @@ export default app
 
 ## Verification
 
-Database adapters are verified by the integration, conformance, race, and crash suites in `@xonava/testing`, run against real databases. Typechecking alone does not show that an adapter meets the contract. See the [persistence setup guide](https://github.com/Suriyaprakash-Somu/engine/blob/main/docs/guides/persistence-setup.md) and the [adapter authoring guide](https://github.com/Suriyaprakash-Somu/engine/blob/main/docs/typescript/adapter-authoring.md).
+Database adapters are verified by the integration, conformance, race, and crash suites in `@xonava/testing`, run against real databases. Typechecking alone does not show that an adapter meets the contract. See the [persistence setup guide](https://github.com/xonava/xonava/blob/main/docs/guides/persistence-setup.md) and the [adapter authoring guide](https://github.com/xonava/xonava/blob/main/docs/typescript/adapter-authoring.md).
 
 ## Documentation
 
-- [Adapter model](https://github.com/Suriyaprakash-Somu/engine/blob/main/docs/architecture/adapter-model.md)
-- [Adapter authoring](https://github.com/Suriyaprakash-Somu/engine/blob/main/docs/typescript/adapter-authoring.md)
-- [HTTP framework adapters](https://github.com/Suriyaprakash-Somu/engine/blob/main/docs/typescript/http-adapters.md)
-- [Persistence setup](https://github.com/Suriyaprakash-Somu/engine/blob/main/docs/guides/persistence-setup.md)
-- [Public exports](https://github.com/Suriyaprakash-Somu/engine/blob/main/docs/reference/package-exports.md)
+- [Adapter model](https://github.com/xonava/xonava/blob/main/docs/architecture/adapter-model.md)
+- [Adapter authoring](https://github.com/xonava/xonava/blob/main/docs/typescript/adapter-authoring.md)
+- [HTTP framework adapters](https://github.com/xonava/xonava/blob/main/docs/typescript/http-adapters.md)
+- [Persistence setup](https://github.com/xonava/xonava/blob/main/docs/guides/persistence-setup.md)
+- [Public exports](https://github.com/xonava/xonava/blob/main/docs/reference/package-exports.md)
 
 ## License
 

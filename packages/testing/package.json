@@ -12,15 +12,15 @@
     "adapters",
     "vitest"
   ],
-  "homepage": "https://github.com/Suriyaprakash-Somu/engine#readme",
+  "homepage": "https://github.com/xonava/xonava#readme",
   "bugs": {
-    "url": "https://github.com/Suriyaprakash-Somu/engine/issues"
+    "url": "https://github.com/xonava/xonava/issues"
   },
   "license": "MIT",
   "author": "Suriyaprakash Somu",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Suriyaprakash-Somu/engine.git",
+    "url": "git+https://github.com/xonava/xonava.git",
     "directory": "packages/testing"
   },
   "type": "module",

@@ -63,8 +63,20 @@ npm run test:framework:crash:d1
 
 It writes evidence under `artifacts/framework-conformance/`. That directory is tracked governance output; see [artifact retention](docs/governance/artifact-retention.md).
 
+## Branches
+
+- `main` holds released, certified code. It only receives merges from `dev`.
+- `dev` is the integration branch. Every change lands here first through a pull request.
+- Work happens on short-lived branches cut from `dev`, named `<type>/<short-description>` in kebab case:
+  `feat/` (new capability), `fix/` (bug fix), `docs/`, `test/`, `refactor/`, `perf/`, `chore/` (tooling,
+  dependencies, repository housekeeping), and `release/<version>` when preparing a release. Example:
+  `fix/mysql-schedule-retire`.
+- Delete the branch after its pull request merges.
+- When `dev` is complete and passes the release gate below, open a pull request from `dev` to `main`.
+
 ## Pull requests
 
+- Target `dev`, not `main`. Only `dev` merges into `main`.
 - Public behavior changes need tests and applicable conformance coverage.
 - Normative behavior belongs in [`docs/spec`](docs/spec/README.md), not only in code comments.
 - Changes to public import paths need an API and version decision. See [compatibility and versioning](docs/governance/compatibility-and-versioning.md).

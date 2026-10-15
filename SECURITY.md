@@ -4,7 +4,7 @@
 
 Report vulnerabilities privately. Do not open a public issue.
 
-Use GitHub private vulnerability reporting: go to the repository's **Security** tab, choose **Report a vulnerability**, or open <https://github.com/Suriyaprakash-Somu/engine/security/advisories/new> directly.
+Use GitHub private vulnerability reporting: go to the repository's **Security** tab, choose **Report a vulnerability**, or open <https://github.com/xonava/xonava/security/advisories/new> directly.
 
 Include:
 
