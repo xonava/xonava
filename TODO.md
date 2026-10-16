@@ -1,11 +1,16 @@
 # Plan
 
-The working plan for Xonava. It lists what is left to do and in what order. It is not a promise of
-dates. Finished items are removed; what shipped is recorded in the [changelog](CHANGELOG.md), and gaps
-that users must know about today stay in [known limitations](docs/KNOWN-LIMITATIONS.md).
+This file is the single place where remaining work is tracked. No other document, issue list, or
+report keeps its own to-do list; they link here instead.
 
-Status: **experimental**, `2.0.0-rc.2`. Target: core and adapters both at enterprise grade (9.5+)
-before `2.0.0`.
+- **Adding work:** add an unchecked item to the right section. An accepted bug report or feature
+  request becomes an item here, with a link to its issue.
+- **Finishing work:** remove the item in the pull request that completes it. What shipped is recorded
+  in the [changelog](CHANGELOG.md).
+- **Other documents:** [known limitations](docs/KNOWN-LIMITATIONS.md) describes how the current release
+  behaves, not what will change. It does not list planned work.
+
+Status: **experimental**, `2.0.0-rc.2`. Targets before `2.0.0`: core at 9.5+, adapters at 9+.
 
 Every item goes through the usual flow: a `<type>/<short-description>` branch cut from `dev`, a pull
 request into `dev`, then `dev` into `main` (see [CONTRIBUTING.md](CONTRIBUTING.md#branches)).
@@ -39,7 +44,20 @@ only by unit tests. Tenant scope is the only path proven against real databases.
 - [ ] Mutation testing on core and adapters; raise weak suites.
 - [ ] Independent review of adapters, then fix and re-certify.
 
-## 4. Continuous integration
+## 4. Core to 9.5+
+
+- [ ] Performance baselines for the hot paths (predicate compilation, ABAC evaluation, query planning,
+      job claim), with a regression check in CI.
+- [ ] Upgrade tests: an old node and a new node on one database, covering the rolling-deploy rules in
+      known limitations (job fingerprints, list cursors, cache counter layouts, workflow signal receipts).
+- [ ] Threat model for scope resolution, ABAC and the HTTP boundary, recorded in `docs/spec/security.md`.
+- [ ] Dependency and code scanning in CI.
+- [ ] Soak tests: long runs of jobs, schedules and workflows under lease expiry and process restarts.
+- [ ] A decision on each item in section 6: implement it, or mark it out of scope in the spec with the
+      reason.
+- [ ] Feed defects found in pilot applications back into this file.
+
+## 5. Continuous integration
 
 - [ ] GitHub Actions on pull requests: lint, typecheck, build, unit tests, `verify:docs`.
 - [ ] Database jobs with PostgreSQL and MySQL service containers plus D1 (Miniflare): integration,
@@ -47,9 +65,9 @@ only by unit tests. Tenant scope is the only path proven against real databases.
 - [ ] Required status checks on `dev` and `main` once the jobs are stable.
 - [ ] Publish from CI with npm provenance.
 
-## 5. Not implemented yet
+## 6. Not implemented yet
 
-Moved from known limitations. Each needs a design decision before work starts.
+Each needs a design decision before work starts.
 
 - [ ] Interactive transactions on D1 (blocked on the platform).
 - [ ] Savepoints for nested operations.
@@ -60,9 +78,9 @@ Moved from known limitations. Each needs a design decision before work starts.
 - [ ] Persistence-applied codecs, so custom fields with durable codecs can be accepted.
 - [ ] `expiresAt` on list cursors.
 
-## 6. `2.0.0`
+## 7. `2.0.0`
 
-- [ ] Sections 2 to 4 complete, and every item in section 5 either done or recorded as out of scope.
+- [ ] Sections 2 to 5 complete, and every item in section 6 either done or recorded as out of scope.
 - [ ] Full release gate (`npm run verify:framework-release`) green on dedicated databases.
 - [ ] Freeze the public API manifest and durable formats; drop compatibility-only fingerprint versions
       that are no longer needed.

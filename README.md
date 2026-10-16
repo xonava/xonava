@@ -199,7 +199,7 @@ Typechecking an adapter does not show that it meets the contract. Behavior is ch
 
 Xonava is experimental. The `2.0.0-rc.2` release candidate has passed its core, API and architecture gates and the PostgreSQL, MySQL and D1 integration, conformance, race and crash/replay suites. That evidence comes from local multi-backend runs and does not cover your production topology, custom adapters or your own policies; see the [certification matrix](docs/reference/certification-matrix.md).
 
-Before deploying, read [Known limitations](docs/KNOWN-LIMITATIONS.md). It lists required database migrations, the MySQL UTC session requirement, accepted differences between databases, and what is not implemented: interactive transactions on D1, savepoints for nested operations, and a bounded `COMMIT` on MySQL. Notable changes are in the [changelog](CHANGELOG.md), and the remaining work is in the [plan](TODO.md). Until `2.0.0`, pin exact versions.
+Before deploying, read [Known limitations](docs/KNOWN-LIMITATIONS.md). It lists required database migrations, the MySQL UTC session requirement, and accepted differences between databases. Notable changes are in the [changelog](CHANGELOG.md), and all remaining work is tracked in one place, the [plan](TODO.md). Until `2.0.0`, pin exact versions.
 
 ## Contributing
 

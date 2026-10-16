@@ -86,6 +86,7 @@ Branch protection:
 
 ## Pull requests
 
+- Planned work is tracked only in [TODO.md](TODO.md). Remove an item in the pull request that completes it, and add new work there rather than in other documents.
 - Target `dev`, not `main`. Only `dev` merges into `main`.
 - Public behavior changes need tests and applicable conformance coverage.
 - Normative behavior belongs in [`docs/spec`](docs/spec/README.md), not only in code comments.
