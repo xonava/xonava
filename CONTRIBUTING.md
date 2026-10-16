@@ -1,6 +1,6 @@
 # Contributing
 
-This repository is a TypeScript npm workspace with three packages: `packages/core`, `packages/adapters`, and `packages/testing`. Before changing code, read the [architecture rules](docs/architecture/contributing.md). They define where code belongs and what it must not import.
+This repository is a TypeScript npm workspace with three packages: `packages/core`, `packages/adapters`, and `packages/testing`. Before changing code, read the [architecture rules](docs/architecture.md#contributor-rules). They define where code belongs and what it must not import.
 
 ## Prerequisites
 
@@ -61,7 +61,7 @@ npm run test:framework:crash:d1
 
 `npm run verify:framework-release` is the full release gate. Maintainers run it before a release. It requires both `FRAMEWORK_TEST_PG_URL` and `FRAMEWORK_TEST_MYSQL_URL`. It runs the baseline checks, the suites for all three database providers, the differential suites at release volume, and the crash suites with 20 repetitions. It takes a long time and should run against dedicated databases.
 
-It writes evidence under `artifacts/framework-conformance/`. That directory is tracked governance output; see [artifact retention](docs/governance/artifact-retention.md).
+It writes evidence under `artifacts/framework-conformance/`. That directory is tracked governance output; see [artifact retention](docs/governance.md#certification-artifact-retention).
 
 ## Branches
 
@@ -79,7 +79,7 @@ It writes evidence under `artifacts/framework-conformance/`. That directory is t
 - Target `dev`, not `main`. Only `dev` merges into `main`.
 - Public behavior changes need tests and applicable conformance coverage.
 - Normative behavior belongs in [`docs/spec`](docs/spec/README.md), not only in code comments.
-- Changes to public import paths need an API and version decision. See [compatibility and versioning](docs/governance/compatibility-and-versioning.md).
+- Changes to public import paths need an API and version decision. See [compatibility and versioning](docs/governance.md#compatibility-and-versioning).
 - Run `npm run verify:docs` after changing documentation.
 
 ## Security
