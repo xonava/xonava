@@ -190,4 +190,5 @@ These differences are intentional. The differential suites accept exactly these 
 
 ## Not implemented
 
-Features that are not implemented yet are tracked in the [plan](../TODO.md#5-not-implemented-yet).
+Planned work, including features that are not implemented yet, is tracked only in the
+[plan](../TODO.md).
