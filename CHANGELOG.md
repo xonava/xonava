@@ -7,7 +7,7 @@ All notable changes to this project are documented in this file. The format foll
 The project is experimental. See [docs/KNOWN-LIMITATIONS.md](docs/KNOWN-LIMITATIONS.md) for known
 limitations and deployment requirements.
 
-## [0.1.0] — Unreleased
+## [0.1.0] — 2026-10-16
 
 First public release, experimental. Internal builds before it were numbered `2.0.0-rc.N`; that numbering
 is retired, and the sections below describe the changes since those builds. From here on, each entry is
