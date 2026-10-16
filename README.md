@@ -9,7 +9,7 @@
 
 Xonava gives backend services the parts that are tedious to get right: entities with tenant scoping and optimistic concurrency, authorization enforced inside queries, transactions, transactional outbox and inbox events, durable jobs, schedules and workflows, caching, rate limiting and resilience. Each capability is a separate subpath of `@xonava/core`, which has no runtime dependencies, so you import only what you use and add the rest later. Reference adapters connect the contracts to PostgreSQL, MySQL, Cloudflare D1, Express, Fastify and Hono. The packages are native ES modules and require Node.js 22 or later.
 
-> **Experimental.** This is the `2.0.0-rc.2` release candidate. APIs, persistence schemas and wire formats may change before `2.0.0`, and the repository ships no production DDL. Read [Known limitations](docs/KNOWN-LIMITATIONS.md) before adopting it.
+> **Experimental.** Xonava is in its `0.x` series. APIs, persistence schemas and wire formats may change in any minor release before `1.0.0`, and the repository ships no production DDL. Read [Known limitations](docs/KNOWN-LIMITATIONS.md) before adopting it.
 
 ## Why Xonava
 
@@ -189,21 +189,21 @@ Typechecking an adapter does not show that it meets the contract. Behavior is ch
 
 - [Documentation index](docs/README.md)
 - [Getting started](docs/guides/getting-started.md) and [using capabilities independently](docs/guides/independent-capabilities.md)
-- [Architecture overview](docs/architecture/overview.md) and [principles](docs/architecture/principles.md)
+- [Architecture overview](docs/architecture.md) and [principles](docs/architecture.md#principles)
 - [Specification](docs/spec/README.md) and [TypeScript profile](docs/typescript/README.md)
 - Guides: [persistence setup](docs/guides/persistence-setup.md), [events, jobs and workflows](docs/guides/events-and-workflows.md), [create an operation](docs/guides/create-an-operation.md), [transactions and OCC](docs/guides/transactions-and-occ.md), [understanding errors](docs/guides/understanding-errors.md)
 - Reference: [public exports](docs/reference/package-exports.md), [capability catalog](docs/reference/capabilities.md), [certification matrix](docs/reference/certification-matrix.md)
-- [Compatibility and versioning policy](docs/governance/compatibility-and-versioning.md)
+- [Compatibility and versioning policy](docs/governance.md#compatibility-and-versioning)
 
 ## Project status
 
-Xonava is experimental. The `2.0.0-rc.2` release candidate has passed its core, API and architecture gates and the PostgreSQL, MySQL and D1 integration, conformance, race and crash/replay suites. That evidence comes from local multi-backend runs and does not cover your production topology, custom adapters or your own policies; see the [certification matrix](docs/reference/certification-matrix.md).
+Xonava is experimental. The current release has passed its core, API and architecture gates and the PostgreSQL, MySQL and D1 integration, conformance, race and crash/replay suites. That evidence comes from local multi-backend runs and does not cover your production topology, custom adapters or your own policies; see the [certification matrix](docs/reference/certification-matrix.md).
 
-Before deploying, read [Known limitations](docs/KNOWN-LIMITATIONS.md). It lists required database migrations, the MySQL UTC session requirement, accepted differences between databases, and what is not implemented: interactive transactions on D1, savepoints for nested operations, and a bounded `COMMIT` on MySQL. Notable changes are in the [changelog](CHANGELOG.md). Until `2.0.0`, pin exact versions.
+Before deploying, read [Known limitations](docs/KNOWN-LIMITATIONS.md). It lists required database migrations, the MySQL UTC session requirement, and accepted differences between databases. Notable changes are in the [changelog](CHANGELOG.md), and all remaining work is tracked in one place, the [plan](TODO.md). Until `1.0.0`, pin exact versions: a `0.x` minor release may contain breaking changes.
 
 ## Contributing
 
-Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the build and test commands, and the database suites, and the [architecture rules](docs/architecture/contributing.md) for where code belongs. Branch from `dev` and open pull requests against `dev`, not `main`. Participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the build and test commands, and the database suites, and the [architecture rules](docs/architecture.md#contributor-rules) for where code belongs. Branch from `dev` and open pull requests against `dev`, not `main`. Participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Security
 

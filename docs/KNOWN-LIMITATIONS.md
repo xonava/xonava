@@ -1,8 +1,7 @@
 # Known limitations
 
-> **Project status: experimental.** Framework 2.0 is published as a release candidate
-> (`2.0.0-rc.2`). Public APIs, persistence schemas, and wire formats may still change before
-> `2.0.0`. Read this page before adopting the release or planning an upgrade. Behaviour changes
+> **Project status: experimental.** Xonava is in its `0.x` series. Public APIs, persistence schemas,
+> and wire formats may change in any minor release before `1.0.0`. Read this page before adopting the release or planning an upgrade. Behaviour changes
 > are listed in the [changelog](../CHANGELOG.md).
 
 This page lists what the framework does not do, where its database adapters differ on purpose, and
@@ -190,9 +189,5 @@ These differences are intentional. The differential suites accept exactly these 
 
 ## Not implemented
 
-- Interactive transactions on D1.
-- Savepoints for nested operations.
-- Bounded `COMMIT` on MySQL.
-- Query-time evaluation of conditional allow-policy grants.
-- A code formatter (style is enforced by lint only).
-- Production DDL, which the repository does not ship.
+Planned work, including features that are not implemented yet, is tracked only in the
+[plan](../TODO.md).

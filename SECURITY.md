@@ -16,7 +16,7 @@ Do not include real credentials, database URLs, or personal data in a report.
 
 ## Supported versions
 
-This project is pre-release (`2.0.0-rc.2`). Only the latest pre-release receives security fixes. Earlier pre-releases are not patched.
+The project is in its `0.x` series. Only the latest `0.x` release receives security fixes; earlier releases are not patched.
 
 ## Bug bounty
 

@@ -1,6 +1,6 @@
 # Contributing
 
-This repository is a TypeScript npm workspace with three packages: `packages/core`, `packages/adapters`, and `packages/testing`. Before changing code, read the [architecture rules](docs/architecture/contributing.md). They define where code belongs and what it must not import.
+This repository is a TypeScript npm workspace with three packages: `packages/core`, `packages/adapters`, and `packages/testing`. Before changing code, read the [architecture rules](docs/architecture.md#contributor-rules). They define where code belongs and what it must not import.
 
 ## Prerequisites
 
@@ -61,7 +61,7 @@ npm run test:framework:crash:d1
 
 `npm run verify:framework-release` is the full release gate. Maintainers run it before a release. It requires both `FRAMEWORK_TEST_PG_URL` and `FRAMEWORK_TEST_MYSQL_URL`. It runs the baseline checks, the suites for all three database providers, the differential suites at release volume, and the crash suites with 20 repetitions. It takes a long time and should run against dedicated databases.
 
-It writes evidence under `artifacts/framework-conformance/`. That directory is tracked governance output; see [artifact retention](docs/governance/artifact-retention.md).
+It writes evidence under `artifacts/framework-conformance/`. That directory is tracked governance output; see [artifact retention](docs/governance.md#certification-artifact-retention).
 
 ## Branches
 
@@ -86,11 +86,32 @@ Branch protection:
 
 ## Pull requests
 
+- Planned work is tracked only in [TODO.md](TODO.md). Remove an item in the pull request that completes it, and add new work there rather than in other documents.
 - Target `dev`, not `main`. Only `dev` merges into `main`.
 - Public behavior changes need tests and applicable conformance coverage.
 - Normative behavior belongs in [`docs/spec`](docs/spec/README.md), not only in code comments.
-- Changes to public import paths need an API and version decision. See [compatibility and versioning](docs/governance/compatibility-and-versioning.md).
+- Changes to public import paths need an API and version decision. See [compatibility and versioning](docs/governance.md#compatibility-and-versioning).
 - Run `npm run verify:docs` after changing documentation.
+
+## Versioning and releases
+
+The versioning policy is in [governance](docs/governance.md#versioning). Versions and the changelog are
+managed with [Changesets](https://github.com/changesets/changesets).
+
+**In a pull request.** If the change affects users of a published package, run `npm run changeset`, pick the
+affected packages and the bump, and write a one- or two-sentence summary for the changelog. Commit the
+generated file under `.changeset/`. While the version is `0.x`, choose `minor` for a breaking change and
+start the summary with `**Breaking:**`; choose `patch` for everything else. Never choose `major` during
+`0.x`. Changes that do not affect package users (tests, internal docs, tooling) need no changeset. Do not
+edit package versions or `CHANGELOG.md` by hand.
+
+**Cutting a release** (maintainers):
+
+1. On a `release/<version>` branch from `dev`, run `npm run release:version`. It consumes the changesets,
+   bumps all three packages to the same version, writes the `CHANGELOG.md` entry, and refreshes the lockfile.
+2. Open the pull request into `dev`, then merge `dev` into `main`.
+3. From `main`, run `npm run release:publish`. It checks the version policy, builds, publishes the packages
+   that are not yet on npm, and creates the git tags. Push the tags with `git push --follow-tags`.
 
 ## Security
 

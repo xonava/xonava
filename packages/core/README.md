@@ -6,7 +6,7 @@ Zero-dependency core of the Xonava server framework: runtime-neutral semantics a
 [![license: MIT](https://img.shields.io/npm/l/@xonava/core)](https://github.com/xonava/xonava/blob/main/LICENSE)
 [![node >=22](https://img.shields.io/node/v/@xonava/core)](https://nodejs.org)
 
-> **Experimental.** Version `2.0.0-rc.2` is a release candidate, and public APIs may still change before `2.0.0`. See [Known limitations](https://github.com/xonava/xonava/blob/main/docs/KNOWN-LIMITATIONS.md) before you adopt it.
+> **Experimental.** Xonava is in its `0.x` series: a minor release may contain breaking changes until `1.0.0`. Pin an exact version. See [Known limitations](https://github.com/xonava/xonava/blob/main/docs/KNOWN-LIMITATIONS.md) before you adopt it.
 
 Core has no runtime dependencies, ships native ES modules, and exposes one subpath per capability. Importing one subpath does not initialize bootstrap, workflow, HTTP, or a database provider. Concrete database, HTTP, cache, and storage implementations live in [`@xonava/adapters`](https://www.npmjs.com/package/@xonava/adapters).
 

@@ -6,7 +6,7 @@ Conformance contracts and test kit for verifying Xonava adapters against persist
 [![license: MIT](https://img.shields.io/npm/l/@xonava/testing)](https://github.com/xonava/xonava/blob/main/LICENSE)
 [![node >=22](https://img.shields.io/node/v/@xonava/testing)](https://nodejs.org)
 
-> **Experimental.** Version `2.0.0-rc.2` is a release candidate, and public APIs may still change before `2.0.0`. See [Known limitations](https://github.com/xonava/xonava/blob/main/docs/KNOWN-LIMITATIONS.md) before you adopt it.
+> **Experimental.** Xonava is in its `0.x` series: a minor release may contain breaking changes until `1.0.0`. Pin an exact version. See [Known limitations](https://github.com/xonava/xonava/blob/main/docs/KNOWN-LIMITATIONS.md) before you adopt it.
 
 Each export is a function that registers a named Vitest suite checking an implementation against a contract, such as a repository, a persistence provider, or a cache adapter.
 
