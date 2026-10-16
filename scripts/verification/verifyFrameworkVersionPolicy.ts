@@ -9,8 +9,8 @@ import {
   RELEASE_EVIDENCE_SCHEMA,
   RELEASE_EVIDENCE_SCHEMA_VERSION,
   isForbiddenCompatibilityExport,
-  isFrameworkTwoVersion,
-} from "./frameworkVersionPolicy.ts"
+  lockstepViolations,
+} from "./frameworkVersionPolicy.mjs"
 
 type JsonRecord = Record<string, unknown>
 
@@ -80,12 +80,13 @@ if (approvedManifest.schema !== "framework.public-api-manifest" || approvedManif
 }
 const approvedPackages = approvedManifest.packages as Record<string, readonly string[]>
 const packageEvidence: Array<{ name: string; version: string; exports: string[] }> = []
+const packageManifests: JsonRecord[] = []
 
 for (const directory of FRAMEWORK_PACKAGE_DIRECTORIES) {
   const manifest = await readJson(join(repositoryRoot, directory, "package.json"))
   const name = manifest.name
   if (typeof name !== "string") fail(`${directory} has no package name`)
-  if (!isFrameworkTwoVersion(manifest.version)) fail(`${name} version ${String(manifest.version)} is outside the 2.0 line`)
+  packageManifests.push(manifest)
   if (!manifest.exports || typeof manifest.exports !== "object" || Array.isArray(manifest.exports)) {
     fail(`${name} has no explicit exports map`)
   }
@@ -105,10 +106,9 @@ if (sorted(Object.keys(approvedPackages)).length !== FRAMEWORK_PACKAGE_DIRECTORI
   fail("approved manifest contains an unexpected framework package")
 }
 
-const releaseProfile = await readJson(join(repositoryRoot, FRAMEWORK_VERSION_POLICY.releaseProfile))
-if (releaseProfile.line !== "2.0" || releaseProfile.mode !== "breaking-architecture") {
-  fail("2.0 release profile does not identify the breaking architecture line")
-}
+const versionViolations = lockstepViolations(packageManifests)
+if (versionViolations.length > 0) fail(versionViolations.join("; "))
+const frameworkVersion = packageManifests[0]?.version as string
 
 const lockfilePath = join(repositoryRoot, "package-lock.json")
 await stat(lockfilePath)
@@ -116,7 +116,8 @@ const evidence = {
   schema: RELEASE_EVIDENCE_SCHEMA,
   schemaVersion: RELEASE_EVIDENCE_SCHEMA_VERSION,
   generatedAt: new Date().toISOString(),
-  frameworkLine: "2.0",
+  frameworkVersion,
+  versionPolicy: FRAMEWORK_VERSION_POLICY,
   certificationScope: "framework-only",
   applicationPackageVersionsConsidered: false,
   sourceRevision: await resolveSourceRevision(),
@@ -126,10 +127,7 @@ const evidence = {
     sha256: await hashFile(approvedManifestPath),
     packages: packageEvidence,
   },
-  releaseProfiles: {
-    current: FRAMEWORK_VERSION_POLICY.releaseProfile,
-  },
 } as const
 await mkdir(dirname(outputPath), { recursive: true })
 await writeFile(outputPath, `${JSON.stringify(evidence, null, 2)}\n`, "utf8")
-console.log(`Framework 2.0 version/export policy verified; evidence: ${relative(repositoryRoot, outputPath)}`)
+console.log(`Framework ${frameworkVersion} version/export policy verified; evidence: ${relative(repositoryRoot, outputPath)}`)

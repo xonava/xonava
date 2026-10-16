@@ -1,6 +1,5 @@
 {
   "name": "xonava-workspace",
-  "version": "2.0.0-rc.2",
   "description": "Monorepo for Xonava, an experimental TypeScript server framework: @xonava/core, @xonava/adapters and @xonava/testing.",
   "private": true,
   "license": "MIT",
@@ -74,16 +73,20 @@
     "verify:framework:b1": "node scripts/verification/verifyB1Certification.mjs",
     "verify:framework:f1": "node scripts/verification/verifyF1Certification.mjs",
     "verify:framework:df1": "node scripts/verification/verifyDF1Certification.mjs",
-    "test:verification": "node --test scripts/verification/differentialCertification.test.mjs",
+    "test:verification": "node --test scripts/verification/differentialCertification.test.mjs scripts/verification/frameworkVersionPolicy.test.mjs",
     "verify:framework:api": "node scripts/verification/verifyApiCertification.mjs",
     "verify:framework:cert": "node scripts/verification/verifyFinalCertification.mjs",
     "verify:framework:mysql1": "node scripts/verification/verifyMYSQL1Certification.mjs",
     "verify:framework-version": "node --experimental-strip-types scripts/verification/verifyFrameworkVersionPolicy.ts",
     "verify:framework-release:local": "npm run verify:framework-version && npm run verify:docs && npm run verify:framework:fixtures && npm run verify:framework:isolation && npm run lint && npm run build && npm run verify:framework:core-purity && npm run verify:framework:hardening && npm run verify:framework:rl1 && npm run verify:framework:ag1 && npm run verify:framework:th1 && npm run verify:framework:n1 && npm run verify:framework:ht1 && npm run test && npm run test:coverage -w @xonava/core && npm run test:framework:integration:d1 && npm run test:framework:conformance:d1 && npm run test:framework:race:d1 && npm run test:framework:crash:d1",
     "verify:framework-release:baseline": "npm run verify:framework-release:local && npm run test:framework:integration:pg && npm run test:framework:conformance:pg && npm run test:framework:race:pg && npm run test:framework:crash:pg && npm run test:framework:integration:mysql && npm run test:framework:conformance:mysql && npm run test:framework:race:mysql && npm run test:framework:crash:mysql",
-    "verify:framework-release": "node scripts/verification/runFrameworkReleaseCertification.mjs"
+    "verify:framework-release": "node scripts/verification/runFrameworkReleaseCertification.mjs",
+    "changeset": "changeset",
+    "release:version": "node scripts/release/versionPackages.mjs",
+    "release:publish": "npm run verify:framework-version && npm run build && changeset publish"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.31.1",
     "@types/node": "^24.3.1",
     "@typescript-eslint/eslint-plugin": "^8.43.0",
     "@typescript-eslint/parser": "^8.43.0",

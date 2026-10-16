@@ -13,6 +13,26 @@ Distinct versions:
 
 These versions may evolve independently but compatibility claims MUST state which dimensions they cover. Durable writers MUST follow reader-before-writer deployment rules. Public export changes follow the maintained API manifest and package-version policy.
 
+## Versioning
+
+The three packages follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and are versioned in
+lockstep: `@xonava/core`, `@xonava/adapters` and `@xonava/testing` always release together at the same
+version, and each pins the others at that exact version. Users match one number across the three.
+
+- **`0.x` (now).** A minor release (`0.2.0`) may contain breaking changes; a patch release (`0.1.1`)
+  contains only fixes and backward-compatible additions. Applications should pin exact versions.
+- **`1.0.0` and later.** Breaking changes require a major release, new features a minor release, and fixes
+  a patch release.
+- **Prereleases** use `-alpha.N`, `-beta.N` or `-rc.N` with `N` starting at 1.
+
+`npm run verify:framework-version` rejects any other version format, packages at different versions, and an
+internal dependency that is not pinned to the shared version. The specification, durable formats and
+certification suites carry their own version identifiers, described above, and do not follow the package
+version.
+
+How to record a change and cut a release is described in
+[CONTRIBUTING.md](../CONTRIBUTING.md#versioning-and-releases).
+
 ## Certification artifact retention
 
 Certification evidence under `artifacts/framework-conformance` is committed only for the latest

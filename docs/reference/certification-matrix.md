@@ -4,7 +4,7 @@ This page is release state, not normative specification. Source-bound evidence i
 
 | Profile | Current state | Evidence |
 |---|---|---|
-| Core/API/architecture | Proven for `2.0.0-rc.2` | API, purity, ownership, fresh-core, generated-surface gates |
+| Core/API/architecture | Proven for the current release | API, purity, ownership, fresh-core, generated-surface gates |
 | PostgreSQL | Integration, conformance, race, crash/replay proven | `verify:framework:cert` run: `<run-id>/release/pg-guarantees.json`, `pg-crash-replay.json` |
 | D1 | Pinned local Miniflare integration, conformance, race, crash/replay proven | `verify:framework:cert` run: `<run-id>/release/d1-guarantees.json`, `d1-crash-replay.json` |
 | MySQL | Full provider and 120-run crash certification proven | `verify:framework:cert` run: `<run-id>/release/mysql-guarantees.json`, `mysql-crash-replay.json` |

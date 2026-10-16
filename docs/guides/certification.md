@@ -8,7 +8,7 @@ For release certification, configure `FRAMEWORK_TEST_PG_URL` and `FRAMEWORK_TEST
 
 ## Release profiles and gates
 
-The framework 2.0 profile covers F0–F3. That implementation is framework-owned and independent of consumer applications: neither release profile imports application migrations or application lifecycle code.
+The framework release profile covers F0–F3. That implementation is framework-owned and independent of consumer applications: neither release profile imports application migrations or application lifecycle code.
 
 The full framework-only profile covers framework builds, package static and export checks, framework-owned migration consistency, core, adapter, and testing typechecks, lint, unit tests, race tests, separate-process crash recovery, and real D1 and PostgreSQL integration and conformance tests. It also regenerates and validates RL1 business-rule, AG1 aggregate, TH1 temporal-history, N1 sequence-numbering, and HT1 HTTP-adapter evidence from the same source snapshot and run identifier.
 
@@ -16,7 +16,7 @@ The full framework-only profile covers framework builds, package static and expo
 - `npm run verify:framework-release` adds the mandatory PostgreSQL integration, conformance, race, and crash suites.
 - PostgreSQL certification fails closed unless `FRAMEWORK_TEST_PG_URL` or `DATABASE_URL` identifies a real PostgreSQL server. Absence of PostgreSQL evidence is never treated as proof.
 - The `verify:framework:core-purity` gate enforces the dependency-free core contract against both production TypeScript and built JavaScript. It rejects runtime package and Node imports, Node runtime globals, and non-empty `dependencies`, `peerDependencies`, or `optionalDependencies`. The F1 SHA-256 digest is an internal synchronous ECMAScript implementation and does not depend on `node:crypto`, Web Crypto, or a third-party package.
-- The version-policy verifier records package versions, the source revision, the lockfile digest, and the public API digest in `ci-artifacts/framework-release-verification.json`. Adapter proof artifacts stay separate under `artifacts/framework-conformance/<run-id>/`.
+- The version-policy verifier checks that the three packages share one version and pin each other exactly (see [versioning](../governance.md#versioning)), and records package versions, the source revision, the lockfile digest, and the public API digest in `ci-artifacts/framework-release-verification.json`. Adapter proof artifacts stay separate under `artifacts/framework-conformance/<run-id>/`.
 
 ## Differential certification (DF1)
 

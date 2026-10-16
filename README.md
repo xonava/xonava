@@ -9,7 +9,7 @@
 
 Xonava gives backend services the parts that are tedious to get right: entities with tenant scoping and optimistic concurrency, authorization enforced inside queries, transactions, transactional outbox and inbox events, durable jobs, schedules and workflows, caching, rate limiting and resilience. Each capability is a separate subpath of `@xonava/core`, which has no runtime dependencies, so you import only what you use and add the rest later. Reference adapters connect the contracts to PostgreSQL, MySQL, Cloudflare D1, Express, Fastify and Hono. The packages are native ES modules and require Node.js 22 or later.
 
-> **Experimental.** This is the `2.0.0-rc.2` release candidate. APIs, persistence schemas and wire formats may change before `2.0.0`, and the repository ships no production DDL. Read [Known limitations](docs/KNOWN-LIMITATIONS.md) before adopting it.
+> **Experimental.** Xonava is in its `0.x` series. APIs, persistence schemas and wire formats may change in any minor release before `1.0.0`, and the repository ships no production DDL. Read [Known limitations](docs/KNOWN-LIMITATIONS.md) before adopting it.
 
 ## Why Xonava
 
@@ -197,9 +197,9 @@ Typechecking an adapter does not show that it meets the contract. Behavior is ch
 
 ## Project status
 
-Xonava is experimental. The `2.0.0-rc.2` release candidate has passed its core, API and architecture gates and the PostgreSQL, MySQL and D1 integration, conformance, race and crash/replay suites. That evidence comes from local multi-backend runs and does not cover your production topology, custom adapters or your own policies; see the [certification matrix](docs/reference/certification-matrix.md).
+Xonava is experimental. The current release has passed its core, API and architecture gates and the PostgreSQL, MySQL and D1 integration, conformance, race and crash/replay suites. That evidence comes from local multi-backend runs and does not cover your production topology, custom adapters or your own policies; see the [certification matrix](docs/reference/certification-matrix.md).
 
-Before deploying, read [Known limitations](docs/KNOWN-LIMITATIONS.md). It lists required database migrations, the MySQL UTC session requirement, and accepted differences between databases. Notable changes are in the [changelog](CHANGELOG.md), and all remaining work is tracked in one place, the [plan](TODO.md). Until `2.0.0`, pin exact versions.
+Before deploying, read [Known limitations](docs/KNOWN-LIMITATIONS.md). It lists required database migrations, the MySQL UTC session requirement, and accepted differences between databases. Notable changes are in the [changelog](CHANGELOG.md), and all remaining work is tracked in one place, the [plan](TODO.md). Until `1.0.0`, pin exact versions: a `0.x` minor release may contain breaking changes.
 
 ## Contributing
 

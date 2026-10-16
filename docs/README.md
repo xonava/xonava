@@ -16,7 +16,7 @@ When prose disagrees with executable behavior, treat it as a defect to reconcile
 ## Project documents
 
 - [Known limitations](KNOWN-LIMITATIONS.md): gaps in the current release candidate
-- [Plan](../TODO.md): what is left to do before `2.0.0`
+- [Plan](../TODO.md): all remaining work, tracked in one place
 - [Changelog](../CHANGELOG.md): notable changes by release
 - [Contributing](../CONTRIBUTING.md): setup, build, test, and verification commands
 - [Contributor architecture rules](architecture.md#contributor-rules): where code belongs and what it must not import

@@ -93,6 +93,26 @@ Branch protection:
 - Changes to public import paths need an API and version decision. See [compatibility and versioning](docs/governance.md#compatibility-and-versioning).
 - Run `npm run verify:docs` after changing documentation.
 
+## Versioning and releases
+
+The versioning policy is in [governance](docs/governance.md#versioning). Versions and the changelog are
+managed with [Changesets](https://github.com/changesets/changesets).
+
+**In a pull request.** If the change affects users of a published package, run `npm run changeset`, pick the
+affected packages and the bump, and write a one- or two-sentence summary for the changelog. Commit the
+generated file under `.changeset/`. While the version is `0.x`, choose `minor` for a breaking change and
+start the summary with `**Breaking:**`; choose `patch` for everything else. Never choose `major` during
+`0.x`. Changes that do not affect package users (tests, internal docs, tooling) need no changeset. Do not
+edit package versions or `CHANGELOG.md` by hand.
+
+**Cutting a release** (maintainers):
+
+1. On a `release/<version>` branch from `dev`, run `npm run release:version`. It consumes the changesets,
+   bumps all three packages to the same version, writes the `CHANGELOG.md` entry, and refreshes the lockfile.
+2. Open the pull request into `dev`, then merge `dev` into `main`.
+3. From `main`, run `npm run release:publish`. It checks the version policy, builds, publishes the packages
+   that are not yet on npm, and creates the git tags. Push the tags with `git push --follow-tags`.
+
 ## Security
 
 Do not report vulnerabilities in public issues. Follow the [security policy](SECURITY.md).
