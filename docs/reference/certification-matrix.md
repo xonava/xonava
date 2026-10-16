@@ -11,7 +11,7 @@ This page is release state, not normative specification. Source-bound evidence i
 | Aggregate | Proven | `verify:framework:cert` run: `<run-id>/release/framework-release-manifest.json` |
 | Differential/property (DF1) | Required in every release run; evidence is per run with a run-specific seed | `<run-id>/df1/differential-conformance.json` |
 
-Evidence is written by running the named verify scripts under `artifacts/framework-conformance/<run-id>/`. Only the latest certified release run is kept in the repository; see the [artifact retention policy](../governance/artifact-retention.md).
+Evidence is written by running the named verify scripts under `artifacts/framework-conformance/<run-id>/`. Only the latest certified release run is kept in the repository; see the [artifact retention policy](../governance.md#certification-artifact-retention).
 
 The D1 claim does not imply untested remote staging behavior. Application policy and custom adapters are outside this certification unless separately tested.
 

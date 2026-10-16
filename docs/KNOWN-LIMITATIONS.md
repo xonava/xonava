@@ -190,9 +190,4 @@ These differences are intentional. The differential suites accept exactly these 
 
 ## Not implemented
 
-- Interactive transactions on D1.
-- Savepoints for nested operations.
-- Bounded `COMMIT` on MySQL.
-- Query-time evaluation of conditional allow-policy grants.
-- A code formatter (style is enforced by lint only).
-- Production DDL, which the repository does not ship.
+Features that are not implemented yet are tracked in the [plan](../TODO.md#5-not-implemented-yet).

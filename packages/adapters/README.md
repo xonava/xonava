@@ -133,7 +133,7 @@ Type checking alone does not show that a database adapter meets the contract. Th
 
 ## Documentation
 
-- [Adapter model](https://github.com/xonava/xonava/blob/main/docs/architecture/adapter-model.md)
+- [Adapter model](https://github.com/xonava/xonava/blob/main/docs/architecture.md#adapter-model-and-framework-neutrality)
 - [Persistence setup](https://github.com/xonava/xonava/blob/main/docs/guides/persistence-setup.md)
 - [HTTP framework adapters](https://github.com/xonava/xonava/blob/main/docs/typescript/http-adapters.md)
 - [Adapter authoring](https://github.com/xonava/xonava/blob/main/docs/typescript/adapter-authoring.md)
