@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises"
 import { dirname, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { loadAndValidateDf1Evidence } from "./differentialCertification.mjs"
+import { FRAMEWORK_PACKAGE_DIRECTORIES, lockstepViolations } from "./frameworkVersionPolicy.mjs"
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url))
 const repositoryRoot = resolve(scriptDirectory, "../..")
@@ -157,11 +158,14 @@ for (const adapter of adapters) {
 }
 
 const packages = []
-for (const packageDirectory of ["packages/core", "packages/adapters", "packages/testing"]) {
+const packageManifests = []
+for (const packageDirectory of FRAMEWORK_PACKAGE_DIRECTORIES) {
   const value = await readJson(resolve(repositoryRoot, packageDirectory, "package.json"))
-  if (value.version !== "2.0.0-rc.2") fail(`${value.name ?? packageDirectory} is not at approved release candidate 2.0.0-rc.2`)
+  packageManifests.push(value)
   packages.push({ name: value.name, version: value.version })
 }
+const versionViolations = lockstepViolations(packageManifests)
+if (versionViolations.length > 0) fail(`framework packages are not in lockstep: ${versionViolations.join("; ")}`)
 const source = await currentSourceSnapshot()
 if (source.sha256 !== expectedSourceDigest) fail("certification-relevant source changed while the release gate was running")
 const lockfilePath = resolve(repositoryRoot, "package-lock.json")
@@ -171,8 +175,7 @@ const manifest = {
   status: "certified",
   runId,
   phase,
-  frameworkLine: "2.0",
-  releaseCandidate: "2.0.0-rc.2",
+  frameworkVersion: packages[0].version,
   generatedAt: new Date().toISOString(),
   startedAt: startedAtText,
   packages,

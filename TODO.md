@@ -10,17 +10,17 @@ report keeps its own to-do list; they link here instead.
 - **Other documents:** [known limitations](docs/KNOWN-LIMITATIONS.md) describes how the current release
   behaves, not what will change. It does not list planned work.
 
-Status: **experimental**, `2.0.0-rc.2`. Targets before `2.0.0`: core at 9.5+, adapters at 9+.
+Status: **experimental**, `0.x` series. Targets before `1.0.0`: core at 9.5+, adapters at 9+.
 
 Every item goes through the usual flow: a `<type>/<short-description>` branch cut from `dev`, a pull
 request into `dev`, then `dev` into `main` (see [CONTRIBUTING.md](CONTRIBUTING.md#branches)).
 
-## 1. First public release (`next` tag)
+## 1. First public release (`0.1.0`)
 
 - [ ] Enable private vulnerability reporting in the repository security settings.
 - [ ] Fill the repository About description and topics.
 - [ ] Decide whether `dev` becomes the default branch.
-- [ ] Publish the three packages: `npm login`, then `npm run build && npm publish --workspaces --tag next`.
+- [ ] Publish `0.1.0`: date its changelog heading, `npm login`, then `npm run release:publish`.
 - [ ] Smoke-test the published packages in a clean project (all entry points import; README examples
       type-check under NodeNext and Bundler).
 
@@ -78,10 +78,11 @@ Each needs a design decision before work starts.
 - [ ] Persistence-applied codecs, so custom fields with durable codecs can be accepted.
 - [ ] `expiresAt` on list cursors.
 
-## 7. `2.0.0`
+## 7. `1.0.0`
 
 - [ ] Sections 2 to 5 complete, and every item in section 6 either done or recorded as out of scope.
 - [ ] Full release gate (`npm run verify:framework-release`) green on dedicated databases.
 - [ ] Freeze the public API manifest and durable formats; drop compatibility-only fingerprint versions
       that are no longer needed.
-- [ ] Update the changelog and known limitations, cut `release/2.0.0`, publish with the `latest` tag.
+- [ ] Add a major changeset, run `RELEASE_MAJOR=1 npm run release:version` on a `release/1.0.0` branch, update known
+      limitations, and publish.

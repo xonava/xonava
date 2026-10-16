@@ -5,7 +5,7 @@ import { compileFramework } from "../compiler"
 import { FrameworkRuntimeRegistry } from "../runtimeRegistry"
 import { createVerifiedScopeResolution } from "../../security/scopeResolver"
 
-describe("Framework 2.0 bootstrap compiler", () => {
+describe("bootstrap compiler", () => {
   it("orders dependencies and seals all public collections", () => {
     const registry = new FrameworkDefinitionRegistry()
     registry.register({ kind: "entity", key: "orders", definitionVersion: 1 })
