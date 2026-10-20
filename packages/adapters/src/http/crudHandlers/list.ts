@@ -7,6 +7,7 @@ import {
   type OperationDefinition,
 } from "@xonava/core/operation"
 import {
+  ConfigurationError,
   ForbiddenError,
   ValidationError,
   Predicate,
@@ -93,6 +94,9 @@ export function createListHandler<
   D extends SelectableRow,
 >(shared: CrudShared<TRow, A, B, L, D>) {
   const { options, entity } = shared
+  const cursorTtlMs = options.pagination?.strategy === "cursor" ? options.pagination.cursorTtlMs : undefined
+  if (cursorTtlMs !== undefined && !(Number.isSafeInteger(cursorTtlMs) && cursorTtlMs > 0))
+    throw new ConfigurationError(`cursorTtlMs for ${options.moduleKey}.list must be a positive safe integer (milliseconds)`)
   // Query limits also carry pagination, count, search-fanout and JSON byte
   // limits, which are enforced separately below; the strict plan budget is
   // compiled once from the budget keys only.
@@ -213,6 +217,8 @@ export function createListHandler<
           const cursorConfig = options.pagination?.strategy === "cursor" ? options.pagination : undefined
           let cursorPayload: CursorPayloadV1 | undefined
           let cursorBindings: Pick<CursorPayloadV1, "routeHash" | "queryHash" | "scopeHash" | "sortHash"> | undefined
+          let cursorExpiry: { expiresAt: number } | undefined
+          let cursorNow: number | undefined
           if (cursorConfig) {
             if (!sort) throw new ValidationError("cursor pagination requires a configured stable sort")
             if (sort.some(item => !isEntityField(item.field) || (!effectiveSortableColumns.includes(item.field) && !defaultSortFields.includes(item.field)))) throw new ValidationError("cursor sort contains a non-queryable field")
@@ -227,10 +233,16 @@ export function createListHandler<
               scopeHash: await fingerprintJson({ scopeId: requestContext.scopeId, cacheScopeKey: readScope.cacheScopeKey ?? null, securityDigest: abacBundle?.securityDigest ?? null }),
               sortHash: await fingerprintJson(sort),
             }
+            // Opt-in expiry: one clock read per request sets both the expiry on
+            // issued cursors and the reference time used when decoding them.
+            if (cursorConfig.cursorTtlMs !== undefined) {
+              cursorNow = Date.now()
+              cursorExpiry = { expiresAt: cursorNow + cursorConfig.cursorTtlMs }
+            }
             const opaque = input.query.cursor ?? input.query.before
             if (opaque) {
               try {
-                cursorPayload = await decodeCursor(opaque, cursorConfig.integrity, cursorConfig.maxCursorBytes)
+                cursorPayload = await decodeCursor(opaque, cursorConfig.integrity, cursorConfig.maxCursorBytes, cursorNow === undefined ? undefined : { now: cursorNow })
                 assertCursorBinding(cursorPayload, cursorBindings)
               } catch (error) {
                 // Malformed, tampered, expired, signed by a retired key, or bound to
@@ -274,8 +286,8 @@ export function createListHandler<
               kind: "cursor",
               hasNextPage: pageInfo?.hasNextPage ?? false,
               hasPreviousPage: pageInfo?.hasPreviousPage ?? false,
-              startCursor: await encodeCursor({ format: "framework.cursor", version: 1, direction: "before", values: valuesFor(first), ...cursorBindings }, cursorConfig.integrity, cursorConfig.maxCursorBytes),
-              endCursor: await encodeCursor({ format: "framework.cursor", version: 1, direction: "after", values: valuesFor(last), ...cursorBindings }, cursorConfig.integrity, cursorConfig.maxCursorBytes),
+              startCursor: await encodeCursor({ format: "framework.cursor", version: 1, direction: "before", values: valuesFor(first), ...cursorBindings, ...cursorExpiry }, cursorConfig.integrity, cursorConfig.maxCursorBytes),
+              endCursor: await encodeCursor({ format: "framework.cursor", version: 1, direction: "after", values: valuesFor(last), ...cursorBindings, ...cursorExpiry }, cursorConfig.integrity, cursorConfig.maxCursorBytes),
             }
           }
           return {
