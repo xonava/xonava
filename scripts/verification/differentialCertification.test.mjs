@@ -99,6 +99,22 @@ describe("DF1 property call-site scanning", () => {
 })
 
 describe("DF1 real-database store differential suites", () => {
+  it("refuses a store area that declares properties but runs on no database, and requires them once one runner exists", async () => {
+    const shared = join(repositoryRoot, "packages/testing/integration/shared/leaseStoreDifferential.ts")
+    const runner = join(repositoryRoot, "packages/testing/integration/d1/leaseStoreDifferential.integration.test.ts")
+    await writeFile(shared, `import { forAllAsync } from "../../../core/src/__tests__/differential/harness.js"\nforAllAsync("lease probe", { runs: 50 }, async () => {})\n`)
+    try {
+      await assert.rejects(requiredCallSites(repositoryRoot, await df1Suites(repositoryRoot)), /has no per-database test file/)
+      await writeFile(runner, "")
+      const sites = await requiredCallSites(repositoryRoot, await df1Suites(repositoryRoot))
+      assert.ok(sites.d1.some(site => site.display.includes("lease probe")))
+      assert.ok(!sites.pg.some(site => site.display.includes("lease probe")))
+    } finally {
+      await rm(shared, { force: true })
+      await rm(runner, { force: true })
+    }
+  })
+
   it("runs every store area and the signal-buffering suite that exist on every database, and requires their properties", async () => {
     const suites = await df1Suites(repositoryRoot)
     const sites = await requiredCallSites(repositoryRoot, suites)

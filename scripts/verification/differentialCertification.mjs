@@ -330,11 +330,13 @@ export async function requiredCallSites(repositoryRoot, suites) {
     if (sites.length === 0) refuse(`suite ${suite.id} declares no differential properties`)
     bySuite[suite.id] = sites
   }
-  // Shared store files of skipped areas declare nothing required yet, but they still follow the harness rules.
+  // A shared store file of an area that runs on no database yet still follows the harness rules, but it may not
+  // declare properties: they would never run. An area that runs on at least one database is a DF1 suite there.
   for (const path of await listDirectory(repositoryRoot, SHARED_DIRECTORY, STORE_DIFFERENTIAL_SHARED)) {
     if (covered.has(path)) continue
     covered.add(path)
-    scanPropertyCallSites(await readFile(resolve(repositoryRoot, path), "utf8"), path)
+    const sites = scanPropertyCallSites(await readFile(resolve(repositoryRoot, path), "utf8"), path)
+    if (sites.length > 0) refuse(`${path} declares differential properties but its store area has no per-database test file`)
   }
   for (const root of CALL_SITE_SCAN_ROOTS) {
     for (const path of await filesUnder(repositoryRoot, root)) {
