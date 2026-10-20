@@ -35,8 +35,8 @@ export default defineConfig({
         "src/**/*.d.ts",
       ],
       thresholds: {
-        // Enforced ratchet floors for the complete core, including defensive
-        // error branches. Raise these only alongside tests; never lower them.
+        // Enforced ratchet floors for the adapters package, measured when they were
+        // introduced. Raise these only alongside tests; never lower them.
         lines: 76,
         statements: 67,
         functions: 70,
