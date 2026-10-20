@@ -243,6 +243,8 @@ export function createListHandler<
             if (opaque) {
               try {
                 cursorPayload = await decodeCursor(opaque, cursorConfig.integrity, cursorConfig.maxCursorBytes, cursorNow === undefined ? undefined : { now: cursorNow })
+                // With a TTL configured, a cursor issued before it was enabled carries no expiry and would never lapse.
+                if (cursorNow !== undefined && cursorPayload.expiresAt === undefined) throw new ValidationError("cursor has no expiry")
                 assertCursorBinding(cursorPayload, cursorBindings)
               } catch (error) {
                 // Malformed, tampered, expired, signed by a retired key, or bound to

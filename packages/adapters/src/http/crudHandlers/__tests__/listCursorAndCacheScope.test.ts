@@ -192,6 +192,15 @@ describe("list cursor expiry (opt-in cursorTtlMs)", () => {
     expect(response.status, await response.clone().text()).toBe(200)
   })
 
+  it("refuses a cursor without expiry once cursorTtlMs is enabled", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(start)
+    const cursor = await cursorWith(cursorPagination())
+    const response = await listWith(cursorPagination(60_000), `?cursor=${encodeURIComponent(cursor)}`)
+    expect(response.status).toBe(400)
+    expect(await response.text()).toMatch(/restart from the first page/)
+  })
+
   it("rejects a cursorTtlMs that is not a positive safe integer at construction", () => {
     for (const cursorTtlMs of [0, -1, 1.5]) {
       expect(() => createListHandler(withPagination(entity("orders"), cursorPagination(cursorTtlMs)))).toThrow(ConfigurationError)
