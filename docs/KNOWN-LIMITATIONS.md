@@ -155,7 +155,7 @@ These differences are intentional. The differential suites accept exactly these 
 
 - **Custom fields with durable codecs** are rejected until persistence applies the codecs on write and
   read.
-- **List cursors** carry no `expiresAt`.
+- **List cursors** do not expire unless the list handler sets the opt-in `cursorTtlMs`.
 - **Tenant idempotency scopes** have two encodings, `fscope:v1:` and `tenant:N:`. Both are recognised.
 - **Legacy fingerprints.** Stored job fingerprints of versions 4 and 3 are still recognised through
   compatibility-only constructions. Version 3 and 4 digests cannot tell an omitted `maxAttempts` from an

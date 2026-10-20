@@ -69,7 +69,7 @@ export interface AuditConfig {
 export type ListDefaults = { sortColumn?: string; sortDesc?: boolean }
 export type ListPaginationConfig =
   | { strategy: "offset" }
-  | { strategy: "cursor"; integrity: CursorIntegrityPort; uniqueFields: readonly string[]; nullableFields?: readonly string[]; maxCursorBytes?: number }
+  | { strategy: "cursor"; integrity: CursorIntegrityPort; uniqueFields: readonly string[]; nullableFields?: readonly string[]; maxCursorBytes?: number; /** Opt-in cursor lifetime in milliseconds; issued cursors then carry an integrity-protected expiry. */ cursorTtlMs?: number }
 export type OptimisticConcurrencyConfig<TRow extends SelectableRow> = {
   versionField?: keyof TRow & string
 }
