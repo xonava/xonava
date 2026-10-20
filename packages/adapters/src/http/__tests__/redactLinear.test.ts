@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 import { redactPhi, redactPhiDeep } from "../redact"
 
+// Coverage instrumentation slows execution; the budget only has to catch super-linear blowups, which take seconds.
+const TIMING_SCALE = Number(process.env.XONAVA_TIMING_SCALE ?? "1")
+
 /** Equivalence oracle: the original (quadratic) pattern set, kept only here. */
 const LEGACY_PATTERNS = [
   { pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, replacement: "[email redacted]" },
@@ -71,7 +74,7 @@ describe("redactPhi linear-time email scanner", () => {
     it(`redacts a ${SIZE / 1000} kB ${name} input in linear time`, () => {
       const started = performance.now()
       redactPhi(input)
-      expect(performance.now() - started).toBeLessThan(500)
+      expect(performance.now() - started).toBeLessThan(500 * TIMING_SCALE)
     })
   }
 
@@ -79,7 +82,7 @@ describe("redactPhi linear-time email scanner", () => {
     const body = "contact alice@example.com today. ".repeat(30_000)
     const started = performance.now()
     const out = redactPhi(body)
-    expect(performance.now() - started).toBeLessThan(500)
+    expect(performance.now() - started).toBeLessThan(500 * TIMING_SCALE)
     expect(out.startsWith("contact [email redacted] today. ")).toBe(true)
     expect(out).not.toContain("@")
   })

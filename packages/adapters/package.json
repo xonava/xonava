@@ -133,6 +133,7 @@
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
+    "@vitest/coverage-v8": "^4.1.10",
     "@types/pg": "^8.15.5",
     "@types/supertest": "^6.0.3",
     "drizzle-orm": "^0.45.2",

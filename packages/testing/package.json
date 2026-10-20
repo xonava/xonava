@@ -97,6 +97,7 @@
   },
   "devDependencies": {
     "@types/pg": "8.23.1",
+    "@vitest/coverage-v8": "^4.1.10",
     "@xonava/adapters": "0.1.0",
     "drizzle-orm": "0.45.2",
     "miniflare": "3.20250718.3",

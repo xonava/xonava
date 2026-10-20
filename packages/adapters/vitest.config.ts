@@ -22,5 +22,26 @@ export default defineConfig({
   },
   test: {
     include: ["src/**/*.test.ts"],
+    env: {
+      XONAVA_TIMING_SCALE: process.env.XONAVA_TIMING_SCALE ?? (process.argv.includes("--coverage") ? "4" : "1"),
+    },
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json", "html"],
+      include: ["src/**/*.ts"],
+      exclude: [
+        "src/**/*.test.ts",
+        "src/**/__tests__/**",
+        "src/**/*.d.ts",
+      ],
+      thresholds: {
+        // Enforced ratchet floors for the complete core, including defensive
+        // error branches. Raise these only alongside tests; never lower them.
+        lines: 76,
+        statements: 67,
+        functions: 70,
+        branches: 61,
+      },
+    },
   },
 })
