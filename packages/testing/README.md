@@ -16,7 +16,7 @@ Each export is a function that registers a named Vitest suite checking an implem
 npm install -D @xonava/testing vitest
 ```
 
-Requires Node.js 22 or later. The package is ESM only. `vitest` ^4.1.7 is a required peer dependency and runs the suites. [`@xonava/core`](https://www.npmjs.com/package/@xonava/core) is installed automatically as a dependency. Install [`@xonava/adapters`](https://www.npmjs.com/package/@xonava/adapters) too if you test its implementations.
+Requires Node.js 22 or later. The package is ESM only. `vitest` ^4.1.7 is a required peer dependency and runs the suites. The package imports `vitest` at runtime, so it must be installed. [`@xonava/core`](https://www.npmjs.com/package/@xonava/core) is installed automatically as a dependency. Install [`@xonava/adapters`](https://www.npmjs.com/package/@xonava/adapters) too if you test its implementations.
 
 ## Usage
 
