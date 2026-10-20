@@ -2,10 +2,11 @@ import { describe, expect, it, vi } from "vitest"
 import { z } from "zod"
 import { createFrameworkWriteHandler } from "../createFrameworkWriteHandler"
 import { canonicalRequestNormalization } from "./canonicalRequest"
-import { parseJsonBodySafely, parseUniqueQueryParameters, resolveRequestMetadata } from "../requestBody"
+import { RequestBodyNotAcceptedError, UnsupportedMediaTypeError, parseJsonBodySafely, parseUniqueQueryParameters, resolveRequestMetadata } from "../requestBody"
 import type { FrameworkAdapterDeps } from "../../server"
 import type { PersistenceProvider } from "@xonava/core/persistence"
 import { resolveTrustedClientIp } from "../trustedClientIp"
+import { createFrameworkErrorHandler } from "../handleFrameworkCoreError"
 
 const persistence = {} as PersistenceProvider
 
@@ -40,9 +41,44 @@ describe("HTTP request boundary helpers", () => {
       headers: { "content-type": "application/json" },
     })
 
+    await expect(parseJsonBodySafely(request)).rejects.toBeInstanceOf(RequestBodyNotAcceptedError)
     await expect(parseJsonBodySafely(request)).rejects.toMatchObject({
-      code: "UNSUPPORTED_MEDIA_TYPE",
+      code: "BODY_NOT_ACCEPTED",
     })
+    const error: unknown = await parseJsonBodySafely(request).catch((caught: unknown) => caught)
+    const response = createFrameworkErrorHandler()(error)
+    expect(response.status).toBe(415)
+    expect(await response.json()).toEqual({ error: "This operation does not accept a request body", code: "BODY_NOT_ACCEPTED" })
+  })
+
+  it("rejects non-empty text bodies with no body contract as not accepted, not as unsupported media type", async () => {
+    const request = new Request("https://example.test", {
+      method: "DELETE",
+      body: "hello",
+      headers: { "content-type": "text/plain" },
+    })
+
+    await expect(parseJsonBodySafely(request)).rejects.toMatchObject({
+      code: "BODY_NOT_ACCEPTED",
+    })
+  })
+
+  it("returns undefined for an empty body with no body contract", async () => {
+    const request = new Request("https://example.test", { method: "DELETE", headers: { "content-type": "text/plain" } })
+
+    await expect(parseJsonBodySafely(request)).resolves.toBeUndefined()
+  })
+
+  it("keeps the unsupported media type refusal for a schema-backed text body", async () => {
+    const request = new Request("https://example.test", {
+      method: "POST",
+      body: JSON.stringify({ value: "ok" }),
+      headers: { "content-type": "text/plain" },
+    })
+
+    const error = await parseJsonBodySafely(request, z.object({ value: z.string() })).catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(UnsupportedMediaTypeError)
+    expect(error).toMatchObject({ code: "UNSUPPORTED_MEDIA_TYPE" })
   })
 
   it("rejects malformed UTF-8 as invalid JSON", async () => {

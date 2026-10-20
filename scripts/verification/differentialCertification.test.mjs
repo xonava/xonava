@@ -15,12 +15,14 @@ import {
   DF1_MINIMUM_SCALES,
   DF1_PHASE,
   Df1Refusal,
+  STORE_DIFFERENTIAL_AREAS,
   aggregateSuiteReports,
   composeDf1Artifact,
   createDf1SourceManifest,
   deriveDf1Seed,
   df1OutputDirectory,
   df1SourcePaths,
+  df1StoreDifferential,
   df1Suites,
   loadAndValidateDf1Evidence,
   readDf1Baseline,
@@ -97,12 +99,31 @@ describe("DF1 property call-site scanning", () => {
 })
 
 describe("DF1 real-database store differential suites", () => {
-  it("runs the job, schedule, workflow and signal-buffering suites on every database and requires their properties", async () => {
+  it("refuses a store area that declares properties but runs on no database, and requires them once one runner exists", async () => {
+    const shared = join(repositoryRoot, "packages/testing/integration/shared/leaseStoreDifferential.ts")
+    const runner = join(repositoryRoot, "packages/testing/integration/d1/leaseStoreDifferential.integration.test.ts")
+    await writeFile(shared, `import { forAllAsync } from "../../../core/src/__tests__/differential/harness.js"\nforAllAsync("lease probe", { runs: 50 }, async () => {})\n`)
+    try {
+      await assert.rejects(requiredCallSites(repositoryRoot, await df1Suites(repositoryRoot)), /has no per-database test file/)
+      await writeFile(runner, "")
+      const sites = await requiredCallSites(repositoryRoot, await df1Suites(repositoryRoot))
+      assert.ok(sites.d1.some(site => site.display.includes("lease probe")))
+      assert.ok(!sites.pg.some(site => site.display.includes("lease probe")))
+    } finally {
+      await rm(shared, { force: true })
+      await rm(runner, { force: true })
+    }
+  })
+
+  it("runs every store area and the signal-buffering suite that exist on every database, and requires their properties", async () => {
     const suites = await df1Suites(repositoryRoot)
     const sites = await requiredCallSites(repositoryRoot, suites)
+    const { databases } = await df1StoreDifferential(repositoryRoot)
     for (const suite of suites.filter(candidate => candidate.kind === "database")) {
-      for (const name of ["jobStoreDifferential", "scheduleStoreDifferential", "workflowStoreDifferential", "workflowSignalBuffering"]) {
-        assert.ok(suite.testFiles.includes(`packages/testing/integration/${suite.id}/${name}.integration.test.ts`), `${suite.id} runs ${name}`)
+      for (const unit of ["job", "schedule", "workflow", "workflowSignalBuffering"]) assert.ok(databases[suite.id].includes(unit), `${suite.id} runs ${unit}`)
+      for (const unit of [...STORE_DIFFERENTIAL_AREAS, "workflowSignalBuffering"]) {
+        const stem = unit === "workflowSignalBuffering" ? unit : `${unit}StoreDifferential`
+        assert.equal(suite.testFiles.includes(`packages/testing/integration/${suite.id}/${stem}.integration.test.ts`), databases[suite.id].includes(unit), `${suite.id} ${stem} runs only when present`)
       }
       const names = sites[suite.id].map(site => site.display)
       for (const fragment of ["job store lifecycle differential", "job store concurrent transitions", "job store concurrent claim", "core job dispatcher", "schedule store lifecycle differential", "schedule store concurrent claims", "workflow store differential lifecycle", "workflow store differential concurrent dispatch"]) {

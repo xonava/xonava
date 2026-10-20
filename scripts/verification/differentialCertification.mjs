@@ -41,14 +41,16 @@ const HARNESS_SELF_TEST = `${CORE_DIFFERENTIAL_DIR}/harness.test.ts`
 const SHARED_PARITY = ["packages/testing/integration/shared/richParity.ts", "packages/testing/integration/shared/predicateParity.ts"]
 const DATABASE_ADAPTERS = ["pg", "mysql", "d1"]
 /**
- * Real-database lifecycle-store differentials (job, schedule, workflow store versus the core reference) and the
- * workflow signal-buffering suite. Their shared files declare the properties; each adapter has one integration
- * entry point per area.
+ * Real-database lifecycle-store differentials (each store area versus the core reference) and the workflow
+ * signal-buffering suite. Their shared files declare the properties; each adapter has one integration entry point
+ * per area. An area whose shared file or per-database test file does not exist yet is skipped on that database:
+ * its declarations are not required until both files exist.
  */
 const SHARED_DIRECTORY = "packages/testing/integration/shared"
-const STORE_DIFFERENTIAL_AREAS = ["job", "schedule", "workflow"]
-const STORE_DIFFERENTIAL_SHARED = name => /^(?:job|schedule|workflow)StoreDifferential[A-Za-z]*\.ts$/.test(name) || name === "workflowSignalBuffering.ts"
-const STORE_DIFFERENTIAL_TESTS = [...STORE_DIFFERENTIAL_AREAS.map(area => `${area}StoreDifferential.integration.test.ts`), "workflowSignalBuffering.integration.test.ts"]
+export const STORE_DIFFERENTIAL_AREAS = ["job", "schedule", "workflow", "idempotency", "delivery", "lease", "sequence", "temporal", "jobProgress", "tagGeneration"]
+const STORE_SIGNAL_BUFFERING = "workflowSignalBuffering"
+const STORE_DIFFERENTIAL_SHARED_PATTERN = new RegExp(`^(?:${STORE_DIFFERENTIAL_AREAS.join("|")})StoreDifferential[A-Za-z]*\\.ts$`)
+const STORE_DIFFERENTIAL_SHARED = name => STORE_DIFFERENTIAL_SHARED_PATTERN.test(name) || name === `${STORE_SIGNAL_BUFFERING}.ts`
 /** Fixture migration directory per database adapter. */
 const FIXTURE_MIGRATIONS = { pg: "postgres", mysql: "mysql", d1: "d1" }
 /** Roots scanned for harness call sites that are not part of any DF1 suite. */
@@ -137,12 +139,13 @@ export async function df1Suites(repositoryRoot) {
     testFiles: coreTests,
     propertySources: differentialFiles.filter(path => path !== HARNESS && path !== HARNESS_SELF_TEST),
   }]
-  const storeDifferentialShared = await listDirectory(repositoryRoot, SHARED_DIRECTORY, STORE_DIFFERENTIAL_SHARED)
+  const { shared: storeDifferentialShared, databases } = await df1StoreDifferential(repositoryRoot)
   for (const adapter of DATABASE_ADAPTERS) {
+    const units = databases[adapter]
     const testFiles = [
       `packages/testing/integration/${adapter}/richParity.integration.test.ts`,
       `packages/testing/integration/${adapter}/predicateParity.integration.test.ts`,
-      ...STORE_DIFFERENTIAL_TESTS.map(name => `packages/testing/integration/${adapter}/${name}`),
+      ...units.map(unit => storeUnitFiles(unit, adapter).test),
     ]
     suites.push({
       id: adapter,
@@ -151,10 +154,45 @@ export async function df1Suites(repositoryRoot) {
       workspaceDirectory: "packages/testing",
       config: "vitest.integration.config.ts",
       testFiles,
-      propertySources: [...SHARED_PARITY, ...storeDifferentialShared, ...testFiles],
+      propertySources: [...SHARED_PARITY, ...storeDifferentialShared.filter(path => units.includes(storeUnitOf(path))), ...testFiles],
     })
   }
   return suites
+}
+
+/** The shared file and the per-database test file of one store-differential unit (a store area, or signal buffering). */
+function storeUnitFiles(unit, adapter) {
+  const stem = unit === STORE_SIGNAL_BUFFERING ? unit : `${unit}StoreDifferential`
+  return { shared: `${SHARED_DIRECTORY}/${stem}.ts`, test: `packages/testing/integration/${adapter}/${stem}.integration.test.ts` }
+}
+
+/** The unit a shared store file belongs to: the store area its name starts with (suffixed helpers included). */
+function storeUnitOf(path) {
+  const name = posix.basename(path)
+  return name === `${STORE_SIGNAL_BUFFERING}.ts` ? STORE_SIGNAL_BUFFERING : STORE_DIFFERENTIAL_AREAS.find(area => name.startsWith(`${area}StoreDifferential`))
+}
+
+async function fileExists(repositoryRoot, path) {
+  try {
+    return (await stat(resolve(repositoryRoot, path))).isFile()
+  } catch (error) {
+    if (error.code === "ENOENT") return false
+    throw error
+  }
+}
+
+/** The store-differential shared files, and per database the units that run (a unit needs both its files). */
+export async function df1StoreDifferential(repositoryRoot) {
+  const shared = await listDirectory(repositoryRoot, SHARED_DIRECTORY, STORE_DIFFERENTIAL_SHARED)
+  const databases = {}
+  for (const adapter of DATABASE_ADAPTERS) {
+    databases[adapter] = []
+    for (const unit of [...STORE_DIFFERENTIAL_AREAS, STORE_SIGNAL_BUFFERING]) {
+      const { shared: sharedFile, test } = storeUnitFiles(unit, adapter)
+      if (await fileExists(repositoryRoot, sharedFile) && await fileExists(repositoryRoot, test)) databases[adapter].push(unit)
+    }
+  }
+  return { shared, databases }
 }
 
 /** Vitest arguments (after `npm run test -w <workspace> --`) for one suite. */
@@ -291,6 +329,14 @@ export async function requiredCallSites(repositoryRoot, suites) {
     }
     if (sites.length === 0) refuse(`suite ${suite.id} declares no differential properties`)
     bySuite[suite.id] = sites
+  }
+  // A shared store file of an area that runs on no database yet still follows the harness rules, but it may not
+  // declare properties: they would never run. An area that runs on at least one database is a DF1 suite there.
+  for (const path of await listDirectory(repositoryRoot, SHARED_DIRECTORY, STORE_DIFFERENTIAL_SHARED)) {
+    if (covered.has(path)) continue
+    covered.add(path)
+    const sites = scanPropertyCallSites(await readFile(resolve(repositoryRoot, path), "utf8"), path)
+    if (sites.length > 0) refuse(`${path} declares differential properties but its store area has no per-database test file`)
   }
   for (const root of CALL_SITE_SCAN_ROOTS) {
     for (const path of await filesUnder(repositoryRoot, root)) {

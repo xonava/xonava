@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import { ZodError } from "zod"
 import { CapabilityError, ForbiddenError, OptimisticConcurrencyError, RetryablePersistenceError, UnauthorizedError, ValidationError } from "@xonava/core/domain"
 import { createFrameworkErrorHandler } from "../handleFrameworkCoreError"
-import { RequestBodyTooLargeError, UnsupportedMediaTypeError } from "../requestBody"
+import { RequestBodyNotAcceptedError, RequestBodyTooLargeError, UnsupportedMediaTypeError } from "../requestBody"
 
 async function responseBody(response: Response): Promise<unknown> {
   const body: unknown = await response.json()
@@ -28,6 +28,7 @@ describe("framework HTTP error serialization", () => {
       [new ValidationError("leaked validation detail", { dbPassword: "s3cret" }), 400, { error: "Validation failed", code: "VALIDATION_ERROR" }],
       [new RequestBodyTooLargeError(1024), 413, { error: "Request body is too large", code: "REQUEST_BODY_TOO_LARGE" }],
       [new UnsupportedMediaTypeError(), 415, { error: "Unsupported media type", code: "UNSUPPORTED_MEDIA_TYPE" }],
+      [new RequestBodyNotAcceptedError(), 415, { error: "This operation does not accept a request body", code: "BODY_NOT_ACCEPTED" }],
     ]
     for (const [error, status, expected] of cases) {
       const response = createFrameworkErrorHandler()(error)
@@ -36,6 +37,15 @@ describe("framework HTTP error serialization", () => {
       expect(body).not.toMatchObject({ error: expect.stringContaining("leaked") as unknown })
       expect(body).toEqual(expected)
     }
+  })
+
+  it("refuses a body sent to an operation that accepts none with BODY_NOT_ACCEPTED", async () => {
+    const response = createFrameworkErrorHandler()(new RequestBodyNotAcceptedError())
+    expect(response.status).toBe(415)
+    expect(await responseBody(response)).toEqual({
+      error: "This operation does not accept a request body",
+      code: "BODY_NOT_ACCEPTED",
+    })
   })
 
   it("sanitizes ZodError issues and never returns raw issues", async () => {
@@ -65,13 +75,14 @@ describe("framework HTTP error serialization", () => {
     const cases = [
       createFrameworkErrorHandler()(new RequestBodyTooLargeError(1024), metadata),
       createFrameworkErrorHandler()(new UnsupportedMediaTypeError(), metadata),
+      createFrameworkErrorHandler()(new RequestBodyNotAcceptedError(), metadata),
       createFrameworkErrorHandler()(new CapabilityError("tenant.module:manage", { moduleKey: "tenant.module" }), metadata),
     ]
     for (const response of cases) {
       expect(response.headers.get("x-request-id")).toBe("req-123")
       expect(response.headers.get("x-correlation-id")).toBe("corr-456")
     }
-    expect(cases.map((response) => response.status)).toEqual([413, 415, 403])
+    expect(cases.map((response) => response.status)).toEqual([413, 415, 415, 403])
   })
 
   it("maps framework errors only from canonical metadata",async()=>{const conflict=await createFrameworkErrorHandler()(new OptimisticConcurrencyError("table users version leaked")).json();expect(conflict).toEqual({error:"Conflict",code:"OPTIMISTIC_CONCURRENCY_FAILED"});const unavailable=createFrameworkErrorHandler()(new RetryablePersistenceError("postgres host leaked"));expect(unavailable.status).toBe(503);expect(await unavailable.json()).toEqual({error:"Service temporarily unavailable",code:"SERVICE_UNAVAILABLE"})})
