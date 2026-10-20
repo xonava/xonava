@@ -187,6 +187,10 @@ These differences are intentional. The differential suites accept exactly these 
 - **Rate-limit memory.** The in-memory rate-limit store is bounded. At capacity it fails closed rather
   than evicting buckets.
 
+## Tooling
+
+- **npm 10 crash on the Vitest peer.** npm 10.9 can crash with `Cannot read properties of null (reading 'edgesOut')` while it resolves the `vitest` 4 peer of `@xonava/testing`. `--legacy-peer-deps` avoids the crash, but it also skips the peer, so install `vitest` explicitly.
+
 ## Not implemented
 
 Planned work, including features that are not implemented yet, is tracked only in the
