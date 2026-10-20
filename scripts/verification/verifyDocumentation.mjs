@@ -101,7 +101,7 @@ for (const path of (await filesBelow(join(docsRoot, "spec"))).filter(path => ext
 const errorImplementation = await readFile(join(root, "packages/core/src/domain/errors.ts"), "utf8")
 const errorSpecification = await readFile(join(docsRoot, "spec/errors.md"), "utf8")
 const canonicalCodes = [...errorImplementation.matchAll(/^\s*\|\s*"([A-Z_]+)"/gm)].map(match => match[1])
-const publicCodes = [...errorImplementation.matchAll(/publicCode:"([A-Z_]+)"/g)].map(match => match[1])
+const publicCodes = [...errorImplementation.matchAll(/publicCode:\s*"([A-Z_]+)"/g)].map(match => match[1])
 for (const value of new Set([...canonicalCodes, ...publicCodes])) {
   if (!errorSpecification.includes(`\`${value}\``)) failures.push(`docs/spec/errors.md: missing normative error/public code ${value}`)
 }
