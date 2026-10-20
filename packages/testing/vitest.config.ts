@@ -27,5 +27,25 @@ export default defineConfig({
     "@xonava/adapters/drizzle-mysql": path.resolve(import.meta.dirname, "../adapters/src/drizzle-mysql/index.ts"),
     "@xonava/adapters": path.resolve(import.meta.dirname, "../adapters/src/index.ts"),
   }},
-  test: { include: ["tests/**/*.test.ts"] },
+  test: {
+    include: ["tests/**/*.test.ts"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json", "html"],
+      include: ["src/**/*.ts"],
+      exclude: [
+        "src/**/*.test.ts",
+        "src/**/__tests__/**",
+        "src/**/*.d.ts",
+      ],
+      thresholds: {
+        // Enforced ratchet floors for the testing package, measured when they were
+        // introduced. Raise these only alongside tests; never lower them.
+        lines: 76,
+        statements: 75,
+        functions: 75,
+        branches: 55,
+      },
+    },
+  },
 })
