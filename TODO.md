@@ -58,7 +58,7 @@ edited only by the WP that owns them or by Opus at wave close.
 | Gate | Target | Created by |
 | --- | --- | --- |
 | Unit coverage, core | lines 96, branches 90 (today 94 / 86) | Q2 |
-| Unit coverage, adapters | lines 90, branches 82 (today unmeasured) | Q2 |
+| Unit coverage, adapters | lines 90, branches 82 (today 76 / 61) | Q2 |
 | Mutation score | core ≥ 80 %, adapters `http/` and `drizzle-shared/` ≥ 70 % | Q5 |
 | Real-database differential suites | every durable store on PostgreSQL, MySQL and D1 | A2–A8 |
 | HTTP fuzzing | property suites over all CRUD and write handlers in DF1 | Q4 |
@@ -67,84 +67,6 @@ edited only by the WP that owns them or by Opus at wave close.
 | Soak | 30-minute crash/lease soak with no invariant violation | C4 |
 | Threat model | reviewed `docs/spec/security.md` threat model | C5 |
 | CI | every gate above runs on pull requests or nightly | Q1 |
-
-## Wave 0: quick fixes (Haiku, all parallel)
-
-### W0-1 Fix the documentation verifier's public-code check
-
-- [ ] Haiku. Branch `fix/docs-verifier-public-codes`.
-- **Why:** `scripts/verification/verifyDocumentation.mjs:104` matches `publicCode:"` without a space, but
-  `packages/core/src/domain/errors.ts` writes `publicCode: "`. Public codes are never checked.
-- **Steps:** change the regex to `/publicCode:\s*"([A-Z_]+)"/g`. Run `npm run verify:docs`; for every
-  public code it now reports missing, add the code in backticks to the public-code table in
-  `docs/spec/errors.md`.
-- **Acceptance:** `npm run verify:docs` passes and fails if a public code is removed from the spec
-  (check by hand, then restore).
-
-### W0-2 Testing package: document the vitest peer and the npm crash
-
-- [ ] Haiku. Branch `docs/testing-vitest-peer`.
-- **Why:** `@xonava/testing` imports vitest at runtime. Installs with `--legacy-peer-deps` skip it and
-  fail with `Cannot find package 'vitest'`. npm 10.9 crashes with `Cannot read properties of null
-  (reading 'edgesOut')` when resolving the vitest 4 peer.
-- **Files:** `packages/testing/README.md`, `docs/KNOWN-LIMITATIONS.md`.
-- **Steps:** in the testing README install section, show `npm install -D @xonava/testing vitest`. Add a
-  "Tooling" bullet to known limitations describing the npm 10 crash and the `--legacy-peer-deps`
-  workaround (which then requires installing vitest explicitly).
-- **Acceptance:** `npm run verify:docs` passes.
-
-### W0-3 Distinct refusal for bodies an operation does not accept (feedback R4, part 1)
-
-- [ ] Haiku. Branch `fix/body-not-accepted-error`.
-- **Files:** `packages/adapters/src/http/requestBody.ts`, `packages/adapters/src/http/handleFrameworkCoreError.ts`,
-  `packages/adapters/src/http/__tests__/requestBody.test.ts`, `packages/adapters/src/http/__tests__/handleFrameworkCoreError.test.ts`.
-- **Steps:** add `export class RequestBodyNotAcceptedError extends Error` with `readonly code =
-  "BODY_NOT_ACCEPTED"` and message `This operation does not accept a request body`. In
-  `parseJsonBodySafely`, when the body text is non-empty and no schema is configured, throw it
-  **before** the content-type check. In `createFrameworkErrorHandler`, map it to status 415 with body
-  `{ error: "This operation does not accept a request body", code: "BODY_NOT_ACCEPTED" }`, placed
-  next to the `UnsupportedMediaTypeError` branch.
-- **Acceptance:** DELETE with `application/json` body `{}` returns 415 `BODY_NOT_ACCEPTED`; DELETE with
-  a `text/plain` body also returns `BODY_NOT_ACCEPTED`; an empty body still passes; a create with a
-  schema and `text/plain` still returns `UNSUPPORTED_MEDIA_TYPE`. Changeset: patch.
-
-### W0-4 Expiring list cursors
-
-- [ ] Haiku. Branch `feat/list-cursor-ttl`.
-- **Why:** core already supports an integrity-protected cursor `expiresAt`
-  (`packages/core/src/query/cursor.ts:14`, rejection in `cursorCodec.ts:32`), but the HTTP list handler
-  never sets it (`packages/adapters/src/http/crudHandlers/list.ts:277`) or passes `now` (`:233`).
-- **Steps:** add an optional `cursorTtlMs?: number` to the CRUD list configuration in
-  `crudHandlers/types.ts` (positive safe integer, validated at construction with `ConfigurationError`).
-  When set, pass `expiresAt: now + cursorTtlMs` to `encodeCursor` and `now` to the decode call, using
-  the handler's existing clock. An expired cursor goes through the existing `StaleCursorError` path.
-- **Acceptance:** tests in `crudHandlers/__tests__/listCursorAndCacheScope.test.ts`: with a TTL, a cursor
-  replayed after expiry returns the stale-cursor 400; without a TTL behaviour is unchanged. Remove the
-  "List cursors carry no `expiresAt`" bullet from known limitations and say the TTL is opt-in.
-  Changeset: patch.
-
-### W0-5 Generalise DF1 store areas
-
-- [ ] Haiku. Branch `test/df1-store-areas`. **Must merge before any of A2–A8.**
-- **Files:** `scripts/verification/differentialCertification.mjs` (`STORE_DIFFERENTIAL_AREAS` at :49, the
-  shared-file regex, `STORE_DIFFERENTIAL_TESTS` at :51, the source list at :84),
-  `scripts/verification/differentialCertification.test.mjs:104`.
-- **Steps:** extend `STORE_DIFFERENTIAL_AREAS` to `["job", "schedule", "workflow", "idempotency",
-  "delivery", "lease", "sequence", "temporal", "jobProgress", "tagGeneration"]`. Derive the shared-file
-  regex and the expected test names from that array instead of hard-coding them. A store area whose
-  shared file does not exist yet must be skipped, not fail. Update the hard-coded names in the test.
-- **Acceptance:** `npm run test:verification` passes; a fake `packages/testing/integration/shared/leaseStoreDifferential.ts`
-  using `forAllAsync` is recognised as a DF1 suite (check by hand, then delete).
-
-### W0-6 Coverage floors for adapters and testing
-
-- [ ] Haiku. Branch `test/coverage-floors`.
-- **Steps:** add `@vitest/coverage-v8` coverage blocks to `packages/adapters/vitest.config.ts` and
-  `packages/testing/vitest.config.ts` mirroring `packages/core/vitest.config.ts`. Run coverage, then set
-  each threshold to the measured value rounded down to the next integer, with the same "ratchet floor"
-  comment. Add `test:coverage` scripts to both packages.
-- **Acceptance:** `npm run test:coverage -w @xonava/adapters` passes. Report the measured numbers in the
-  pull request.
 
 ## Wave 1: pilot feedback and missing adapters
 
@@ -247,7 +169,7 @@ Request IDs R1–R8 refer to that feedback.
 
 ### F4 Method and body matrix (feedback R4, part 2)
 
-- [ ] Haiku. Branch `docs/http-method-body-matrix`. **Depends on:** W0-3.
+- [ ] Haiku. Branch `docs/http-method-body-matrix`.
 - **Steps:** add a table to `docs/typescript/http-adapters.md` with one row each for list, detail,
   create, update, delete and custom write handlers, and columns for whether the operation reads a body,
   the behaviour for an empty body, a JSON body without a schema (`BODY_NOT_ACCEPTED` 415), a non-JSON
@@ -340,7 +262,7 @@ Request IDs R1–R8 refer to that feedback.
 - **Acceptance:** port the MySQL lease cases from `packages/testing/integration/mysql/ev1.integration.test.ts`
   and `configurableTables.integration.test.ts` to `pg/` and `d1/`. Changeset: minor.
 
-## Wave 2: proof (Sonnet, parallel after W0-5)
+## Wave 2: proof (Sonnet, parallel)
 
 Every A2–A8 suite follows the job-store pattern exactly:
 - `packages/testing/integration/shared/<area>StoreDifferential.ts` holds a driver interface, a lockstep
@@ -492,7 +414,7 @@ when the wave closes.
 
 ### Q2 Raise coverage floors
 
-- [ ] Haiku per package. Branch `test/coverage-<package>`. **Depends on:** W0-6.
+- [ ] Haiku per package. Branch `test/coverage-<package>`.
 - **Steps:** list uncovered branches with `npm run test:coverage -w <pkg>`. Write targeted tests module
   by module until the gate is met, then raise the thresholds in the config. No test may assert only that
   code runs; each asserts an outcome.
