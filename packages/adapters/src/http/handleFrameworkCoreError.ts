@@ -1,6 +1,6 @@
 import { ZodError } from "zod"
 import { FrameworkCoreError, type FrameworkCoreErrorCode } from "@xonava/core/domain"
-import { InvalidJsonError, RequestBodyTooLargeError, UnsupportedMediaTypeError } from "./requestBody"
+import { InvalidJsonError, RequestBodyNotAcceptedError, RequestBodyTooLargeError, UnsupportedMediaTypeError } from "./requestBody"
 
 export function frameworkJson<T>(data: T, init: ResponseInit = {}) {
   const headers = new Headers(init.headers)
@@ -78,6 +78,10 @@ export function createFrameworkErrorHandler(options: FrameworkErrorHandlerOption
       return json({ error: "Unsupported media type", code: error.code }, { status: 415 })
     }
 
+    if (error instanceof RequestBodyNotAcceptedError) {
+      return json({ error: "This operation does not accept a request body", code: error.code }, { status: 415 })
+    }
+
     if (error instanceof FrameworkCoreError) {
       const status = frameworkErrorHttpStatus(error.code)
       if (status >= 500 || status === 401 || status === 403) reportError(error)
@@ -102,4 +106,4 @@ export function createFrameworkErrorHandler(options: FrameworkErrorHandlerOption
   }
 }
 
-export { InvalidJsonError, RequestBodyTooLargeError, UnsupportedMediaTypeError, parseJsonBodySafely } from "./requestBody"
+export { InvalidJsonError, RequestBodyNotAcceptedError, RequestBodyTooLargeError, UnsupportedMediaTypeError, parseJsonBodySafely } from "./requestBody"
