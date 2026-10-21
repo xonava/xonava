@@ -70,6 +70,48 @@ describe("framework HTTP error serialization", () => {
     expect(JSON.stringify(body)).not.toContain("do-not-leak")
   })
 
+  it("maps a ZodError from another zod installation to 400 VALIDATION_ERROR", async () => {
+    class ZodError extends Error {
+      name = "ZodError"
+      issues = [{ code: "too_small", path: ["items", 0, "qty"], message: "Too small" }]
+    }
+    const response = createFrameworkErrorHandler()(new ZodError("foreign"))
+    expect(response.status).toBe(400)
+    expect(await responseBody(response)).toEqual({
+      error: "Validation failed",
+      code: "VALIDATION_ERROR",
+      details: [{ code: "too_small", path: "items.0.qty", message: "Too small" }],
+    })
+  })
+
+  it("sanitizes hostile foreign issue shapes without echoing their extra data", async () => {
+    class ZodError extends Error {
+      name = "ZodError"
+      issues = [
+        { path: "not-an-array", message: { leaked: "secret" }, received: "secret" },
+        { code: { leaked: "secret" }, path: ["a", { leaked: "secret" }, 2], message: "ok" },
+      ]
+    }
+    const response = createFrameworkErrorHandler()(new ZodError("foreign"))
+    expect(response.status).toBe(400)
+    const body = await responseBody(response)
+    expect(body).toEqual({
+      error: "Validation failed",
+      code: "VALIDATION_ERROR",
+      details: [
+        { code: "invalid", path: "", message: "Invalid value" },
+        { code: "invalid", path: "a.2", message: "ok" },
+      ],
+    })
+    expect(JSON.stringify(body)).not.toContain("secret")
+  })
+
+  it("keeps an Error named ZodError without an issues array as an internal error", async () => {
+    const response = createFrameworkErrorHandler()(Object.assign(new Error("fake"), { name: "ZodError" }))
+    expect(response.status).toBe(500)
+    expect(await responseBody(response)).toEqual({ error: "Internal Server Error", code: "INTERNAL_SERVER_ERROR" })
+  })
+
   it("routes 413/415 and capability responses through metadata decoration", () => {
     const metadata = { requestId: "req-123", correlationId: "corr-456" }
     const cases = [
