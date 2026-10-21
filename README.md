@@ -149,6 +149,41 @@ const decision = await checkRateLimit({ store, key: "tenant:t1:user:u1", limit: 
 
 For custom business logic, declare an operation with `createOperation` and run it with `runOperation`; see [create an operation](docs/guides/create-an-operation.md).
 
+## Standalone application
+
+An application with one deployment and no tenants uses the platform scope. The entity has no tenant column, and the route's fixed scope plan, an optional `scopeFilter` and ABAC isolate it; see the [standalone application guide](docs/guides/standalone-application.md) for the routes, policy, jobs and workflows. This block is compiled and run by the documentation-example test; `MODULE_KEY` and the `Announcement` row type are defined in the guide.
+
+```ts
+const body = z.object({ title: z.string().min(1).max(200), region: z.string().min(1), priority: z.number().int() }).strict()
+const patch = body.partial()
+
+export const announcements = defineEntity<Announcement, z.infer<typeof body>, z.infer<typeof patch>, Announcement, Announcement>({
+  moduleKey: MODULE_KEY,
+  entity: {
+    name: "announcement",
+    primaryKey: "id",
+    versionField: "version",
+    fields: {
+      id: { type: "uuid" },
+      title: { type: "string" },
+      region: { type: "string" },
+      priority: { type: "number" },
+      version: { type: "number" },
+    },
+  },
+  // One deployment, no tenants: the row has no tenant or application column.
+  entityScope: { kind: "platform", acknowledged: true },
+  policy: { customCapabilityKey: "announcements" },
+  cache: false,
+  audit: false,
+  validation: {
+    idParams: z.object({ id: z.string().uuid() }).strict(),
+    createBody: body,
+    updateBody: patch,
+  },
+})
+```
+
 ## Packages
 
 | Package | Contents |
@@ -191,7 +226,7 @@ Typechecking an adapter does not show that it meets the contract. Behavior is ch
 - [Getting started](docs/guides/getting-started.md) and [using capabilities independently](docs/guides/independent-capabilities.md)
 - [Architecture overview](docs/architecture.md) and [principles](docs/architecture.md#principles)
 - [Specification](docs/spec/README.md) and [TypeScript profile](docs/typescript/README.md)
-- Guides: [persistence setup](docs/guides/persistence-setup.md), [events, jobs and workflows](docs/guides/events-and-workflows.md), [create an operation](docs/guides/create-an-operation.md), [transactions and OCC](docs/guides/transactions-and-occ.md), [understanding errors](docs/guides/understanding-errors.md), [ownership for non-staff users](docs/guides/ownership.md), [durable uploads](docs/guides/durable-uploads.md), [supporting reads](docs/guides/supporting-reads.md)
+- Guides: [persistence setup](docs/guides/persistence-setup.md), [events, jobs and workflows](docs/guides/events-and-workflows.md), [create an operation](docs/guides/create-an-operation.md), [transactions and OCC](docs/guides/transactions-and-occ.md), [understanding errors](docs/guides/understanding-errors.md), [ownership for non-staff users](docs/guides/ownership.md), [standalone applications](docs/guides/standalone-application.md), [durable uploads](docs/guides/durable-uploads.md), [supporting reads](docs/guides/supporting-reads.md)
 - Reference: [public exports](docs/reference/package-exports.md), [capability catalog](docs/reference/capabilities.md), [certification matrix](docs/reference/certification-matrix.md)
 - [Compatibility and versioning policy](docs/governance.md#compatibility-and-versioning)
 
