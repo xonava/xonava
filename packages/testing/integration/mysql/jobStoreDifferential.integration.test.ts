@@ -6,6 +6,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise"
 import { afterAll, beforeAll, describe } from "vitest"
 import { DrizzleMySqlJobStore } from "@xonava/adapters/drizzle-mysql"
 import { mysqlCertificationUrl } from "./database.js"
+import { applyMySqlByteExactIdentifiersMigration } from "../../fixtures/mysql/bootstrap.js"
 import { defineConcurrentLinearizability, defineConcurrentStorm, defineDispatcherAgainstStore } from "../shared/jobStoreDifferentialConcurrency.js"
 import { defineLifecycleDifferential, defineLifecycleRegressions, printCoverage, type JobStoreDifferentialDriver, type RawJobRow } from "../shared/jobStoreDifferential.js"
 
@@ -52,6 +53,7 @@ describe("MySQL job store differential", () => {
       const match = /^CREATE TABLE (?:IF NOT EXISTS )?(jobs|job_executions)\b/.exec(statement)
       if (match) await pool.query(statement)
     }
+    await applyMySqlByteExactIdentifiersMigration(pool, ["jobs", "job_executions"])
   })
   afterAll(async () => {
     printCoverage("mysql")

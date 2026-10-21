@@ -11,6 +11,7 @@ const required = [
   "packages/testing/fixtures/mysql/migrations/0001_framework.sql",
   "packages/testing/fixtures/mysql/migrations/0002_workflow_signal_buffering.sql",
   "packages/testing/fixtures/mysql/migrations/0003_schedule_next_run_nullable.sql",
+  "packages/testing/fixtures/mysql/migrations/0006_byte_exact_identifiers.sql",
   "packages/testing/fixtures/mysql/bootstrap.ts",
   "packages/testing/integration/pg/repository.integration.test.ts",
   "packages/testing/integration/pg/transaction.integration.test.ts",

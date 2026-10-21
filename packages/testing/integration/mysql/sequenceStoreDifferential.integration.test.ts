@@ -22,10 +22,6 @@ describe("MySQL sequence store differential", () => {
     label: "mysql",
     store: new DrizzleMySqlSequenceStore(pool),
     maxWorkers: 10,
-    deviations: {
-      trailingSpaceScope: "scope_id is ascii_bin, a PAD SPACE collation, so 'a' and 'a ' are one counter",
-      nonAsciiScope: "scope_id is an ascii column; a non-ASCII scope fails with 'Incorrect string value'",
-    },
     // Several first allocations of one key waiting behind a rolled-back inserter deadlock (ER_LOCK_DEADLOCK 1213); InnoDB aborts one victim.
     retryable: (error) => (error as { errno?: number }).errno === 1213,
     reset: async () => { await pool.query("DELETE FROM sequences") },

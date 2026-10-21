@@ -6,7 +6,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise"
 import { afterAll, beforeAll, describe, it } from "vitest"
 import { DrizzleMySqlJobStore, DrizzleMySqlScheduleStore } from "@xonava/adapters/drizzle-mysql"
 import { mysqlCertificationUrl } from "./database.js"
-import { applyMySqlScheduleNextRunNullableMigration } from "../../fixtures/mysql/bootstrap.js"
+import { applyMySqlByteExactIdentifiersMigration, applyMySqlScheduleNextRunNullableMigration } from "../../fixtures/mysql/bootstrap.js"
 import { assertConcurrentClaimInvariants, assertScheduleStoreMatchesReference, scaledTimeoutMs, type ScheduleDriver } from "../shared/scheduleStoreDifferential.js"
 import {
   assertClaimWithoutNowUsesTheClock, assertDispatcherEnqueuesEachOccurrenceOnce, assertElapsedLeaseExpiryFencesOldOwner, assertLiveClaimsDoNotConsumeClaimLimit,
@@ -38,6 +38,7 @@ describe("MySQL schedule store differential", () => {
     }
     // Later fixture migrations alter these tables (0003 makes schedules.next_run_at nullable).
     await applyMySqlScheduleNextRunNullableMigration(pool)
+    await applyMySqlByteExactIdentifiersMigration(pool, ["schedules", "jobs", "job_executions"])
     jobStore = new DrizzleMySqlJobStore(pool)
     driver = {
       label: "mysql", store: new DrizzleMySqlScheduleStore(pool), nullableNextRunAt: true,
