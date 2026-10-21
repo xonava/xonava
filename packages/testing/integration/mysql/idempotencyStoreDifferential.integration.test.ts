@@ -10,10 +10,10 @@ import { canonicalJson } from "../shared/idempotencyStoreDifferentialModel.js"
 import { defineIdempotencyDifferential, defineIdempotencyRegressions, printCoverage, type IdempotencyDifferentialDriver, type RawIdempotencyRow } from "../shared/idempotencyStoreDifferential.js"
 
 const DATABASE = "framework_df_idempotency"
-// The fixture table of 0001_framework.sql in an isolated database. scope and key use a binary collation: identities are
+// The fixture table of 0001_framework.sql with 0006_byte_exact_identifiers.sql in an isolated database. scope and key use a NO PAD binary collation (utf8mb4_bin is PAD SPACE): identities are
 // case-sensitive, and the fixture's default case-insensitive collation makes `K` replay `k` (reported as a finding).
 const DDL = `CREATE TABLE idempotency (
-  id VARCHAR(100) NOT NULL, \`scope\` VARCHAR(255) COLLATE utf8mb4_bin NOT NULL, \`key\` VARCHAR(255) COLLATE utf8mb4_bin NOT NULL,
+  id VARCHAR(100) NOT NULL, \`scope\` VARCHAR(255) COLLATE utf8mb4_0900_bin NOT NULL, \`key\` VARCHAR(255) COLLATE utf8mb4_0900_bin NOT NULL,
   fingerprint VARCHAR(128) NOT NULL, token VARCHAR(100) NOT NULL, status VARCHAR(30) NOT NULL,
   result JSON NULL, resource_entity VARCHAR(255) NULL, resource_id VARCHAR(255) NULL,
   resource_version VARCHAR(100) NULL, pending_invalidations JSON NULL,

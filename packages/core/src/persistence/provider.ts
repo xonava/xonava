@@ -120,7 +120,6 @@ export interface ScopedPersistenceProvider<TScope extends ExecutionScope> extend
   readonly scope: TScope
 }
 
-export type ApplicationPersistenceProvider = ScopedPersistenceProvider<Extract<ExecutionScope, { kind: "application" }>>
 export interface TenantScopedPersistenceProvider<TTenantId extends string = string>
   extends ScopedPersistenceProvider<{ readonly kind: "tenant"; readonly tenantId: TTenantId }> {
   readonly tenantId: TTenantId
@@ -128,16 +127,6 @@ export interface TenantScopedPersistenceProvider<TTenantId extends string = stri
 }
 /** Unforgeable marker for providers created by the core tenant-scope wrapper. */
 export type TenantPersistenceProvider<TTenantId extends string = string> = TenantScopedPersistenceProvider<TTenantId>
-export type PlatformPersistenceProvider = ScopedPersistenceProvider<Extract<ExecutionScope, { kind: "platform" }>>
-export type SystemPersistenceProvider = ScopedPersistenceProvider<Extract<ExecutionScope, { kind: "system" }>>
-
-/** Root authority router. It is intentionally not assignable to a scoped provider. */
-export interface RootPersistenceProvider {
-  resolveApplication(scope: Extract<ExecutionScope, { kind: "application" }>): ApplicationPersistenceProvider
-  resolveTenant(scope: Extract<ExecutionScope, { kind: "tenant" }>): TenantPersistenceProvider
-  resolvePlatform(scope: Extract<ExecutionScope, { kind: "platform" }>): PlatformPersistenceProvider
-  resolveSystem(scope: Extract<ExecutionScope, { kind: "system" }>): SystemPersistenceProvider
-}
 
 export function isTenantScopedPersistenceProvider(
   provider: PersistenceProvider,
