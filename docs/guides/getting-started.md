@@ -10,6 +10,7 @@ Applications may start with one capability and add orchestration later. No unrel
 
 ## Next steps
 
+- [Build a standalone application without tenants](standalone-application.md): platform scope, fixed route scope, ABAC, jobs and workflows
 - [Give customers access to only their own records](ownership.md): trusted session, tenant scope, ABAC ownership policy, projection, update and delete
 - [Store uploaded files without orphans](durable-uploads.md): reservation, upload, finalize and cleanup across the database and the object store
 - [Create an operation](create-an-operation.md)

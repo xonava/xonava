@@ -10,6 +10,7 @@ import { validateQueryPlan } from "@xonava/core/query"
 import { createOperation, createOperationContext } from "@xonava/core/operation"
 import { defineWorkflow } from "@xonava/core/workflow"
 import { CRUD } from "@xonava/adapters/http"
+import { createAbacBundle } from "@xonava/core/domain"
 import { InMemoryObjectStore } from "@xonava/adapters/storage"
 import {
   cleanupExpiredUploads,
@@ -22,6 +23,7 @@ import {
   type Reservation,
   type ReserveUploadInput,
 } from "./durableUploadsExample"
+import { adapterDeps as standaloneDeps, announcements, announcementsCatalog, staffPolicy, createAnnouncementHandlers, staffRequestNormalization, enqueueExpiry, inMemoryAnnouncements, jobs as standaloneJobs, PLATFORM_SCOPE, type Announcement, type StaffLogin } from "./standaloneGuideExample"
 import { adapterDeps, createOrderHandlers, inMemoryOrders, orders, ordersRequestNormalization, type Order, type VerifiedLogin } from "./ownershipGuideExample"
 
 describe("canonical documentation examples", () => {
@@ -159,6 +161,87 @@ describe("canonical documentation examples", () => {
       const blocks = [...guide.matchAll(/```ts\n([\s\S]*?)```/g)].map((match) => match[1]!.trimEnd())
       expect(blocks.length).toBeGreaterThan(0)
       for (const block of blocks) expect(example, `guide block not found in ownershipGuideExample.ts:\n${block}`).toContain(block)
+    })
+  })
+
+  describe("standalone application guide (docs/guides/standalone-application.md)", () => {
+    const FIRST = "00000000-0000-4000-8000-0000000000a1"
+    const SECOND = "00000000-0000-4000-8000-0000000000a2"
+    const row = (id: string, priority: number): Announcement => ({ id, title: `announcement ${priority}`, region: "eu", priority, version: 1 })
+    const json = (method: string, path: string, body?: unknown, headers: Record<string, string> = {}) => new Request(`https://app.test${path}`, {
+      method, ...(body === undefined ? {} : { body: JSON.stringify(body) }), headers: { "content-type": "application/json", ...headers },
+    })
+
+    function setup(login: StaffLogin | null = { userId: "staff-1", sessionId: "s1" }) {
+      const store = inMemoryAnnouncements([row(FIRST, 1), row(SECOND, 2)])
+      const handlers = createAnnouncementHandlers({ createPersistence: store.createPersistence, getCacheAdapter: async () => ({}) as never }, async () => login ?? undefined)
+      return { store, handlers }
+    }
+
+    it("serves list, detail, create, update and delete under the fixed platform scope", async () => {
+      const { handlers, store } = setup()
+      const list = await handlers.list(json("GET", "/announcements"))
+      expect(list.status, await list.clone().text()).toBe(200)
+      expect((await handlers.detail(json("GET", `/announcements/${FIRST}`), { id: FIRST })).status).toBe(200)
+      const created = await handlers.create(json("POST", "/announcements", { title: "new", region: "us", priority: 3 }))
+      expect(created.status, await created.clone().text()).toBe(201)
+      const patched = await handlers.update(json("PATCH", `/announcements/${FIRST}`, { title: "edited" }, { "if-match": "1" }), { params: Promise.resolve({ id: FIRST }) })
+      expect(patched.status, await patched.clone().text()).toBe(200)
+      expect(store.rows.get(FIRST)?.title).toBe("edited")
+      const removed = await handlers.delete(json("DELETE", `/announcements/${SECOND}`, undefined, { "if-match": "1" }), { params: Promise.resolve({ id: SECOND }) })
+      expect(removed.status, await removed.clone().text()).toBeLessThan(300)
+      expect(store.rows.has(SECOND)).toBe(false)
+    })
+
+    it("rejects a request without a verified login", async () => {
+      const { handlers } = setup(null)
+      expect((await handlers.list(json("GET", "/announcements"))).status).toBe(401)
+    })
+
+    it("denies the request when the ABAC bundle is missing, read-only or lacks the capability", async () => {
+      const store = inMemoryAnnouncements([row(FIRST, 1)])
+      const build = (deps: typeof standaloneDeps) => CRUD(announcements, {
+        adapterDeps: deps,
+        requestNormalization: staffRequestNormalization(async () => ({ userId: "staff-1", sessionId: "s1" })),
+        scope: { scope: "platform", idempotency: { required: false } },
+        createPersistence: store.createPersistence,
+        getCacheAdapter: async () => ({}) as never,
+      })
+      expect((await build(standaloneDeps).list(json("GET", "/announcements"))).status).toBe(200)
+      // Without the bundle or without the grant there is no access, whatever the module facts say.
+      const readOnly = { ...standaloneDeps, resolveAbacBundle: async ({ moduleKey }: { moduleKey: string }) => createAbacBundle({
+        provider: { async resolve() { return [{ ...staffPolicy, payload: { ...staffPolicy.payload, actions: ["read"], capabilities: ["announcements"] } }] } },
+        mode: "platform", moduleKey, catalog: announcementsCatalog, context: { userId: "staff-1" },
+      }) }
+      expect((await build(readOnly).list(json("GET", "/announcements"))).status).toBe(200)
+      expect((await build(readOnly).create(json("POST", "/announcements", { title: "x", region: "eu", priority: 1 }))).status).toBe(403)
+      const noCapability = { ...standaloneDeps, resolveAbacBundle: async ({ moduleKey }: { moduleKey: string }) => createAbacBundle({
+        provider: { async resolve() { return [{ ...staffPolicy, payload: { ...staffPolicy.payload, capabilities: [] } }] } },
+        mode: "platform", moduleKey, catalog: announcementsCatalog, context: { userId: "staff-1" },
+      }) }
+      expect((await build(noCapability).list(json("GET", "/announcements"))).status).toBe(403)
+      const noBundle = { ...standaloneDeps, resolveAbacBundle: async () => null }
+      expect((await build(noBundle).list(json("GET", "/announcements"))).status).toBe(403)
+    })
+
+    it("declares a platform job definition and enqueues under the platform scope", async () => {
+      expect(standaloneJobs.get("announcements.expire", 1)?.scope).toBe("platform")
+      const enqueued: unknown[] = []
+      await enqueueExpiry({ enqueue: async (args: unknown) => { enqueued.push(args); return {} } } as never)
+      expect(enqueued).toMatchObject([{ requester: { scope: "platform" }, job: { executionScope: PLATFORM_SCOPE, jobType: "announcements.expire" } }])
+    })
+
+    it("keeps every ts block in the guide and the README example identical to the compiled example", () => {
+      const example = readFileSync(new URL("./standaloneGuideExample.ts", import.meta.url), "utf8")
+      const guide = readFileSync(new URL("../../../docs/guides/standalone-application.md", import.meta.url), "utf8")
+      const guideBlocks = [...guide.matchAll(/```ts\n([\s\S]*?)```/g)].map((match) => match[1]!.trimEnd())
+      expect(guideBlocks.length).toBeGreaterThan(0)
+      for (const block of guideBlocks) expect(example, `guide block not found in standaloneGuideExample.ts:\n${block}`).toContain(block)
+      const readme = readFileSync(new URL("../../../README.md", import.meta.url), "utf8")
+      const section = readme.match(/## Standalone application\n([\s\S]*?)\n## /)?.[1] ?? ""
+      const readmeBlocks = [...section.matchAll(/```ts\n([\s\S]*?)```/g)].map((match) => match[1]!.trimEnd())
+      expect(readmeBlocks.length).toBeGreaterThan(0)
+      for (const block of readmeBlocks) expect(example, `README block not found in standaloneGuideExample.ts:\n${block}`).toContain(block)
     })
   })
 
