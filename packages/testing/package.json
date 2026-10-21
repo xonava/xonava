@@ -64,6 +64,10 @@
       "types": "./dist/contracts/cache-adapter.d.ts",
       "default": "./dist/contracts/cache-adapter.js"
     },
+    "./contracts/object-store": {
+      "types": "./dist/contracts/object-store/index.d.ts",
+      "default": "./dist/contracts/object-store/index.js"
+    },
     "./contracts/shared-conformance": {
       "types": "./dist/contracts/shared-conformance.d.ts",
       "default": "./dist/contracts/shared-conformance.js"

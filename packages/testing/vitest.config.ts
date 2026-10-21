@@ -24,6 +24,7 @@ export default defineConfig({
     "@xonava/core": path.resolve(import.meta.dirname, "../core/src/index.ts"),
     "@xonava/adapters/drizzle-d1": path.resolve(import.meta.dirname, "../adapters/src/drizzle-d1/index.ts"),
     "@xonava/adapters/drizzle-pg": path.resolve(import.meta.dirname, "../adapters/src/drizzle-pg/index.ts"),
+    "@xonava/adapters/storage": path.resolve(import.meta.dirname, "../adapters/src/storage/index.ts"),
     "@xonava/adapters/drizzle-mysql": path.resolve(import.meta.dirname, "../adapters/src/drizzle-mysql/index.ts"),
     "@xonava/adapters": path.resolve(import.meta.dirname, "../adapters/src/index.ts"),
   }},

@@ -1,16 +1,18 @@
 import { describe, expect, it } from "vitest"
 import { InMemoryObjectStore } from ".."
 
+const SHA256_OF_010203 = "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81"
+
 describe("O1 ObjectStore reference adapter", () => {
   it("supports put, head, get and delete with immutable byte copies", async () => {
     const store = new InMemoryObjectStore()
     const source = new Uint8Array([1, 2, 3])
-    const metadata = await store.put({ bucket: "b", key: "k", body: source, contentLength: 3, contentType: "application/octet-stream", checksum: { algorithm: "sha256", value: "digest" } })
+    const metadata = await store.put({ bucket: "b", key: "k", body: source, contentLength: 3, contentType: "application/octet-stream", checksum: { algorithm: "sha256", value: SHA256_OF_010203 } })
     source[0] = 9
     expect(metadata).toMatchObject({ bucket: "b", key: "k", contentLength: 3 })
     const result = await store.get({ bucket: "b", key: "k" })
     expect([...(result!.body as Uint8Array)]).toEqual([1, 2, 3])
-    expect((await store.head({ bucket: "b", key: "k" }))?.checksum?.value).toBe("digest")
+    expect((await store.head({ bucket: "b", key: "k" }))?.checksum?.value).toBe(SHA256_OF_010203)
     expect(await store.delete({ bucket: "b", key: "k" })).toBe(true)
     expect(await store.get({ bucket: "b", key: "k" })).toBeNull()
   })
