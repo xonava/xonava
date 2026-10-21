@@ -23,6 +23,33 @@ function formatIssuePath(path: readonly (string | number | symbol)[]): string {
   return joined.length > MAX_ISSUE_PATH_LENGTH ? joined.slice(0, MAX_ISSUE_PATH_LENGTH) : joined
 }
 
+type ZodLikeError = { issues: readonly unknown[] }
+
+/**
+ * Schemas built with another zod installation (or zod 3) throw errors that fail `instanceof ZodError`.
+ * Recognize them by name and by an issues array of objects instead.
+ */
+function isZodLikeError(error: unknown): error is ZodLikeError {
+  if (error instanceof ZodError) return true
+  if (!(error instanceof Error) || error.name !== "ZodError") return false
+  const issues: unknown = (error as { issues?: unknown }).issues
+  return Array.isArray(issues) && issues.every((issue) => typeof issue === "object" && issue !== null)
+}
+
+function sanitizeIssue(issue: unknown) {
+  const record = issue as { code?: unknown; path?: unknown; message?: unknown }
+  const code = typeof record.code === "string" ? record.code : "invalid"
+  const rawPath: unknown[] = Array.isArray(record.path) ? record.path : []
+  const segments = rawPath.filter((segment): segment is string | number | symbol =>
+    typeof segment === "string" || typeof segment === "number" || typeof segment === "symbol")
+  const message = typeof record.message === "string" ? record.message : "Invalid value"
+  return {
+    code,
+    path: formatIssuePath(segments),
+    message: message.slice(0, MAX_ISSUE_MESSAGE_LENGTH),
+  }
+}
+
 function defaultReportError(_error: unknown) {}
 
 const HTTP_STATUS_BY_FRAMEWORK_CODE: Readonly<Record<FrameworkCoreErrorCode, number>> = Object.freeze({
@@ -95,15 +122,11 @@ export function createFrameworkErrorHandler(options: FrameworkErrorHandlerOption
       return json({ error:error.safeMessage,code:error.publicCode,...(details?{details}:{}) }, { status,...(headers?{headers}:{}) })
     }
 
-    if (error instanceof ZodError) {
+    if (isZodLikeError(error)) {
       return json({
         error: "Validation failed",
         code: "VALIDATION_ERROR",
-        details: error.issues.map((issue) => ({
-          code: issue.code,
-          path: formatIssuePath(issue.path),
-          message: issue.message.slice(0, MAX_ISSUE_MESSAGE_LENGTH),
-        })),
+        details: error.issues.map(sanitizeIssue),
       }, { status: 400 })
     }
 
