@@ -2,7 +2,7 @@
 
 A form often needs data from another module to be filled in. Assigning an order to a warehouse needs warehouse labels, but the dispatcher who assigns orders is not a warehouse administrator and should not be handed the warehouse module. This guide shows an application pattern for that case: a **supporting read**, a small read-only endpoint that belongs to the parent module and is admitted by the parent action.
 
-This is a pattern in your application code, not a framework feature. It uses only public APIs: `createFrameworkWriteHandler` for the business action, `createAbacBundle` and `assertFrameworkAuthorization` for admission, and `createTenantScopedPersistenceProvider` for scope.
+This is a pattern in your application code, not a framework feature. It uses only public APIs: `createFrameworkWriteHandler` for the business action, `resolveEndpointRequestContext` and `admitModuleAction` for the hand-written read, `createAbacBundle` for policies, and `createTenantScopedPersistenceProvider` for scope.
 
 Every `ts` block below is compiled and executed by the documentation-example test (`packages/testing/tests/documentationExamples.test.ts`, source in `packages/testing/tests/supportingReadsExample.ts`), and that test fails if a block here drifts from the compiled source. Imports use only public paths from [`package-exports.md`](../reference/package-exports.md). The trusted session, tenant scope and policy provider follow [Ownership for non-staff users](ownership.md); read that guide first for what each layer does.
 
@@ -228,12 +228,6 @@ export function ordersRequestNormalization(
     routeBindings: {
       assignWarehouse: routeBinding("assignWarehouse"),
       warehouseOptions: routeBinding("warehouseOptions"),
-      // The type requires the five CRUD keys even though no CRUD handler is built here.
-      list: routeBinding("warehouseOptions"),
-      detail: routeBinding("warehouseOptions"),
-      create: routeBinding("assignWarehouse"),
-      update: routeBinding("assignWarehouse"),
-      delete: routeBinding("assignWarehouse"),
     },
     resolverBindings: new Map([[resolverBinding.key, resolverBinding]]),
     async resolveTrustedSession({ request }) {
@@ -285,26 +279,6 @@ export function ordersRequestNormalization(
 - A **conditional deny does not refuse the read** either; it narrows which orders qualify and is enforced by the save.
 
 ```ts
-/** Builds the trusted request context for a hand-written endpoint, as the built-in handlers do. */
-async function requestContextFor(
-  normalization: FrameworkRequestNormalization,
-  request: Request,
-  routeKey: string,
-  metadata: { requestId: string; correlationId: string },
-): Promise<RequestContext> {
-  const route = normalization.routeBindings[routeKey]!
-  const session = await normalization.resolveTrustedSession({ request, route })
-  return normalizeFrameworkRequest({
-    ...metadata,
-    route,
-    resolverBindings: normalization.resolverBindings,
-    ...(session === undefined ? {} : { session }),
-    admit: ({ identity, scope, scopeId }) => normalization.resolveAdmissionEvidence({ request, route, identity, scope, scopeId }),
-    signal: request.signal,
-    host: new URL(request.url).hostname,
-  })
-}
-
 /**
  * Admits a supporting read with the PARENT action. It resolves a fresh bundle for the
  * parent module and asks the same question the save will ask: may this caller run
@@ -314,18 +288,7 @@ async function requestContextFor(
  */
 export async function admitParentAction(deps: FrameworkAdapterDeps, context: RequestContext, action: string): Promise<void> {
   const bundle = await deps.resolveAbacBundle({ moduleKey: ORDERS, context })
-  if (!bundle) throw new ForbiddenError("ABAC authorization bundle unavailable")
-  assertFrameworkAuthorization({
-    facts: {
-      ...deps.resolveModuleAuthorizationFacts?.({ moduleKey: ORDERS, context }),
-      scope: "tenant",
-      ownerAuthority: false,
-      impersonated: false,
-    },
-    moduleKey: ORDERS,
-    action,
-    bundle,
-  })
+  admitModuleAction({ adapterDeps: deps, moduleKey: ORDERS, action, context, bundle })
 }
 ```
 
@@ -361,7 +324,12 @@ export function createWarehouseOptionsHandler(args: {
       return response
     }
     try {
-      const context = await requestContextFor(args.requestNormalization, request, "warehouseOptions", metadata)
+      const context = await resolveEndpointRequestContext({
+        request,
+        routeKey: "warehouseOptions",
+        normalization: args.requestNormalization,
+        requestMetadata: metadata,
+      })
       if (context.scope.kind !== "tenant") throw new ForbiddenError("A tenant-scoped session is required")
       await admitParentAction(args.adapterDeps, context, "assignWarehouse")
 
@@ -495,5 +463,4 @@ For real write routes keep idempotency required: supply `createIdempotencyPort` 
 - **A list is not a permission.** Never skip the re-check on save because "the client could only have picked a listed id". Ids can be forged, replayed, or stale.
 - **Keep the allowlist small.** Add fields to the mapping deliberately. Do not return the row and strip fields.
 - **Persistence.** The documentation test runs against an in-memory stand-in. Run your own database through the persistence conformance suites in `@xonava/testing` before relying on these queries in SQL.
-- **Route bindings.** `FrameworkRequestNormalization.routeBindings` must contain the five CRUD keys (`list`, `detail`, `create`, `update`, `delete`) even when the module builds no CRUD handler; the sample points them at its two bindings and never uses them.
-- **Hand-written endpoint plumbing.** `requestContextFor` and `admitParentAction` repeat what the built-in handlers do internally, because that step is not exported. Keep them in one shared module in your application.
+- **Hand-written endpoints.** `resolveEndpointRequestContext` and `admitModuleAction` run the same request-context and module-admission steps as the built-in handlers. `routeBindings` needs only the keys you use; the five CRUD keys are required only by CRUD handlers that are enabled.

@@ -23,6 +23,7 @@ import {
   buildStructuralScope,
   deriveSecurityCachePartition,
   getRequestIp,
+  assertCrudRouteBinding,
   normalizeCrudRequest,
   toCrudReadContext,
   withScopedPersistence,
@@ -38,6 +39,7 @@ export function createDetailHandler<
   D extends SelectableRow,
 >(shared: CrudShared<TRow, A, B, L, D>) {
   const { options, entity } = shared
+  if (shared.routes.detail) assertCrudRouteBinding(options.requestNormalization, "detail", options.moduleKey)
   return async (
     request: Request,
     params: Record<string, string>

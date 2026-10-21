@@ -11,7 +11,7 @@ const withTransactionRetry=async<T>(pool:Pick<Pool,"getConnection">,work:(connec
   for(let attempt=0;;attempt++){
     const connection=await pool.getConnection()
     try{await connection.beginTransaction();const result=await work(connection);await connection.commit();return result}
-    catch(error){await connection.rollback();if(attempt<3&&retryable(error))continue;throw error}
+    catch(error){await connection.rollback();if(attempt<12&&retryable(error))continue;throw error}
     finally{connection.release()}
   }
 }

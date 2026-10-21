@@ -221,7 +221,6 @@ export function ordersRequestNormalization(
       detail: routeBinding("detail"),
       update: routeBinding("update"),
       delete: routeBinding("delete"),
-      create: routeBinding("detail"), // unused: the create route is disabled
     },
     resolverBindings: new Map([[resolverBinding.key, resolverBinding]]),
     async resolveTrustedSession({ request }) {
