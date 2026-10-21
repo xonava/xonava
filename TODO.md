@@ -19,7 +19,7 @@ Status: **experimental**. `0.1.0` is published on npm. Target for `1.0.0`: core 
 | --- | --- | --- |
 | 0: quick fixes | Done (6 of 6) | |
 | 1: pilot feedback and missing adapters | Done (9 of 9, plus 3 follow-ups) | All eight requests from the TanStack Start / Cloudflare pilot |
-| 2: proof | In progress (8 of 14, plus 6 follow-ups) | Remaining: A8, Q1, Q2, Q4, Q5, Q6, and the wave close below |
+| 2: proof | In progress (8 of 13, plus 6 follow-ups) | Remaining: A8, Q2, Q4, Q5, Q6, and the wave close below; CI (Q1) deferred |
 | 3: hardening and decisions | Not started (0 of 4) | |
 
 Real-database differential suites now cover jobs, schedules, workflows, idempotency, inbox/outbox
@@ -72,7 +72,8 @@ edited only by the WP that owns them or by Opus at wave close.
 
 ## Quality gates
 
-`1.0.0` ships when every gate is green in CI. Each gate is created by the WP named after it.
+`1.0.0` ships when every gate is green. Until CI exists (deferred, see below), the gates run locally through
+the release gate and the named scripts. Each gate is created by the WP named after it.
 
 | Gate | Target | Created by |
 | --- | --- | --- |
@@ -85,7 +86,6 @@ edited only by the WP that owns them or by Opus at wave close.
 | Upgrade compatibility | N-1 suite against the previous published release | C3 |
 | Soak | 30-minute crash/lease soak with no invariant violation | C4 |
 | Threat model | reviewed `docs/spec/security.md` threat model | C5 |
-| CI | every gate above runs on pull requests or nightly | Q1 |
 
 ## Wave 2: proof (Sonnet, parallel)
 
@@ -143,7 +143,8 @@ when the wave closes.
   adapters `http` and `drizzle-shared`): for each surviving mutant, add a test that kills it, or mark it
   equivalent with a one-line reason in `stryker-equivalent.md` next to the config. Stop when the module
   meets the gate.
-- **Acceptance:** gate thresholds in the quality table; a nightly CI job (Q1) enforces them.
+- **Acceptance:** gate thresholds in the quality table, enforced by `npm run test:mutation` with a
+  failing exit code below threshold.
 
 ### Q6 Performance baselines
 
@@ -160,26 +161,6 @@ when the wave closes.
   committed `benchmarks/baseline.json` and fails on a regression above 25 %.
 - **Acceptance:** the baseline is recorded in the pull request; the verifier fails when a benchmark is
   artificially slowed (check by hand, then revert).
-
-### Q1 Continuous integration
-
-- [ ] Sonnet. Branch `chore/ci-workflows`.
-- **Steps:** add these workflows:
-  - `.github/workflows/ci.yml`, on pull requests to `dev` and `main`: Node 22, `npm ci`, lint,
-    typecheck, build, `npm test`, `verify:docs`, `test:verification`, `verify:framework-version`, and
-    the D1 integration suite;
-  - `.github/workflows/databases.yml`, on pull requests and nightly: PostgreSQL 16 and MySQL 8 service
-    containers running integration, conformance, race and crash suites;
-  - `.github/workflows/nightly.yml`: coverage, mutation (Q5), benchmarks (Q6) and DF1 at release
-    volume;
-  - `.github/workflows/codeql.yml`;
-  - `.github/dependabot.yml` for npm and GitHub Actions, weekly;
-  - `.github/workflows/release.yml`, manual dispatch on `main`: `npm run release:publish` with
-    `NPM_CONFIG_PROVENANCE=true` and the `NPM_TOKEN` secret.
-- **Note:** pushing workflow files needs a token with the `workflow` scope. If the push is refused,
-  hand the files to the maintainer.
-- **Acceptance:** CI green on the pull request. Then the maintainer makes `ci` a required check on
-  `dev` and `main`.
 
 ### Q2 Raise coverage floors
 
@@ -246,7 +227,7 @@ Small items found by the wave 2 suites and reviews. Each is one Haiku or Sonnet 
   - workflow signals are consumed at most once.
 
   Write evidence like the crash suites.
-- **Acceptance:** a 30-minute run passes; the nightly CI runs 10 minutes.
+- **Acceptance:** a 30-minute run passes.
 
 ### C5 Threat model
 
@@ -283,12 +264,37 @@ Small items found by the wave 2 suites and reviews. Each is one Haiku or Sonnet 
   - **Persistence-applied codecs.** Rejected today at `packages/core/src/entity/validateEntity.ts:114`.
     Candidate: apply `durableCodec` in each adapter's `drizzleRepository.ts` row mapping.
 
+## Deferred
+
+Work the maintainer has postponed. It is not part of the current waves or the `1.0.0` gate until moved
+back.
+
+### Q1 Continuous integration (deferred)
+
+- [ ] Sonnet. Branch `chore/ci-workflows`.
+- **Steps:** add these workflows:
+  - `.github/workflows/ci.yml`, on pull requests to `dev` and `main`: Node 22, `npm ci`, lint,
+    typecheck, build, `npm test`, `verify:docs`, `test:verification`, `verify:framework-version`, and
+    the D1 integration suite;
+  - `.github/workflows/databases.yml`, on pull requests and nightly: PostgreSQL 16 and MySQL 8 service
+    containers running integration, conformance, race and crash suites;
+  - `.github/workflows/nightly.yml`: coverage, mutation (Q5), benchmarks (Q6) and DF1 at release
+    volume;
+  - `.github/workflows/codeql.yml`;
+  - `.github/dependabot.yml` for npm and GitHub Actions, weekly;
+  - `.github/workflows/release.yml`, manual dispatch on `main`: `npm run release:publish` with
+    `NPM_CONFIG_PROVENANCE=true` and the `NPM_TOKEN` secret.
+- **Note:** pushing workflow files needs a token with the `workflow` scope. If the push is refused,
+  hand the files to the maintainer.
+- **Acceptance:** CI green on the pull request. Then the maintainer makes `ci` a required check on
+  `dev` and `main`.
+
+
 ## Repository settings (maintainer)
 
 - [ ] Enable private vulnerability reporting.
 - [ ] Fill the About description and topics.
 - [ ] Decide whether `dev` becomes the default branch.
-- [ ] After Q1 merges, require the `ci` check on `dev` and `main`.
 
 ## Release `0.2.0`
 
@@ -300,7 +306,7 @@ Small items found by the wave 2 suites and reviews. Each is one Haiku or Sonnet 
 
 ## Release `1.0.0`
 
-- [ ] Every quality gate green in CI for two consecutive weeks.
+- [ ] Every quality gate green in the full local release gate on dedicated databases.
 - [ ] Every C6 item decided; full release gate (`npm run verify:framework-release`) green on dedicated
       databases.
 - [ ] Freeze the public API manifest and durable formats; drop compatibility-only fingerprint versions
