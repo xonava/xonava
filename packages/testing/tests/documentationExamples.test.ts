@@ -22,6 +22,20 @@ import {
   type Reservation,
   type ReserveUploadInput,
 } from "./durableUploadsExample"
+import {
+  createAdapterDeps,
+  createAssignWarehouseHandler,
+  createWarehouseOptionsHandler,
+  defaultEntitlements,
+  defaultPolicies,
+  inMemoryShop,
+  ordersRequestNormalization as shopRequestNormalization,
+  ORDERS,
+  WAREHOUSE_OPTION_LIMIT,
+  type Order as ShopOrder,
+  type Warehouse,
+  type WarehouseOptions,
+} from "./supportingReadsExample"
 import { adapterDeps, createOrderHandlers, inMemoryOrders, orders, ordersRequestNormalization, type Order, type VerifiedLogin } from "./ownershipGuideExample"
 
 describe("canonical documentation examples", () => {
@@ -336,6 +350,214 @@ describe("canonical documentation examples", () => {
       const blocks = [...guide.matchAll(/```ts\n([\s\S]*?)```/g)].map((match) => match[1]!.trimEnd())
       expect(blocks.length).toBeGreaterThan(0)
       for (const block of blocks) expect(example, `guide block not found in durableUploadsExample.ts:\n${block}`).toContain(block)
+    })
+  })
+
+  describe("supporting reads guide (docs/guides/supporting-reads.md)", () => {
+    const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`
+    const ORDER = uuid(1)
+    const CLOSED_ORDER = uuid(2)
+    const EU = uuid(101)
+    const US = uuid(102)
+    const INACTIVE_EU = uuid(103)
+    const OTHER_TENANT = uuid(104)
+    const warehouse = (id: string, label: string, over: Partial<Warehouse> = {}): Warehouse => ({
+      id, tenantId: "t1", label, region: "eu", active: true, internalCostCentre: "cc-secret", ...over,
+    })
+    const order = (id: string, status: string): ShopOrder => ({ id, tenantId: "t1", status, region: "eu", warehouseId: null })
+
+    function setup(extra: Warehouse[] = [], login: VerifiedLogin | null = { userId: "dora", tenantId: "t1", sessionId: "s1" }) {
+      const policies = defaultPolicies()
+      const entitlements = defaultEntitlements()
+      const deps = createAdapterDeps(policies, entitlements)
+      const shop = inMemoryShop({
+        orders: [order(ORDER, "open"), order(CLOSED_ORDER, "shipped")],
+        warehouses: [
+          warehouse(EU, "Berlin"),
+          warehouse(US, "Austin", { region: "us" }),
+          warehouse(INACTIVE_EU, "Closed depot", { active: false }),
+          warehouse(OTHER_TENANT, "Foreign depot", { tenantId: "t2" }),
+          ...extra,
+        ],
+      })
+      const normalization = shopRequestNormalization(async () => login ?? undefined)
+      const args = { adapterDeps: deps, requestNormalization: normalization, createPersistence: shop.createPersistence }
+      return { policies, entitlements, shop, options: createWarehouseOptionsHandler(args), assign: createAssignWarehouseHandler(args) }
+    }
+    const optionsRequest = (query = "") => new Request(`https://shop.test/orders/warehouse-options${query}`)
+    const assignRequest = (orderId: string, warehouseId: string) => new Request(`https://shop.test/orders/${orderId}/assign-warehouse`, {
+      method: "POST", body: JSON.stringify({ warehouseId }), headers: { "content-type": "application/json" },
+    })
+    const params = (id: string) => ({ params: Promise.resolve({ id }) })
+
+    it("returns only id and label, sorted, for active warehouses of the caller's tenant", async () => {
+      const { options } = setup()
+      const response = await options(optionsRequest())
+      expect(response.status).toBe(200)
+      const body = await response.json() as WarehouseOptions
+      // The supporting read is admitted by the parent action, not by the warehouses module,
+      // so the US warehouse is listed although this caller cannot read it there.
+      expect(body).toEqual({ items: [{ id: US, label: "Austin" }, { id: EU, label: "Berlin" }], truncated: false })
+      for (const item of body.items) expect(Object.keys(item).sort()).toEqual(["id", "label"])
+      expect(JSON.stringify(body)).not.toMatch(/cc-secret|Foreign|Closed depot|tenantId|region/)
+    })
+
+    it("sets cache-control: no-store on success and on every refusal", async () => {
+      const ok = setup()
+      expect((await ok.options(optionsRequest())).headers.get("cache-control")).toBe("no-store")
+      const anonymous = setup([], null)
+      const unauthenticated = await anonymous.options(optionsRequest())
+      expect(unauthenticated.status).toBe(401)
+      expect(unauthenticated.headers.get("cache-control")).toBe("no-store")
+      const denied = setup()
+      denied.policies[ORDERS] = []
+      const forbidden = await denied.options(optionsRequest())
+      expect(forbidden.status).toBe(403)
+      expect(forbidden.headers.get("cache-control")).toBe("no-store")
+      const invalid = await ok.options(optionsRequest("?q=a&q=b"))
+      expect(invalid.status).toBe(400)
+      expect(invalid.headers.get("cache-control")).toBe("no-store")
+    })
+
+    it("bounds the result and reports overflow explicitly", async () => {
+      const many = Array.from({ length: WAREHOUSE_OPTION_LIMIT + 4 }, (_, index) => warehouse(uuid(200 + index), `Depot ${String(index).padStart(2, "0")}`))
+      const { options, shop } = setup(many)
+      const body = await (await options(optionsRequest())).json() as WarehouseOptions
+      expect(body.items).toHaveLength(WAREHOUSE_OPTION_LIMIT)
+      expect(body.truncated).toBe(true)
+      // The store was asked for one more row than it may return, never for everything.
+      expect(shop.queries.at(-1)).toEqual({ entity: "warehouse", pageSize: WAREHOUSE_OPTION_LIMIT + 1 })
+      // Narrowing the search brings the list back under the bound.
+      const narrowed = await (await options(optionsRequest("?q=Depot%200"))).json() as WarehouseOptions
+      expect(narrowed.truncated).toBe(false)
+      expect(narrowed.items.every((item) => item.label.includes("Depot 0"))).toBe(true)
+    })
+
+    it("is not truncated when the list has exactly the limit", async () => {
+      const exact = Array.from({ length: WAREHOUSE_OPTION_LIMIT - 2 }, (_, index) => warehouse(uuid(200 + index), `Depot ${String(index).padStart(2, "0")}`))
+      const { options } = setup(exact)
+      const body = await (await options(optionsRequest())).json() as WarehouseOptions
+      expect(body.items).toHaveLength(WAREHOUSE_OPTION_LIMIT)
+      expect(body.truncated).toBe(false)
+    })
+
+    it("rejects unknown, repeated and oversize query parameters", async () => {
+      const { options } = setup()
+      expect((await options(optionsRequest("?limit=1000"))).status).toBe(400)
+      expect((await options(optionsRequest("?tenantId=t2"))).status).toBe(400)
+      expect((await options(optionsRequest(`?q=${"x".repeat(51)}`))).status).toBe(400)
+    })
+
+    it("is admitted by the parent action through a fresh bundle, conditional grants and denies included", async () => {
+      // The default conditional grant (open orders only) admits the read.
+      const conditional = setup()
+      expect((await conditional.options(optionsRequest())).status).toBe(200)
+
+      // A conditional deny narrows which orders qualify but still admits the read.
+      const conditionalDeny = setup()
+      conditionalDeny.policies[ORDERS]!.push({
+        ...conditionalDeny.policies[ORDERS]![0]!,
+        source: { policyId: "no-eu-orders", scopeType: "tenant_default" },
+        effect: "deny",
+        priority: 20,
+        payload: {
+          ...conditionalDeny.policies[ORDERS]![0]!.payload,
+          conditions: { version: 2, systemScope: { logic: "AND", conditions: [{ field: "region", operator: "equals", value: "us" }] }, userFilters: { logic: "AND", conditions: [] } },
+        },
+      })
+      expect((await conditionalDeny.options(optionsRequest())).status).toBe(200)
+
+      // An unconditional deny on the parent action refuses the read.
+      const hardDeny = setup()
+      hardDeny.policies[ORDERS]!.push({
+        ...hardDeny.policies[ORDERS]![0]!,
+        source: { policyId: "freeze-dispatch", scopeType: "tenant_default" },
+        effect: "deny",
+        priority: 20,
+        payload: {
+          ...hardDeny.policies[ORDERS]![0]!.payload,
+          actions: ["assignWarehouse"],
+          conditions: { version: 2, systemScope: { logic: "AND", conditions: [] }, userFilters: { logic: "AND", conditions: [] } },
+        },
+      })
+      expect((await hardDeny.options(optionsRequest())).status).toBe(403)
+
+      // Reading orders is not the parent action.
+      const readOnly = setup()
+      readOnly.policies[ORDERS] = [{
+        ...readOnly.policies[ORDERS]![0]!,
+        payload: { ...readOnly.policies[ORDERS]![0]!.payload, actions: ["read"] },
+      }]
+      expect((await readOnly.options(optionsRequest())).status).toBe(403)
+
+      // Holding the warehouses module's read grant is not the parent action either.
+      const onlyWarehouses = setup()
+      onlyWarehouses.policies[ORDERS] = []
+      expect((await onlyWarehouses.options(optionsRequest())).status).toBe(403)
+
+      // The module must also be enabled for the tenant with that action.
+      const moduleOff = setup()
+      moduleOff.entitlements.enabledModuleActions[ORDERS] = ["read"]
+      expect((await moduleOff.options(optionsRequest())).status).toBe(403)
+    })
+
+    it("revoking the parent action revokes the read on the next request", async () => {
+      const { options, assign, policies } = setup()
+      expect((await options(optionsRequest())).status).toBe(200)
+      policies[ORDERS] = []
+      expect((await options(optionsRequest())).status).toBe(403)
+      expect((await assign(assignRequest(ORDER, EU), params(ORDER))).status).toBe(403)
+    })
+
+    it("assigns a warehouse the caller may read to an order the caller may dispatch", async () => {
+      const { assign, shop } = setup()
+      const response = await assign(assignRequest(ORDER, EU), params(ORDER))
+      expect(response.status, await response.clone().text()).toBe(200)
+      expect(await response.json()).toEqual({ id: ORDER, warehouseId: EU })
+      expect(shop.orders.get(ORDER)?.warehouseId).toBe(EU)
+    })
+
+    it("grants nothing by listing an option: the save re-checks the full warehouse record", async () => {
+      const { options, assign, shop } = setup()
+      const listed = await (await options(optionsRequest())).json() as WarehouseOptions
+      expect(listed.items.map((item) => item.id)).toContain(US)
+
+      // Offered by the supporting read, but the warehouses module does not let this caller read it.
+      const unreadable = await assign(assignRequest(ORDER, US), params(ORDER))
+      expect(unreadable.status).toBe(404)
+      // It answers exactly like an id that does not exist, so the response confirms nothing.
+      const missing = await assign(assignRequest(ORDER, uuid(999)), params(ORDER))
+      expect(missing.status).toBe(404)
+      expect((await unreadable.json() as { message?: string }).message).toBe((await missing.json() as { message?: string }).message)
+      // Another tenant's warehouse is not reachable either.
+      expect((await assign(assignRequest(ORDER, OTHER_TENANT), params(ORDER))).status).toBe(404)
+      expect(shop.orders.get(ORDER)?.warehouseId).toBeNull()
+    })
+
+    it("re-checks the full order against the parent action at save time", async () => {
+      const { assign, shop } = setup()
+      // The read was admitted by a conditional grant; this order does not satisfy the condition.
+      const response = await assign(assignRequest(CLOSED_ORDER, EU), params(CLOSED_ORDER))
+      expect(response.status).toBe(403)
+      expect(shop.orders.get(CLOSED_ORDER)?.warehouseId).toBeNull()
+    })
+
+    it("reports a business rule with a public code, not an authorization failure", async () => {
+      const inactive = setup()
+      const response = await inactive.assign(assignRequest(ORDER, INACTIVE_EU), params(ORDER))
+      expect(response.status).toBeGreaterThanOrEqual(400)
+      expect(response.status).not.toBe(403)
+      expect(response.status).not.toBe(404)
+      expect(JSON.stringify(await response.json())).toContain("WAREHOUSE_NOT_ACCEPTING")
+      expect(inactive.shop.orders.get(ORDER)?.warehouseId).toBeNull()
+    })
+
+    it("keeps every ts block in the guide identical to the compiled example", () => {
+      const guide = readFileSync(new URL("../../../docs/guides/supporting-reads.md", import.meta.url), "utf8")
+      const example = readFileSync(new URL("./supportingReadsExample.ts", import.meta.url), "utf8")
+      const blocks = [...guide.matchAll(/```ts\n([\s\S]*?)```/g)].map((match) => match[1]!.trimEnd())
+      expect(blocks.length).toBeGreaterThan(0)
+      for (const block of blocks) expect(example, `guide block not found in supportingReadsExample.ts:\n${block}`).toContain(block)
     })
   })
 })
