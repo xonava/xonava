@@ -8,7 +8,7 @@ import { assertDurableIdentifier, scheduleOccurrencesConsumed } from "@xonava/co
 import type { DrizzleColumnMap } from "../drizzle-shared/predicateCompiler"
 import type { DrizzleSessionLike } from "./drizzleRepository"
 import { d1ColumnInputValue, d1CurrentEpochMilliseconds, d1EpochMillisecondsAfter, getAffectedRows } from "./d1Utils"
-import { decodePersistedJobScope } from "../drizzle-shared/jobScope"
+import { decodePersistedJobScope, readPersistedScopeKey } from "../drizzle-shared/jobScope"
 
 export interface DrizzleScheduleStoreConfig {
   schedulesTable: AnySQLiteTable
@@ -30,7 +30,7 @@ function toScheduleClaim(row: Record<string, unknown>): ScheduleClaim {
   const scope = readScheduleScope(row)
   const tenantId = (row.tenantId as string) ?? null
   return {
-    scheduleId: row.id as string, scope, executionScope: decodePersistedJobScope(scope, tenantId), jobType: row.jobType as string,
+    scheduleId: row.id as string, scope, executionScope: decodePersistedJobScope(scope, tenantId, readPersistedScopeKey(row.scopeKey)), jobType: row.jobType as string,
     jobVersion: row.jobVersion as number, tenantId, payload: row.payload as string,
     cronExpression: row.cronExpression as string, timezone: row.timezone as string,
     overlapPolicy: { type: (row.overlapPolicy as string) ?? "allow" } as OverlapPolicy,

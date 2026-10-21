@@ -37,6 +37,9 @@ export async function applyD1Migration(database: D1FixtureDatabase, name: (typeo
     try { await database.exec(statement) } catch (error) {
       if (index === 0 && isDuplicateColumn(error)) return false
       if (/^CREATE (UNIQUE )?INDEX /i.test(statement) && isMissingTable(error)) return false
+      // Column additions to deployment-owned tables (jobs, schedules): one missing table or already-added column must not stop the others.
+      if (index > 0 && /^ALTER TABLE \w+ ADD COLUMN /i.test(statement) && (isMissingTable(error) || isDuplicateColumn(error))) continue
+      if (index === 0 && /^ALTER TABLE \w+ ADD COLUMN /i.test(statement) && isMissingTable(error)) continue
       throw error
     }
   }
