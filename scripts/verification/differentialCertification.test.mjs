@@ -5,6 +5,7 @@
  * source-drifted differential evidence is never accepted.
  */
 import assert from "node:assert/strict"
+import { existsSync } from "node:fs"
 import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
@@ -99,16 +100,19 @@ describe("DF1 property call-site scanning", () => {
 })
 
 describe("DF1 real-database store differential suites", () => {
-  it("refuses a store area that declares properties but runs on no database, and requires them once one runner exists", async () => {
-    const shared = join(repositoryRoot, "packages/testing/integration/shared/leaseStoreDifferential.ts")
-    const runner = join(repositoryRoot, "packages/testing/integration/d1/leaseStoreDifferential.integration.test.ts")
-    await writeFile(shared, `import { forAllAsync } from "../../../core/src/__tests__/differential/harness.js"\nforAllAsync("lease probe", { runs: 50 }, async () => {})\n`)
+  it("refuses a store area that declares properties but runs on no database, and requires them once one runner exists", async t => {
+    // The probe plants files for an area that has none yet, so it can never overwrite (and then delete) a real suite.
+    const area = STORE_DIFFERENTIAL_AREAS.find(candidate => !existsSync(join(repositoryRoot, `packages/testing/integration/shared/${candidate}StoreDifferential.ts`)) && !existsSync(join(repositoryRoot, `packages/testing/integration/d1/${candidate}StoreDifferential.integration.test.ts`)))
+    if (area === undefined) { t.skip("every store area has a real suite"); return }
+    const shared = join(repositoryRoot, `packages/testing/integration/shared/${area}StoreDifferential.ts`)
+    const runner = join(repositoryRoot, `packages/testing/integration/d1/${area}StoreDifferential.integration.test.ts`)
+    await writeFile(shared, `import { forAllAsync } from "../../../core/src/__tests__/differential/harness.js"\nforAllAsync("${area} probe", { runs: 50 }, async () => {})\n`)
     try {
       await assert.rejects(requiredCallSites(repositoryRoot, await df1Suites(repositoryRoot)), /has no per-database test file/)
       await writeFile(runner, "")
       const sites = await requiredCallSites(repositoryRoot, await df1Suites(repositoryRoot))
-      assert.ok(sites.d1.some(site => site.display.includes("lease probe")))
-      assert.ok(!sites.pg.some(site => site.display.includes("lease probe")))
+      assert.ok(sites.d1.some(site => site.display.includes(`${area} probe`)))
+      assert.ok(!sites.pg.some(site => site.display.includes(`${area} probe`)))
     } finally {
       await rm(shared, { force: true })
       await rm(runner, { force: true })
