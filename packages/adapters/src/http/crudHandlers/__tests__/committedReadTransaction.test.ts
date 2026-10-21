@@ -7,6 +7,8 @@ import { CRUD } from "../../crud"
 import { allowAllAbacBundle, allowAllModuleFacts, canonicalRequestNormalization, trustedSession } from "../../__tests__/canonicalRequest"
 
 type Row = { id: string; tenantId?: string; name: string; version: number }
+type TenantRow = { id: string; tenantId: string; name: string; version: number }
+type PlatformRow = { id: string; name: string; version: number }
 
 /**
  * A provider that behaves like PostgreSQL/MySQL: a write is visible only to
@@ -63,11 +65,11 @@ function handlersFor(kind: "tenant" | "platform", provider: PersistenceProvider)
   const validation = { createBody: z.object({ name: z.string() }), updateBody: z.object({ name: z.string() }), idParams: z.object({ id: z.string() }) }
   const fields = { id: { type: "string" }, name: { type: "string" }, version: { type: "number" } } as const
   return kind === "tenant"
-    ? CRUD(defineEntity<Row, { name: string }, { name: string }>({
+    ? CRUD(defineEntity<TenantRow, { name: string }, { name: string }>({
         moduleKey, entity: { name: "isolatedTenant", primaryKey: "id", tenantField: "tenantId", versionField: "version", fields: { ...fields, tenantId: { type: "string" } } },
         entityScope: { kind: "tenant" }, policy: { skipCapabilityCheck: true }, cache: false, audit: false, validation,
       }), runtime as never)
-    : CRUD(defineEntity<Row, { name: string }, { name: string }>({
+    : CRUD(defineEntity<PlatformRow, { name: string }, { name: string }>({
         moduleKey, entity: { name: "isolatedPlatform", primaryKey: "id", versionField: "version", fields },
         entityScope: { kind: "platform", acknowledged: true }, policy: { skipCapabilityCheck: true }, cache: false, audit: false, validation,
       }), runtime as never)
