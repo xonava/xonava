@@ -1,5 +1,5 @@
 import { ZodError } from "zod"
-import { FrameworkCoreError, type FrameworkCoreErrorCode } from "@xonava/core/domain"
+import { FrameworkCoreError, PublicBusinessError, type FrameworkCoreErrorCode } from "@xonava/core/domain"
 import { InvalidJsonError, RequestBodyNotAcceptedError, RequestBodyTooLargeError, UnsupportedMediaTypeError } from "./requestBody"
 
 export function frameworkJson<T>(data: T, init: ResponseInit = {}) {
@@ -35,6 +35,7 @@ const HTTP_STATUS_BY_FRAMEWORK_CODE: Readonly<Record<FrameworkCoreErrorCode, num
   OUTBOX_SINK_MISSING: 500, OPERATION_CONTEXT_INACTIVE: 500, EFFECT_REGISTRATION_CLOSED: 500,
   EFFECT_COLLECTOR_DISPOSED: 500, EFFECTS_ALREADY_DRAINED: 500,
   TIMEOUT: 504, UNAVAILABLE: 503, CANCELLED: 503,
+  REQUIRED_HEADER_MISSING: 400, PRECONDITION_REQUIRED: 428,
 })
 
 export function frameworkErrorHttpStatus(code: FrameworkCoreErrorCode): number {
@@ -86,7 +87,12 @@ export function createFrameworkErrorHandler(options: FrameworkErrorHandlerOption
       const status = frameworkErrorHttpStatus(error.code)
       if (status >= 500 || status === 401 || status === 403) reportError(error)
       const headers = status === 429 || status === 503 ? retryAfterHeader(error, status) : undefined
-      return json({ error:error.safeMessage,code:error.publicCode }, { status,...(headers?{headers}:{}) })
+      const details = error instanceof PublicBusinessError
+        ? { fields: [...error.fields] }
+        : (error.code === "REQUIRED_HEADER_MISSING" || error.code === "PRECONDITION_REQUIRED") && typeof error.safeMetadata.header === "string"
+          ? { header: error.safeMetadata.header }
+          : undefined
+      return json({ error:error.safeMessage,code:error.publicCode,...(details?{details}:{}) }, { status,...(headers?{headers}:{}) })
     }
 
     if (error instanceof ZodError) {

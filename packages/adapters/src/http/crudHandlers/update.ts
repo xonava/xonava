@@ -7,6 +7,7 @@ import {
   hasRecordDependentFieldWrite,
   markAbacPreImage,
   NotFoundError,
+  PreconditionRequiredError,
   Predicate,
   projectResponseRecord,
   resolveFieldReadOverrides,
@@ -150,7 +151,7 @@ export function createUpdateHandler<
             `Optimistic concurrency for "${entity.name}" requires numeric version field "${config.versionField}"`
           )
         if (typeof incoming !== "number")
-          throw new ConflictError("Version is required for this update")
+          throw new PreconditionRequiredError("If-Match")
         if (incoming !== existingVersion)
           throw new ConflictError(
             "This record was modified by another user. Please reload and try again."
@@ -217,7 +218,7 @@ export function createUpdateHandler<
               `Optimistic concurrency for "${entity.name}" requires numeric version field "${config.versionField}"`,
             )
           }
-          if (typeof incoming !== "number") throw new ConflictError("Version is required for this update")
+          if (typeof incoming !== "number") throw new PreconditionRequiredError("If-Match")
           if (incoming !== existingVersion) {
             throw new ConflictError("This record was modified by another user. Please reload and try again.")
           }
@@ -424,7 +425,7 @@ export function createUpdateHandler<
        const headerValue = config ? request.headers.get("if-match") : null
        const expectedVersion = config ? parseIfMatchVersion(headerValue) : undefined
        if (config && (expectedVersion === undefined || !Number.isSafeInteger(expectedVersion) || expectedVersion < 0))
-         throw new ConflictError("Version is required for this update")
+         throw headerValue === null || headerValue.trim() === "" ? new PreconditionRequiredError("If-Match") : new ConflictError("Version is required for this update")
        const patch = rawPatch as B
        assertProtectedUpdateFields(entity, patch as object)
        return {
