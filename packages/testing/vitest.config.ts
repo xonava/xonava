@@ -21,6 +21,7 @@ export default defineConfig({
     "@xonava/core/aggregate": path.resolve(import.meta.dirname, "../core/src/aggregate/index.ts"),
     "@xonava/core/rules": path.resolve(import.meta.dirname, "../core/src/rules/index.ts"),
     "@xonava/core/object-store": path.resolve(import.meta.dirname, "../core/src/object-store/index.ts"),
+    "@xonava/core/storage": path.resolve(import.meta.dirname, "../core/src/storage/index.ts"),
     "@xonava/core/serialization": path.resolve(import.meta.dirname, "../core/src/serialization/index.ts"),
     "@xonava/core/workflow": path.resolve(import.meta.dirname, "../core/src/workflow/index.ts"),
     "@xonava/core": path.resolve(import.meta.dirname, "../core/src/index.ts"),
