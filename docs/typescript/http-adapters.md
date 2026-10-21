@@ -183,6 +183,28 @@ Arguments: `entity` is the descriptor (its `versionField` and declared fields); 
 
 These are internal outcomes, not HTTP responses. Do not let an unauthorized client tell `outside-read-scope` from `deleted`: answer both with the same response (built-in create and update return `{ "success": true, "reason": "CREATED_OUTSIDE_READ_SCOPE" }` or `UPDATED_OUTSIDE_READ_SCOPE` and no entity content). In `recoverCommittedResponse`, return `null` for every kind other than `record`; the framework then stores a stable 409 for the receipt. Separating `deleted` from `outside-read-scope` costs one extra read, issued only when the scoped read finds nothing and only with the structural scope (tenant, application and active-row filters), never an unscoped read.
 
+## Hand-written endpoints
+
+A read endpoint that is neither CRUD nor a write handler (a lookup list, a report) can reuse the request and admission steps of the built-in handlers instead of re-implementing them. Both helpers are exported from `@xonava/adapters/http`.
+
+```ts
+import { admitModuleAction, resolveEndpointRequestContext, resolveRequestMetadata } from "@xonava/adapters/http"
+
+const requestMetadata = resolveRequestMetadata(request)
+const context = await resolveEndpointRequestContext({
+  request,
+  routeKey: "warehouseOptions", // a key of requestNormalization.routeBindings
+  normalization: requestNormalization,
+  requestMetadata, // optional: omit to have the ids generated
+})
+const bundle = await adapterDeps.resolveAbacBundle({ moduleKey: "shop.orders", context })
+admitModuleAction({ adapterDeps, moduleKey: "shop.orders", action: "assignWarehouse", context, bundle })
+```
+
+- `resolveEndpointRequestContext({ request, routeKey, normalization, adapterDeps?, requestMetadata?, pathParameters? })` returns the trusted `RequestContext` (trusted session, scope resolution, admission evidence) exactly as CRUD and write handlers build it. A missing route binding is a `ConfigurationError`; a request without a login on a route that does not allow anonymous callers is refused with 401.
+- `admitModuleAction({ adapterDeps, moduleKey, action, context, bundle, capabilityKey? })` applies the module and ABAC collection admission CRUD uses. A missing, unverified or other-module bundle, a deny, and a disabled module, action or capability are refused with 403. A conditional grant admits, because the per-record condition belongs to the action itself.
+- `routeBindings` needs only the keys you use. The five CRUD keys (`list`, `detail`, `create`, `update`, `delete`) are required only by a CRUD handler whose route is enabled; `CRUD(...)` throws a `ConfigurationError` naming the missing key at construction. See [supporting reads](../guides/supporting-reads.md) for a complete example.
+
 ## Method and body matrix
 
 Every write handler (CRUD `create`, `update` and `delete`, and `createFrameworkWriteHandler`) reads its body with `parseJsonBodySafely` (`packages/adapters/src/http/requestBody.ts`) before session, CSRF or authorization checks. Refusals are mapped by `createFrameworkErrorHandler` (`packages/adapters/src/http/handleFrameworkCoreError.ts`). List and detail handlers never read a body: they parse only the query and path parameters.

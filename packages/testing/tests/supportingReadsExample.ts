@@ -5,14 +5,14 @@ import { z } from "zod"
 import {
   createFrameworkErrorHandler,
   createFrameworkWriteHandler,
-  normalizeFrameworkRequest,
+  admitModuleAction,
   parseUniqueQueryParameters,
+  resolveEndpointRequestContext,
   resolveRequestMetadata,
 } from "@xonava/adapters/http"
 import type { FrameworkAdapterDeps, FrameworkRequestNormalization } from "@xonava/adapters/server"
 import type { CompiledRouteBinding, CompiledScopeResolverBinding } from "@xonava/core/bootstrap"
 import {
-  assertFrameworkAuthorization,
   createAbacAuthorizer,
   createAbacBundle,
   defineAbacModule,
@@ -232,12 +232,6 @@ export function ordersRequestNormalization(
     routeBindings: {
       assignWarehouse: routeBinding("assignWarehouse"),
       warehouseOptions: routeBinding("warehouseOptions"),
-      // The type requires the five CRUD keys even though no CRUD handler is built here.
-      list: routeBinding("warehouseOptions"),
-      detail: routeBinding("warehouseOptions"),
-      create: routeBinding("assignWarehouse"),
-      update: routeBinding("assignWarehouse"),
-      delete: routeBinding("assignWarehouse"),
     },
     resolverBindings: new Map([[resolverBinding.key, resolverBinding]]),
     async resolveTrustedSession({ request }) {
@@ -280,26 +274,6 @@ export function ordersRequestNormalization(
 // --8<-- end
 
 // --8<-- admission
-/** Builds the trusted request context for a hand-written endpoint, as the built-in handlers do. */
-async function requestContextFor(
-  normalization: FrameworkRequestNormalization,
-  request: Request,
-  routeKey: string,
-  metadata: { requestId: string; correlationId: string },
-): Promise<RequestContext> {
-  const route = normalization.routeBindings[routeKey]!
-  const session = await normalization.resolveTrustedSession({ request, route })
-  return normalizeFrameworkRequest({
-    ...metadata,
-    route,
-    resolverBindings: normalization.resolverBindings,
-    ...(session === undefined ? {} : { session }),
-    admit: ({ identity, scope, scopeId }) => normalization.resolveAdmissionEvidence({ request, route, identity, scope, scopeId }),
-    signal: request.signal,
-    host: new URL(request.url).hostname,
-  })
-}
-
 /**
  * Admits a supporting read with the PARENT action. It resolves a fresh bundle for the
  * parent module and asks the same question the save will ask: may this caller run
@@ -309,18 +283,7 @@ async function requestContextFor(
  */
 export async function admitParentAction(deps: FrameworkAdapterDeps, context: RequestContext, action: string): Promise<void> {
   const bundle = await deps.resolveAbacBundle({ moduleKey: ORDERS, context })
-  if (!bundle) throw new ForbiddenError("ABAC authorization bundle unavailable")
-  assertFrameworkAuthorization({
-    facts: {
-      ...deps.resolveModuleAuthorizationFacts?.({ moduleKey: ORDERS, context }),
-      scope: "tenant",
-      ownerAuthority: false,
-      impersonated: false,
-    },
-    moduleKey: ORDERS,
-    action,
-    bundle,
-  })
+  admitModuleAction({ adapterDeps: deps, moduleKey: ORDERS, action, context, bundle })
 }
 // --8<-- end
 
@@ -347,7 +310,12 @@ export function createWarehouseOptionsHandler(args: {
       return response
     }
     try {
-      const context = await requestContextFor(args.requestNormalization, request, "warehouseOptions", metadata)
+      const context = await resolveEndpointRequestContext({
+        request,
+        routeKey: "warehouseOptions",
+        normalization: args.requestNormalization,
+        requestMetadata: metadata,
+      })
       if (context.scope.kind !== "tenant") throw new ForbiddenError("A tenant-scoped session is required")
       await admitParentAction(args.adapterDeps, context, "assignWarehouse")
 
