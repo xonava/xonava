@@ -2,7 +2,7 @@ import mysql from "mysql2/promise"
 import type { Pool, RowDataPacket } from "mysql2/promise"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { DrizzleMySqlJobStore } from "@xonava/adapters/drizzle-mysql"
-import { applyMySqlJobPartitionHeadIndexMigration, readMySqlMigrationStatements } from "../../fixtures/mysql/bootstrap.js"
+import { applyMySqlJobPartitionHeadIndexMigration, applyMySqlJobScopeKeyMigration, readMySqlMigrationStatements } from "../../fixtures/mysql/bootstrap.js"
 import { mysqlCertificationUrl } from "./database.js"
 
 /**
@@ -25,6 +25,7 @@ describe("MySQL job partition-head index", () => {
     pool = mysql.createPool({ uri: url.toString(), connectionLimit: 4 })
     // 0001 creates the jobs table without the index; only the tables the claim touches are needed here.
     for (const statement of await readMySqlMigrationStatements("0001_framework.sql")) if (/\b(jobs|job_executions)\b/.test(statement.split("(")[0]!)) await pool.query(statement)
+    await applyMySqlJobScopeKeyMigration(pool)
     // 20 000 rows: mostly finished, 1 500 due in partitions of ~2 rows, 1 500 running (one per partition, as the unique key demands).
     const rows: string[] = []
     for (let i = 0; i < 20_000; i++) {

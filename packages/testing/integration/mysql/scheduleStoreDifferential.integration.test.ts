@@ -6,11 +6,11 @@ import type { Pool, RowDataPacket } from "mysql2/promise"
 import { afterAll, beforeAll, describe, it } from "vitest"
 import { DrizzleMySqlJobStore, DrizzleMySqlScheduleStore } from "@xonava/adapters/drizzle-mysql"
 import { mysqlCertificationUrl } from "./database.js"
-import { applyMySqlScheduleNextRunNullableMigration } from "../../fixtures/mysql/bootstrap.js"
+import { applyMySqlJobScopeKeyMigration, applyMySqlScheduleNextRunNullableMigration } from "../../fixtures/mysql/bootstrap.js"
 import { assertConcurrentClaimInvariants, assertScheduleStoreMatchesReference, scaledTimeoutMs, type ScheduleDriver } from "../shared/scheduleStoreDifferential.js"
 import {
   assertClaimWithoutNowUsesTheClock, assertDispatcherEnqueuesEachOccurrenceOnce, assertElapsedLeaseExpiryFencesOldOwner, assertLiveClaimsDoNotConsumeClaimLimit,
-  assertNullNextRunAtRetiresSchedule, assertRenewalNeverShortensLease,
+  assertNullNextRunAtRetiresSchedule, assertRenewalNeverShortensLease, assertScheduleScopeKeysRoundTrip,
 } from "../shared/scheduleStoreDifferentialScenarios.js"
 
 // Own database: other suites share this server.
@@ -38,6 +38,7 @@ describe("MySQL schedule store differential", () => {
     }
     // Later fixture migrations alter these tables (0003 makes schedules.next_run_at nullable).
     await applyMySqlScheduleNextRunNullableMigration(pool)
+    await applyMySqlJobScopeKeyMigration(pool)
     jobStore = new DrizzleMySqlJobStore(pool)
     driver = {
       label: "mysql", store: new DrizzleMySqlScheduleStore(pool), nullableNextRunAt: true,
@@ -54,6 +55,7 @@ describe("MySQL schedule store differential", () => {
   it("matches the reference store over random lifecycle sequences", async () => { await assertScheduleStoreMatchesReference(driver) }, scaledTimeoutMs(120_000))
   it("holds the claim invariants under concurrent workers", async () => { await assertConcurrentClaimInvariants(driver) }, scaledTimeoutMs(120_000))
   it("does not let live claims use up another worker's claim limit", async () => { await assertLiveClaimsDoNotConsumeClaimLimit(driver) })
+  it("round-trips platform and system keys on claim and decodes key-less rows to the defaults", async () => { await assertScheduleScopeKeysRoundTrip(driver) })
   it("never shortens a lease on renewal", async () => { await assertRenewalNeverShortensLease(driver) })
   it("claims by the real clock when no time is given", async () => { await assertClaimWithoutNowUsesTheClock(driver) })
   it("fences the old owner after a lease really runs out", async () => { await assertElapsedLeaseExpiryFencesOldOwner(driver) })
