@@ -46,6 +46,16 @@ export function tenantIdFromContext(context: RequestContext): string | undefined
   return context.scope.kind === "tenant" ? context.scope.tenantId : undefined
 }
 
+/** Fails at handler construction when an enabled CRUD handler has no route binding. */
+export function assertCrudRouteBinding(
+  normalization: FrameworkRequestNormalization,
+  routeKey: "list" | "detail",
+  moduleKey: string,
+): void {
+  if (!Object.hasOwn(normalization.routeBindings, routeKey))
+    throw new ConfigurationError(`CRUD handler for "${moduleKey}" has no route binding "${routeKey}"`)
+}
+
 export async function normalizeCrudRequest(args: {
   request: Request
   routeKey: string
