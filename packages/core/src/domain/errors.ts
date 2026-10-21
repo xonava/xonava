@@ -213,6 +213,8 @@ export class BusinessRuleError extends FrameworkCoreError {
 }
 
 const PUBLIC_CODE_PATTERN = /^[A-Z][A-Z0-9_]{2,63}$/
+/** Codes transports answer with before an operation runs; an application code must not collide with them. */
+const TRANSPORT_RESERVED_PUBLIC_CODES: ReadonlySet<string> = new Set(["INVALID_JSON", "REQUEST_BODY_TOO_LARGE", "UNSUPPORTED_MEDIA_TYPE", "BODY_NOT_ACCEPTED"])
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/
 
@@ -235,7 +237,7 @@ export class PublicBusinessError extends BusinessRuleError {
   constructor(input: PublicBusinessErrorInput, details?: unknown) {
     const { publicCode, publicMessage, fields = [] } = input ?? ({} as PublicBusinessErrorInput)
     if (typeof publicCode !== "string" || !PUBLIC_CODE_PATTERN.test(publicCode)) throw new ConfigurationError("publicCode must match /^[A-Z][A-Z0-9_]{2,63}$/")
-    if (Object.hasOwn(ERROR_DEFAULTS, publicCode) || Object.values(ERROR_DEFAULTS).some((d) => d.publicCode === publicCode))
+    if (Object.hasOwn(ERROR_DEFAULTS, publicCode) || Object.values(ERROR_DEFAULTS).some((d) => d.publicCode === publicCode) || TRANSPORT_RESERVED_PUBLIC_CODES.has(publicCode))
       throw new ConfigurationError("publicCode must not equal a framework error code")
     if (typeof publicMessage !== "string" || publicMessage.length < 1 || publicMessage.length > 200 || CONTROL_CHARACTERS.test(publicMessage))
       throw new ConfigurationError("publicMessage must be 1-200 characters without control characters")

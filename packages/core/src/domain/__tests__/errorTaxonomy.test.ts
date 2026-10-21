@@ -51,6 +51,8 @@ describe("error taxonomy", () => {
       ["registry code", { ...valid, publicCode: "FORBIDDEN" }],
       ["registry public code", { ...valid, publicCode: "INTERNAL_SERVER_ERROR" }],
       ["new registry code", { ...valid, publicCode: "PRECONDITION_REQUIRED" }],
+      ["transport code", { ...valid, publicCode: "BODY_NOT_ACCEPTED" }],
+      ["transport json code", { ...valid, publicCode: "INVALID_JSON" }],
       ["empty message", { ...valid, publicMessage: "" }],
       ["long message", { ...valid, publicMessage: "x".repeat(201) }],
       ["control character", { ...valid, publicMessage: "bad\nmessage" }],
