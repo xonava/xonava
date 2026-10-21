@@ -7,6 +7,7 @@ import { dispatchWorkflows, type WorkflowDispatchOptions } from "../../workflow/
 import type { WorkflowFence, WorkflowStore } from "../../workflow/store"
 import { isWorkflowSignalWait, oldestPendingWorkflowSignal, resumeWorkflowFromBufferedSignal } from "../../workflow/workflowStateMachine"
 import type { WorkflowInstance } from "../../workflow/types"
+import { TIMING_SCALE } from "../timing"
 
 /**
  * Signal buffering (docs/spec/workflow.md, "Signals"): receipts are durable, each is consumed at most once, a delivery to a waiting
@@ -15,7 +16,7 @@ import type { WorkflowInstance } from "../../workflow/types"
  * the structural invariants (signalLedgerViolations) under concurrent dispatchers, interleaved deliveries, and lease loss.
  */
 
-vi.setConfig({ testTimeout: 60_000 * Math.max(1, scaledRuns(100) / 100) })
+vi.setConfig({ testTimeout: 60_000 * Math.max(1, scaledRuns(100) / 100) * TIMING_SCALE })
 
 const SCOPE = { kind: "tenant", tenantId: "t1" } as const
 const IDS = ["i0", "i1", "i2"] as const

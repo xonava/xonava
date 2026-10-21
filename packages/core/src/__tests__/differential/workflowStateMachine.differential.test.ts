@@ -10,9 +10,10 @@ import {
 } from "../../workflow/workflowStateMachine"
 import { WorkflowDefinitionError, WorkflowStateError } from "../../workflow/workflowErrors"
 import type { WorkflowFailure, WorkflowInstance, WorkflowStepResult } from "../../workflow/types"
+import { TIMING_SCALE } from "../timing"
 
 // Property runs scale with DIFFERENTIAL_SCALE; so does the time they may take.
-vi.setConfig({ testTimeout: 60_000 * Math.max(1, scaledRuns(100) / 100) })
+vi.setConfig({ testTimeout: 60_000 * Math.max(1, scaledRuns(100) / 100) * TIMING_SCALE })
 
 /**
  * The workflow state machine against an independent reference transition table

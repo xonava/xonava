@@ -5,6 +5,7 @@ import { buildWorld, generateWorld, LEASE_MS, STEP_TIMEOUT_MS, stableJson, type 
 import { ModelDispatcher, type ModelCounts, type ModelRow } from "./workflowModel"
 import { dispatchWorkflows, type WorkflowDispatchResult } from "../../workflow/workflowDispatcher"
 import type { WorkflowInstance } from "../../workflow/types"
+import { TIMING_SCALE } from "../timing"
 
 /**
  * Model-based differential for the workflow dispatcher: random interleavings of
@@ -15,7 +16,7 @@ import type { WorkflowInstance } from "../../workflow/types"
 
 const IDS = ["i0", "i1", "i2", "i3", "i4"] as const
 // Property runs scale with DIFFERENTIAL_SCALE; so does the time they may take.
-vi.setConfig({ testTimeout: 60_000 * Math.max(1, scaledRuns(100) / 100) })
+vi.setConfig({ testTimeout: 60_000 * Math.max(1, scaledRuns(100) / 100) * TIMING_SCALE })
 
 const SAMPLES = [0, 0.25, 0.5, 0.999] as const
 

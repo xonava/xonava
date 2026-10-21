@@ -12,6 +12,7 @@ import {
   computeScheduleOccurrences, createIntlCronTimezoneAdapter, getNextOccurrence, matchesCron, parseCronExpression, shouldFireSchedule,
 } from "../../execution/scheduleCalculator"
 import type { CronDisambiguation, ScheduleDefinition } from "../../execution/types"
+import { TIMING_SCALE } from "../timing"
 
 /**
  * Differential suite for the cron schedule calculator against a brute-force
@@ -20,7 +21,7 @@ import type { CronDisambiguation, ScheduleDefinition } from "../../execution/typ
  */
 
 // Release certification runs every property at a multiple of its base run count.
-vi.setConfig({ testTimeout: 120_000 * Math.max(1, scaledRuns(100) / 100) })
+vi.setConfig({ testTimeout: 120_000 * Math.max(1, scaledRuns(100) / 100) * TIMING_SCALE })
 
 const MINUTE = 60_000
 const DAY = 86_400_000
