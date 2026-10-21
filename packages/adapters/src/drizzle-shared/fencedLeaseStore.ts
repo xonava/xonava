@@ -19,7 +19,8 @@ export class FencedLeaseStore implements LeasePort {
     })
   }
   renew(lease: FencedLease, durationMs: number): Promise<FencedLease> { const duration = validateLeaseDuration(durationMs); return this.backend.transition(lease.resource, (current, now) => { if (!sameOwner(current, lease, now)) throw new StaleClaimError(); const next = { ...current!, expiresAt: new Date(now.getTime() + duration).toISOString() }; return { lease: next, result: next } }) }
-  release(lease: FencedLease): Promise<void> { return this.backend.transition(lease.resource, (current, now) => { if (!sameOwner(current, lease, now)) throw new StaleClaimError(); return { lease: null, result: undefined } }) }
+  /** Ends the lease by expiring it now rather than deleting the row, so the next grant still continues the fencing token. */
+  release(lease: FencedLease): Promise<void> { return this.backend.transition(lease.resource, (current, now) => { if (!sameOwner(current, lease, now)) throw new StaleClaimError(); return { lease: { ...current!, expiresAt: now.toISOString() }, result: undefined } }) }
   async assertCurrent(lease: FencedLease): Promise<void> { const { lease: current, backendNow } = await this.backend.read(lease.resource); if (!sameOwner(current, lease, backendNow)) throw new StaleClaimError() }
 }
 

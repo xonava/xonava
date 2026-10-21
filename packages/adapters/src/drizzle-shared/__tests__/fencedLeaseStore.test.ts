@@ -21,6 +21,6 @@ describe.each([["PG", createDrizzlePgLeaseStore], ["D1", createDrizzleD1LeaseSto
   it("takes over expired leases with monotonic fencing and rejects old effects", async () => {
     const backend = new Backend(); const store = factory(backend); const first = await store.acquire(resource, "a", 100)
     backend.now = new Date("2026-09-11T00:00:00.100Z"); const second = await store.acquire(resource, "b", 100)
-    expect(second).toMatchObject({ fencingToken: 2, claimToken: "claim-2" }); await expect(store.assertCurrent(first!)).rejects.toMatchObject({ code: "STALE_CLAIM" }); await store.release(second!); expect(backend.lease).toBeNull()
+    expect(second).toMatchObject({ fencingToken: 2, claimToken: "claim-2" }); await expect(store.assertCurrent(first!)).rejects.toMatchObject({ code: "STALE_CLAIM" }); await store.release(second!); expect(backend.lease).toMatchObject({ fencingToken: 2, expiresAt: backend.now.toISOString() }); await expect(store.assertCurrent(second!)).rejects.toMatchObject({ code: "STALE_CLAIM" }); expect(await store.acquire(resource, "c", 100)).toMatchObject({ fencingToken: 3 })
   })
 })
