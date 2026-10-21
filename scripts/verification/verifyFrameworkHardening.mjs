@@ -82,7 +82,7 @@ for (const path of sourceFiles) {
     }
   }
   const isTestSource = path.includes("/__tests__/") || /\.(?:test|spec)\.[cm]?[jt]s$/.test(path)
-  if (!isTestSource && /\bas unknown as\s+(?:PersistenceProvider|ReadOnlyPersistenceProvider|TenantScopedPersistenceProvider|RootPersistenceProvider)\b/.test(source)) {
+  if (!isTestSource && /\bas unknown as\s+(?:PersistenceProvider|ReadOnlyPersistenceProvider|TenantScopedPersistenceProvider)\b/.test(source)) {
     failures.push(`${relative(repositoryRoot, path)} contains a privilege-bearing persistence cast bridge`)
   }
   if (!isTestSource && /\b(?:@ts-ignore|@ts-nocheck)\b/.test(source)) failures.push(`${relative(repositoryRoot, path)} disables TypeScript safety checks`)

@@ -37,6 +37,7 @@ table names, and apply them before you deploy the new adapters.
 | MySQL      | `0003_schedule_next_run_nullable.sql`  | Yes; without it a schedule with no future occurrence cannot retire                             |
 | MySQL      | `0004_job_partition_head_index.sql`    | Yes; without it each job claim candidate rescans the jobs table                                |
 | MySQL      | `0005_job_scope_key.sql`               | Yes; the job and schedule stores read and write `scope_key`                                    |
+| MySQL      | `0006_byte_exact_identifiers.sql`      | Yes; without it keys differing by case or trailing space collide and non-ASCII sequence/temporal scopes fail |
 | D1         | `0002_workflow_signal_buffering.sql`   | Yes                                                                                           |
 | D1         | `0003_job_partition_head_index.sql`    | Yes; without it each job claim candidate rescans the jobs table                                |
 | D1         | `0004_lease_records.sql`               | Only if you use `createD1LeaseStore` / `D1AtomicLeaseBackend`                                  |
@@ -54,6 +55,17 @@ transition, so an un-migrated workflow table breaks every workflow commit, not o
 - **MySQL `0002` rebuilds tables** through `MODIFY` statements. Plan a maintenance window.
 - **Create PostgreSQL indexes with `CREATE INDEX CONCURRENTLY`** in production. It cannot run inside a
   transaction or a `DO` block.
+- **MySQL `0006` rebuilds every framework table** (`MODIFY` of identifier columns to `utf8mb4_0900_bin`, plus a new
+  primary key on `sequences` and `temporal_*`). Plan a maintenance window; each table is locked for writes while it
+  rebuilds. The `MODIFY` statements are safe to re-apply; the `sequences` / `temporal_*` statements add `scope_hash`
+  and must run once. Comparison becomes stricter (case-sensitive, no padding), so existing rows cannot start to
+  violate a unique key and the migration cannot fail on a duplicate; the pre-check is therefore informational. The
+  old collation already merged `K`/`k` and `'a'`/`'a '` into one row, so no duplicate exists to find, but those
+  merged rows are now distinct identities. To see where callers relied on the merge, look for spellings that
+  differ only by case or padding, for example ``SELECT `scope`, `key` FROM idempotency WHERE `key` <> TRIM(`key`)
+  OR `scope` <> TRIM(`scope`)`` (padded identifiers) and ``SELECT LOWER(`key`), COUNT(*) FROM idempotency GROUP BY
+  LOWER(`scope`), LOWER(`key`) HAVING COUNT(DISTINCT `key`) > 1`` (the second returns rows only on a database that
+  was already case-sensitive). Clients must send each identity in one spelling, as before.
 - **MySQL `0003` is safe to re-apply.** PostgreSQL and D1 already allow a `NULL` `next_run_at`.
 - **The workflow migration backfills existing receipts** as consumed at their delivery time, in
   delivery order. Otherwise old receipts would become pending and wake future waits.

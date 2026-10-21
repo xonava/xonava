@@ -145,6 +145,7 @@ export class IdempotencyRunner {
         const ok = this.model.renew(aim.slot, aim.fingerprint, aim.tokenSym, op.badLease === true)
         const actual = await attempt(() => store.renew({ scope: aim.scope, key: aim.key, fingerprint: aim.fingerprint, token: aim.token, leaseDurationMs: op.badLease ? -5 : HOUR }))
         if (actual.ok !== ok) this.fail(index, op, `renew: expected ${ok ? "success" : "failure"}, got ${actual.ok ? "success" : `${errorName(actual.error)}`}`)
+        if (!actual.ok && !op.badLease && errorName(actual.error) !== "ConflictError") this.fail(index, op, `renew: a lost fence must surface as ConflictError, got ${errorName(actual.error)}`)
         break
       }
       case "abandon": {
@@ -171,6 +172,7 @@ export class IdempotencyRunner {
         const ok = this.model.complete(aim.slot, aim.fingerprint, aim.tokenSym, op.result)
         const actual = await attempt(() => store.complete({ scope: aim.scope, key: aim.key, fingerprint: aim.fingerprint, token: aim.token, result: op.result }))
         if (actual.ok !== ok) this.fail(index, op, `complete: expected ${ok ? "success" : "failure"}, got ${actual.ok ? "success" : `${errorName(actual.error)}`}`)
+        if (!actual.ok && true && errorName(actual.error) !== "ConflictError") this.fail(index, op, `complete: a lost fence must surface as ConflictError, got ${errorName(actual.error)}`)
         break
       }
       case "claim": await this.claim(index, op); break
@@ -180,6 +182,7 @@ export class IdempotencyRunner {
         const ok = this.model.ack(aim.slot, aim.fingerprint, aim.tokenSym, claimSym)
         const actual = await attempt(() => store.ackClaimedInvalidation({ scope: aim.scope, key: aim.key, fingerprint: aim.fingerprint, token: aim.token, claimToken: this.realClaimToken(claimSym) }))
         if (actual.ok !== ok) this.fail(index, op, `ack: expected ${ok ? "success" : "failure"}, got ${actual.ok ? "success" : `${errorName(actual.error)}`}`)
+        if (!actual.ok && true && errorName(actual.error) !== "ConflictError") this.fail(index, op, `ack: a lost fence must surface as ConflictError, got ${errorName(actual.error)}`)
         break
       }
       case "completeClaimed": {
@@ -188,6 +191,7 @@ export class IdempotencyRunner {
         const ok = this.model.completeClaimed(aim.slot, aim.fingerprint, aim.tokenSym, claimSym, op.result)
         const actual = await attempt(() => store.completeClaimedInvalidation({ scope: aim.scope, key: aim.key, fingerprint: aim.fingerprint, token: aim.token, claimToken: this.realClaimToken(claimSym), result: op.result }))
         if (actual.ok !== ok) this.fail(index, op, `completeClaimed: expected ${ok ? "success" : "failure"}, got ${actual.ok ? "success" : `${errorName(actual.error)}`}`)
+        if (!actual.ok && true && errorName(actual.error) !== "ConflictError") this.fail(index, op, `completeClaimed: a lost fence must surface as ConflictError, got ${errorName(actual.error)}`)
         break
       }
       case "expireLease": {
@@ -343,7 +347,7 @@ export function defineIdempotencyRegressions(driver: IdempotencyDifferentialDriv
     await driver.expireLease(REQUEST.scope, REQUEST.key)
     const fresh = await acquireOwned(driver)
     expect(fresh).not.toBe(stale)
-    await expect(driver.store.renew({ ...REQUEST, token: stale })).rejects.toBeDefined()
+    await expect(driver.store.renew({ ...REQUEST, token: stale })).rejects.toMatchObject({ name: "ConflictError" })
     await expect(driver.commit({ ...REQUEST, token: stale })).rejects.toMatchObject({ name: "ConflictError" })
     expect(await driver.store.acquire(REQUEST)).toEqual({ outcome: "in-progress" })
     await driver.commit({ ...REQUEST, token: fresh })

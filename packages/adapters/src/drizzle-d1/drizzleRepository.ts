@@ -373,8 +373,16 @@ export function createDrizzleRepository<T extends SelectableRow, TId = string>(a
           ? and(eq(primaryKeyColumn, id as never), eq(versionColumn!, options.optimisticConcurrency.expectedVersion as never))
           : eq(primaryKeyColumn, id as never))
 
-      if (getAffectedRows(result) === 0 && options?.idempotent !== true) {
-        throw new NotFoundError(`${args.entity.name} record not found`)
+      if (getAffectedRows(result) === 0) {
+        if (options?.optimisticConcurrency) {
+          const existing = await fetchMatchingPrimaryKeys({ db: args.db, table: args.table, whereClause: eq(primaryKeyColumn, id as never), primaryKeyColumn })
+          if (existing.length > 0) {
+            throw new OptimisticConcurrencyError(
+              `${args.entity.name} version mismatch: expected version ${options.optimisticConcurrency.expectedVersion}`,
+            )
+          }
+        }
+        if (options?.idempotent !== true) throw new NotFoundError(`${args.entity.name} record not found`)
       }
     },
     async deleteWhere(filter, options?: DeleteOptions): Promise<{ deletedCount: number }> {
@@ -398,9 +406,13 @@ export function createDrizzleRepository<T extends SelectableRow, TId = string>(a
 
       const deletedCount = getAffectedRows(result)
       if (options?.optimisticConcurrency && deletedCount === 0) {
-        throw new OptimisticConcurrencyError(
-           `${args.entity.name} version mismatch: expected version ${options.optimisticConcurrency.expectedVersion}`,
-        )
+        const existing = await fetchMatchingPrimaryKeys({ db: args.db, table: args.table, whereClause: compiledWhere, primaryKeyColumn })
+        if (existing.length > 0) {
+          throw new OptimisticConcurrencyError(
+             `${args.entity.name} version mismatch: expected version ${options.optimisticConcurrency.expectedVersion}`,
+          )
+        }
+        throw new NotFoundError(`${args.entity.name} record not found`)
       }
       return { deletedCount }
     },
