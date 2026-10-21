@@ -14,7 +14,7 @@
     ],
     "@xonava/testing": [
       ".", "./abac", "./contracts/atomic-batch", "./contracts/cache-adapter",
-      "./contracts/persistence-provider", "./contracts/shared-conformance", "./predicates",
+      "./contracts/object-store", "./contracts/persistence-provider", "./contracts/shared-conformance", "./predicates",
       "./repositories"
     ]
   }

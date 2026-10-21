@@ -59,6 +59,7 @@ runPersistenceProviderContractTests("my provider", {
 | `@xonava/testing/contracts/persistence-provider` | Persistence provider contract suite |
 | `@xonava/testing/contracts/atomic-batch` | Atomic batch contract suite |
 | `@xonava/testing/contracts/cache-adapter` | Cache adapter contract suite |
+| `@xonava/testing/contracts/object-store` | Object store contract suite |
 | `@xonava/testing/contracts/shared-conformance` | Shared conformance suites for idempotency, outbox replay, audit, cache generation, atomic rollback, and tenant OCC |
 
 Only the paths in the package `exports` map are public. Do not deep-import `src` or `dist`.
