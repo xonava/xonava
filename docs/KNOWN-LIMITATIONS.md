@@ -32,12 +32,15 @@ table names, and apply them before you deploy the new adapters.
 | PostgreSQL | `0002_workflow_signal_buffering.sql`   | Yes                                                                                           |
 | PostgreSQL | `0003_job_partition_head_index.sql`    | Yes; without it each job claim candidate rescans the jobs table                                |
 | PostgreSQL | `0004_lease_records.sql`               | Only if you use `createPgLeaseStore` / `PgAtomicLeaseBackend`                                  |
+| PostgreSQL | `0005_job_scope_key.sql`               | Only for jobs and schedules with a non-default `platformKey` / `systemKey`; map the column as `scopeKey` |
 | MySQL      | `0002_workflow_signal_buffering.sql`   | Yes                                                                                           |
 | MySQL      | `0003_schedule_next_run_nullable.sql`  | Yes; without it a schedule with no future occurrence cannot retire                             |
 | MySQL      | `0004_job_partition_head_index.sql`    | Yes; without it each job claim candidate rescans the jobs table                                |
+| MySQL      | `0005_job_scope_key.sql`               | Yes; the job and schedule stores read and write `scope_key`                                    |
 | D1         | `0002_workflow_signal_buffering.sql`   | Yes                                                                                           |
 | D1         | `0003_job_partition_head_index.sql`    | Yes; without it each job claim candidate rescans the jobs table                                |
 | D1         | `0004_lease_records.sql`               | Only if you use `createD1LeaseStore` / `D1AtomicLeaseBackend`                                  |
+| D1         | `0005_job_scope_key.sql`               | Only for jobs and schedules with a non-default `platformKey` / `systemKey`; map the column as `scopeKey` |
 
 The workflow migration is not optional. `commit()` writes `resume_signal_id` on every workflow
 transition, so an un-migrated workflow table breaks every workflow commit, not only signal delivery.
@@ -54,6 +57,13 @@ transition, so an un-migrated workflow table breaks every workflow commit, not o
 - **MySQL `0003` is safe to re-apply.** PostgreSQL and D1 already allow a `NULL` `next_run_at`.
 - **The workflow migration backfills existing receipts** as consumed at their delivery time, in
   delivery order. Otherwise old receipts would become pending and wake future waits.
+- **`0005_job_scope_key.sql` adds a nullable `scope_key` column** to `jobs` and `schedules`. It holds the
+  `platformKey` / `systemKey` of platform and system rows, `NULL` for tenant rows and for the framework
+  defaults (`default`, `framework`). Add a `scopeKey` entry to the job and schedule column maps on PostgreSQL
+  and D1. Without the column, the PostgreSQL and D1 stores still work for default-key jobs and refuse to
+  enqueue a non-default key with a `ConfigurationError` (they never store it under the default). MySQL
+  `0005` also rebuilds `jobs` to redefine the generated `active_partition_tenant` column
+  (`COALESCE(tenant_id, scope_key, '')`), so plan a maintenance window; apply it once.
 - **The job partition-head index** covers `(partition_key, scope, tenant_id, status)`. It is partial on
   `partition_key IS NOT NULL` on PostgreSQL and D1.
 
@@ -67,6 +77,15 @@ Instances that resumed before the migration have no `resume_signal_id`. They fal
 receipt by name, which is the previous behaviour.
 
 During a rolling deploy, expect these transitional effects:
+
+- **Platform and system keys.** Apply `0005_job_scope_key.sql` before deploying; old code ignores the
+  nullable column, so migrating first is safe. Rows written before the fix, and default-key rows written by
+  new workers, have `scope_key = NULL` and decode to `default` / `framework` on every version. A job with a
+  non-default key written by a new worker is read by an old worker as the default key, so its
+  `executionScope` is wrong there (claims, leases and fencing are unaffected, because they never read the
+  key). Old workers also treat all platform (or all system) jobs that share a partition key as one
+  partition, which only serializes more than new workers do and never runs two jobs of one key at once.
+  Drain old workers before enqueueing non-default keys.
 
 - **Job fingerprints.** Job fingerprint version 5 is not matched by workers on version 4. An older
   worker that re-enqueues a job without an explicit `maxAttempts`, written by a newer worker, receives

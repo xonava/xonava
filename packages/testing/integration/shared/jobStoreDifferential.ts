@@ -1,6 +1,6 @@
 import { appendFileSync } from "node:fs"
 import { expect, it } from "vitest"
-import type { JobStore, StoredJob, JobTransitionResult } from "@xonava/core/execution"
+import type { JobExecutionScope, JobStore, StoredJob, JobTransitionResult } from "@xonava/core/execution"
 import { forAllAsync, scaledRuns } from "../../../core/src/__tests__/differential/harness.js"
 import { TIMING_SCALE } from "../../../core/src/__tests__/timing.js"
 import {
@@ -30,6 +30,8 @@ export interface RawJobRow {
   correlationId: string | null
   idempotencyKey: string | null
   tenantId: string | null
+  /** The raw scope_key column: the platform/system key, NULL for the framework defaults and tenant rows. */
+  scopeKey: string | null
   scope: string
   jobType: string
   jobVersion: number
@@ -48,6 +50,8 @@ export interface JobStoreDifferentialDriver {
   /** Rewrites the job's lease so it expired one hour ago on the DATABASE clock. */
   expireLease(jobId: string): Promise<void>
   dump(): Promise<RawJobRow[]>
+  /** Rewrites the job row as an older release wrote it: scope_key NULL (no platform/system key). */
+  clearScopeKey(jobId: string): Promise<void>
   executions(ids: string[]): Promise<RawExecutionRow[]>
   /** Every execution-history row of the given jobs. */
   executionsFor(jobIds: string[]): Promise<RawExecutionRow[]>
@@ -136,11 +140,20 @@ interface ObservedState {
   correlationId: string | null
   idempotencyKey: string | null
   tenantId: string | null
+  /** The raw scope_key column: the platform/system key, NULL for the framework defaults and tenant rows. */
+  scopeKey: string | null
   scope: string
   jobType: string
   jobVersion: number
   payload: unknown
   metadata: unknown
+}
+
+/** The persisted form of a stored job's platform/system key (NULL for the defaults and tenant scopes), derived from its decoded scope. */
+function scopeKeyOf(scope: StoredJob["executionScope"]): string | null {
+  if (scope.kind === "platform") return scope.platformKey === "default" ? null : scope.platformKey
+  if (scope.kind === "system") return scope.systemKey === "framework" ? null : scope.systemKey
+  return null
 }
 
 function fromStored(job: StoredJob): ObservedState & { maxAttempts: number | undefined } {
@@ -149,7 +162,7 @@ function fromStored(job: StoredJob): ObservedState & { maxAttempts: number | und
     nextAttemptAt: job.nextAttemptAt?.getTime() ?? null, leaseOwner: job.leaseOwner, claimToken: job.claimToken,
     leaseExpiresAt: job.leaseExpiresAt?.getTime() ?? null, lastError: job.lastError, resultPayload: job.resultPayload,
     startedAt: job.startedAt?.getTime() ?? null, completed: job.completedAt !== null, partitionKey: job.partitionKey,
-    correlationId: job.correlationId, idempotencyKey: job.idempotencyKey, tenantId: job.tenantId, scope: job.scope,
+    correlationId: job.correlationId, idempotencyKey: job.idempotencyKey, tenantId: job.tenantId, scopeKey: scopeKeyOf(job.executionScope), scope: job.scope,
     jobType: job.jobType, jobVersion: job.jobVersion, payload: job.payload, metadata: job.metadata, maxAttempts: job.maxAttempts,
   }
 }
@@ -161,7 +174,7 @@ function fromRaw(row: RawJobRow): ObservedState & { maxAttempts: number | undefi
     status: row.status, attempts: row.attempts, priority: row.priority, runAt: row.runAt, nextAttemptAt: row.nextAttemptAt,
     leaseOwner: row.leaseOwner, claimToken: row.claimToken, leaseExpiresAt: row.leaseExpiresAt, lastError: row.lastError,
     resultPayload: row.resultPayload, startedAt: row.startedAt, completed: row.completedAt !== null, partitionKey: row.partitionKey,
-    correlationId: row.correlationId, idempotencyKey: row.idempotencyKey, tenantId: row.tenantId, scope: row.scope,
+    correlationId: row.correlationId, idempotencyKey: row.idempotencyKey, tenantId: row.tenantId, scopeKey: row.scopeKey, scope: row.scope,
     jobType: row.jobType, jobVersion: row.jobVersion, payload: row.payload, metadata: row.metadata,
     maxAttempts: row.maxAttempts === SENTINEL_MAX ? undefined : row.maxAttempts,
   }
@@ -209,6 +222,7 @@ export class LifecycleRunner {
     check("idempotencyKey", ref.spec.idem ?? null, observed.idempotencyKey)
     check("tenantId", ref.tenantId, observed.tenantId)
     check("scope", ref.scope, observed.scope)
+    check("scopeKey", ref.scopeKey, observed.scopeKey)
     check("jobType", ref.spec.jobType, observed.jobType)
     check("jobVersion", ref.spec.version, observed.jobVersion)
     if (!sameJson(observed.payload, ref.spec.payload)) out.push(`${source}.payload: expected ${canonicalJson(ref.spec.payload)}, got ${JSON.stringify(observed.payload)}`)
@@ -573,6 +587,56 @@ export function defineLifecycleRegressions(driver: JobStoreDifferentialDriver): 
     expect(claimedOne.map((job) => job.id)).toEqual([one.id])
     const claimedTwo = await store.claimDue({ limit: 1, workerId: "w2", leaseDurationMs: HOUR, requester: requesterOf("t2"), now: new Date(T0 + 1) })
     expect(claimedTwo.map((job) => job.id)).toEqual([two.id])
+  })
+
+  it(`platform and system keys round-trip exactly and scope the partition: other keys neither block nor merge (${driver.label})`, async () => {
+    await driver.reset()
+    const { store } = driver
+    const PLATFORM = requesterOf("plat")
+    const enqueue = (requester: typeof PLATFORM | typeof SYSTEM, executionScope: JobExecutionScope, runAt: number) => store.enqueue({
+      requester, job: { executionScope, jobType: "regression", jobVersion: 1, payload: {}, runAt: new Date(runAt), partitionKey: "shared-partition-name" },
+    })
+    const platformDefault = await enqueue(PLATFORM, { kind: "platform", platformKey: "default" }, T0)
+    const platformA = await enqueue(PLATFORM, { kind: "platform", platformKey: "tenantless-a" }, T0 + 1)
+    const platformB = await enqueue(PLATFORM, { kind: "platform", platformKey: "tenantless-b" }, T0 + 2)
+    const platformASecond = await enqueue(PLATFORM, { kind: "platform", platformKey: "tenantless-a" }, T0 + 3)
+    expect(platformA.executionScope).toEqual({ kind: "platform", platformKey: "tenantless-a" })
+    expect(platformDefault.executionScope).toEqual({ kind: "platform", platformKey: "default" })
+    // Three distinct keys share a partition name but are three partitions; the second job of key A waits behind the first.
+    const claimed = await store.claimDue({ limit: 10, workerId: "w1", leaseDurationMs: HOUR, requester: PLATFORM, now: new Date(T0 + 10) })
+    expect(claimed.map((job) => job.id).sort()).toEqual([platformDefault.id, platformA.id, platformB.id].sort())
+    expect(Object.fromEntries(claimed.map((job) => [job.id, job.executionScope]))).toEqual({
+      [platformDefault.id]: { kind: "platform", platformKey: "default" },
+      [platformA.id]: { kind: "platform", platformKey: "tenantless-a" },
+      [platformB.id]: { kind: "platform", platformKey: "tenantless-b" },
+    })
+    expect(await store.claimDue({ limit: 10, workerId: "w2", leaseDurationMs: HOUR, requester: PLATFORM, now: new Date(T0 + 10) })).toEqual([])
+    const doneA = claimed.find((job) => job.id === platformA.id)!
+    expect(await store.markSucceeded({ jobId: doneA.id, workerId: "w1", claimToken: doneA.claimToken!, attempt: doneA.currentAttempt })).toMatchObject({ applied: true })
+    const next = await store.claimDue({ limit: 10, workerId: "w2", leaseDurationMs: HOUR, requester: PLATFORM, now: new Date(T0 + 10) })
+    expect(next.map((job) => job.id)).toEqual([platformASecond.id])
+    expect(next[0]!.executionScope).toEqual({ kind: "platform", platformKey: "tenantless-a" })
+    // The same holds for system keys, and a read by id decodes the exact key as well.
+    const systemDefault = await enqueue(SYSTEM, { kind: "system", systemKey: "framework" }, T0)
+    const systemProbe = await enqueue(SYSTEM, { kind: "system", systemKey: "probe" }, T0 + 1)
+    const systemClaimed = await store.claimDue({ limit: 10, workerId: "w3", leaseDurationMs: HOUR, requester: SYSTEM, now: new Date(T0 + 10) })
+    expect(systemClaimed.map((job) => job.id).sort()).toEqual([systemDefault.id, systemProbe.id].sort())
+    expect((await store.getById({ id: systemProbe.id, requester: SYSTEM }))?.executionScope).toEqual({ kind: "system", systemKey: "probe" })
+  })
+
+  it(`rows written before the scope-key column (scope_key NULL) decode to the framework default keys (${driver.label})`, async () => {
+    await driver.reset()
+    const { store } = driver
+    const platform = await store.enqueue({ requester: requesterOf("plat"), job: { executionScope: { kind: "platform", platformKey: "tenantless-a" }, jobType: "regression", jobVersion: 1, payload: {}, runAt: new Date(T0) } })
+    const system = await store.enqueue({ requester: SYSTEM, job: { executionScope: { kind: "system", systemKey: "probe" }, jobType: "regression", jobVersion: 1, payload: {}, runAt: new Date(T0) } })
+    expect(platform.executionScope).toEqual({ kind: "platform", platformKey: "tenantless-a" })
+    expect(system.executionScope).toEqual({ kind: "system", systemKey: "probe" })
+    await driver.clearScopeKey(platform.id)
+    await driver.clearScopeKey(system.id)
+    expect((await store.getById({ id: platform.id, requester: requesterOf("plat") }))?.executionScope).toEqual({ kind: "platform", platformKey: "default" })
+    expect((await store.getById({ id: system.id, requester: SYSTEM }))?.executionScope).toEqual({ kind: "system", systemKey: "framework" })
+    const claimed = await store.claimDue({ limit: 5, workerId: "w1", leaseDurationMs: HOUR, requester: SYSTEM, now: new Date(T0 + 1) })
+    expect(claimed.map((job) => job.executionScope)).toEqual([{ kind: "system", systemKey: "framework" }])
   })
 
   it(`a busy partition does not starve other jobs behind it at claim limit 1 (${driver.label})`, async () => {
