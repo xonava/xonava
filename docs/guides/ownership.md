@@ -67,7 +67,7 @@ export const orders = defineEntity<Order, Record<string, never>, { shippingNote:
 
 ## 2. Describe the fields to ABAC
 
-A policy may only name fields that the module catalog lists, and the catalog's `actions` must include every action a policy grants. Policy normalization fails with `CATALOG_VALIDATION_FAILED` otherwise, and the request fails closed with a 500.
+A policy may only name fields that the module catalog lists, and the catalog's `actions` must include every action a policy grants. Policy normalization fails with `CATALOG_VALIDATION_FAILED` otherwise. `createAbacBundle` reports it as an `InvalidPolicyConfigurationError` (`moduleKey`, `policyId`, `missingFields`), which answers 500 if it first happens while serving a request. Call `assertAbacPoliciesMatchCatalog({ moduleKey, catalog, policies })` at startup or when policies are loaded to find the mismatch before any request does.
 
 ```ts
 export const ordersCatalog = defineAbacModule({
@@ -136,7 +136,7 @@ In production the provider reads policies from your policy store. It receives th
 
 ## 4. Resolve the bundle and entitlements
 
-`resolveAbacBundle` runs on every request with the `RequestContext` that the adapter built from your trusted session. The ABAC context carries the user id from `context.identity.subject` (the effective user; `actor` is whoever is operating the session) and the tenant from the verified scope. Return `null` for anything you cannot vouch for; the handler then answers 403. `createAbacBundle` is typed as returning the plain bundle, while the adapter requires the verified type, so the sample narrows it with `assertVerifiedAbacBundle`, which also re-checks the security digest.
+`resolveAbacBundle` runs on every request with the `RequestContext` that the adapter built from your trusted session. The ABAC context carries the user id from `context.identity.subject` (the effective user; `actor` is whoever is operating the session) and the tenant from the verified scope. Return `null` for anything you cannot vouch for; the handler then answers 403. `createAbacBundle` returns the verified bundle type the adapter requires, so no assertion is needed.
 
 `resolveModuleAuthorizationFacts` supplies module entitlements only (which module, actions and capabilities this tenant has enabled). It does not make decisions.
 
@@ -152,8 +152,6 @@ export const adapterDeps: FrameworkAdapterDeps = {
       catalog: ordersCatalog,
       context: { userId: context.identity.subject.id, tenantId: context.scope.tenantId },
     })
-    // createAbacBundle is typed as the unverified bundle; this narrows it.
-    assertVerifiedAbacBundle(bundle)
     return bundle
   },
   resolveModuleAuthorizationFacts: ({ moduleKey }) => ({

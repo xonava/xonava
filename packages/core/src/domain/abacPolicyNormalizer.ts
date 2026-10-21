@@ -21,6 +21,8 @@ export interface NormalizationError {
   message: string
   path?: string
   policyId?: string
+  /** The offending value (for catalog failures: the unknown action, capability or field name). */
+  value?: unknown
 }
 
 function asDate(value: Date | string | null | undefined): Date | undefined {
@@ -138,6 +140,7 @@ export function normalizeAbacPolicy(args: {
         message: e.message,
         path: e.path,
         policyId: args.policy.source.policyId,
+        value: e.value,
       })),
     }
   }

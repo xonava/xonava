@@ -293,13 +293,16 @@ export class InvalidPolicyConfigurationError extends FrameworkCoreError {
   readonly policyId: string | null
   readonly issues: unknown[]
   readonly catalogModuleKey?: string
+  /** Field names that policies reference but the module catalog does not list. */
+  readonly missingFields?: string[]
 
-  constructor(message: string, details: { moduleKey: string; policyId: string | null; issues: unknown[]; catalogModuleKey?: string }) {
+  constructor(message: string, details: { moduleKey: string; policyId: string | null; issues: unknown[]; catalogModuleKey?: string; missingFields?: string[] }) {
     super(message, "INVALID_POLICY_CONFIGURATION", { moduleKey: details.moduleKey, policyId: details.policyId })
     this.moduleKey = details.moduleKey
     this.policyId = details.policyId
     this.issues = details.issues
     if (details.catalogModuleKey !== undefined) this.catalogModuleKey = details.catalogModuleKey
+    if (details.missingFields !== undefined) this.missingFields = details.missingFields
   }
 }
 
