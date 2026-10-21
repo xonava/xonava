@@ -85,7 +85,7 @@ export class DrizzlePgIdempotencyStore<TResult>
   async renew(lease: { scope: string; key: string; fingerprint: string; token: string; leaseDurationMs?: number }): Promise<void> {
     validateLeaseDuration(lease.leaseDurationMs)
     const updated = await this.db.update(this.table).set({ createdAt: sql`now()` }).where(sql`scope = ${lease.scope} AND key = ${lease.key} AND fingerprint = ${lease.fingerprint} AND token = ${lease.token} AND status = 'in-progress'`)
-    if (getAffectedRows(updated) !== 1) throw new Error("Idempotency lease renewal lost ownership")
+    if (getAffectedRows(updated) !== 1) throw new ConflictError("Idempotency lease renewal lost ownership")
   }
 
   /** Releases an uncommitted reservation this caller still owns; committed receipts are never touched. */
@@ -171,7 +171,7 @@ export class DrizzlePgIdempotencyStore<TResult>
       finalizerClaimToken: null,
       finalizerClaimExpiresAt: null,
     }).where(sql`scope = ${request.scope} AND key = ${request.key} AND fingerprint = ${request.fingerprint} AND token = ${request.token} AND finalizer_claim_token = ${request.claimToken} AND status = 'business-committed' AND finalizer_claim_expires_at > now()`)
-    if (getAffectedRows(updated) !== 1) throw new Error("Idempotency ack claimed invalidations lost ownership or lease expired")
+    if (getAffectedRows(updated) !== 1) throw new ConflictError("Idempotency ack claimed invalidations lost ownership or lease expired")
   }
 
   async completeClaimedInvalidation(completion: IdempotencyCompletion<TResult> & { claimToken: string }): Promise<void> {
@@ -184,7 +184,7 @@ export class DrizzlePgIdempotencyStore<TResult>
       finalizerClaimExpiresAt: null,
       completedAt: sql`now()`,
     }).where(sql`scope = ${completion.scope} AND key = ${completion.key} AND fingerprint = ${completion.fingerprint} AND token = ${completion.token} AND finalizer_claim_token = ${completion.claimToken} AND status = 'business-committed' AND finalizer_claim_expires_at > now()`)
-    if (getAffectedRows(updated) !== 1) throw new Error("Idempotency complete claimed invalidations lost ownership or lease expired")
+    if (getAffectedRows(updated) !== 1) throw new ConflictError("Idempotency complete claimed invalidations lost ownership or lease expired")
   }
 
   async complete(completion: IdempotencyCompletion<TResult>): Promise<void> {
@@ -197,7 +197,7 @@ export class DrizzlePgIdempotencyStore<TResult>
       finalizerClaimExpiresAt: null,
       completedAt: sql`now()`,
     }).where(sql`scope = ${completion.scope} AND key = ${completion.key} AND fingerprint = ${completion.fingerprint} AND token = ${completion.token} AND status = 'business-committed'`)
-    if (getAffectedRows(updated) !== 1) throw new Error("Idempotency completion lost ownership of the reservation")
+    if (getAffectedRows(updated) !== 1) throw new ConflictError("Idempotency completion lost ownership of the reservation")
   }
 }
 

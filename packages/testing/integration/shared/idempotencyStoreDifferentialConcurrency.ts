@@ -78,7 +78,7 @@ export function defineConcurrentAcquireRaces(driver: IdempotencyDifferentialDriv
       if (winners.length === 1) {
         const newToken = (results[winners[0]!] as { token: string }).token
         expect(newToken).not.toBe(staleToken)
-        await expect(driver.store.renew({ scope: SCOPE, key: "lapsed", fingerprint: FP[0], token: staleToken })).rejects.toBeDefined()
+        await expect(driver.store.renew({ scope: SCOPE, key: "lapsed", fingerprint: FP[0], token: staleToken })).rejects.toMatchObject({ name: "ConflictError" })
         await driver.store.renew({ scope: SCOPE, key: "lapsed", fingerprint: FP[0], token: newToken })
       }
     }, { runs: driver.concurrencyRuns ?? 50, shrink: shrinkRace, describe: describeRace })
