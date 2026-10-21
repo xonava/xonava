@@ -2,6 +2,8 @@ import { defineConfig } from "vitest/config"
 import path from "node:path"
 export default defineConfig({
   resolve: { alias: {
+    // The adapters package depends on zod 4; a nested zod 3 here would make its ZodError checks miss schemas built by tests.
+    "zod": path.resolve(import.meta.dirname, "../../node_modules/zod"),
     "@xonava/core/domain": path.resolve(import.meta.dirname, "../core/src/domain/index.ts"),
     "@xonava/core/entity": path.resolve(import.meta.dirname, "../core/src/entity/index.ts"),
     "@xonava/core/execution": path.resolve(import.meta.dirname, "../core/src/execution/index.ts"),
@@ -22,6 +24,8 @@ export default defineConfig({
     "@xonava/core/serialization": path.resolve(import.meta.dirname, "../core/src/serialization/index.ts"),
     "@xonava/core/workflow": path.resolve(import.meta.dirname, "../core/src/workflow/index.ts"),
     "@xonava/core": path.resolve(import.meta.dirname, "../core/src/index.ts"),
+    "@xonava/adapters/http": path.resolve(import.meta.dirname, "../adapters/src/http/index.ts"),
+    "@xonava/adapters/server": path.resolve(import.meta.dirname, "../adapters/src/server/index.ts"),
     "@xonava/adapters/drizzle-d1": path.resolve(import.meta.dirname, "../adapters/src/drizzle-d1/index.ts"),
     "@xonava/adapters/drizzle-pg": path.resolve(import.meta.dirname, "../adapters/src/drizzle-pg/index.ts"),
     "@xonava/adapters/drizzle-mysql": path.resolve(import.meta.dirname, "../adapters/src/drizzle-mysql/index.ts"),

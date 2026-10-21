@@ -7,3 +7,10 @@
 5. For database work, configure real provider URLs and run the matching integration/conformance/race/crash gates.
 
 Applications may start with one capability and add orchestration later. No unrelated capability initialization is required.
+
+## Next steps
+
+- [Give customers access to only their own records](ownership.md): trusted session, tenant scope, ABAC ownership policy, projection, update and delete
+- [Create an operation](create-an-operation.md)
+- [Persistence setup](persistence-setup.md)
+- [Understand errors](understanding-errors.md)
