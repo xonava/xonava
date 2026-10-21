@@ -107,6 +107,8 @@ Statuses, binary bodies, repeated Set-Cookie headers, idempotency headers, If-Ma
 
 Uncaught handler/conversion errors use `createFrameworkErrorHandler()`. The optional `reportError` callback receives errors reported by that boundary; errors already handled inside CRUD retain CRUD's own reporting behavior. Fastify parser errors and router-level errors stay under the framework's error handling.
 
+`requestNormalization.resolveTrustedSession` returns `undefined` when the request has no login. On a route whose binding is authenticated and has no anonymous principal, every CRUD and write handler then answers 401 `UNAUTHORIZED` before scope resolution, admission, the repository, audit or the business action run; there is no need to throw from the resolver. Routes that allow an anonymous principal keep their existing behaviour, and an inconsistent binding stays a configuration error (500).
+
 To integrate Node peer addresses, set `runtime.adapterDeps.resolveHttpMetadata` to `resolveAdapterHttpMetadata`. It supplies the socket peer address, never an automatic proxy-trust assertion. Continue configuring `resolveClientIp` using the existing trusted-proxy policy. If your application already supplies a metadata resolver, compose it explicitly instead of replacing its policy accidentally.
 
 ## Business actions

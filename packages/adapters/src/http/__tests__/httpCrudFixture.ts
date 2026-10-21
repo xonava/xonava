@@ -3,12 +3,13 @@ import { z } from "zod"
 import { defineEntity } from "@xonava/core/entity"
 import { evaluatePredicate, type PredicateNode } from "@xonava/core/domain"
 import type { PersistenceProvider } from "@xonava/core/persistence"
+import type { FrameworkRequestNormalization } from "../../server"
 import { CRUD } from "../crud"
 import { allowAllAbacBundle, allowAllModuleFacts, canonicalRequestNormalization, trustedSession } from "./canonicalRequest"
 
 type Row = { id: string; tenantId: string; name: string; version: number }
 
-export function httpCrudFixture(options: { deny?: boolean; disabled?: boolean; protectedFields?: readonly string[] } = {}) {
+export function httpCrudFixture(options: { deny?: boolean; disabled?: boolean; protectedFields?: readonly string[]; requestNormalization?: FrameworkRequestNormalization } = {}) {
   const rows = new Map<string, Row>()
   const select = (filter?: PredicateNode) => [...rows.values()].filter(row => !filter || evaluatePredicate(row, filter))
   const repository = {
@@ -47,7 +48,7 @@ export function httpCrudFixture(options: { deny?: boolean; disabled?: boolean; p
   })
   const handlers = CRUD(entity, {
     adapterDeps: { assertValidCsrf: () => undefined, resolveModuleAuthorizationFacts: allowAllModuleFacts, resolveAbacBundle: async ({ moduleKey }) => options.deny ? null : allowAllAbacBundle(moduleKey) },
-    requestNormalization: canonicalRequestNormalization(trustedSession({ kind: 'tenant', tenantId: 'tenant-1' }), 'http.people'),
+    requestNormalization: options.requestNormalization ?? canonicalRequestNormalization(trustedSession({ kind: 'tenant', tenantId: 'tenant-1' }), 'http.people'),
     scope: { scope: 'tenant', idempotency: { required: false } },
     createPersistence: () => persistence,
     getCacheAdapter: vi.fn(),

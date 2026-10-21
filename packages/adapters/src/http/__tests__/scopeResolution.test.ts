@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { createAnonymousPrincipal, ForbiddenError, type ExecutionScope, type ExecutionScopeId, type Principal } from "@xonava/core/domain"
+import { ConfigurationError, createAnonymousPrincipal, ForbiddenError, UnauthorizedError, type ExecutionScope, type ExecutionScopeId, type Principal } from "@xonava/core/domain"
 import { type CompiledRouteBinding, type CompiledScopeResolverBinding } from "@xonava/core/bootstrap"
 import { createVerifiedScopeResolution, type ScopeResolver } from "@xonava/core/security"
 import { normalizeFrameworkRequest, type ScopeAdmissionEvidence, type TrustedFrameworkSession } from "../scopeResolution"
@@ -127,5 +127,29 @@ describe("A2 trusted scope normalization", () => {
     await expect(normalizeFrameworkRequest({
       ...base(resolver), route: route({ exposure: "authenticated", anonymousPrincipal: { allowed: false } }), session,
     })).rejects.toThrow(/cannot widen or rebind/)
+  })
+
+  it("answers 401 for an absent session on an authenticated route without an anonymous principal, before resolving or admitting", async () => {
+    const resolve = vi.fn(async () => createVerifiedScopeResolution("directory", { kind: "tenant", tenantId: "t" }))
+    const admit = vi.fn(async () => admission)
+    const authenticatedRoute = route({ exposure: "authenticated", anonymousPrincipal: { allowed: false } })
+    const fixedRoute = route({ exposure: "authenticated", anonymousPrincipal: { allowed: false }, scopeResolution: { kind: "fixed", scope: { kind: "tenant", tenantId: "t" } } })
+    for (const r of [authenticatedRoute, fixedRoute]) {
+      await expect(normalizeFrameworkRequest({ ...base({ key: "directory", resolve }), route: r, admit })).rejects.toBeInstanceOf(UnauthorizedError)
+    }
+    expect(resolve).not.toHaveBeenCalled()
+    expect(admit).not.toHaveBeenCalled()
+  })
+
+  it("keeps the configuration error when an authenticated route allows an anonymous principal, and for misconfigured public routes", async () => {
+    const resolver: ScopeResolver = { key: "directory", resolve: async () => createVerifiedScopeResolution("directory", { kind: "tenant", tenantId: "t" }) }
+    await expect(normalizeFrameworkRequest({ ...base(resolver), route: route({ exposure: "authenticated" }) })).rejects.toBeInstanceOf(ConfigurationError)
+    await expect(normalizeFrameworkRequest({ ...base(resolver), route: route({ anonymousPrincipal: { allowed: false } }) })).rejects.toThrow(/no compiled anonymous principal/)
+  })
+
+  it("a public route with an anonymous principal and no session is unchanged", async () => {
+    const resolver: ScopeResolver = { key: "directory", resolve: async () => createVerifiedScopeResolution("directory", { kind: "tenant", tenantId: "t" }) }
+    const context = await normalizeFrameworkRequest(base(resolver))
+    expect(context.identity.actor.kind).toBe("anonymous")
   })
 })

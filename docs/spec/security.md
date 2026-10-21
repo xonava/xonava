@@ -6,6 +6,8 @@ Trusted scope resolution MUST originate at a trusted boundary. Caller-supplied t
 
 Principal identity, authority, scope, policy bundle/facts, resource facts, and requested action are distinct inputs. Policy bundles MUST be integrity checked and normalized before use. Missing/invalid required facts fail closed.
 
+A request without a trusted session (the session resolver returned no identity) on a route whose compiled binding is authenticated and allows no anonymous principal MUST fail as an authentication failure (`UnauthorizedError`, 401) before scope resolution, admission or any handler work; routes that allow an anonymous principal keep their binding's behaviour, and a binding that is itself inconsistent (for example a public route with no compiled anonymous principal) remains a configuration failure.
+
 ## Enforcement requirements
 
 Persistence operations MUST carry mandatory scope predicates. Authorization facts used by a conditional mutation MUST be revalidated atomically when TOCTOU could change the decision. Authority delegation MUST attenuate rather than amplify authority. Safe diagnostics MUST redact sensitive facts.
