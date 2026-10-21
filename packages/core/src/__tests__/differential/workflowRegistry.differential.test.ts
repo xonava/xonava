@@ -4,9 +4,10 @@ import { createWorkflowRegistry } from "../../workflow/workflowRegistry"
 import { defineWorkflow } from "../../workflow/workflowDefinition"
 import { WorkflowDefinitionError, WorkflowVersionError } from "../../workflow/workflowErrors"
 import type { WorkflowDefinition, WorkflowUpcaster } from "../../workflow/types"
+import { TIMING_SCALE } from "../timing"
 
 // Property runs scale with DIFFERENTIAL_SCALE; so does the time they may take.
-vi.setConfig({ testTimeout: 60_000 * Math.max(1, scaledRuns(100) / 100) })
+vi.setConfig({ testTimeout: 60_000 * Math.max(1, scaledRuns(100) / 100) * TIMING_SCALE })
 
 /**
  * Definition validation and version decoding (docs/spec/workflow.md: "Version

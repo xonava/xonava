@@ -5,6 +5,7 @@ import { oracleNext, oracleOccurrences, parseOracleCron, type OracleCron } from 
 import { FAULT_TEXT, ScheduleWorld, type ClaimRecord, type ScheduleScopeKind, type StoreFault, type WorldEvent, type WorldSchedule } from "./scheduleWorld"
 import { DEFAULT_SCHEDULE_FAILURE_BACKOFF, materializeDueSchedules, type MaterializeResult } from "../../execution/scheduleDispatcher"
 import type { JobRequester, JobStatus } from "../../execution/types"
+import { TIMING_SCALE } from "../timing"
 
 /**
  * Model-based test for materializeDueSchedules. A fake schedule store (claim
@@ -35,7 +36,7 @@ import type { JobRequester, JobStatus } from "../../execution/types"
  *    lease records nothing and never enqueues after the loss
  */
 
-vi.setConfig({ testTimeout: 120_000 * Math.max(1, scaledRuns(100) / 100) })
+vi.setConfig({ testTimeout: 120_000 * Math.max(1, scaledRuns(100) / 100) * TIMING_SCALE })
 
 const MINUTE = 60_000
 const HOUR = 3_600_000

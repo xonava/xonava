@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { drive, flush, ManualClock, MemoryWorkflowStore } from "./workflowFixtures"
 import { buildWorld, type Behavior, type StepSpec, type WorldSpec } from "./workflowWorld"
+import { expectNearLinear } from "../timing"
 import { dispatchWorkflows } from "../../workflow/workflowDispatcher"
 import { defineWorkflow } from "../../workflow/workflowDefinition"
 import { applyWorkflowStep, createWorkflowFailure } from "../../workflow/workflowStateMachine"
@@ -185,12 +186,11 @@ describe("regressions found by the workflow differentials", () => {
 })
 
 describe("failure recording is bounded in time and space", () => {
-  it("a huge adversarial error message neither stalls the dispatcher nor leaks a cut-off contact detail", () => {
+  it("a huge adversarial error message neither stalls the dispatcher nor leaks a cut-off contact detail", async () => {
     // Found by "workflow failure record": defaultAuditSanitizer backtracks quadratically on "a.a.a.…" (32 kB took 2.4 s, 100 kB ~25 s),
     // and createWorkflowFailure sanitized the whole message before truncating it to 512 characters.
-    const started = Date.now()
+    await expectNearLinear((size) => () => createWorkflowFailure({ code: "STEP_FAILED", message: "a.".repeat(size / 2), step: "a", phase: "execute", attempt: 1, at }), { size: 400_000 })
     const failure = createWorkflowFailure({ code: "STEP_FAILED", message: "a.".repeat(200_000), step: "a", phase: "execute", attempt: 1, at })
-    expect(Date.now() - started, "sanitizing a 400 kB message").toBeLessThan(1_000)
     expect(Array.from(failure.message).length).toBeLessThanOrEqual(512)
     // A contact detail that straddles the cut must not survive as a recognisable prefix of itself: sixteen 250-character addresses
     // shrink to 10 characters each, so the cut token would otherwise be part of the stored message.

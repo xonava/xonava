@@ -8,6 +8,7 @@ import {
   EVENT_TYPE, HOUR, INBOX_KEYS, MINUTE, OPERATOR, OUTBOX_KEYS, POLICIES, PROVENANCE, T0, describeOps, generateOps, inboxRecordFor, inboxView, outboxRecordFor, outboxView, shrinkOps,
   ModelDelivery, type Behaviour, type DeliverySide, type Op, type TokenRef,
 } from "./deliveryStoreDifferentialModel.js"
+import { TIMING_SCALE } from "../../../core/src/__tests__/timing.js"
 
 export { HOUR, MINUTE }
 
@@ -38,7 +39,7 @@ export function printCoverage(label: string): void {
 }
 
 /** Generous per-test budget: a failing property shrinks. It grows with DIFFERENTIAL_SCALE like the case counts do. */
-export const PROPERTY_TIMEOUT_MS = Math.ceil(300_000 * Math.max(1, scaledRuns(100) / 100))
+export const PROPERTY_TIMEOUT_MS = Math.ceil(300_000 * Math.max(1, scaledRuns(100) / 100) * TIMING_SCALE)
 
 /** Stable text for an error, independent of the database driver: framework errors by code, everything else by name and message. */
 export function classify(error: unknown, mutationMayFail = false): string {

@@ -1,4 +1,5 @@
 import { afterEach,describe,expect,it,vi } from "vitest"
+import { expectNearLinear } from "../../__tests__/timing"
 import { Predicate } from "../../domain/predicate"
 import { encodeExecutionScopeId } from "../../domain/executionScope"
 import { DEFAULT_QUERY_BUDGET } from "../../query/queryBudget"
@@ -179,13 +180,12 @@ describe("indexed read-model joins",()=>{
   })
 
   it("indexes a 5,000 by 5,000 no-match join in near-linear time",async()=>{
-    const count=5_000
-    const orders=Array.from({length:count},(_,index)=>({tenantId:"t1",customerId:`left-${index}`}))
-    const customers=Array.from({length:count},(_,index)=>({tenantId:"t1",id:`right-${index}`}))
-    const started=performance.now()
-    const result=await runJoin(orders,customers,{maxSourceRows:count,maxOutputRows:count})
-    expect(result.rows).toHaveLength(0)
-    expect(performance.now()-started).toBeLessThan(300)
+    // The cost of 5,000 rows per side is compared with the cost of 1,250: a nested-loop join would grow sixteen-fold.
+    await expectNearLinear((count)=>{
+      const orders=Array.from({length:count},(_,index)=>({tenantId:"t1",customerId:`left-${index}`}))
+      const customers=Array.from({length:count},(_,index)=>({tenantId:"t1",id:`right-${index}`}))
+      return async()=>{expect((await runJoin(orders,customers,{maxSourceRows:count,maxOutputRows:count})).rows).toHaveLength(0)}
+    },{size:5_000})
   })
 })
 

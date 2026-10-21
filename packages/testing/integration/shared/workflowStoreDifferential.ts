@@ -5,6 +5,7 @@ import {
   type WorkflowClaim, type WorkflowFence, type WorkflowInstance, type WorkflowSignal, type WorkflowStepResult, type WorkflowStore,
 } from "@xonava/core/workflow"
 import { forAllAsync, scaledRuns, type Rng } from "../../../core/src/__tests__/differential/harness.js"
+import { TIMING_SCALE } from "../../../core/src/__tests__/timing.js"
 import { ManualClock, MemoryWorkflowStore, signalLedgerViolations } from "../../../core/src/__tests__/differential/workflowFixtures.js"
 
 /**
@@ -63,7 +64,7 @@ export interface WorkflowStoreDriver {
 }
 
 /** Per-property budget; grows with DIFFERENTIAL_SCALE like the case counts (certification runs databases at scale 2). */
-export const PROPERTY_TIMEOUT_MS = Math.ceil(300_000 * Math.max(1, scaledRuns(100) / 100))
+export const PROPERTY_TIMEOUT_MS = Math.ceil(300_000 * Math.max(1, scaledRuns(100) / 100) * TIMING_SCALE)
 export const SCOPE = { kind: "tenant", tenantId: "t1" } as const
 
 // ---------------------------------------------------------------------------------------------------------------------

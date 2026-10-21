@@ -2,6 +2,7 @@ import { appendFileSync } from "node:fs"
 import { expect, it } from "vitest"
 import type { JobExecutionScope, JobStore, StoredJob, JobTransitionResult } from "@xonava/core/execution"
 import { forAllAsync, scaledRuns } from "../../../core/src/__tests__/differential/harness.js"
+import { TIMING_SCALE } from "../../../core/src/__tests__/timing.js"
 import {
   BOGUS_TOKEN, HOUR, RefStore, T0, canonicalJson, describeOps, executionScopeOf, generateOps, requesterOf, shrinkOps,
   type EnqueueOutcome, type EnqueueSpec, type Op, type RefConfig, type RefJob, type TransitionOutcome, type ViewReq,
@@ -90,8 +91,8 @@ export function printCoverage(label: string): void {
   if (file) appendFileSync(file, `${label} coverage ${JSON.stringify(Object.fromEntries([...COVERAGE].sort()))}\n`)
 }
 
-/** Generous per-test budget: a failing property shrinks. It grows with DIFFERENTIAL_SCALE like the case counts do. */
-export const PROPERTY_TIMEOUT_MS = Math.ceil(300_000 * Math.max(1, scaledRuns(100) / 100))
+/** Generous per-test budget: a failing property shrinks. It grows with DIFFERENTIAL_SCALE like the case counts do, and with XONAVA_TIMING_SCALE. */
+export const PROPERTY_TIMEOUT_MS = Math.ceil(300_000 * Math.max(1, scaledRuns(100) / 100) * TIMING_SCALE)
 
 function sleepMs(ms: number): Promise<void> { return new Promise((resolve) => { setTimeout(resolve, ms) }) }
 

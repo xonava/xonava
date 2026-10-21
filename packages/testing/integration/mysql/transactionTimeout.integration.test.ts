@@ -8,6 +8,7 @@ import { createExecutionDeadline, createOperationContext, runOperation } from "@
 import { createDrizzleMySqlPersistenceProvider, DrizzleMySqlEntityRegistry, getDrizzleMySqlSession, type MySqlDatabaseLike } from "@xonava/adapters/drizzle-mysql"
 import { bigint, json, mysqlTable, varchar } from "drizzle-orm/mysql-core"
 import { mysqlCertificationUrl } from "./database.js"
+import { scaledMs } from "../../../core/src/__tests__/timing.js"
 
 // A dedicated table keeps these timing-sensitive tests independent of the shared fixture tables.
 const mysqlRecords = mysqlTable("tx_timeout_records", { id: varchar("id", { length: 100 }).primaryKey(), tenantId: varchar("tenant_id", { length: 100 }).notNull(), name: varchar("name", { length: 255 }).notNull(), version: bigint("version", { mode: "number" }).notNull().default(1), value: json("value").notNull() })
@@ -79,7 +80,7 @@ describe("MYSQL transaction timeouts (TransactionOptions.timeoutMs)", () => {
       expect(failure).toBeInstanceOf(TimeoutError)
       expect((failure as TimeoutError).details).toMatchObject({ dialect: "mysql", transactionOutcome: "rolled_back" })
       expect(elapsed).toBeGreaterThanOrEqual(700)
-      expect(elapsed).toBeLessThan(2_000)
+      expect(elapsed).toBeLessThan(scaledMs(2_000))
     } finally {
       await locker.rollback()
       locker.release()
@@ -102,7 +103,7 @@ describe("MYSQL transaction timeouts (TransactionOptions.timeoutMs)", () => {
       const failure = await failureOf(provider.runInTransaction(async (tx) => tx.repository(entity).update("r1", { name: "blocked" }, { optimisticConcurrency: { expectedVersion: 1 } }), { timeoutMs: 900 }))
       expect(failure).toBeInstanceOf(TimeoutError)
       expect((failure as TimeoutError).details).toMatchObject({ providerCode: "ER_LOCK_WAIT_TIMEOUT", transactionOutcome: "rolled_back" })
-      expect(Date.now() - started).toBeLessThan(3_000)
+      expect(Date.now() - started).toBeLessThan(scaledMs(3_000))
       const [rows] = await connection.query("SELECT @@session.max_execution_time AS m, @@session.innodb_lock_wait_timeout AS l")
       expect((rows as { m: number; l: number }[])[0]).toEqual({ m: globals.maxExecutionTime, l: globals.lockWaitTimeout })
     } finally {
@@ -120,7 +121,7 @@ describe("MYSQL transaction timeouts (TransactionOptions.timeoutMs)", () => {
     }, { timeoutMs: 500 }))
     expect(failure).toBeInstanceOf(TimeoutError)
     expect((failure as TimeoutError).details).toMatchObject({ providerCode: "ER_QUERY_INTERRUPTED", transactionOutcome: "rolled_back" })
-    expect(Date.now() - started).toBeLessThan(2_000)
+    expect(Date.now() - started).toBeLessThan(scaledMs(2_000))
     expect(await nameOf("r1")).toBe("before")
   })
 
@@ -143,7 +144,7 @@ describe("MYSQL transaction timeouts (TransactionOptions.timeoutMs)", () => {
       await getDrizzleMySqlSession(tx).execute(sql`UPDATE tx_timeout_records SET name='slow' WHERE id='r1' AND SLEEP(5)=0`)
     }, { timeoutMs: 200 }))
     expect(failure).toBeInstanceOf(TimeoutError)
-    expect(Date.now() - started).toBeLessThan(2_000)
+    expect(Date.now() - started).toBeLessThan(scaledMs(2_000))
   })
 
   it("restores the pooled connection's session limits after a timeout and keeps it usable", async () => {
@@ -228,7 +229,7 @@ describe("MYSQL transaction timeouts (TransactionOptions.timeoutMs)", () => {
         input: {},
       }))
       expect(failure).toBeInstanceOf(TimeoutError)
-      expect(Date.now() - started).toBeLessThan(2_500)
+      expect(Date.now() - started).toBeLessThan(scaledMs(2_500))
     } finally {
       await locker.rollback()
       locker.release()

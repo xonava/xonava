@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest"
+import { scaledMs } from "../../__tests__/timing"
 import { runOperation } from "../operationPipeline"
 import { createOperationContext } from "../operationContext"
 import { createOperationInvoker } from "../operationInvoker"
@@ -145,7 +146,7 @@ describe("joined siblings after the parent fails", () => {
       }),
       input: {},
     })).rejects.toThrow("sibling failed")
-    expect(Date.now() - startedAt).toBeLessThan(2_000)
+    expect(Date.now() - startedAt).toBeLessThan(scaledMs(2_000))
     expect(log).toEqual(["tx1 begin", "tx1 rollback"])
   })
 })

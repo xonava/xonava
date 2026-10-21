@@ -2,8 +2,9 @@ import { describe, expect, it, vi } from "vitest"
 import { forAllAsync, scaledRuns } from "./harness"
 import { describeJobScenario, generateCalmJobScenario, generateJobScenario, shrinkJobScenario } from "./jobArbitraries"
 import { runScenario, type JobScenario } from "./jobModel"
+import { TIMING_SCALE } from "../timing"
 
-vi.setConfig({ testTimeout: 120_000 * Math.max(1, scaledRuns(100) / 100) })
+vi.setConfig({ testTimeout: 120_000 * Math.max(1, scaledRuns(100) / 100) * TIMING_SCALE })
 
 async function check(scenario: JobScenario): Promise<void> {
   const outcome = await runScenario(scenario)

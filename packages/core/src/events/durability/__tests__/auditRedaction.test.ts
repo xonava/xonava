@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { expectNearLinear } from "../../../__tests__/timing"
 import { defaultAuditSanitizer } from "../audit"
 import { redactSensitiveText } from "../auditRedaction"
 
@@ -12,12 +13,6 @@ function lcg(seed: number): () => number {
     state = (Math.imul(state, 1664525) + 1013904223) >>> 0
     return state / 2 ** 32
   }
-}
-
-function timed(fn: () => void): number {
-  const started = performance.now()
-  fn()
-  return performance.now() - started
 }
 
 describe("redactSensitiveText equivalence with the original expression", () => {
@@ -79,8 +74,6 @@ describe("redactSensitiveText equivalence with the original expression", () => {
 
 describe("redactSensitiveText is linear-time on adversarial input", () => {
   const SIZE = 200_000
-  // Generous on purpose: v8 coverage (release certification) slows these runs several-fold, while a quadratic regression needs many seconds at 200 kB.
-  const BUDGET_MS = 2_000
   const shapes: Array<[string, (size: number) => string]> = [
     ["a.a.a. repeated", (n) => "a.".repeat(n / 2)],
     ["a.a.a.@ then dots", (n) => "a.".repeat(n / 4) + "@" + "a.".repeat(n / 4)],
@@ -98,20 +91,14 @@ describe("redactSensitiveText is linear-time on adversarial input", () => {
     ["dates without boundary", (n) => "2026-08-05_".repeat(n / 11)],
     ["unicode", (n) => "é.".repeat(n / 2) + "😀@".repeat(n / 8)],
   ]
-  it.each(shapes)("%s: 200 kB within the linear-time budget", (_name, build) => {
-    const input = build(SIZE)
-    expect(input.length).toBeGreaterThanOrEqual(SIZE / 2)
-    expect(timed(() => redactSensitiveText(input))).toBeLessThan(BUDGET_MS)
-    expect(timed(() => defaultAuditSanitizer({ nested: [input] }))).toBeLessThan(BUDGET_MS)
+  it.each(shapes)("%s: 200 kB grows near-linearly", async (_name, build) => {
+    expect(build(SIZE).length).toBeGreaterThanOrEqual(SIZE / 2)
+    await expectNearLinear((size) => { const input = build(size); return () => redactSensitiveText(input) }, { size: SIZE })
+    await expectNearLinear((size) => { const input = build(size); return () => defaultAuditSanitizer({ nested: [input] }) }, { size: SIZE })
   })
 
-  it("grows roughly linearly: 20x the input costs far less than 400x the time", () => {
-    const small = "a.".repeat(5_000)
-    const large = "a.".repeat(100_000)
-    redactSensitiveText(small) // warm up
-    const smallMs = Math.max(timed(() => redactSensitiveText(small)), 0.05)
-    const largeMs = timed(() => redactSensitiveText(large))
-    expect(largeMs).toBeLessThan(Math.max(smallMs * 20 * 6, 200))
+  it("grows roughly linearly: 4x the input costs far less than 16x the time", async () => {
+    await expectNearLinear((size) => { const input = "a.".repeat(size / 2); return () => redactSensitiveText(input) }, { size: 200_000 })
   })
 
   it("redacts a contact detail embedded in a huge string", () => {
