@@ -13,6 +13,25 @@ report keeps its own to-do list; they link here instead.
 Status: **experimental**. `0.1.0` is published on npm. Target for `1.0.0`: core and adapters both above
 9.5, measured by the [quality gates](#quality-gates) below rather than by opinion.
 
+## Progress
+
+| Wave | State | Notes |
+| --- | --- | --- |
+| 0: quick fixes | Done (6 of 6) | |
+| 1: pilot feedback and missing adapters | Done (9 of 9, plus 3 follow-ups) | All eight requests from the TanStack Start / Cloudflare pilot |
+| 2: proof | In progress (8 of 14, plus 6 follow-ups) | Remaining: A8, Q1, Q2, Q4, Q5, Q6, and the wave close below |
+| 3: hardening and decisions | Not started (0 of 4) | |
+
+Real-database differential suites now cover jobs, schedules, workflows, idempotency, inbox/outbox
+delivery, leases, sequences, temporal history and job progress on PostgreSQL, MySQL and D1. Writing
+them found and fixed 16 store and adapter defects; each fix shipped with its regression test and a
+changeset. `dev` carries the pending changesets for `0.2.0`, including two required migrations
+(`0005_job_scope_key`, `0006_byte_exact_identifiers` on MySQL).
+
+**Merge rule learnt in wave 2:** before merging any change to adapter or store code, Opus runs the
+complete PostgreSQL, MySQL and D1 integration suites on the branch merged with `dev`, not only the
+files the subagent touched. Subagents share one database server, so they run only their own files.
+
 ## How to run this plan
 
 Each work package (WP) is written to be handed to one subagent. The orchestrating session (Opus) owns
@@ -60,7 +79,7 @@ edited only by the WP that owns them or by Opus at wave close.
 | Unit coverage, core | lines 96, branches 90 (today 94 / 86) | Q2 |
 | Unit coverage, adapters | lines 90, branches 82 (today 76 / 61) | Q2 |
 | Mutation score | core ≥ 80 %, adapters `http/` and `drizzle-shared/` ≥ 70 % | Q5 |
-| Real-database differential suites | every durable store on PostgreSQL, MySQL and D1 | A2–A8 |
+| Real-database differential suites | every durable store on PostgreSQL, MySQL and D1 (all but cache tag generations done) | A8 |
 | HTTP fuzzing | property suites over all CRUD and write handlers in DF1 | Q4 |
 | Performance | hot-path benchmarks within 25 % of the recorded baseline | Q6 |
 | Upgrade compatibility | N-1 suite against the previous published release | C3 |
@@ -70,7 +89,7 @@ edited only by the WP that owns them or by Opus at wave close.
 
 ## Wave 2: proof (Sonnet, parallel)
 
-Every A2–A8 suite follows the job-store pattern exactly:
+Every store differential follows the job-store pattern exactly:
 - `packages/testing/integration/shared/<area>StoreDifferential.ts` holds a driver interface, a lockstep
   runner and `define*` functions;
 - `<area>StoreDifferentialModel.ts` holds a pure reference model with `generateOps`, `shrinkOps` and
@@ -83,86 +102,12 @@ name with no alias, with at least 50 base runs (`DF1_MIN_BASE_RUNS`). Opus regen
 `scripts/verification/differentialBaseline.json` with `npm run verify:framework:df1 -- --update-baseline`
 when the wave closes.
 
-### A2 Idempotency store differential
-
-- [ ] Sonnet. Branch `test/idempotency-differential`. Area `idempotency`.
-- **Model:** acquire, renew, complete, abandon, expiry and replay, compared with each adapter's
-  `drizzleIdempotencyStore.ts`. Include concurrent acquire races and fingerprint conflicts.
-
-### A3 Inbox and outbox delivery differential
-
-- [ ] Sonnet. Branch `test/delivery-differential`. Area `delivery`.
-- **Model:** the fenced delivery state machine (`drizzle-shared/fencedDeliveryStateMachine.ts`) over each
-  database's atomic record backend: claim, acknowledge, fail, retry, fence takeover, and D1's
-  `acknowledgeBatch`.
-
-### A4 Lease differential
-
-- [ ] Sonnet. Branch `test/lease-differential`. Area `lease`.
-- **Model:** acquire, renew, release, expiry on the database clock, fence monotonicity, and concurrent
-  takeover.
-
-### A5 Sequence differential
-
-- [ ] Sonnet. Branch `test/sequence-differential`. Area `sequence`.
-- **Model:** reuse the core sequence model in `packages/core/src/__tests__/differential/primitive*.differential.test.ts`
-  against the real `drizzleSequenceStore.ts`, including reset boundaries across time zones and
-  concurrent allocation without gaps or duplicates.
-
-### A6 Temporal history differential
-
-- [ ] Sonnet. Branch `test/temporal-differential`. Area `temporal`.
-- **Model:** append revisions and snapshots, then reconstruct point-in-time state; compare with the
-  core temporal model, including deletes, restores and pages larger than the limit.
-
-### A7 Job progress differential
-
-- [ ] Sonnet. Branch `test/job-progress-differential`. Area `jobProgress`.
-- **Model:** reuse `packages/core/src/__tests__/differential/jobProgress.differential.test.ts` against
-  each `drizzleJobProgressStore.ts`.
-
 ### A8 Cache tag-generation differential
 
 - [ ] Sonnet. Branch `test/tag-generation-differential`. Area `tagGeneration`.
 - **Model:** advance and read tag generations through `dbTagGenerationStore.ts` and
   `mysqlTagGenerationStore.ts` under concurrent invalidation. Include the KV adapter's dual-layout
   reads (`kvCacheAdapter.ts:276-319`) against a fake KV namespace.
-
-### F9 Supporting-read recipe (feedback R6)
-
-- [ ] Sonnet. Branch `docs/supporting-reads`.
-- **Decision (Opus):** supporting reads stay an application pattern, not a framework API.
-- **Steps:** write `docs/guides/supporting-reads.md` with an executable example, following
-  `packages/testing/tests/ownershipGuideExample.ts` and the verbatim-block test in
-  `documentationExamples.test.ts`. The example is a parent operation, "assign an order to a warehouse",
-  that needs warehouse labels from another module. Show:
-  - admission by the parent action through a fresh verified bundle, conditional grants and denies
-    included;
-  - a separate read-only endpoint owned by the parent module, with a fixed response allowlist
-    (id, label);
-  - a bound on the result and explicit overflow behaviour;
-  - `cache-control: no-store`;
-  - that revoking the parent action revokes the read;
-  - that choosing an option grants nothing at save time, where the save re-checks the full records.
-- **Acceptance:** behaviour tests for every point above; `npm run verify:docs` passes.
-
-### S1 Standalone applications: platform scope end to end
-
-- [ ] Sonnet, with an Opus **design gate** on step 1. Branch `feat/platform-scope-proof`.
-- **Today:** platform-scoped entities are unit-tested only, and `RootPersistenceProvider.resolvePlatform`
-  (`packages/core/src/persistence/provider.ts:138`) is declared but implemented by no adapter.
-- **Steps:**
-  1. Report how a platform-scoped entity is persisted today through each adapter's
-     `drizzlePersistenceProvider.ts`, and propose either implementing `RootPersistenceProvider` in the
-     three adapters or removing it from the public surface. Opus decides.
-  2. Add `packages/testing/integration/shared/platformScope.ts` with CRUD, list, query and OCC cases for
-     an entity with `entityScope: { kind: "platform", acknowledged: true }`, modelled on
-     `mysql/repository.integration.test.ts`, plus per-database runners.
-  3. An HTTP test with a fixed `platform` scope plan, end to end through `createCrudHandlers`.
-  4. Jobs, schedules and a workflow run under `platform` and `system` scope against D1, PostgreSQL and
-     MySQL.
-  5. A "Standalone application" guide in `docs/guides/` and a short README example, both type-checked.
-- **Acceptance:** suites pass on all three databases. Changeset only if step 1 changes the API.
 
 ### Q4 HTTP fuzzing
 
@@ -243,6 +188,32 @@ when the wave closes.
   by module until the gate is met, then raise the thresholds in the config. No test may assert only that
   code runs; each asserts an outcome.
 
+### W2-close Close wave 2
+
+- [ ] Opus. When A8 is merged: regenerate `scripts/verification/differentialBaseline.json` with
+  `npm run verify:framework:df1 -- --update-baseline` against PostgreSQL and MySQL, review the diff, run
+  the full release gate locally (`npm run verify:framework-release`), and update this file.
+
+### B7 Follow-ups found in wave 2
+
+Small items found by the wave 2 suites and reviews. Each is one Haiku or Sonnet package.
+
+- [ ] Haiku. `FencedLeaseStore.acquire` and `renew` (`packages/adapters/src/drizzle-shared/fencedLeaseStore.ts`)
+  throw synchronously on an invalid owner or duration; make them reject asynchronously like every other
+  store method, and tighten the lease differential to expect a rejected promise.
+- [ ] Haiku. `validateJobProgress` rejects an out-of-range integer in a checkpoint with a canonical-JSON
+  error instead of `ConfigurationError`; map it, and add `-0` percent and a `\u0000` checkpoint string
+  (PostgreSQL `jsonb`) to the job-progress differential.
+- [ ] Haiku. Document in known limitations that concurrent first allocations of one MySQL sequence key
+  can deadlock (InnoDB 1213) when a holder rolls back, so callers must retry the transaction; committed
+  numbers stay gapless.
+- [ ] Sonnet, **design gate**. Custom `projectCommittedResult` hooks receive a fresh-connection
+  persistence, so on PostgreSQL and MySQL they cannot see the row the operation just wrote (built-in
+  CRUD was fixed in B6). Decide whether hooks get the transaction-bound persistence or the limitation is
+  documented.
+- [ ] Opus, input to C5. For platform-scope routes, module entitlements (`enabledModuleKeys`, actions,
+  capabilities) are not consulted; ABAC is the only authorization input. Confirm in the threat model.
+
 ## Wave 3: hardening and decisions
 
 ### C3 N-1 upgrade compatibility suite
@@ -321,9 +292,11 @@ when the wave closes.
 
 ## Release `0.2.0`
 
-- [ ] Waves 0 and 1 are merged. Run `npm run release:version` on `release/0.2.0`, verify that
-  the published packages install and import in a clean project (with vitest installed for the testing
-  package) and that the README examples type-check, then publish.
+- [ ] Maintainer decides when. Waves 0 and 1 and most of wave 2 are on `dev`. Promote `dev` to `main`,
+  run `npm run release:version` on `release/0.2.0`, verify that the published packages install and
+  import in a clean project (with vitest installed for the testing package) and that the README
+  examples type-check, then publish. The release notes must call out the breaking changes listed in the
+  changesets and the two required migrations (`0005_job_scope_key`, MySQL `0006_byte_exact_identifiers`).
 
 ## Release `1.0.0`
 
