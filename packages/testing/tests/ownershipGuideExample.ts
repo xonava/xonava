@@ -10,7 +10,6 @@ import {
   defineAbacModule,
   assertVerifiedAbacBundle,
   ForbiddenError,
-  UnauthorizedError,
   evaluatePredicate,
   type AbacPolicy,
   type PredicateNode,
@@ -208,7 +207,7 @@ export function ordersRequestNormalization(
     resolverBindings: new Map([[resolverBinding.key, resolverBinding]]),
     async resolveTrustedSession({ request }) {
       const login = await verifyLogin(request)
-      if (!login) throw new UnauthorizedError("Sign in to continue")
+      if (!login) return undefined
       const customer: Principal = {
         id: login.userId,
         kind: "human",

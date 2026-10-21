@@ -166,7 +166,7 @@ export const adapterDeps: FrameworkAdapterDeps = {
 
 ## 5. Build the trusted session and tenant scope
 
-`resolveTrustedSession` is the only place that decides who the caller is. Verify the login in your own authentication layer and return the identity and the tenant. If the login is missing or invalid, throw `UnauthorizedError` so the handler answers 401. Returning `undefined` for an authenticated route is treated as a server misconfiguration and answers 500.
+`resolveTrustedSession` is the only place that decides who the caller is. Verify the login in your own authentication layer and return the identity and the tenant. If the login is missing or invalid, return `undefined`: an authenticated route that has no anonymous principal answers 401.
 
 The tenant must not come from the request. The route binding below uses a scope resolver that reads the tenant from `resolverFacts`, which only `resolveTrustedSession` can set. Route bindings are normally taken from the compiled route plans of `@xonava/core/bootstrap`; they are written out here to keep the example self-contained.
 
@@ -228,7 +228,7 @@ export function ordersRequestNormalization(
     resolverBindings: new Map([[resolverBinding.key, resolverBinding]]),
     async resolveTrustedSession({ request }) {
       const login = await verifyLogin(request)
-      if (!login) throw new UnauthorizedError("Sign in to continue")
+      if (!login) return undefined
       const customer: Principal = {
         id: login.userId,
         kind: "human",
