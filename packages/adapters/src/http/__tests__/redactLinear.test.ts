@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest"
+import { expectNearLinear } from "../../../../core/src/__tests__/timing"
 import { redactPhi, redactPhiDeep } from "../redact"
 
-// Coverage instrumentation slows execution; the budget only has to catch super-linear blowups, which take seconds.
-const TIMING_SCALE = Number(process.env.XONAVA_TIMING_SCALE ?? "1")
+// The cost on each input is compared with the cost on a quarter of it, so coverage instrumentation or a loaded machine
+// cannot fail these tests; only super-linear growth can.
+const nearLinear = (input: string) => expectNearLinear((size) => { const part = input.slice(0, size); return () => redactPhi(part) }, { size: input.length })
 
 /** Equivalence oracle: the original (quadratic) pattern set, kept only here. */
 const LEGACY_PATTERNS = [
@@ -71,18 +73,15 @@ describe("redactPhi linear-time email scanner", () => {
     "spaced digits": "1 ".repeat(SIZE / 2),
   }
   for (const [name, input] of Object.entries(shapes)) {
-    it(`redacts a ${SIZE / 1000} kB ${name} input in linear time`, () => {
-      const started = performance.now()
-      redactPhi(input)
-      expect(performance.now() - started).toBeLessThan(500 * TIMING_SCALE)
+    it(`redacts a ${SIZE / 1000} kB ${name} input in linear time`, async () => {
+      await nearLinear(input)
     })
   }
 
-  it("redacts every email in a large body in linear time", () => {
+  it("redacts every email in a large body in linear time", async () => {
     const body = "contact alice@example.com today. ".repeat(30_000)
-    const started = performance.now()
+    await nearLinear(body)
     const out = redactPhi(body)
-    expect(performance.now() - started).toBeLessThan(500 * TIMING_SCALE)
     expect(out.startsWith("contact [email redacted] today. ")).toBe(true)
     expect(out).not.toContain("@")
   })

@@ -2,6 +2,7 @@ import { appendFileSync } from "node:fs"
 import { expect, it } from "vitest"
 import type { IdempotencyAcquireResult, IdempotencyCommitItem, IdempotencyFinalizationPort, IdempotencyPort, IdempotencyRequest } from "@xonava/core/events"
 import { forAllAsync, scaledRuns } from "../../../core/src/__tests__/differential/harness.js"
+import { TIMING_SCALE } from "../../../core/src/__tests__/timing.js"
 import {
   BOGUS_TOKEN, FINGERPRINTS, HOUR, OWNERS, RefStore, SLOTS, canonicalJson, describeOps, generateOps, shrinkOps,
   type AcquireOutcome, type Fence, type Json, type Op, type ResourceSpec,
@@ -63,7 +64,7 @@ export function printCoverage(label: string): void {
 }
 
 /** Generous per-test budget: a failing property shrinks. It grows with DIFFERENTIAL_SCALE like the case counts do. */
-export const PROPERTY_TIMEOUT_MS = Math.ceil(300_000 * Math.max(1, scaledRuns(100) / 100))
+export const PROPERTY_TIMEOUT_MS = Math.ceil(300_000 * Math.max(1, scaledRuns(100) / 100) * TIMING_SCALE)
 
 async function attempt<T>(action: () => Promise<T>): Promise<{ ok: true; value: T } | { ok: false; error: unknown }> {
   try { return { ok: true, value: await action() } } catch (error) { return { ok: false, error } }

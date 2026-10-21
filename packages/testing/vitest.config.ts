@@ -1,5 +1,8 @@
 import { defineConfig } from "vitest/config"
 import path from "node:path"
+// XONAVA_TIMING_SCALE (default 1, 4 under --coverage) loosens every wall-clock budget and vitest timeout for slow or loaded machines.
+const parsedTimingScale = Number(process.env.XONAVA_TIMING_SCALE ?? (process.argv.includes("--coverage") ? "4" : "1"))
+export const timingScale = Number.isFinite(parsedTimingScale) ? Math.max(1, parsedTimingScale) : 1
 export default defineConfig({
   resolve: { alias: {
     // The adapters package depends on zod 4; a nested zod 3 here would make its ZodError checks miss schemas built by tests.
@@ -35,6 +38,8 @@ export default defineConfig({
   }},
   test: {
     include: ["tests/**/*.test.ts"],
+    env: { XONAVA_TIMING_SCALE: String(timingScale) },
+    ...(timingScale > 1 ? { testTimeout: 5_000 * timingScale, hookTimeout: 10_000 * timingScale } : {}),
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],

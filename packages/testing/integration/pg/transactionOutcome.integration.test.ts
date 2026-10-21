@@ -7,6 +7,7 @@ import { Predicate, RetryablePersistenceError, TimeoutError, TransactionRolledBa
 import { createOperationContext, runOperation } from "@xonava/core/operation"
 import type { PersistenceProvider, UnversionedEntityDescriptor } from "@xonava/core/persistence"
 import { pgCertificationUrl } from "./database.js"
+import { scaledMs } from "../../../core/src/__tests__/timing.js"
 
 const items = pgTable("framework_tx_items", { id: text("id").primaryKey(), bucket: text("bucket").notNull(), amount: integer("amount").notNull() })
 const slow = pgTable("framework_tx_slow", { id: text("id").primaryKey(), bucket: text("bucket").notNull(), amount: integer("amount").notNull() })
@@ -93,7 +94,7 @@ describe("PostgreSQL transaction outcome classification", () => {
     await withProvider(async (provider) => {
       const started = Date.now()
       await expect(provider.runInTransaction(async (tx) => tx.repository<Item>(slowEntity).findMany({}), { timeoutMs: 200 })).rejects.toBeInstanceOf(TimeoutError)
-      expect(Date.now() - started).toBeLessThan(1_500)
+      expect(Date.now() - started).toBeLessThan(scaledMs(1_500))
       await expect(provider.runInTransaction(async (tx) => (await tx.repository<Item>(itemEntity).findMany({})).rows.length, { timeoutMs: 5_000 })).resolves.toBe(1)
     })
   }, 30_000)

@@ -22,6 +22,7 @@
 import { expect } from "vitest"
 import { assertDurableIdentifier, scheduleOccurrencesConsumed, type FencedScheduleClaim, type ScheduleStore } from "@xonava/core/execution"
 import { forAllAsync, scaledRuns, type Rng } from "../../../core/src/__tests__/differential/harness.js"
+import { TIMING_SCALE } from "../../../core/src/__tests__/timing.js"
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Driver
@@ -758,9 +759,9 @@ function shrinkOps(ops: Op[]): Iterable<Op[]> {
   return out
 }
 
-/** A per-test time budget that grows with DIFFERENTIAL_SCALE like the property case counts do (1 at scale 1). */
+/** A per-test time budget that grows with DIFFERENTIAL_SCALE like the property case counts do, and with XONAVA_TIMING_SCALE (1 at scale 1). */
 export function scaledTimeoutMs(baseMs: number): number {
-  return Math.ceil(baseMs * Math.max(1, scaledRuns(100) / 100))
+  return Math.ceil(baseMs * Math.max(1, scaledRuns(100) / 100) * TIMING_SCALE)
 }
 
 /**

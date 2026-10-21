@@ -2,6 +2,7 @@ import { expect, it } from "vitest"
 import { allocateSequence, type SequenceAllocation, type SequenceStore } from "@xonava/core/sequence"
 import type { ExecutionScopeId } from "@xonava/core/domain"
 import { forAllAsync, scaledRuns, type Rng } from "../../../core/src/__tests__/differential/harness.js"
+import { TIMING_SCALE } from "../../../core/src/__tests__/timing.js"
 import {
   EXOTIC_SCOPES, HOUR, INVALID_SCOPES, NAMES, RefSequence, SCOPES, ZONES, compareCounters, counterKey, describeAlloc, describeOps, generateDef, generateOps, nextBoundary, oraclePeriod, shrinkOps,
   type AllocSpec, type Counter, type DefSpec, type Op, type RefOutcome,
@@ -40,7 +41,7 @@ export interface SequenceStoreDifferentialDriver {
   maxWorkers?: number
 }
 
-export const PROPERTY_TIMEOUT_MS = Math.ceil(300_000 * Math.max(1, scaledRuns(100) / 100))
+export const PROPERTY_TIMEOUT_MS = Math.ceil(300_000 * Math.max(1, scaledRuns(100) / 100) * TIMING_SCALE)
 
 const toDefinition = (def: DefSpec, name: string) => ({
   name, reset: def.reset, padding: def.padding, timeZone: def.timeZone,

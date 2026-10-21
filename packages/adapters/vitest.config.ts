@@ -1,6 +1,8 @@
 import { defineConfig } from "vitest/config"
 import path from "path"
 
+const parsedTimingScale = Number(process.env.XONAVA_TIMING_SCALE ?? (process.argv.includes("--coverage") ? "4" : "1"))
+const timingScale = Number.isFinite(parsedTimingScale) ? Math.max(1, parsedTimingScale) : 1
 export default defineConfig({
   resolve: {
     alias: {
@@ -23,8 +25,9 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.ts"],
     env: {
-      XONAVA_TIMING_SCALE: process.env.XONAVA_TIMING_SCALE ?? (process.argv.includes("--coverage") ? "4" : "1"),
+      XONAVA_TIMING_SCALE: String(timingScale),
     },
+    ...(timingScale > 1 ? { testTimeout: 5_000 * timingScale, hookTimeout: 10_000 * timingScale } : {}),
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],

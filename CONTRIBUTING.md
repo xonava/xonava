@@ -24,6 +24,8 @@ npm install
 | `npm run test:coverage -w @xonava/core` | Runs core unit tests with coverage thresholds |
 | `npm run verify:docs` | Checks documentation links, public import paths, and canonical references |
 
+Tests that depend on elapsed time scale their budgets and vitest timeouts by `XONAVA_TIMING_SCALE` (default 1, 4 under `--coverage`), so run tests on a loaded machine with `XONAVA_TIMING_SCALE=4`.
+
 ## Database test suites
 
 The integration, conformance, race, and crash suites run against real databases. Use a disposable database for each. The fixtures create tables and delete rows, so do not point them at data you need.
