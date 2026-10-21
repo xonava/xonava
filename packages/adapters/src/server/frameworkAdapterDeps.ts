@@ -36,7 +36,8 @@ export type CrudRouteBindings = Readonly<{
 
 /** Bootstrap-owned bindings used at the common HTTP normalization boundary. */
 export interface FrameworkRequestNormalization {
-  readonly routeBindings: CrudRouteBindings
+  /** CRUD bindings plus one binding per business action, looked up by the handler's `routeKey`. */
+  readonly routeBindings: CrudRouteBindings & Readonly<Record<string, CompiledRouteBinding>>
   readonly resolverBindings: ReadonlyMap<string, CompiledScopeResolverBinding>
   readonly trustedHeaders?: readonly string[]
   resolveTrustedSession(args: { readonly request: Request; readonly route: CompiledRouteBinding }): Promise<TrustedFrameworkSession | undefined>

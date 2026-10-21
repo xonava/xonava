@@ -20,6 +20,12 @@ export interface CrudRuntime {
   auditSinkFactory?: (context: RequestContext, persistence?: PersistenceProvider) => AuditSink
   outboxSinkFactory?: (context: RequestContext, persistence?: PersistenceProvider) => OutboxSink
   runtimeCapabilities?: RuntimeCapabilities
+  /**
+   * Fields reserved for business actions. A generic update that patches any
+   * of them is refused with ForbiddenError; change them through a business
+   * action write handler instead.
+   */
+  update?: { protectedFields?: readonly string[] }
 }
 
 export function CRUD<
@@ -52,6 +58,16 @@ export function CRUD<
     throw new ConfigurationError(
       `Entity "${compiled.entity.name}" configures durable audit guarantee without an outboxSinkFactory in CRUD().`,
     )
+  }
+
+  const protectedFields = runtime.update?.protectedFields
+  if (protectedFields !== undefined) {
+    const unknown = protectedFields.filter((field) => !Object.hasOwn(compiled.entity.fields, field))
+    if (unknown.length > 0) {
+      throw new ConfigurationError(
+        `Entity "${compiled.entity.name}" reserves unknown protectedFields: ${unknown.join(", ")}`,
+      )
+    }
   }
 
   return createCrudHandlersInternal({
@@ -88,5 +104,6 @@ export function CRUD<
       ...(compiled.filterFieldMeta ? { filterFieldMeta: compiled.filterFieldMeta } : {}),
       ...(compiled.listDefaults ? { listDefaults: compiled.listDefaults } : {}),
       ...(compiled.optimisticConcurrency ? { optimisticConcurrency: compiled.optimisticConcurrency } : {}),
+      ...(protectedFields !== undefined ? { update: { protectedFields: [...protectedFields] } } : {}),
   })
 }

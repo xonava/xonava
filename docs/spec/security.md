@@ -14,6 +14,8 @@ Client/UI authorization is never authoritative security. Secrets MUST remain opa
 
 Row authorization precedes field projection/mutation checks. Obligations emitted by policy MUST be enforced or execution denied. Nested operations receive no more authority/budget/services than the parent explicitly delegates.
 
+Business actions (`approve`, `reject`, and similar domain verbs) are authorized by their own ABAC grant and module action entry, never through `update`; `manage` in a module's `enabledModuleActions` still allows every action. See [Business actions](operations.md#business-actions-normative).
+
 ## Errors and conformance
 
 Unauthenticated and unauthorized outcomes remain distinguishable internally but MUST avoid protected existence disclosure. Invalid policy is configuration failure, not an allow decision. Conformance includes hostile caller scopes, tenant crossing, policy tampering, missing facts, ABAC normalization/evaluation, field visibility/writes, obligations, delegation attenuation, TOCTOU races, and redaction.

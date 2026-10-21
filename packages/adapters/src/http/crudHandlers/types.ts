@@ -122,6 +122,12 @@ export interface CrudOptions<
   listDefaults?: ListDefaults
   pagination?: ListPaginationConfig
   optimisticConcurrency?: OptimisticConcurrencyConfig<TRow>
+  /**
+   * Generic-update settings. `protectedFields` reserves entity fields for
+   * business actions: a generic update whose patch contains one is refused
+   * with ForbiddenError.
+   */
+  update?: { protectedFields?: readonly string[] }
 }
 
 /** Upper bound on the offset page number accepted from callers. */
