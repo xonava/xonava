@@ -20,7 +20,7 @@ import type {
 } from "@xonava/core/execution"
 import { assertRequesterCanEnqueueScope, assertJobScopeCanEnqueue, assertDurableJob, assertDurableIdentifier, requesterJobScope, requesterTenantId, scheduleCorrelationId, CorruptJobMetadataError, JobIdempotencyConflictError } from "@xonava/core/execution"
 import { buildJobFingerprintInput, decodeStoredJobMaxAttempts, encodeStoredJobMaxAttempts, fingerprintJob, jobFingerprintMatches } from "@xonava/core/execution"
-import { decodePersistedJobFingerprint, decodePersistedJobScope, encodeJobScope } from "../drizzle-shared/jobScope"
+import { decodePersistedJobFingerprint, decodePersistedJobScope, encodeJobScope, readPersistedScopeKey } from "../drizzle-shared/jobScope"
 import { uuidv7 } from "uuidv7"
 import type { DrizzleColumnMap } from "../drizzle-shared/predicateCompiler"
 import type { DrizzleSessionLike } from "./drizzleRepository"
@@ -96,7 +96,7 @@ function toStoredJob(row: Record<string, unknown>): StoredJob {
     jobVersion: row.jobVersion as number,
     tenantId,
     scope,
-    executionScope: decodePersistedJobScope(scope, tenantId),
+    executionScope: decodePersistedJobScope(scope, tenantId, readPersistedScopeKey(row.scopeKey)),
     payload: row.payload as string,
     status: row.status as StoredJob["status"],
     priority: row.priority as number,
@@ -213,7 +213,18 @@ export class DrizzleJobStore implements JobStore {
   /** Same scope, tenant and partition as the outer job row, excluding the row itself. */
   private samePartition(alias: string): SQL {
     const j = this.jobs
-    return sql`${this.aliased(alias, j.partitionKey!)} = ${j.partitionKey!} AND ${this.aliased(alias, j.scope!)} = ${j.scope!} AND ${this.aliased(alias, j.tenantId!)} IS NOT DISTINCT FROM ${j.tenantId!} AND ${this.aliased(alias, j.id!)} <> ${j.id!}`
+    return sql`${this.aliased(alias, j.partitionKey!)} = ${j.partitionKey!} AND ${this.aliased(alias, j.scope!)} = ${j.scope!} AND ${this.aliased(alias, j.tenantId!)} IS NOT DISTINCT FROM ${j.tenantId!}${j.scopeKey ? sql` AND ${this.aliased(alias, j.scopeKey)} IS NOT DISTINCT FROM ${j.scopeKey}` : sql``} AND ${this.aliased(alias, j.id!)} <> ${j.id!}`
+  }
+
+  /**
+   * The scope-key column value for an insert. The column is optional in the column map so tables created before the
+   * scope-key migration keep working for default-key jobs; a non-default platform/system key cannot be stored there,
+   * and silently dropping it would run the job under the default key, so that fails instead.
+   */
+  private scopeKeyValue(scopeKey: string | null): { scopeKey?: string } {
+    if (scopeKey === null) return {}
+    if (!this.jobs.scopeKey) throw new ConfigurationError("Job store column map has no 'scopeKey' column; apply the scope-key migration to enqueue a platform/system job with a non-default key")
+    return { scopeKey }
   }
 
   private tenantFilter(tenantId: string | null) {
@@ -234,7 +245,8 @@ export class DrizzleJobStore implements JobStore {
 
   async enqueue(args: EnqueueJobArgs): Promise<StoredJob> {
     const job = args.job
-    const { scope, tenantId } = encodeJobScope(job.executionScope)
+    const { scope, tenantId, scopeKey } = encodeJobScope(job.executionScope)
+    const scopeKeyValue = this.scopeKeyValue(scopeKey)
     const runAt = job.runAt ?? new Date()
     assertDurableJob(job, runAt)
     assertRequesterCanEnqueueScope(args.requester, scope, tenantId)
@@ -249,7 +261,7 @@ export class DrizzleJobStore implements JobStore {
       let inserted: unknown[]
       try {
         inserted = await this.db.insert(this.jobsTable).values({
-          id: uuidv7(), jobType: job.jobType, jobVersion: job.jobVersion, tenantId, scope,
+          id: uuidv7(), jobType: job.jobType, jobVersion: job.jobVersion, tenantId, scope, ...scopeKeyValue,
           payload: JSON.stringify(job.payload), status: "pending", priority: job.priority ?? 0,
           attempts: 0, maxAttempts: encodeStoredJobMaxAttempts(job.maxAttempts), runAt, nextAttemptAt: runAt,
           idempotencyKey: job.idempotencyKey, idempotencyScope, ...(this.jobs.fingerprint ? { fingerprint } : {}), correlationId: job.correlationId ?? null,
@@ -275,7 +287,7 @@ export class DrizzleJobStore implements JobStore {
     }
     const id = uuidv7()
     await this.db.insert(this.jobsTable).values({
-      id, jobType: job.jobType, jobVersion: job.jobVersion, tenantId, scope,
+      id, jobType: job.jobType, jobVersion: job.jobVersion, tenantId, scope, ...scopeKeyValue,
       payload: JSON.stringify(job.payload), status: "pending", priority: job.priority ?? 0,
       attempts: 0, maxAttempts: encodeStoredJobMaxAttempts(job.maxAttempts), runAt, nextAttemptAt: runAt,
       idempotencyKey: job.idempotencyKey ?? null, idempotencyScope, ...(this.jobs.fingerprint ? { fingerprint } : {}), correlationId: job.correlationId ?? null,

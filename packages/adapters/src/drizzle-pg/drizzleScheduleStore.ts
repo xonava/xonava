@@ -8,7 +8,7 @@ import type { DrizzleColumnMap } from "../drizzle-shared/predicateCompiler"
 import type { DrizzleSessionLike } from "./drizzleRepository"
 import { getAffectedRows } from "./pgUtils"
 import { uuidv7 } from "uuidv7"
-import { decodePersistedJobScope } from "../drizzle-shared/jobScope"
+import { decodePersistedJobScope, readPersistedScopeKey } from "../drizzle-shared/jobScope"
 
 export interface DrizzleScheduleStoreConfig {
   schedulesTable: AnyPgTable
@@ -30,7 +30,7 @@ function toScheduleClaim(row: Record<string, unknown>): ScheduleClaim {
   const scope = readScheduleScope(row)
   const tenantId = (row.tenantId as string) ?? null
   return {
-    scheduleId: row.id as string, scope, executionScope: decodePersistedJobScope(scope, tenantId), jobType: row.jobType as string,
+    scheduleId: row.id as string, scope, executionScope: decodePersistedJobScope(scope, tenantId, readPersistedScopeKey(row.scopeKey)), jobType: row.jobType as string,
     jobVersion: row.jobVersion as number, tenantId, payload: row.payload as string,
     cronExpression: row.cronExpression as string, timezone: row.timezone as string,
     overlapPolicy: { type: (row.overlapPolicy as string) ?? "allow" } as OverlapPolicy,

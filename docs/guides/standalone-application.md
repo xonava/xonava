@@ -131,7 +131,7 @@ The route binding carries the scope, and the trusted session carries the same sc
 
 ```ts
 // The scope is fixed in the route plan, never read from the request.
-export const PLATFORM_SCOPE = { kind: "platform", platformKey: "default" } as const satisfies ExecutionScope
+export const PLATFORM_SCOPE = { kind: "platform", platformKey: "acme" } as const satisfies ExecutionScope
 
 export interface StaffLogin {
   userId: string
@@ -230,11 +230,11 @@ Two behaviours to know:
 
 ## 5. Jobs, schedules and workflows
 
-Jobs and schedules run under the `platform` or `system` scope kind, declared on the job definition and carried on the stored job. A workflow carries a full `ExecutionScope`, so a workflow started under `{ kind: "platform", platformKey: "ops" }` reads back with that key and its steps see it as `context.executionScope`.
+Jobs and schedules run under the `platform` or `system` scope kind, declared on the job definition and carried on the stored job. Jobs, schedules and workflows all keep the full `ExecutionScope`: a job enqueued under `{ kind: "platform", platformKey: "acme" }` reads back with that key (jobs and schedules store it in the `scope_key` column added by migration `0005_job_scope_key`; see [known limitations](../KNOWN-LIMITATIONS.md)), and workflow steps see it as `context.executionScope`.
 
 ```ts
-// Jobs and schedules run under the same scope kinds. Today the stores persist only the kind,
-// so a platform job reads back with platformKey "default" and a system job with systemKey "framework".
+// Jobs and schedules run under the same scope kinds. The stores keep the platformKey or systemKey
+// in the scope_key column (migration 0005_job_scope_key), so the key reads back exactly as enqueued.
 export const jobs = createJobRegistry()
 jobs.register({
   type: "announcements.expire",

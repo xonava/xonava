@@ -229,9 +229,9 @@ export async function assertPlatformHttp(provider: PersistenceProvider, probe: P
 // Jobs, schedules and workflows under platform and system scope.
 // ---------------------------------------------------------------------------
 
-/** Job and schedule stores persist the scope kind only; they read back with these keys. */
-export const PLATFORM_JOB_SCOPE: JobExecutionScope = { kind: "platform", platformKey: "default" }
-export const SYSTEM_JOB_SCOPE: JobExecutionScope = { kind: "system", systemKey: "framework" }
+/** Non-default keys: they must survive the job and schedule stores exactly (scope_key column). */
+export const PLATFORM_JOB_SCOPE: JobExecutionScope = { kind: "platform", platformKey: "ops-east" }
+export const SYSTEM_JOB_SCOPE: JobExecutionScope = { kind: "system", systemKey: "maintenance" }
 const PLATFORM_REQUESTER: JobRequester = { scope: "platform", actorId: "ops-1", capabilities: ["enqueue:platform"] }
 const SYSTEM_REQUESTER: JobRequester = { scope: "system" }
 const SCOPES = [
@@ -242,6 +242,8 @@ const SCOPES = [
 export interface ScheduleRowFixture {
   id: string
   scope: "platform" | "system"
+  /** The platformKey or systemKey the row carries (scope_key column). */
+  scopeKey: string
   nextRunAt: Date
 }
 
@@ -298,7 +300,7 @@ export async function assertSchedulesUnderScope(args: {
     const scheduleId = `${prefix}-${name}-schedule`
     const jobType = `${prefix}.${name}.scheduled`
     const due = new Date(Date.now() - 60_000)
-    await args.insertSchedule({ id: scheduleId, scope: name, nextRunAt: due, jobType })
+    await args.insertSchedule({ id: scheduleId, scope: name, scopeKey: scope.kind === "platform" ? scope.platformKey : scope.systemKey, nextRunAt: due, jobType })
     const result = await materializeDueSchedules({ scheduleStore, jobStore, workerId: `${prefix}-${name}-materializer`, limit: 100, now: new Date() })
     expect(result).toMatchObject({ errors: [] })
     expect(result.jobsEnqueued).toBeGreaterThanOrEqual(1)
@@ -317,16 +319,18 @@ export async function assertSchedulesUnderScope(args: {
   }
 }
 
-/**
- * KNOWN BUG (separate work package): job and schedule stores persist the scope
- * kind only, so `platformKey` / `systemKey` are replaced by "default" /
- * "framework" on read (drizzle-shared/jobScope.ts). These assertions describe
- * the correct behaviour and fail today; runners wrap them in `it.fails`.
- */
+/** Platform and system keys, default and non-default, read back from the job store exactly as enqueued. */
 export async function assertJobScopeKeysSurviveRoundTrip(jobStore: JobStore, prefix: string): Promise<void> {
-  const platform: ExecutionScope = { kind: "platform", platformKey: "ops-east" }
-  const stored = await jobStore.enqueue({ requester: PLATFORM_REQUESTER, job: { executionScope: platform as JobExecutionScope, jobType: `${prefix}.keys`, jobVersion: 1, payload: {}, runAt: new Date() } })
-  expect((await jobStore.getById({ id: stored.id, requester: PLATFORM_REQUESTER }))?.executionScope).toEqual(platform)
+  const scopes: JobExecutionScope[] = [
+    { kind: "platform", platformKey: "ops-east" }, { kind: "platform", platformKey: "default" },
+    { kind: "system", systemKey: "maintenance" }, { kind: "system", systemKey: "framework" },
+  ]
+  for (const [index, scope] of scopes.entries()) {
+    const requester = scope.kind === "platform" ? PLATFORM_REQUESTER : SYSTEM_REQUESTER
+    const stored = await jobStore.enqueue({ requester, job: { executionScope: scope, jobType: `${prefix}.keys`, jobVersion: 1, payload: {}, runAt: new Date(), idempotencyKey: `${prefix}-keys-${index}` } })
+    expect(stored.executionScope).toEqual(scope)
+    expect((await jobStore.getById({ id: stored.id, requester }))?.executionScope).toEqual(scope)
+  }
 }
 
 /** Workflows persist the whole execution scope, so keys survive and steps see the scope they run under. */

@@ -124,7 +124,7 @@ export const adapterDeps: FrameworkAdapterDeps = {
 
 // --8<-- routes
 // The scope is fixed in the route plan, never read from the request.
-export const PLATFORM_SCOPE = { kind: "platform", platformKey: "default" } as const satisfies ExecutionScope
+export const PLATFORM_SCOPE = { kind: "platform", platformKey: "acme" } as const satisfies ExecutionScope
 
 export interface StaffLogin {
   userId: string
@@ -213,8 +213,8 @@ export function createAnnouncementHandlers(
 // --8<-- end
 
 // --8<-- jobs
-// Jobs and schedules run under the same scope kinds. Today the stores persist only the kind,
-// so a platform job reads back with platformKey "default" and a system job with systemKey "framework".
+// Jobs and schedules run under the same scope kinds. The stores keep the platformKey or systemKey
+// in the scope_key column (migration 0005_job_scope_key), so the key reads back exactly as enqueued.
 export const jobs = createJobRegistry()
 jobs.register({
   type: "announcements.expire",

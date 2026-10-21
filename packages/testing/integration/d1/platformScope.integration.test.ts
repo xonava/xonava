@@ -18,7 +18,7 @@ const assertions = sqliteTable("ps_assertions", {
 })
 const ts = (name: string) => integer(name, { mode: "timestamp_ms" })
 const jobs = sqliteTable("ps_jobs", {
-  id: text("id").primaryKey(), jobType: text("job_type"), jobVersion: integer("job_version"), tenantId: text("tenant_id"), scope: text("scope"), payload: text("payload"),
+  id: text("id").primaryKey(), jobType: text("job_type"), jobVersion: integer("job_version"), tenantId: text("tenant_id"), scope: text("scope"), scopeKey: text("scope_key"), payload: text("payload"),
   status: text("status"), priority: integer("priority"), attempts: integer("attempts"), maxAttempts: integer("max_attempts"), runAt: ts("run_at"), nextAttemptAt: ts("next_attempt_at"),
   leaseOwner: text("lease_owner"), leaseExpiresAt: integer("lease_expires_at"), claimToken: text("claim_token"), idempotencyKey: text("idempotency_key"),
   idempotencyScope: text("idempotency_scope"), fingerprint: text("fingerprint"), correlationId: text("correlation_id"), lastError: text("last_error"),
@@ -26,7 +26,7 @@ const jobs = sqliteTable("ps_jobs", {
 })
 const execs = sqliteTable("ps_execs", { id: text("id").primaryKey(), jobId: text("job_id"), attempt: integer("attempt"), workerId: text("worker_id"), status: text("status"), errorMessage: text("error_message"), startedAt: ts("started_at"), finishedAt: ts("finished_at") })
 const schedules = sqliteTable("ps_schedules", {
-  id: text("id").primaryKey(), jobType: text("job_type"), jobVersion: integer("job_version"), tenantId: text("tenant_id"), scope: text("scope"), payload: text("payload"),
+  id: text("id").primaryKey(), jobType: text("job_type"), jobVersion: integer("job_version"), tenantId: text("tenant_id"), scope: text("scope"), scopeKey: text("scope_key"), payload: text("payload"),
   cronExpression: text("cron_expression"), timezone: text("timezone"), enabled: integer("enabled", { mode: "boolean" }), overlapPolicy: text("overlap_policy"),
   misfirePolicy: text("misfire_policy"), nextRunAt: ts("next_run_at"), lastRunAt: ts("last_run_at"), lastStatus: text("last_status"), lastError: text("last_error"),
   leaseOwner: text("lease_owner"), leaseExpiresAt: integer("lease_expires_at"), claimToken: text("claim_token"), remainingOccurrences: integer("remaining_occurrences"),
@@ -34,10 +34,10 @@ const schedules = sqliteTable("ps_schedules", {
 const SCHEMA = [
   "CREATE TABLE ps_assertions (scope TEXT, key TEXT, fingerprint TEXT, token TEXT, expected_affected_rows INTEGER, actual_affected_rows INTEGER, CHECK (expected_affected_rows IS NULL OR expected_affected_rows = actual_affected_rows))",
   "CREATE TABLE ps_announcements (id TEXT PRIMARY KEY, title TEXT NOT NULL, region TEXT NOT NULL, priority INTEGER NOT NULL, version INTEGER NOT NULL)",
-  "CREATE TABLE ps_jobs (id TEXT PRIMARY KEY, job_type TEXT, job_version INTEGER, tenant_id TEXT, scope TEXT, payload TEXT, status TEXT, priority INTEGER, attempts INTEGER NOT NULL, max_attempts INTEGER NOT NULL, run_at INTEGER, next_attempt_at INTEGER, lease_owner TEXT, lease_expires_at INTEGER, claim_token TEXT, idempotency_key TEXT, idempotency_scope TEXT, fingerprint TEXT, correlation_id TEXT, last_error TEXT, result_payload TEXT, metadata TEXT, created_at INTEGER, started_at INTEGER, completed_at INTEGER, partition_key TEXT)",
+  "CREATE TABLE ps_jobs (id TEXT PRIMARY KEY, job_type TEXT, job_version INTEGER, tenant_id TEXT, scope TEXT, scope_key TEXT, payload TEXT, status TEXT, priority INTEGER, attempts INTEGER NOT NULL, max_attempts INTEGER NOT NULL, run_at INTEGER, next_attempt_at INTEGER, lease_owner TEXT, lease_expires_at INTEGER, claim_token TEXT, idempotency_key TEXT, idempotency_scope TEXT, fingerprint TEXT, correlation_id TEXT, last_error TEXT, result_payload TEXT, metadata TEXT, created_at INTEGER, started_at INTEGER, completed_at INTEGER, partition_key TEXT)",
   "CREATE UNIQUE INDEX ps_jobs_idem ON ps_jobs (idempotency_scope, idempotency_key)",
   "CREATE TABLE ps_execs (id TEXT PRIMARY KEY, job_id TEXT NOT NULL, attempt INTEGER, worker_id TEXT, status TEXT, error_message TEXT, started_at INTEGER, finished_at INTEGER)",
-  "CREATE TABLE ps_schedules (id TEXT PRIMARY KEY, job_type TEXT, job_version INTEGER, tenant_id TEXT, scope TEXT, payload TEXT, cron_expression TEXT, timezone TEXT, enabled INTEGER, overlap_policy TEXT, misfire_policy TEXT, next_run_at INTEGER, last_run_at INTEGER, last_status TEXT, last_error TEXT, lease_owner TEXT, lease_expires_at INTEGER, claim_token TEXT, remaining_occurrences INTEGER)",
+  "CREATE TABLE ps_schedules (id TEXT PRIMARY KEY, job_type TEXT, job_version INTEGER, tenant_id TEXT, scope TEXT, scope_key TEXT, payload TEXT, cron_expression TEXT, timezone TEXT, enabled INTEGER, overlap_policy TEXT, misfire_policy TEXT, next_run_at INTEGER, last_run_at INTEGER, last_status TEXT, last_error TEXT, lease_owner TEXT, lease_expires_at INTEGER, claim_token TEXT, remaining_occurrences INTEGER)",
 ]
 
 let fixture: D1Fixture | undefined
@@ -82,7 +82,7 @@ describe("D1 platform scope", () => {
     const { d1, jobStore, scheduleStore } = await setup()
     await assertSchedulesUnderScope({
       scheduleStore, jobStore, prefix: "ps-d1",
-      insertSchedule: async (row) => { await d1.prepare("INSERT INTO ps_schedules(id,job_type,job_version,tenant_id,scope,payload,cron_expression,timezone,enabled,overlap_policy,misfire_policy,next_run_at) VALUES(?,?,1,NULL,?,'{}','0 * * * *','UTC',1,'allow','fire_now',?)").bind(row.id, row.jobType, row.scope, row.nextRunAt.getTime()).run() },
+      insertSchedule: async (row) => { await d1.prepare("INSERT INTO ps_schedules(id,job_type,job_version,tenant_id,scope,scope_key,payload,cron_expression,timezone,enabled,overlap_policy,misfire_policy,next_run_at) VALUES(?,?,1,NULL,?,?,'{}','0 * * * *','UTC',1,'allow','fire_now',?)").bind(row.id, row.jobType, row.scope, row.scopeKey, row.nextRunAt.getTime()).run() },
       readSchedule: async (scheduleId) => {
         const row = (await d1.prepare("SELECT next_run_at,last_status FROM ps_schedules WHERE id=?").bind(scheduleId).first<Record<string, unknown>>())!
         return { nextRunAt: new Date(Number(row.next_run_at)), lastStatus: row.last_status as string | null }
@@ -95,8 +95,7 @@ describe("D1 platform scope", () => {
     await assertWorkflowsUnderScope(workflowStore, "ps-wf-d1")
   })
 
-  // Known bug, fixed by another work package: the job store reads every platform job back with platformKey "default".
-  it.fails("keeps a job's platformKey through the job store", async () => {
+  it("keeps a job's platformKey and systemKey through the job store", async () => {
     const { jobStore } = await setup()
     await assertJobScopeKeysSurviveRoundTrip(jobStore, "ps-d1")
   })

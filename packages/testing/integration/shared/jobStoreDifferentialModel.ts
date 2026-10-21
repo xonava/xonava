@@ -5,7 +5,7 @@ import type { Rng } from "../../../core/src/__tests__/differential/harness.js"
  * Reference JobStore for the real-database differential.
  *
  * The reference is written from the JobStore contract (packages/core/src/execution/types.ts, docs/spec/execution.md) and
- * the documented partition rule ("at most one job per non-null partition runs at a time", per scope and tenant), not from
+ * the documented partition rule ("at most one job per non-null partition runs at a time", per scope, tenant and platform/system key), not from
  * any SQL adapter. Time handling:
  *
  *  - Due-ness of pending/retrying jobs is driven by the `now` argument of claimDue, so it uses a virtual clock (`vnow`).
@@ -19,7 +19,8 @@ export const HOUR = 3_600_000
 
 export type ReqName = "sys" | "plat" | "platCap" | "t1" | "t2"
 export type ViewReq = "sys" | "plat" | "t1" | "t2"
-export type ScopeName = "system" | "platform" | "t1" | "t2"
+/** "platformK" / "systemK" are non-default keyed scopes ({ platformKey: "tenantless-a" } / { systemKey: "probe" }); the stores must round-trip the exact key. */
+export type ScopeName = "system" | "systemK" | "platform" | "platformK" | "t1" | "t2"
 export type FailStatus = "failed" | "dead_letter" | "cancelled"
 export type JobStatusName = "pending" | "running" | "succeeded" | "retrying" | "failed" | "dead_letter" | "cancelled"
 
@@ -36,18 +37,23 @@ export function requesterOf(name: ReqName): JobRequester {
 export function executionScopeOf(scope: ScopeName): JobExecutionScope {
   switch (scope) {
     case "system": return { kind: "system", systemKey: "framework" }
+    case "systemK": return { kind: "system", systemKey: "probe" }
     case "platform": return { kind: "platform", platformKey: "default" }
+    case "platformK": return { kind: "platform", platformKey: "tenantless-a" }
     case "t1": return { kind: "tenant", tenantId: "t1" }
     case "t2": return { kind: "tenant", tenantId: "t2" }
   }
 }
 
-function scopeParts(scope: ScopeName): { scope: "system" | "platform" | "tenant"; tenantId: string | null } {
+/** `scopeKey` is the platform/system key as the stores persist it: NULL for the framework defaults and for tenant scopes. */
+function scopeParts(scope: ScopeName): { scope: "system" | "platform" | "tenant"; tenantId: string | null; scopeKey: string | null } {
   switch (scope) {
-    case "system": return { scope: "system", tenantId: null }
-    case "platform": return { scope: "platform", tenantId: null }
-    case "t1": return { scope: "tenant", tenantId: "t1" }
-    case "t2": return { scope: "tenant", tenantId: "t2" }
+    case "system": return { scope: "system", tenantId: null, scopeKey: null }
+    case "systemK": return { scope: "system", tenantId: null, scopeKey: "probe" }
+    case "platform": return { scope: "platform", tenantId: null, scopeKey: null }
+    case "platformK": return { scope: "platform", tenantId: null, scopeKey: "tenantless-a" }
+    case "t1": return { scope: "tenant", tenantId: "t1", scopeKey: null }
+    case "t2": return { scope: "tenant", tenantId: "t2", scopeKey: null }
   }
 }
 
@@ -112,7 +118,7 @@ function requesterMayEnqueue(req: ReqName, scope: ScopeName): boolean {
   switch (req) {
     case "sys": return true
     case "platCap": return true
-    case "plat": return scope === "platform"
+    case "plat": return scope === "platform" || scope === "platformK"
     case "t1": return scope === "t1"
     case "t2": return scope === "t2"
   }
@@ -136,6 +142,8 @@ export interface RefJob {
   spec: EnqueueSpec
   scope: "system" | "platform" | "tenant"
   tenantId: string | null
+  /** Persisted platform/system key; NULL for the framework defaults and for tenant scopes. */
+  scopeKey: string | null
   idemScope: string
   status: JobStatusName
   attempts: number
@@ -179,7 +187,7 @@ export class RefStore {
   constructor(readonly config: RefConfig) {}
 
   private groupKey(job: RefJob): string | null {
-    return job.spec.partition === undefined ? null : `${job.spec.partition}|${job.scope}|${job.tenantId ?? ""}`
+    return job.spec.partition === undefined ? null : `${job.spec.partition}|${job.scope}|${job.tenantId ?? ""}|${job.scopeKey ?? ""}`
   }
 
   enqueue(spec: EnqueueSpec): EnqueueOutcome {
@@ -195,7 +203,7 @@ export class RefStore {
       }
     }
     const job: RefJob = {
-      slot: this.jobs.length, spec, scope: parts.scope, tenantId: parts.tenantId, idemScope, status: "pending", attempts: 0,
+      slot: this.jobs.length, spec, scope: parts.scope, tenantId: parts.tenantId, scopeKey: parts.scopeKey, idemScope, status: "pending", attempts: 0,
       storedMax: spec.maxAttempts ?? Number.POSITIVE_INFINITY, nextAttemptAt: spec.runAt, leaseOwner: null, token: null, leaseLive: false,
       lastError: null, result: null, startedAt: null, completed: false, tokenHistory: [], lastOwner: null,
     }
@@ -384,7 +392,7 @@ export class RefStore {
 // Generators
 
 const VIEWS: readonly ViewReq[] = ["sys", "sys", "plat", "t1", "t1", "t2"]
-const SCOPES: readonly ScopeName[] = ["system", "system", "system", "system", "system", "platform", "t1", "t1", "t2"]
+const SCOPES: readonly ScopeName[] = ["system", "system", "system", "system", "system", "systemK", "platform", "platformK", "t1", "t1", "t2"]
 const IDEM_KEYS = ["k1", "k2", "k3", "k4"] as const
 const CORRS = ["c1", "c2", "sched:s1", "sched:s1", "sched:s2"] as const
 const PARTITIONS = ["p1", "p1", "p2"] as const
@@ -402,7 +410,7 @@ export function generateEnqueueSpec(rng: Rng, ordinal: number, dense = false): E
   const scope = dense && rng.bool(0.7) ? "system" : rng.pick(SCOPES)
   const own: ReqName = scope === "t2" ? "t2" : "t1"
   const req: ReqName = rng.bool(0.8)
-    ? (scope === "system" ? "sys" : scope === "platform" ? rng.pick(["sys", "plat", "platCap"] as const) : rng.pick(["sys", own, own] as const))
+    ? (scope === "system" || scope === "systemK" ? "sys" : scope === "platform" || scope === "platformK" ? rng.pick(["sys", "plat", "platCap"] as const) : rng.pick(["sys", own, own] as const))
     : rng.pick(["sys", "plat", "platCap", "t1", "t2"] as const)
   const spec: EnqueueSpec = {
     req, scope, jobType: rng.pick(["ta", "ta", "tb"]), version: rng.pick([1, 1, 2]), payload: genPayload(rng),
@@ -430,7 +438,7 @@ function mutateSpec(rng: Rng, spec: EnqueueSpec): EnqueueSpec {
   }
 }
 
-function viewOfScope(scope: ScopeName): ViewReq { return scope === "system" ? "sys" : scope === "platform" ? "plat" : scope }
+function viewOfScope(scope: ScopeName): ViewReq { return scope === "system" || scope === "systemK" ? "sys" : scope === "platform" || scope === "platformK" ? "plat" : scope }
 
 /** Applies an op to the reference only (used by the generator to aim later ops at live jobs). */
 function advanceReference(ref: RefStore, op: Op): void {

@@ -226,7 +226,7 @@ Typechecking an adapter does not show that it meets the contract. Behavior is ch
 - [Getting started](docs/guides/getting-started.md) and [using capabilities independently](docs/guides/independent-capabilities.md)
 - [Architecture overview](docs/architecture.md) and [principles](docs/architecture.md#principles)
 - [Specification](docs/spec/README.md) and [TypeScript profile](docs/typescript/README.md)
-- Guides: [persistence setup](docs/guides/persistence-setup.md), [events, jobs and workflows](docs/guides/events-and-workflows.md), [create an operation](docs/guides/create-an-operation.md), [transactions and OCC](docs/guides/transactions-and-occ.md), [understanding errors](docs/guides/understanding-errors.md), [ownership for non-staff users](docs/guides/ownership.md), [standalone applications](docs/guides/standalone-application.md), [durable uploads](docs/guides/durable-uploads.md)
+- Guides: [persistence setup](docs/guides/persistence-setup.md), [events, jobs and workflows](docs/guides/events-and-workflows.md), [create an operation](docs/guides/create-an-operation.md), [transactions and OCC](docs/guides/transactions-and-occ.md), [understanding errors](docs/guides/understanding-errors.md), [ownership for non-staff users](docs/guides/ownership.md), [standalone applications](docs/guides/standalone-application.md), [durable uploads](docs/guides/durable-uploads.md), [supporting reads](docs/guides/supporting-reads.md)
 - Reference: [public exports](docs/reference/package-exports.md), [capability catalog](docs/reference/capabilities.md), [certification matrix](docs/reference/certification-matrix.md)
 - [Compatibility and versioning policy](docs/governance.md#compatibility-and-versioning)
 

@@ -12,7 +12,7 @@ const SCHEMA = "df_jobs"
 const s = pgSchema(SCHEMA)
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" })
 const jobs = s.table("jobs", {
-  id: text("id").primaryKey(), jobType: text("job_type"), jobVersion: integer("job_version"), tenantId: text("tenant_id"), scope: text("scope"),
+  id: text("id").primaryKey(), jobType: text("job_type"), jobVersion: integer("job_version"), tenantId: text("tenant_id"), scope: text("scope"), scopeKey: text("scope_key"),
   payload: text("payload"), status: text("status"), priority: integer("priority"), attempts: integer("attempts"), maxAttempts: integer("max_attempts"),
   runAt: ts("run_at"), nextAttemptAt: ts("next_attempt_at"), leaseOwner: text("lease_owner"), leaseExpiresAt: ts("lease_expires_at"), claimToken: text("claim_token"),
   idempotencyKey: text("idempotency_key"), idempotencyScope: text("idempotency_scope"), fingerprint: text("fingerprint"), correlationId: text("correlation_id"),
@@ -25,7 +25,7 @@ const execs = s.table("job_executions", {
 })
 
 const DDL = `DROP SCHEMA IF EXISTS ${SCHEMA} CASCADE; CREATE SCHEMA ${SCHEMA};
-CREATE TABLE ${SCHEMA}.jobs(id text primary key, job_type text, job_version int, tenant_id text, scope text, payload text, status text, priority int, attempts int NOT NULL, max_attempts int NOT NULL, run_at timestamptz, next_attempt_at timestamptz, lease_owner text, lease_expires_at timestamptz, claim_token text, idempotency_key text, idempotency_scope text, fingerprint text, correlation_id text, last_error text, result_payload text, metadata text, created_at timestamptz, started_at timestamptz, completed_at timestamptz, partition_key text, UNIQUE(idempotency_scope, idempotency_key));
+CREATE TABLE ${SCHEMA}.jobs(id text primary key, job_type text, job_version int, tenant_id text, scope text, scope_key text, payload text, status text, priority int, attempts int NOT NULL, max_attempts int NOT NULL, run_at timestamptz, next_attempt_at timestamptz, lease_owner text, lease_expires_at timestamptz, claim_token text, idempotency_key text, idempotency_scope text, fingerprint text, correlation_id text, last_error text, result_payload text, metadata text, created_at timestamptz, started_at timestamptz, completed_at timestamptz, partition_key text, UNIQUE(idempotency_scope, idempotency_key));
 CREATE TABLE ${SCHEMA}.job_executions(id text primary key, job_id text not null, attempt int not null, worker_id text not null, status text not null, error_message text, started_at timestamptz not null, finished_at timestamptz not null);`
 
 const ms = (value: unknown): number | null => (value === null || value === undefined ? null : new Date(value as string).getTime())
@@ -41,12 +41,13 @@ describe("PostgreSQL job store differential", () => {
     expiredFinalAttemptError: "Lease expired on final attempt",
     reset: async () => { await pool.query(`TRUNCATE ${SCHEMA}.jobs, ${SCHEMA}.job_executions`) },
     expireLease: async (id) => { await pool.query(`UPDATE ${SCHEMA}.jobs SET lease_expires_at = now() - interval '1 hour' WHERE id = $1 AND status = 'running'`, [id]) },
+    clearScopeKey: async (id) => { await pool.query(`UPDATE ${SCHEMA}.jobs SET scope_key = NULL WHERE id = $1`, [id]) },
     dump: async (): Promise<RawJobRow[]> => (await q(`SELECT * FROM ${SCHEMA}.jobs`)).map((r) => ({
       id: r.id as string, status: r.status as string, attempts: r.attempts as number, maxAttempts: r.max_attempts as number, priority: r.priority as number,
       runAt: ms(r.run_at)!, nextAttemptAt: ms(r.next_attempt_at), leaseOwner: r.lease_owner as string | null, claimToken: r.claim_token as string | null,
       leaseExpiresAt: ms(r.lease_expires_at), lastError: r.last_error as string | null, resultPayload: r.result_payload, startedAt: ms(r.started_at),
       completedAt: ms(r.completed_at), partitionKey: r.partition_key as string | null, correlationId: r.correlation_id as string | null,
-      idempotencyKey: r.idempotency_key as string | null, tenantId: r.tenant_id as string | null, scope: r.scope as string, jobType: r.job_type as string,
+      idempotencyKey: r.idempotency_key as string | null, tenantId: r.tenant_id as string | null, scope: r.scope as string, scopeKey: (r.scope_key ?? null) as string | null, jobType: r.job_type as string,
       jobVersion: r.job_version as number, payload: r.payload, metadata: r.metadata,
     })),
     executionsFor: async (jobIds) => (await q(`SELECT id, job_id, attempt, worker_id, status FROM ${SCHEMA}.job_executions WHERE job_id = ANY($1)`, [jobIds])).map((r) => ({ id: r.id as string, jobId: r.job_id as string, attempt: r.attempt as number, workerId: r.worker_id as string, status: r.status as string })),

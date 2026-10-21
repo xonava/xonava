@@ -30,6 +30,7 @@ import {
   buildStructuralScope,
   deriveSecurityCachePartition,
   getRequestIp,
+  assertCrudRouteBinding,
   normalizeCrudRequest,
   toCrudReadContext,
   withScopedPersistence,
@@ -94,6 +95,7 @@ export function createListHandler<
   D extends SelectableRow,
 >(shared: CrudShared<TRow, A, B, L, D>) {
   const { options, entity } = shared
+  if (shared.routes.list) assertCrudRouteBinding(options.requestNormalization, "list", options.moduleKey)
   const cursorTtlMs = options.pagination?.strategy === "cursor" ? options.pagination.cursorTtlMs : undefined
   if (cursorTtlMs !== undefined && !(Number.isSafeInteger(cursorTtlMs) && cursorTtlMs > 0))
     throw new ConfigurationError(`cursorTtlMs for ${options.moduleKey}.list must be a positive safe integer (milliseconds)`)

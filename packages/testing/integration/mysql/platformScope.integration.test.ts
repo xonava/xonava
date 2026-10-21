@@ -66,7 +66,7 @@ describe("MySQL platform scope", () => {
     const { jobStore, scheduleStore } = stores()
     await assertSchedulesUnderScope({
       scheduleStore, jobStore, prefix: "ps-mysql",
-      insertSchedule: async (row) => { await pool.query(`INSERT INTO \`${database}\`.\`${altName("schedules")}\`(id,scope,job_type,job_version,tenant_id,payload,cron_expression,timezone,overlap_policy,misfire_policy,next_run_at) VALUES(?,?,?,1,NULL,JSON_OBJECT(),'0 * * * *','UTC','allow','fire_now',?)`, [row.id, row.scope, row.jobType, row.nextRunAt]) },
+      insertSchedule: async (row) => { await pool.query(`INSERT INTO \`${database}\`.\`${altName("schedules")}\`(id,scope,scope_key,job_type,job_version,tenant_id,payload,cron_expression,timezone,overlap_policy,misfire_policy,next_run_at) VALUES(?,?,?,?,1,NULL,JSON_OBJECT(),'0 * * * *','UTC','allow','fire_now',?)`, [row.id, row.scope, row.scopeKey, row.jobType, row.nextRunAt]) },
       readSchedule: async (scheduleId) => {
         const [rows] = await pool.query<RowDataPacket[]>(`SELECT next_run_at,last_status FROM \`${database}\`.\`${altName("schedules")}\` WHERE id=?`, [scheduleId])
         return { nextRunAt: new Date(rows[0]!.next_run_at as string), lastStatus: rows[0]!.last_status as string | null }
@@ -79,8 +79,7 @@ describe("MySQL platform scope", () => {
     await assertWorkflowsUnderScope(stores().workflowStore, "ps-wf-mysql")
   })
 
-  // Known bug, fixed by another work package: the job store reads every platform job back with platformKey "default".
-  it.fails("keeps a job's platformKey through the job store", async () => {
+  it("keeps a job's platformKey and systemKey through the job store", async () => {
     await clearAltDatabase(pool, database)
     await assertJobScopeKeysSurviveRoundTrip(stores().jobStore, "ps-mysql")
   })

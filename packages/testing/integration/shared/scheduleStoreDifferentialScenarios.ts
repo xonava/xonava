@@ -11,7 +11,7 @@ const T0 = Date.UTC(2031, 0, 1)
 
 export function scheduleRow(id: string, overrides: Partial<RefRow> = {}): RefRow {
   return {
-    id, scope: "system", tenantId: null, jobType: "sched.job", jobVersion: 1, payload: "{}", cronExpression: "*/5 * * * *", timezone: "UTC",
+    id, scope: "system", tenantId: null, scopeKey: null, jobType: "sched.job", jobVersion: 1, payload: "{}", cronExpression: "*/5 * * * *", timezone: "UTC",
     enabled: true, paused: false, overlapPolicy: "allow", misfirePolicy: "fire_now", nextRunAt: T0 - 60_000, lastRunAt: null, lastStatus: null,
     lastError: null, leaseOwner: null, claimToken: null, leaseAt: null, effectiveFrom: null, effectiveUntil: null, remaining: null,
     calendarKey: null, owner: null, description: null, ...overrides,
@@ -111,6 +111,25 @@ export async function assertTenantTimezoneResolution(driver: ScheduleDriver, res
   await insertRow(driver, scheduleRow("platform-row", { scope: "platform", timezone: "Europe/Paris", nextRunAt: T0 - 3_000 }))
   const claims = await resolving.claimDueSchedules(claimArgs("tz-worker", 10, T0))
   expect(Object.fromEntries(claims.map((claim) => [claim.scheduleId, claim.timezone]))).toEqual({ "tenant-resolved": "America/Chicago", "tenant-unknown": "Asia/Tokyo", "platform-row": "Europe/Paris" })
+  await clearRows(driver)
+}
+
+/** Platform and system keys are claimed back exactly; a row without a key (written before scope_key existed) decodes to the framework default. */
+export async function assertScheduleScopeKeysRoundTrip(driver: ScheduleDriver): Promise<void> {
+  await clearRows(driver)
+  await insertRow(driver, scheduleRow("platform-keyed", { scope: "platform", scopeKey: "tenantless-a", nextRunAt: T0 - 6_000 }))
+  await insertRow(driver, scheduleRow("system-keyed", { scope: "system", scopeKey: "probe", nextRunAt: T0 - 5_000 }))
+  await insertRow(driver, scheduleRow("platform-legacy", { scope: "platform", scopeKey: null, nextRunAt: T0 - 4_000 }))
+  await insertRow(driver, scheduleRow("system-legacy", { scope: "system", scopeKey: null, nextRunAt: T0 - 3_000 }))
+  await insertRow(driver, scheduleRow("tenant-row", { scope: "tenant", tenantId: "tenant-1", nextRunAt: T0 - 2_000 }))
+  const claims = await driver.store.claimDueSchedules(claimArgs("key-worker", 10, T0))
+  expect(Object.fromEntries(claims.map((claim) => [claim.scheduleId, claim.executionScope]))).toEqual({
+    "platform-keyed": { kind: "platform", platformKey: "tenantless-a" },
+    "system-keyed": { kind: "system", systemKey: "probe" },
+    "platform-legacy": { kind: "platform", platformKey: "default" },
+    "system-legacy": { kind: "system", systemKey: "framework" },
+    "tenant-row": { kind: "tenant", tenantId: "tenant-1" },
+  })
   await clearRows(driver)
 }
 
