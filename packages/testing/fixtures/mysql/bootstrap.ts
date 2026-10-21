@@ -35,7 +35,7 @@ export async function applyMySqlJobPartitionHeadIndexMigration(pool:Pool):Promis
 }
 
 /**
- * Applies 0005 (byte-exact identifier columns). `tables` limits it to the tables an isolated database holds. The sequence/temporal
+ * Applies 0006 (byte-exact identifier columns). `tables` limits it to the tables an isolated database holds. The sequence/temporal
  * statements add `scope_hash` (not re-runnable), so a table that already has it is skipped; the MODIFY statements are re-applicable.
  */
 export async function applyMySqlByteExactIdentifiersMigration(pool:Pool,tables?:readonly string[]):Promise<void>{

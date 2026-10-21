@@ -10,7 +10,7 @@ import { mysqlIdempotency } from "../../fixtures/mysql/schema.js"
 import { mysqlCertificationUrl } from "./database.js"
 
 // Identifier columns compare byte-for-byte (docs/spec/sequence.md): 'a' vs 'a ' (PAD SPACE), 'K' vs 'k' (case folding) and
-// non-ASCII scopes must stay distinct. FIXTURE is built by the fixture migrations (including 0005); ADAPTER by the adapters' own DDL.
+// non-ASCII scopes must stay distinct. FIXTURE is built by the fixture migrations (including 0006); ADAPTER by the adapters' own DDL.
 const FIXTURE = "framework_byte_exact_fixture"
 const ADAPTER = "framework_byte_exact_adapter"
 const SCOPES = ["a", "a ", "K", "k", "é", "é", "日本語", "😀", "A".repeat(1024), `${"A".repeat(1023)}B`] as const
