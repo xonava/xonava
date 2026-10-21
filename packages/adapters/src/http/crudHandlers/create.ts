@@ -82,7 +82,21 @@ export function createCreateHandler<
             options.entityScope
            ),
          )
-       return { record }
+       // Read the row back through the transaction that wrote it: any other
+       // connection cannot see the uncommitted insert (PostgreSQL, MySQL).
+       const committedVersion = entity.versionField ? record[entity.versionField] : undefined
+       if (committedVersion !== undefined) assertEntityVersion(committedVersion)
+       const committedRead = await loadCommittedRecord({
+         entity,
+         moduleKey: options.moduleKey,
+         context: session,
+         persistence: operation.persistence,
+         adapterDeps: options.adapterDeps,
+         ...(options.entityScope !== undefined ? { entityScope: options.entityScope } : {}),
+         id: input.id,
+         ...(committedVersion !== undefined ? { committedVersion: committedVersion as EntityVersion } : {}),
+       })
+       return { record, committedRead }
      },
     atomicBatch: {
       prepare: async ({ operation, input }) => {
@@ -106,18 +120,23 @@ export function createCreateHandler<
       const session = resolveOperationRequestContext(operation)
       if (!("record" in result)) throw new ConfigurationError("Mutation result record is unavailable")
          const readablePersistence = withScopedPersistence(session, options.createPersistence(session))
-         const committedVersion = entity.versionField ? result.record[entity.versionField] : undefined
-         if (committedVersion !== undefined) assertEntityVersion(committedVersion)
-         const loaded = await loadCommittedRecord({
-           entity,
-           moduleKey: options.moduleKey,
-           context: session,
-           persistence: options.createPersistence(session),
-           adapterDeps: options.adapterDeps,
-           ...(options.entityScope !== undefined ? { entityScope: options.entityScope } : {}),
-           id: input.id,
-           ...(committedVersion !== undefined ? { committedVersion: committedVersion as EntityVersion } : {}),
-         })
+         // Initial response: the row read inside the writing transaction. The
+         // atomic-batch path has no such read; its batch is already applied when
+         // `after` runs, so a fresh read sees it.
+         const loaded = result.committedRead ?? await (async () => {
+           const committedVersion = entity.versionField ? result.record[entity.versionField] : undefined
+           if (committedVersion !== undefined) assertEntityVersion(committedVersion)
+           return loadCommittedRecord({
+             entity,
+             moduleKey: options.moduleKey,
+             context: session,
+             persistence: options.createPersistence(session),
+             adapterDeps: options.adapterDeps,
+             ...(options.entityScope !== undefined ? { entityScope: options.entityScope } : {}),
+             id: input.id,
+             ...(committedVersion !== undefined ? { committedVersion: committedVersion as EntityVersion } : {}),
+           })
+         })()
       if (loaded.kind !== "record")
          return {
            success: true,

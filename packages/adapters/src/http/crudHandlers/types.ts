@@ -11,6 +11,7 @@ import type {
   EntityScopeDefinition,
 } from "@xonava/core/entity"
 import type { EntityDescriptor } from "@xonava/core/persistence"
+import type { LoadedCommittedRecord } from "../committedRecord"
 import type { RequestContext } from "@xonava/core/domain"
 import type { FrameworkAdapterDeps, FrameworkRequestNormalization } from "../../server"
 import type {
@@ -40,7 +41,19 @@ export type MutationOutsideReadScope = {
   success: true
   reason: "CREATED_OUTSIDE_READ_SCOPE" | "UPDATED_OUTSIDE_READ_SCOPE"
 }
-export type MutationResult<TRow> = { record: TRow } | MutationOutsideReadScope
+export type MutationResult<TRow> =
+  | {
+      record: TRow
+      /**
+       * The committed row as read inside the writing transaction (the only
+       * connection that can see the uncommitted write), under the caller's read
+       * scope and projection. The `after` hook builds the response from it. Absent
+       * on the atomic-batch path, where the write has already been applied when
+       * `after` runs and a fresh read sees it.
+       */
+      committedRead?: LoadedCommittedRecord<TRow & Record<string, unknown>>
+    }
+  | MutationOutsideReadScope
 
 export type RateLimitConfigs = {
   list?: import("@xonava/core/entity").EntityRateLimitSetting
