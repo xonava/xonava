@@ -159,13 +159,13 @@ describe("D1 repository OCC conformance", () => {
     expect(deleteWhere).toHaveBeenCalledOnce()
   })
 
-  it("throws NotFoundError on delete with wrong expectedVersion", async () => {
+  it("throws OptimisticConcurrencyError on delete with wrong expectedVersion of an existing row", async () => {
     const db = createMockDb({ affectedRows: 0 })
     const repo = createDrizzleRepository(createBaseArgs(db))
 
     await expect(
       repo.delete("product-1", { optimisticConcurrency: { expectedVersion: 99 } }),
-    ).rejects.toBeInstanceOf(NotFoundError)
+    ).rejects.toBeInstanceOf(OptimisticConcurrencyError)
   })
 
   it("throws ConfigurationError when supplying version field directly in updateOneWhere", async () => {

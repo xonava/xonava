@@ -4,6 +4,7 @@ import {
   ConfigurationError,
   ConflictError,
   NotFoundError,
+  OptimisticConcurrencyError,
   PreconditionRequiredError,
   Predicate,
   projectResponseRecord,
@@ -86,7 +87,13 @@ export function createDeleteHandler<
           })()
         : await (async () => {
             if (!repo.deleteWhere) throw new ConfigurationError(`Secure delete for ${entity.name} requires deleteWhere support`)
-            return (await repo.deleteWhere(deleteFilter, mutationOptions)).deletedCount
+            try {
+              return (await repo.deleteWhere(deleteFilter, mutationOptions)).deletedCount
+            } catch (error) {
+              // The version is part of the filter, so a stale version matches no row; the record was read above, so report it as a version conflict.
+              if (versionField && error instanceof NotFoundError) throw new OptimisticConcurrencyError(`${entity.name} version mismatch`)
+              throw error
+            }
           })()
       if (affected === 0) {
         if (versionField && input.expectedVersion !== undefined) throw new ConflictError("This record was modified by another user. Please reload and try again.")

@@ -501,11 +501,19 @@ export function createDrizzleRepository<T extends SelectableRow, TId = string>(a
              : eq(primaryKeyColumn, id as never))
           .returning<T>()
 
-         if (deleted.length === 0 && options?.idempotent !== true) {
-          throw new NotFoundError(`${args.entity.name} record not found`)
+        if (deleted.length === 0) {
+          if (options?.optimisticConcurrency) {
+            const existing = await fetchMatchingPrimaryKeys({ db: args.db, table: args.table, whereClause: eq(primaryKeyColumn, id as never), primaryKeyColumn })
+            if (existing.length > 0) {
+              throw new OptimisticConcurrencyError(
+                `${args.entity.name} version mismatch: expected version ${options.optimisticConcurrency.expectedVersion}`
+              )
+            }
+          }
+          if (options?.idempotent !== true) throw new NotFoundError(`${args.entity.name} record not found`)
         }
       } catch (error) {
-        if (error instanceof NotFoundError) throw error
+        if (error instanceof NotFoundError || error instanceof OptimisticConcurrencyError) throw error
         rethrowConstraintError(error, constraintMap)
       }
     },
@@ -520,6 +528,7 @@ export function createDrizzleRepository<T extends SelectableRow, TId = string>(a
           throw new ConfigurationError(`Optimistic concurrency for "${args.entity.name}" requires a mapped version field`)
         }
         let whereClause = compileWhereClause(predicateCompiler, filter)
+        const unversionedWhere = whereClause
         if (options?.optimisticConcurrency) {
           const versionPredicate = eq(versionColumn!, options.optimisticConcurrency.expectedVersion as never)
           whereClause = whereClause ? (and(whereClause, versionPredicate) ?? versionPredicate) : versionPredicate
@@ -530,13 +539,17 @@ export function createDrizzleRepository<T extends SelectableRow, TId = string>(a
           .returning<T>()
 
         if (options?.optimisticConcurrency && deleted.length === 0) {
-          throw new OptimisticConcurrencyError(
-             `${args.entity.name} version mismatch: expected version ${options.optimisticConcurrency.expectedVersion}`,
-          )
+          const existing = await fetchMatchingPrimaryKeys({ db: args.db, table: args.table, whereClause: unversionedWhere!, primaryKeyColumn })
+          if (existing.length > 0) {
+            throw new OptimisticConcurrencyError(
+               `${args.entity.name} version mismatch: expected version ${options.optimisticConcurrency.expectedVersion}`,
+            )
+          }
+          throw new NotFoundError(`${args.entity.name} record not found`)
         }
         return { deletedCount: deleted.length }
       } catch (error) {
-        if (error instanceof OptimisticConcurrencyError || error instanceof ConfigurationError) throw error
+        if (error instanceof OptimisticConcurrencyError || error instanceof NotFoundError || error instanceof ConfigurationError) throw error
         rethrowConstraintError(error, constraintMap)
       }
     },

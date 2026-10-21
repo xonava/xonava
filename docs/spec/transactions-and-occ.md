@@ -10,6 +10,8 @@ Nested transaction behavior MUST be declared: true savepoint/nesting, join-exist
 
 A versioned mutation MUST condition on the expected version and advance the version only on success. A stale version MUST produce a conflict and MUST NOT partially apply effects. When authorization facts can change concurrently, authorization predicates and the mutation MUST be one conditional atomic decision.
 
+A delete that carries an expected version follows the same rule on every provider. When the delete matches no row, the repository MUST distinguish the cause: if a row with that identity (within scope and authorization predicates) still exists with a different version, the result is `OPTIMISTIC_CONCURRENCY_FAILED` and the row is untouched; if no such row exists, the result is `NOT_FOUND`. An idempotent delete forgives only the missing row, never a stale version. `deleteWhere` with an expected version applies the same distinction to its filter: rows match the filter but not the version is `OPTIMISTIC_CONCURRENCY_FAILED`, no row matches the filter is `NOT_FOUND`. Over HTTP the first case answers 409 and the second 404.
+
 Exactly one concurrent mutation for a shared expected version may succeed. A retry MUST reread/re-authorize and use the new version; blind automatic replay is forbidden.
 
 ## Atomic effects and crash behavior
