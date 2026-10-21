@@ -109,6 +109,31 @@ Uncaught handler/conversion errors use `createFrameworkErrorHandler()`. The opti
 
 To integrate Node peer addresses, set `runtime.adapterDeps.resolveHttpMetadata` to `resolveAdapterHttpMetadata`. It supplies the socket peer address, never an automatic proxy-trust assertion. Continue configuring `resolveClientIp` using the existing trusted-proxy policy. If your application already supplies a metadata resolver, compose it explicitly instead of replacing its policy accidentally.
 
+## Business actions
+
+A write that is not a plain create, update or delete is a business action. Register a route binding for it, grant the action in the module catalog and the ABAC policies, and pass the name as `action`:
+
+```ts
+const approve = createFrameworkWriteHandler({
+  adapterDeps,
+  requestNormalization, // routeBindings includes an `approve` binding
+  scope: { scope: "tenant", idempotency: { required: true } },
+  moduleKey: "billing.invoices",
+  action: "approve", // routeKey defaults to the action
+  customCapabilityKey: "billing.invoices.approve",
+  createPersistence,
+  definition: approveInvoiceOperation, // key matches the binding's operationKey
+  resolveInput,
+  resolveResourceIdentity,
+  recoverCommittedResponse,
+})
+
+// Keep generic updates away from the fields only approve may change.
+const handlers = CRUD(invoiceDefinition, { ...runtime, update: { protectedFields: ["status", "approvedAt"] } })
+```
+
+`approve` is admitted only by its own grant (an `update` grant does not imply it), a missing binding or a reserved name (`read`, `manage`, `create`, `update`, `delete`) fails at construction, and a generic update that touches a `protectedFields` entry is refused with 403. See [Business actions](../spec/operations.md#business-actions-normative).
+
 ## Method and body matrix
 
 Every write handler (CRUD `create`, `update` and `delete`, and `createFrameworkWriteHandler`) reads its body with `parseJsonBodySafely` (`packages/adapters/src/http/requestBody.ts`) before session, CSRF or authorization checks. Refusals are mapped by `createFrameworkErrorHandler` (`packages/adapters/src/http/handleFrameworkCoreError.ts`). List and detail handlers never read a body: they parse only the query and path parameters.

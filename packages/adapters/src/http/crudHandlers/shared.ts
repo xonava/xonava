@@ -15,7 +15,6 @@ import {
   type PredicateNode,
   type RequestContext,
 } from "@xonava/core/domain"
-import type { CrudRouteKey } from "@xonava/core/entity"
 import { createReadOnlyPersistenceProvider, createTenantScopedPersistenceProvider, encodeTenantCacheTag, type PersistenceProvider } from "@xonava/core/persistence"
 import { CacheBackedRateLimitStore } from "../../cache"
 import type {
@@ -49,14 +48,17 @@ export function tenantIdFromContext(context: RequestContext): string | undefined
 
 export async function normalizeCrudRequest(args: {
   request: Request
-  routeKey: CrudRouteKey
+  routeKey: string
   normalization: FrameworkRequestNormalization
   requestId: string
   correlationId: string
   pathParameters?: Readonly<Record<string, string>>
   metadata?: Readonly<Record<string, unknown>>
 }): Promise<RequestContext> {
-  const route = args.normalization.routeBindings[args.routeKey]
+  const route = Object.hasOwn(args.normalization.routeBindings, args.routeKey)
+    ? args.normalization.routeBindings[args.routeKey]
+    : undefined
+  if (route === undefined) throw new ConfigurationError(`No route binding is configured for "${args.routeKey}"`)
   const session = await args.normalization.resolveTrustedSession({ request: args.request, route })
   const trustedHeaders = Object.fromEntries((args.normalization.trustedHeaders ?? []).flatMap((name) => {
     const value = args.request.headers.get(name)
@@ -140,7 +142,7 @@ export function canUseOwnerBypass(
 export function authorizeFrameworkModule(args: {
   deps: CrudOptions<SelectableRow>["adapterDeps"]
   moduleKey: string
-  action: "read" | "create" | "update" | "delete"
+  action: string
   capabilityKey?: string
   context: RequestContext
   bundle?: import("../../server").AbacBundle | null
@@ -230,9 +232,10 @@ export function getProtectedMutationFields<TRow extends SelectableRow>(
 
 export function assertProtectedUpdateFields<TRow extends SelectableRow>(
   entity: CrudOptions<TRow>["entity"],
-  patch: object
+  patch: object,
+  reservedFields: readonly string[] = [],
 ): void {
-  const protectedFields = getProtectedMutationFields(entity)
+  const protectedFields = [...new Set([...getProtectedMutationFields(entity), ...reservedFields])]
   const provided = protectedFields.filter((field) => Object.hasOwn(patch, field))
   if (provided.length > 0)
     throw new ForbiddenError(

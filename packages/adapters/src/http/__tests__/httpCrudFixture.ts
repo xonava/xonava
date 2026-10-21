@@ -8,7 +8,7 @@ import { allowAllAbacBundle, allowAllModuleFacts, canonicalRequestNormalization,
 
 type Row = { id: string; tenantId: string; name: string; version: number }
 
-export function httpCrudFixture(options: { deny?: boolean; disabled?: boolean } = {}) {
+export function httpCrudFixture(options: { deny?: boolean; disabled?: boolean; protectedFields?: readonly string[] } = {}) {
   const rows = new Map<string, Row>()
   const select = (filter?: PredicateNode) => [...rows.values()].filter(row => !filter || evaluatePredicate(row, filter))
   const repository = {
@@ -51,6 +51,7 @@ export function httpCrudFixture(options: { deny?: boolean; disabled?: boolean } 
     scope: { scope: 'tenant', idempotency: { required: false } },
     createPersistence: () => persistence,
     getCacheAdapter: vi.fn(),
+    ...(options.protectedFields ? { update: { protectedFields: options.protectedFields } } : {}),
   })
   return { handlers, repository, rows }
 }

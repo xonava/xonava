@@ -45,6 +45,33 @@ export type ScopedFrameworkValidatedContext = {
   validatedBody?: unknown
 }
 
+/** Actions a business action may not reuse: they keep their CRUD or wildcard meaning. */
+const RESERVED_ACTION_NAMES: ReadonlySet<string> = new Set(["read", "manage", "create", "update", "delete"])
+const BUSINESS_ACTION_NAME = /^[a-z][a-zA-Z0-9_-]{0,63}$/
+
+/**
+ * A business action is a domain verb such as `approve`, granted on its own in
+ * the module catalog and ABAC policies. It never implies, and is never implied
+ * by, `update`.
+ */
+export type BusinessActionName = string & { readonly __businessAction?: never }
+
+export type WriteHandlerAction = "create" | "update" | "delete" | BusinessActionName
+
+function assertWriteAction(moduleKey: string, action: string): void {
+  if (action === "create" || action === "update" || action === "delete") return
+  if (typeof action === "string" && RESERVED_ACTION_NAMES.has(action)) {
+    throw new ConfigurationError(
+      `Write handler for "${moduleKey}" cannot use "${action}" as a business action; it is reserved`,
+    )
+  }
+  if (typeof action !== "string" || !BUSINESS_ACTION_NAME.test(action)) {
+    throw new ConfigurationError(
+      `Write handler for "${moduleKey}" has an invalid business action name; use ${String(BUSINESS_ACTION_NAME)}`,
+    )
+  }
+}
+
 export type CrudScopeConfig = {
   scope: "application" | "tenant" | "platform" | "system" | "public"
   sessionRequired?: boolean
@@ -133,7 +160,9 @@ export function createFrameworkWriteHandler<
   requestNormalization: FrameworkRequestNormalization
   scope: CrudScopeConfig
   moduleKey: string
-  action: "create" | "update" | "delete"
+  action: WriteHandlerAction
+  /** Key of the route binding in `requestNormalization.routeBindings`; defaults to `action`. */
+  routeKey?: string
   validation?: ScopedFrameworkValidation
    rateLimit?: { config: RateLimitConfig; consistency?: "atomic" | "best-effort"; failureMode?: import("@xonava/core/rate-limit").RateLimitFailureMode; key?: (request: Request, context: RequestContext) => string }
    getRateLimitStore?: () => Promise<RateLimitStore>
@@ -173,6 +202,13 @@ export function createFrameworkWriteHandler<
   toResponse?: (result: TResult) => Response
 } & CapabilityCheckConfig) {
   assertFrameworkAdapterDeps(args.adapterDeps)
+  assertWriteAction(args.moduleKey, args.action)
+  const routeKey = args.routeKey ?? args.action
+  if (!Object.hasOwn(args.requestNormalization.routeBindings, routeKey)) {
+    throw new ConfigurationError(
+      `Write handler for "${args.moduleKey}" action "${args.action}" has no route binding "${routeKey}"`,
+    )
+  }
 
   // Correctness-critical cache invalidation requires a durable obligation, which
   // is only available when the mutation participates in idempotency.
@@ -228,7 +264,7 @@ export function createFrameworkWriteHandler<
         : undefined
       const requestContext = await normalizeCrudRequest({
         request,
-        routeKey: args.action,
+        routeKey,
         normalization: args.requestNormalization,
         requestId: requestMetadata.requestId,
         correlationId: requestMetadata.correlationId,
@@ -298,7 +334,7 @@ export function createFrameworkWriteHandler<
 
       const authorizer = abacBundle ? createAbacAuthorizer(abacBundle) : null
       const enforceAbac: AbacWriteEnforcer | undefined = authorizer
-         ? { enforce: (action: string, record: Record<string, unknown>, changedFields?: string[]) => authorizer.assertWrite({ action: action as "create" | "update" | "delete", record, ...(changedFields ? { changedFields } : {}) }) }
+         ? { enforce: (action: string, record: Record<string, unknown>, changedFields?: string[]) => authorizer.assertWrite({ action, record, ...(changedFields ? { changedFields } : {}) }) }
         : undefined
 
        const basePersistence = args.createPersistence(requestContext)

@@ -105,13 +105,13 @@ export function createUpdateHandler<
       ? {
           before: async ({ operation, input }: { operation: PreparationOperationContext; input: UpdateOperationInput<TRow, B> }) => {
             const session = resolveOperationRequestContext(operation)
-            assertProtectedUpdateFields(entity, input.patch as object)
+            assertProtectedUpdateFields(entity, input.patch as object, options.update?.protectedFields)
               const patch = await options.crud!.update!.transformInput!({
               existing: input.existing,
               patch: input.patch,
               context: toCrudContext(session, operation),
             })
-            assertProtectedUpdateFields(entity, (patch ?? input.patch) as object)
+            assertProtectedUpdateFields(entity, (patch ?? input.patch) as object, options.update?.protectedFields)
             return patch
               ? { ...input, patch, originalPatch: input.originalPatch }
               : input
@@ -187,7 +187,7 @@ export function createUpdateHandler<
         // transformInput runs after the authorization stage; the FINAL patch
         // must pass the same protected-field and ABAC update checks that the
         // interactive execute path applies before the batch is prepared.
-        assertProtectedUpdateFields(entity, input.patch as object)
+        assertProtectedUpdateFields(entity, input.patch as object, options.update?.protectedFields)
         // Pre-image and post-image must both permit the patch (see
         // enforceUpdateImages).
         for (const record of [
@@ -427,7 +427,7 @@ export function createUpdateHandler<
        if (config && (expectedVersion === undefined || !Number.isSafeInteger(expectedVersion) || expectedVersion < 0))
          throw headerValue === null || headerValue.trim() === "" ? new PreconditionRequiredError("If-Match") : new ConflictError("Version is required for this update")
        const patch = rawPatch as B
-       assertProtectedUpdateFields(entity, patch as object)
+       assertProtectedUpdateFields(entity, patch as object, options.update?.protectedFields)
        return {
         id: (validated.validatedParams as { id: string }).id,
         patch,

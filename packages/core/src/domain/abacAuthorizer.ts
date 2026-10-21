@@ -25,7 +25,7 @@ export interface AbacAuthorizer {
   buildActionScope(action: string): AbacReadScope
 
   /** `existing` is the durable pre-image of an update; both images must permit the write. */
-  assertWrite(params: { action: "create" | "update" | "delete"; record: Record<string, unknown>; existing?: Record<string, unknown>; changedFields?: string[] }): void
+  assertWrite(params: { action: string; record: Record<string, unknown>; existing?: Record<string, unknown>; changedFields?: string[] }): void
   fieldReadPlan(record: Record<string, unknown>): Record<string, FieldReadOverride>
 }
 
