@@ -24,6 +24,8 @@ export type FrameworkCoreErrorCode =
   | "TIMEOUT"
   | "CANCELLED"
   | "UNAVAILABLE"
+  | "REQUIRED_HEADER_MISSING"
+  | "PRECONDITION_REQUIRED"
 
 export type FrameworkErrorCategory = "authentication" | "authorization" | "validation" | "conflict" | "not-found" | "rate-limit" | "configuration" | "dependency" | "internal"
 export type SafeErrorMetadata = Readonly<Record<string, string | number | boolean>>
@@ -42,6 +44,8 @@ const ERROR_DEFAULTS: Readonly<Record<FrameworkCoreErrorCode, ErrorDefaults>> = 
   CONFLICT: { safeMessage: "Conflict", retryable: false, category: "conflict", publicCode: "CONFLICT" },
   OPTIMISTIC_CONCURRENCY_FAILED: { safeMessage: "Conflict", retryable: false, category: "conflict", publicCode: "OPTIMISTIC_CONCURRENCY_FAILED" },
   STALE_CLAIM: { safeMessage: "Conflict", retryable: false, category: "conflict", publicCode: "STALE_CLAIM" },
+  REQUIRED_HEADER_MISSING: { safeMessage: "A required request header is missing", retryable: false, category: "validation", publicCode: "REQUIRED_HEADER_MISSING" },
+  PRECONDITION_REQUIRED: { safeMessage: "A precondition header is required", retryable: false, category: "validation", publicCode: "PRECONDITION_REQUIRED" },
   NOT_FOUND: { safeMessage: "Not found", retryable: false, category: "not-found", publicCode: "NOT_FOUND" },
   RATE_LIMIT_EXCEEDED: { safeMessage: "Rate limit exceeded", retryable: true, category: "rate-limit", publicCode: "RATE_LIMIT_EXCEEDED" },
   RETRYABLE_PERSISTENCE_ERROR: { safeMessage: "Service temporarily unavailable", retryable: true, category: "dependency", publicCode: "SERVICE_UNAVAILABLE" },
@@ -91,6 +95,26 @@ export class FrameworkCoreError extends Error {
     this.category = defaults.category
     this.safeMetadata = Object.freeze({ ...safeMetadata })
     this.publicCode = defaults.publicCode
+  }
+}
+
+function assertSafeHeaderName(header: string): void {
+  if (typeof header !== "string" || !/^[A-Za-z0-9-]{1,100}$/.test(header)) throw new ConfigurationError("Header name is invalid")
+}
+
+/** A required request header (for example `Idempotency-Key`) was not supplied. Public metadata carries the header name. */
+export class RequiredHeaderMissingError extends FrameworkCoreError {
+  constructor(header: string) {
+    assertSafeHeaderName(header)
+    super(`${header} header is required`, "REQUIRED_HEADER_MISSING", undefined, { header })
+  }
+}
+
+/** A precondition header (for example `If-Match`) is required but was not supplied. Public metadata carries the header name. */
+export class PreconditionRequiredError extends FrameworkCoreError {
+  constructor(header: string) {
+    assertSafeHeaderName(header)
+    super(`${header} header is required`, "PRECONDITION_REQUIRED", undefined, { header })
   }
 }
 
@@ -185,6 +209,45 @@ export class ValidationError extends FrameworkCoreError {
 export class BusinessRuleError extends FrameworkCoreError {
   constructor(message: string = "Business rule violation", details?: unknown) {
     super(message, "BAD_REQUEST", details)
+  }
+}
+
+const PUBLIC_CODE_PATTERN = /^[A-Z][A-Z0-9_]{2,63}$/
+/** Codes transports answer with before an operation runs; an application code must not collide with them. */
+const TRANSPORT_RESERVED_PUBLIC_CODES: ReadonlySet<string> = new Set(["INVALID_JSON", "REQUEST_BODY_TOO_LARGE", "UNSUPPORTED_MEDIA_TYPE", "BODY_NOT_ACCEPTED"])
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/
+
+export interface PublicBusinessErrorInput {
+  /** Stable machine-readable code, `^[A-Z][A-Z0-9_]{2,63}$`, distinct from every registry code. */
+  readonly publicCode: string
+  /** Application-authored message that is safe to show to the caller (1-200 characters, no control characters). */
+  readonly publicMessage: string
+  /** Names of the request fields the caller should correct (at most 20, each 1-200 characters). */
+  readonly fields?: readonly string[]
+}
+
+/**
+ * A business-rule failure whose code and message are authored by the application and are safe to expose.
+ * Never use it for authentication or authorization failures; 401, 403 and 404 stay fixed.
+ */
+export class PublicBusinessError extends BusinessRuleError {
+  readonly fields: readonly string[]
+
+  constructor(input: PublicBusinessErrorInput, details?: unknown) {
+    const { publicCode, publicMessage, fields = [] } = input ?? ({} as PublicBusinessErrorInput)
+    if (typeof publicCode !== "string" || !PUBLIC_CODE_PATTERN.test(publicCode)) throw new ConfigurationError("publicCode must match /^[A-Z][A-Z0-9_]{2,63}$/")
+    if (Object.hasOwn(ERROR_DEFAULTS, publicCode) || Object.values(ERROR_DEFAULTS).some((d) => d.publicCode === publicCode) || TRANSPORT_RESERVED_PUBLIC_CODES.has(publicCode))
+      throw new ConfigurationError("publicCode must not equal a framework error code")
+    if (typeof publicMessage !== "string" || publicMessage.length < 1 || publicMessage.length > 200 || CONTROL_CHARACTERS.test(publicMessage))
+      throw new ConfigurationError("publicMessage must be 1-200 characters without control characters")
+    if (!Array.isArray(fields) || fields.length > 20 || fields.some((f) => typeof f !== "string" || f.length < 1 || f.length > 200))
+      throw new ConfigurationError("fields must have at most 20 entries of 1-200 characters")
+    super(publicMessage, details)
+    // The base constructor assigns the registry values; override with the validated application values.
+    Object.defineProperty(this, "safeMessage", { value: publicMessage, enumerable: true, writable: false, configurable: false })
+    Object.defineProperty(this, "publicCode", { value: publicCode, enumerable: true, writable: false, configurable: false })
+    this.fields = Object.freeze([...fields])
   }
 }
 

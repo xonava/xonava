@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { ZodError } from "zod"
-import { CapabilityError, ForbiddenError, OptimisticConcurrencyError, RetryablePersistenceError, UnauthorizedError, ValidationError } from "@xonava/core/domain"
+import { CapabilityError, ForbiddenError, OptimisticConcurrencyError, PreconditionRequiredError, PublicBusinessError, RequiredHeaderMissingError, RetryablePersistenceError, UnauthorizedError, ValidationError } from "@xonava/core/domain"
 import { createFrameworkErrorHandler } from "../handleFrameworkCoreError"
 import { RequestBodyNotAcceptedError, RequestBodyTooLargeError, UnsupportedMediaTypeError } from "../requestBody"
 
@@ -86,4 +86,30 @@ describe("framework HTTP error serialization", () => {
   })
 
   it("maps framework errors only from canonical metadata",async()=>{const conflict=await createFrameworkErrorHandler()(new OptimisticConcurrencyError("table users version leaked")).json();expect(conflict).toEqual({error:"Conflict",code:"OPTIMISTIC_CONCURRENCY_FAILED"});const unavailable=createFrameworkErrorHandler()(new RetryablePersistenceError("postgres host leaked"));expect(unavailable.status).toBe(503);expect(await unavailable.json()).toEqual({error:"Service temporarily unavailable",code:"SERVICE_UNAVAILABLE"})})
+
+  describe("public error contract", () => {
+    it("returns the code, message and fields of a PublicBusinessError", async () => {
+      const response = createFrameworkErrorHandler()(new PublicBusinessError({ publicCode: "ORDER_ALREADY_SHIPPED", publicMessage: "This order has already shipped", fields: ["orderId"] }, { secret: "x" }))
+      expect(response.status).toBe(400)
+      expect(await responseBody(response)).toEqual({ error: "This order has already shipped", code: "ORDER_ALREADY_SHIPPED", details: { fields: ["orderId"] } })
+    })
+
+    it("keeps the generic body for a plain business rule error, unknown errors and forbidden errors", async () => {
+      const forbidden = createFrameworkErrorHandler()(new ForbiddenError("policy detail", { fields: ["ssn"] }))
+      expect(forbidden.status).toBe(403)
+      expect(await responseBody(forbidden)).toEqual({ error: "Forbidden", code: "FORBIDDEN" })
+      const unknown = createFrameworkErrorHandler()(new Error("boom"))
+      expect(unknown.status).toBe(500)
+      expect(await responseBody(unknown)).toEqual({ error: "Internal Server Error", code: "INTERNAL_SERVER_ERROR" })
+    })
+
+    it("maps header errors to 400 and 428 with details.header", async () => {
+      const missing = createFrameworkErrorHandler()(new RequiredHeaderMissingError("Idempotency-Key"))
+      expect(missing.status).toBe(400)
+      expect(await responseBody(missing)).toEqual({ error: "A required request header is missing", code: "REQUIRED_HEADER_MISSING", details: { header: "Idempotency-Key" } })
+      const precondition = createFrameworkErrorHandler()(new PreconditionRequiredError("If-Match"))
+      expect(precondition.status).toBe(428)
+      expect(await responseBody(precondition)).toEqual({ error: "A precondition header is required", code: "PRECONDITION_REQUIRED", details: { header: "If-Match" } })
+    })
+  })
 })

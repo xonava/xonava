@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { CancelledError, ConfigurationError, FrameworkCoreError, TimeoutError, UnavailableError, ValidationError } from "../errors"
+import { BusinessRuleError, CancelledError, ConfigurationError, ForbiddenError, FrameworkCoreError, PreconditionRequiredError, PublicBusinessError, RequiredHeaderMissingError, TimeoutError, UnavailableError, ValidationError } from "../errors"
 
 describe("error taxonomy", () => {
   it("classifies timeout, cancellation, and unavailability", () => {
@@ -21,5 +21,46 @@ describe("error taxonomy", () => {
     expect(error.safeMessage).toBe("Internal Server Error")
     expect(error.publicCode).toBe("INTERNAL_SERVER_ERROR")
     expect(Object.isFrozen(error.safeMetadata)).toBe(true)
+  })
+
+  it("classifies header errors with public metadata", () => {
+    expect(new RequiredHeaderMissingError("Idempotency-Key")).toMatchObject({ code: "REQUIRED_HEADER_MISSING", publicCode: "REQUIRED_HEADER_MISSING", safeMessage: "A required request header is missing", category: "validation", retryable: false, safeMetadata: { header: "Idempotency-Key" } })
+    expect(new PreconditionRequiredError("If-Match")).toMatchObject({ code: "PRECONDITION_REQUIRED", publicCode: "PRECONDITION_REQUIRED", safeMessage: "A precondition header is required", safeMetadata: { header: "If-Match" } })
+    expect(() => new RequiredHeaderMissingError("bad header\n")).toThrow(ConfigurationError)
+  })
+
+  describe("PublicBusinessError", () => {
+    const valid = { publicCode: "ORDER_ALREADY_SHIPPED", publicMessage: "This order has already shipped", fields: ["orderId"] }
+
+    it("exposes the supplied code, message and fields while staying a BAD_REQUEST", () => {
+      const error = new PublicBusinessError(valid, { internal: "x" })
+      expect(error).toBeInstanceOf(BusinessRuleError)
+      expect(error).toMatchObject({ code: "BAD_REQUEST", safeMessage: valid.publicMessage, publicCode: valid.publicCode, fields: ["orderId"], category: "validation" })
+      expect(new PublicBusinessError({ publicCode: "ABC", publicMessage: "m" }).fields).toEqual([])
+    })
+
+    it("does not change the generic BusinessRuleError or other registry errors", () => {
+      expect(new BusinessRuleError("secret")).toMatchObject({ safeMessage: "Business rule violation", publicCode: "BAD_REQUEST" })
+      expect(new ForbiddenError("secret").safeMessage).toBe("Forbidden")
+    })
+
+    it.each([
+      ["lowercase code", { ...valid, publicCode: "order_shipped" }],
+      ["too short code", { ...valid, publicCode: "AB" }],
+      ["too long code", { ...valid, publicCode: "A".repeat(65) }],
+      ["registry code", { ...valid, publicCode: "FORBIDDEN" }],
+      ["registry public code", { ...valid, publicCode: "INTERNAL_SERVER_ERROR" }],
+      ["new registry code", { ...valid, publicCode: "PRECONDITION_REQUIRED" }],
+      ["transport code", { ...valid, publicCode: "BODY_NOT_ACCEPTED" }],
+      ["transport json code", { ...valid, publicCode: "INVALID_JSON" }],
+      ["empty message", { ...valid, publicMessage: "" }],
+      ["long message", { ...valid, publicMessage: "x".repeat(201) }],
+      ["control character", { ...valid, publicMessage: "bad\nmessage" }],
+      ["too many fields", { ...valid, fields: Array.from({ length: 21 }, (_, i) => `f${i}`) }],
+      ["empty field", { ...valid, fields: [""] }],
+      ["long field", { ...valid, fields: ["x".repeat(201)] }],
+    ])("rejects %s with ConfigurationError", (_name, input) => {
+      expect(() => new PublicBusinessError(input)).toThrow(ConfigurationError)
+    })
   })
 })

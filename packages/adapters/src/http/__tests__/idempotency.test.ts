@@ -123,6 +123,7 @@ describe("framework write handler idempotency", () => {
     const port = createPort(conflictAcquire)
      const required = await createHandler(createDeps(port), execute, { required: true })(new Request("https://example.test", { method: "POST", body: "{}", headers: { "content-type": "application/json" } }))
     expect(required.status).toBe(400)
+    expect(await required.json()).toEqual({ error: "A required request header is missing", code: "REQUIRED_HEADER_MISSING", details: { header: "Idempotency-Key" } })
 
      const conflict = await createHandler(createDeps(port), execute)(new Request("https://example.test", { method: "POST", body: "{}", headers: { "content-type": "application/json", "Idempotency-Key": "key-1" } }))
     expect(conflict.status).toBe(409)

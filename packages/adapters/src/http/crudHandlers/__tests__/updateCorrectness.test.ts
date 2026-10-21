@@ -256,8 +256,27 @@ describe("CRUD update correctness", () => {
       { params: Promise.resolve({ id }) },
     )
 
-    expect(response.status).toBe(409)
+    expect(response.status).toBe(428)
+    expect(await response.json()).toEqual({ error: "A precondition header is required", code: "PRECONDITION_REQUIRED", details: { header: "If-Match" } })
     expect(updateOneWhereReturning).not.toHaveBeenCalled()
+  })
+
+  it("delete without an if-match header answers 428 PRECONDITION_REQUIRED", async () => {
+    const row: TestRow = { id, tenantId: "tenant-1", version: 1, name: "before" }
+    const deleteWhere = vi.fn(async () => ({ deletedCount: 1 }))
+    const repository = {
+      findOneWhere: vi.fn(async () => row),
+      findMany: vi.fn(async () => ({ rows: [row], rowCount: 1, page: 1, pageSize: 1 })),
+      deleteWhere,
+    }
+    const { shared } = makeOptions(repository)
+    const handler = createDeleteHandler(shared)
+
+    const response = await handler(new Request(`https://example.test/items/${id}`, { method: "DELETE" }), { params: Promise.resolve({ id }) })
+
+    expect(response.status).toBe(428)
+    expect(await response.json()).toEqual({ error: "A precondition header is required", code: "PRECONDITION_REQUIRED", details: { header: "If-Match" } })
+    expect(deleteWhere).not.toHaveBeenCalled()
   })
 
   it("delete with an if-match header fences on the expected version", async () => {

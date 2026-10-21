@@ -5,7 +5,7 @@ import { enforceRateLimit, type RateLimitConfig, type RateLimitStore } from "@xo
 import { isAtomicBatchIdempotencyPort, isDurableIdempotencyPort, isTransactionalIdempotencyPort, type IdempotencyCommitItem, type IdempotencyResourceIdentity } from "@xonava/core/events"
 import type { AbacWriteEnforcer } from "@xonava/core/security"
 import { emitTelemetry, explicitlySafeTelemetryAttributes } from "@xonava/core/telemetry"
-import { ConfigurationError, ConflictError, ForbiddenError, UnauthorizedError, ValidationError, assertVerifiedAbacBundle, createAbacAuthorizer, type RequestContext } from "@xonava/core/domain"
+import { ConfigurationError, ConflictError, ForbiddenError, RequiredHeaderMissingError, UnauthorizedError, ValidationError, assertVerifiedAbacBundle, createAbacAuthorizer, type RequestContext } from "@xonava/core/domain"
 import { redactPhiDeep } from "./redact"
 import type { FrameworkAdapterDeps, FrameworkRequestNormalization } from "../server"
 import { assertFrameworkAdapterDeps } from "../server"
@@ -317,7 +317,7 @@ export function createFrameworkWriteHandler<
           throw new ValidationError("Idempotency-Key is too long")
         }
          if (args.scope.idempotency?.required && !idempotencyKey) {
-           throw new ValidationError("Idempotency-Key header is required")
+           throw new RequiredHeaderMissingError("Idempotency-Key")
          }
          if (idempotencyKey && (!args.resolveResourceIdentity || !args.recoverCommittedResponse)) {
            throw new ConfigurationError(
