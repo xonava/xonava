@@ -123,6 +123,16 @@ describe("PostgreSQL job-store idempotency lookup", () => {
     })).rejects.toThrow("fingerprint is missing")
   })
 
+  it("refuses a non-default platform key instead of dropping it when the column map has no scopeKey column", async () => {
+    const db = { insert: vi.fn(), select: vi.fn() } as unknown as DrizzleSessionLike
+    const store = createDrizzleJobStore(db, { jobsTable, executionsTable, columnMap })
+    await expect(store.enqueue({
+      requester: { scope: "platform", actorId: "worker-1" },
+      job: { executionScope: { kind: "platform", platformKey: "tenantless-a" }, jobType: "test.job", jobVersion: 1, payload: {} },
+    })).rejects.toThrow(/scopeKey/)
+    expect(db.insert).not.toHaveBeenCalled()
+  })
+
   describe("fingerprints persisted before the RFC 8785 key-order fix (job fingerprint version 3)", () => {
     const runAt = new Date("2026-01-01T00:00:00.000Z")
     const job = { executionScope: { kind: "platform" as const, platformKey: "default" }, jobType: "test.job", jobVersion: 1, payload: { "10": 1, "9": 2 }, idempotencyKey: "job-1", runAt }

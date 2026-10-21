@@ -32,6 +32,7 @@ export async function openAltDatabase():Promise<{pool:Pool;database:string;drop:
   for(const statement of await readMySqlMigrationStatements("0002_workflow_signal_buffering.sql"))await pool.query(statement.replace(/\b(workflows|workflow_signals)\b/g,name=>`\`${database}\`.\`${altName(name as AltTable)}\``))
   for(const statement of await readMySqlMigrationStatements("0003_schedule_next_run_nullable.sql"))await pool.query(statement.replace(/\bschedules\b/g,`\`${database}\`.\`${altName("schedules")}\``))
   for(const statement of await readMySqlMigrationStatements("0004_job_partition_head_index.sql"))await pool.query(statement.replace(/\bjobs\b/g,`\`${database}\`.\`${altName("jobs")}\``))
+  for(const statement of await readMySqlMigrationStatements("0005_job_scope_key.sql"))await pool.query(statement.replace(/\b(jobs|schedules)\b/g,name=>`\`${database}\`.\`${altName(name as AltTable)}\``))
   const alt=new Set<string>(ALT_TABLES)
   for(const statement of await readMySqlMigrationStatements("0006_byte_exact_identifiers.sql")){
     const table=/^ALTER TABLE ([a-z_]+)/.exec(statement)?.[1]

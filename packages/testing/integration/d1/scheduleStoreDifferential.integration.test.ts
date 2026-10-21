@@ -7,13 +7,13 @@ import { openD1Fixture, type D1Fixture } from "./database.js"
 import { assertConcurrentClaimInvariants, assertScheduleStoreMatchesReference, scaledTimeoutMs, type ScheduleDriver } from "../shared/scheduleStoreDifferential.js"
 import {
   assertClaimWithoutNowUsesTheClock, assertDispatcherEnqueuesEachOccurrenceOnce, assertElapsedLeaseExpiryFencesOldOwner, assertLiveClaimsDoNotConsumeClaimLimit,
-  assertNullNextRunAtRetiresSchedule, assertRenewalNeverShortensLease, assertTenantTimezoneResolution,
+  assertNullNextRunAtRetiresSchedule, assertRenewalNeverShortensLease, assertScheduleScopeKeysRoundTrip, assertTenantTimezoneResolution,
 } from "../shared/scheduleStoreDifferentialScenarios.js"
 
 // Own Miniflare instance (openD1Fixture creates a private in-memory database) with its own tables.
 const ts = (name: string) => integer(name, { mode: "timestamp_ms" })
 const jobs = sqliteTable("df_jobs", {
-  id: text("id").primaryKey(), jobType: text("job_type"), jobVersion: integer("job_version"), tenantId: text("tenant_id"), scope: text("scope"), payload: text("payload"),
+  id: text("id").primaryKey(), jobType: text("job_type"), jobVersion: integer("job_version"), tenantId: text("tenant_id"), scope: text("scope"), scopeKey: text("scope_key"), payload: text("payload"),
   status: text("status"), priority: integer("priority"), attempts: integer("attempts"), maxAttempts: integer("max_attempts"), runAt: ts("run_at"), nextAttemptAt: ts("next_attempt_at"),
   leaseOwner: text("lease_owner"), leaseExpiresAt: integer("lease_expires_at"), claimToken: text("claim_token"), idempotencyKey: text("idempotency_key"),
   idempotencyScope: text("idempotency_scope"), fingerprint: text("fingerprint"), correlationId: text("correlation_id"), lastError: text("last_error"),
@@ -21,17 +21,17 @@ const jobs = sqliteTable("df_jobs", {
 })
 const execs = sqliteTable("df_execs", { id: text("id").primaryKey(), jobId: text("job_id"), attempt: integer("attempt"), workerId: text("worker_id"), status: text("status"), errorMessage: text("error_message"), startedAt: ts("started_at"), finishedAt: ts("finished_at") })
 const schedules = sqliteTable("df_schedules", {
-  id: text("id").primaryKey(), jobType: text("job_type"), jobVersion: integer("job_version"), tenantId: text("tenant_id"), scope: text("scope"), payload: text("payload"),
+  id: text("id").primaryKey(), jobType: text("job_type"), jobVersion: integer("job_version"), tenantId: text("tenant_id"), scope: text("scope"), scopeKey: text("scope_key"), payload: text("payload"),
   cronExpression: text("cron_expression"), timezone: text("timezone"), enabled: integer("enabled", { mode: "boolean" }), paused: integer("paused", { mode: "boolean" }),
   overlapPolicy: text("overlap_policy"), misfirePolicy: text("misfire_policy"), nextRunAt: ts("next_run_at"), lastRunAt: ts("last_run_at"), lastStatus: text("last_status"),
   lastError: text("last_error"), leaseOwner: text("lease_owner"), leaseExpiresAt: integer("lease_expires_at"), claimToken: text("claim_token"), remainingOccurrences: integer("remaining_occurrences"),
   effectiveFrom: ts("effective_from"), effectiveUntil: ts("effective_until"), calendarExclusionKey: text("calendar_exclusion_key"), owner: text("owner"), description: text("description"),
 })
 const SCHEMA = [
-  "CREATE TABLE df_jobs (id TEXT PRIMARY KEY, job_type TEXT, job_version INTEGER, tenant_id TEXT, scope TEXT, payload TEXT, status TEXT, priority INTEGER, attempts INTEGER NOT NULL, max_attempts INTEGER NOT NULL, run_at INTEGER, next_attempt_at INTEGER, lease_owner TEXT, lease_expires_at INTEGER, claim_token TEXT, idempotency_key TEXT, idempotency_scope TEXT, fingerprint TEXT, correlation_id TEXT, last_error TEXT, result_payload TEXT, metadata TEXT, created_at INTEGER, started_at INTEGER, completed_at INTEGER, partition_key TEXT)",
+  "CREATE TABLE df_jobs (id TEXT PRIMARY KEY, job_type TEXT, job_version INTEGER, tenant_id TEXT, scope TEXT, scope_key TEXT, payload TEXT, status TEXT, priority INTEGER, attempts INTEGER NOT NULL, max_attempts INTEGER NOT NULL, run_at INTEGER, next_attempt_at INTEGER, lease_owner TEXT, lease_expires_at INTEGER, claim_token TEXT, idempotency_key TEXT, idempotency_scope TEXT, fingerprint TEXT, correlation_id TEXT, last_error TEXT, result_payload TEXT, metadata TEXT, created_at INTEGER, started_at INTEGER, completed_at INTEGER, partition_key TEXT)",
   "CREATE UNIQUE INDEX df_jobs_idem ON df_jobs (idempotency_scope, idempotency_key)",
   "CREATE TABLE df_execs (id TEXT PRIMARY KEY, job_id TEXT NOT NULL, attempt INTEGER, worker_id TEXT, status TEXT, error_message TEXT, started_at INTEGER, finished_at INTEGER)",
-  "CREATE TABLE df_schedules (id TEXT PRIMARY KEY, job_type TEXT NOT NULL, job_version INTEGER NOT NULL, tenant_id TEXT, scope TEXT NOT NULL, payload TEXT NOT NULL, cron_expression TEXT NOT NULL, timezone TEXT NOT NULL, enabled INTEGER NOT NULL, paused INTEGER NOT NULL DEFAULT 0, overlap_policy TEXT NOT NULL, misfire_policy TEXT NOT NULL, next_run_at INTEGER, last_run_at INTEGER, last_status TEXT, last_error TEXT, lease_owner TEXT, lease_expires_at INTEGER, claim_token TEXT, remaining_occurrences INTEGER, effective_from INTEGER, effective_until INTEGER, calendar_exclusion_key TEXT, owner TEXT, description TEXT)",
+  "CREATE TABLE df_schedules (id TEXT PRIMARY KEY, job_type TEXT NOT NULL, job_version INTEGER NOT NULL, tenant_id TEXT, scope TEXT NOT NULL, scope_key TEXT, payload TEXT NOT NULL, cron_expression TEXT NOT NULL, timezone TEXT NOT NULL, enabled INTEGER NOT NULL, paused INTEGER NOT NULL DEFAULT 0, overlap_policy TEXT NOT NULL, misfire_policy TEXT NOT NULL, next_run_at INTEGER, last_run_at INTEGER, last_status TEXT, last_error TEXT, lease_owner TEXT, lease_expires_at INTEGER, claim_token TEXT, remaining_occurrences INTEGER, effective_from INTEGER, effective_until INTEGER, calendar_exclusion_key TEXT, owner TEXT, description TEXT)",
 ]
 
 describe("D1 schedule store differential", () => {
@@ -68,6 +68,7 @@ describe("D1 schedule store differential", () => {
   it("matches the reference store over random lifecycle sequences", async () => { await assertScheduleStoreMatchesReference(driver) }, scaledTimeoutMs(240_000))
   it("holds the claim invariants under concurrent workers", async () => { await assertConcurrentClaimInvariants(driver) }, scaledTimeoutMs(240_000))
   it("does not let live claims use up another worker's claim limit", async () => { await assertLiveClaimsDoNotConsumeClaimLimit(driver) })
+  it("round-trips platform and system keys on claim and decodes key-less rows to the defaults", async () => { await assertScheduleScopeKeysRoundTrip(driver) })
   it("never shortens a lease on renewal", async () => { await assertRenewalNeverShortensLease(driver) })
   it("claims by the real clock when no time is given", async () => { await assertClaimWithoutNowUsesTheClock(driver) })
   it("fences the old owner after a lease really runs out", async () => { await assertElapsedLeaseExpiryFencesOldOwner(driver) })

@@ -7,6 +7,7 @@
 -- sequences.scope_id and temporal_*.scope_id may be 1024 characters (up to 4096 bytes), more than InnoDB's 3072-byte index key limit allows
 -- next to the other key parts. They stay in a utf8mb4_0900_bin column and the keys use scope_hash = SHA-256 of the scope's UTF-8 bytes
 -- (a STORED generated column; lookups use scope_hash=UNHEX(SHA2(?,256))). Two scopes are the same key only if their SHA-256 digests match.
+-- jobs/schedules.scope_key (0005, platform/system keys) is converted too and active_partition_tenant keeps 0005's COALESCE(tenant_id, scope_key, '').
 -- MODIFY and the primary-key change rebuild the tables: run in a maintenance window. The sequence/temporal statements are not re-runnable
 -- (ADD COLUMN); the fixture bootstrap applies them only while scope_hash is missing.
 ALTER TABLE sequences MODIFY scope_id VARCHAR(1024) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL, ADD COLUMN scope_hash BINARY(32) GENERATED ALWAYS AS (UNHEX(SHA2(scope_id,256))) STORED NOT NULL, DROP PRIMARY KEY, ADD PRIMARY KEY (scope_hash, name, period);
@@ -66,6 +67,7 @@ ALTER TABLE workflow_signals
   MODIFY instance_id VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL,
   MODIFY name VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL;
 ALTER TABLE jobs
+  MODIFY scope_key VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NULL,
   MODIFY id VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL,
   MODIFY job_type VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL,
   MODIFY tenant_id VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NULL,
@@ -79,7 +81,7 @@ ALTER TABLE jobs
   MODIFY correlation_id VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NULL,
   MODIFY partition_key VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NULL,
   MODIFY active_partition VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin GENERATED ALWAYS AS (CASE WHEN status='running' THEN partition_key ELSE NULL END) STORED,
-  MODIFY active_partition_tenant VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin GENERATED ALWAYS AS (CASE WHEN status='running' AND partition_key IS NOT NULL THEN COALESCE(tenant_id,'') ELSE NULL END) STORED;
+  MODIFY active_partition_tenant VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin GENERATED ALWAYS AS (CASE WHEN status='running' AND partition_key IS NOT NULL THEN COALESCE(tenant_id,scope_key,'') ELSE NULL END) STORED;
 ALTER TABLE job_executions
   MODIFY id VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL,
   MODIFY job_id VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL,
@@ -88,6 +90,7 @@ ALTER TABLE job_executions
 ALTER TABLE job_progress
   MODIFY job_id VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL;
 ALTER TABLE schedules
+  MODIFY scope_key VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NULL,
   MODIFY id VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL,
   MODIFY `scope` VARCHAR(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL,
   MODIFY job_type VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL,
