@@ -20,6 +20,6 @@ Business actions (`approve`, `reject`, and similar domain verbs) are authorized 
 
 ## Errors and conformance
 
-Unauthenticated and unauthorized outcomes remain distinguishable internally but MUST avoid protected existence disclosure. Invalid policy is configuration failure, not an allow decision. Conformance includes hostile caller scopes, tenant crossing, policy tampering, missing facts, ABAC normalization/evaluation, field visibility/writes, obligations, delegation attenuation, TOCTOU races, and redaction.
+Unauthenticated and unauthorized outcomes remain distinguishable internally but MUST avoid protected existence disclosure. Invalid policy is configuration failure, not an allow decision. A policy that names an action, capability, condition field or fieldAccess field absent from its module catalog is such a configuration error (`INVALID_POLICY_CONFIGURATION`, identifying the module, the policy and the missing names); it is detected when the bundle is constructed or the policies are pre-validated (`assertAbacPoliciesMatchCatalog`), and `createAbacBundle` returns a verified bundle. Conformance includes hostile caller scopes, tenant crossing, policy tampering, missing facts, ABAC normalization/evaluation, field visibility/writes, obligations, delegation attenuation, TOCTOU races, and redaction.
 
 Traceability: `@xonava/core/domain`, `@xonava/core/security`, scoped persistence, adversarial/TOCTOU suites, S1 and V1 evidence.

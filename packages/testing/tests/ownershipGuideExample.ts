@@ -8,7 +8,6 @@ import type { CompiledRouteBinding, CompiledScopeResolverBinding } from "@xonava
 import {
   createAbacBundle,
   defineAbacModule,
-  assertVerifiedAbacBundle,
   ForbiddenError,
   evaluatePredicate,
   type AbacPolicy,
@@ -137,8 +136,6 @@ export const adapterDeps: FrameworkAdapterDeps = {
       catalog: ordersCatalog,
       context: { userId: context.identity.subject.id, tenantId: context.scope.tenantId },
     })
-    // createAbacBundle is typed as the unverified bundle; this narrows it.
-    assertVerifiedAbacBundle(bundle)
     return bundle
   },
   resolveModuleAuthorizationFacts: ({ moduleKey }) => ({
