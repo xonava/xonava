@@ -68,200 +68,6 @@ edited only by the WP that owns them or by Opus at wave close.
 | Threat model | reviewed `docs/spec/security.md` threat model | C5 |
 | CI | every gate above runs on pull requests or nightly | Q1 |
 
-## Wave 1: pilot feedback and missing adapters
-
-Source: feedback from a TanStack Start application on Cloudflare (D1, R2, KV, Drizzle) against `0.1.0`.
-Request IDs R1–R8 refer to that feedback.
-
-### F1 Public, application-safe error contract (feedback R2)
-
-- [ ] Sonnet. Branch `feat/public-error-contract`. **Design gate:** Opus approves the spec diff first.
-- **Today:** `FrameworkCoreError.safeMessage` and `publicCode` always come from the registry in
-  `packages/core/src/domain/errors.ts:36-62`. A `BusinessRuleError` always answers "Business rule
-  violation". Missing headers are plain `ValidationError`s (`createFrameworkWriteHandler.ts:320`) or 409
-  `ConflictError`s ("Version is required", `crudHandlers/update.ts:424`, `delete.ts:76`).
-- **Design:**
-  1. New class `PublicBusinessError extends BusinessRuleError` in `errors.ts`:
-     `constructor(input: { publicCode: string; publicMessage: string; fields?: readonly string[] }, details?: unknown)`.
-     `publicCode` must match `/^[A-Z][A-Z0-9_]{2,63}$/` and must not equal any registry code.
-     `publicMessage` is 1–200 characters with no control characters. `fields` has at most 20 entries,
-     each 1–200 characters. Invalid input throws `ConfigurationError`. The instance's `safeMessage` and
-     `publicCode` are the supplied values; `code` stays `BAD_REQUEST`, so the status stays 400.
-  2. Two new registry codes, added to the code union, the registry, `docs/spec/errors.md` and the
-     HTTP status map: `REQUIRED_HEADER_MISSING` ("A required request header is missing", status 400) and
-     `PRECONDITION_REQUIRED` ("A precondition header is required", status 428). Each takes
-     `safeMetadata: { header: "<Header-Name>" }`.
-  3. Classes `RequiredHeaderMissingError(header)` and `PreconditionRequiredError(header)`.
-  4. `createFrameworkErrorHandler` adds `details` only for these three cases: `{ fields }` for
-     `PublicBusinessError`, `{ header }` for the two header errors. Every other error keeps today's body.
-  5. Missing `Idempotency-Key` throws `RequiredHeaderMissingError("Idempotency-Key")`. Missing `If-Match`
-     on update and delete throws `PreconditionRequiredError("If-Match")` (status changes 409 → 428).
-- **Rules for the spec:** public business errors must never be used for authentication or
-  authorization failures; 401, 403 and 404 stay fixed so they cannot reveal existence.
-- **Files:** `packages/core/src/domain/errors.ts`, `docs/spec/errors.md`, `packages/adapters/src/http/handleFrameworkCoreError.ts`,
-  `createFrameworkWriteHandler.ts`, `crudHandlers/update.ts`, `crudHandlers/delete.ts`, and the error and
-  handler tests listed in the error tests (`errors.test.ts`, `errorTaxonomy.test.ts`,
-  `handleFrameworkCoreError.test.ts`).
-- **Acceptance:** a thrown `PublicBusinessError` returns its code, message and fields; constructor
-  validation rejects bad input; an unknown error still returns the generic 500; a `ForbiddenError`
-  still returns the fixed message; a missing idempotency key returns `REQUIRED_HEADER_MISSING` with
-  `details.header`; a missing `If-Match` returns 428. ER1 certification still passes
-  (`node scripts/verification/verifyER1Certification.mjs`). Changeset: minor (the 409 → 428 change is
-  breaking, so the summary starts with `**Breaking:**`).
-
-### F2 Business-action writes (feedback R1)
-
-- [ ] Sonnet. Branch `feat/business-action-writes`. **Depends on:** F1 (same files).
-  **Design gate:** Opus approves the spec diff first.
-- **Today:** ABAC policies already accept any action listed in the module catalog
-  (`abacPolicySchema.ts:585`), and module admission (`frameworkAuthorization.ts:56`) and
-  `enforceAbacWrite` (`abacWrite.ts:143`) take any action string. Only three places are fixed to CRUD:
-  the handler's `action` type (`createFrameworkWriteHandler.ts:136`), `AbacAuthorizer.assertWrite`
-  (`abacAuthorizer.ts`), and the route-binding keys (`CrudRouteBindings`, `frameworkAdapterDeps.ts:29`;
-  `CrudRouteKey`, `defineEntity.ts:21`).
-- **Design:**
-  1. `action` becomes `"create" | "update" | "delete" | BusinessActionName`, where a business action is
-     a string matching `/^[a-z][a-zA-Z0-9_-]{0,63}$/` that is not `read`, `manage`, `create`, `update`
-     or `delete`. Checked at construction.
-  2. New optional `routeKey?: string` argument. It defaults to `action` and must exist in
-     `requestNormalization.routeBindings`; otherwise `ConfigurationError` at construction. Widen the
-     route-binding map type to `CrudRouteBindings & Readonly<Record<string, CompiledRouteBindingRef>>`.
-  3. Widen `assertWrite`'s action to `string` and remove the cast at `createFrameworkWriteHandler.ts:301`.
-     A business action is admitted by its own grant only: no implicit `update`, and `manage` keeps its
-     current meaning.
-  4. New CRUD update option `protectedFields?: readonly string[]`. A generic update whose changed
-     fields intersect it is refused with `ForbiddenError`, so ordinary updates cannot perform a business
-     operation. Documented as the way to reserve fields for business actions.
-  5. Idempotency scope and rate-limit keys already include the action; keep them, and add a test that
-     proves it.
-- **Spec:** add a "Business actions" section to `docs/spec/operations.md` and a pointer from
-  `docs/spec/security.md`.
-- **Acceptance:** new test file `packages/adapters/src/http/__tests__/businessActionWrites.test.ts`
-  covering:
-  - an `approve`-only grant succeeds without `update`;
-  - an `update`-only grant cannot run `approve`;
-  - a deny on `approve` wins;
-  - field write restrictions apply to `approve`;
-  - `protectedFields` blocks a generic update of a reserved field;
-  - an idempotent retry of `approve` replays, and a key reused for `update` conflicts;
-  - a rollback in the business action leaves no audit or outbox rows;
-  - revoking the grant (a new bundle digest) refuses the next call;
-  - construction fails for `action: "read"` and for a missing route binding.
-
-  Changeset: minor.
-
-### F3 Committed-response helper (feedback R3)
-
-- [ ] Sonnet. Branch `feat/committed-response-helper`. **Depends on:** F2.
-- **Today:** built-in CRUD uses `buildCommittedReadResponse` and `loadReadableMutationRecord`
-  (`crudHandlers/shared.ts:362-454`), which are not public. Custom handlers rebuild them.
-- **Design:** export `readCommittedRecord(args)` from `@xonava/adapters/http`, a thin public wrapper
-  over the same internals, returning a discriminated result:
-  `{ kind: "record", record }`, `{ kind: "outside-read-scope" }`, `{ kind: "revision-unavailable" }`
-  (the durable version differs from the committed one), or `{ kind: "deleted" }`. It applies the
-  read scope, field overrides and projection exactly as built-in CRUD does, and never substitutes a
-  newer revision. Rewire `create.ts`, `update.ts` and `recoverCommittedResponse` to use it, so there is
-  one path.
-- **Acceptance:** tests showing initial and recovered responses project identically; a newer
-  revision yields `revision-unavailable`, not the newer record; a deleted record yields `deleted`;
-  existing `writeReadScope.test.ts` passes unchanged. Document the recipe in
-  `docs/typescript/http-adapters.md`. Changeset: minor.
-
-### F4 Method and body matrix (feedback R4, part 2)
-
-- [ ] Haiku. Branch `docs/http-method-body-matrix`.
-- **Steps:** add a table to `docs/typescript/http-adapters.md` with one row each for list, detail,
-  create, update, delete and custom write handlers, and columns for whether the operation reads a body,
-  the behaviour for an empty body, a JSON body without a schema (`BODY_NOT_ACCEPTED` 415), a non-JSON
-  content type (`UNSUPPORTED_MEDIA_TYPE` 415), malformed JSON (`INVALID_JSON` 400) and an oversize body
-  (413). The facts are in `packages/adapters/src/http/requestBody.ts:86-108`; GET handlers never read a
-  body.
-- **Acceptance:** add one regression test per row to `requestBody.test.ts` so the table is enforced.
-
-### F5 Ownership guide for non-staff users (feedback R7)
-
-- [ ] Sonnet. Branch `docs/ownership-guide`.
-- **Steps:** write `docs/guides/ownership.md`: an owner-only "orders" entity for customer accounts,
-  using a trusted session, tenant scope, a deny-by-default bundle with an `userAttr: "user.id"`
-  ownership condition, compiled list filtering, response projection, and update and delete
-  authorization. Explain what `skipCapabilityCheck` skips (only capability-key checks; module action
-  and ABAC collection checks still run, see `packages/core/src/entity/capabilityCheck.ts`), and that
-  removing a capability string does not prove the bundle denies access. Add the code samples to the
-  documentation-example test (`packages/testing/tests/documentationExamples.test.ts`) so they
-  type-check.
-- **Acceptance:** `npm run verify:docs` and the documentation-example test pass.
-
-### F6 Cloudflare R2 object store and the object-store contract suite (feedback R8)
-
-- [ ] Sonnet. Branch `feat/r2-object-store`.
-- **Today:** `ObjectStore` (`packages/core/src/object-store/objectStore.ts`) has only an in-memory
-  adapter, which ignores checksums, `metadata` and `version`. No contract suite exists, although the
-  spec (`docs/spec/object-store.md`, certification O1) lists the requirements. Miniflare
-  3.20250718.3, already pinned in `packages/testing`, supports `r2Buckets` and `getR2Bucket`.
-- **Steps:**
-  1. **Contract suite** in `packages/testing/src/contracts/object-store/` modelled on
-     `src/contracts/cache-adapter`. It takes a factory and covers: round trip for bytes and streams,
-     absence on `get`/`head`/`delete`, metadata and content-type fidelity, custom metadata, `sha256`
-     checksum accepted and a mismatched checksum rejected, length mismatch rejected, early stream
-     cancellation, an aborted signal before I/O, an expired deadline, hostile keys (empty, 1,025
-     characters, NUL), and that provider failures surface as `UnavailableError` without provider text.
-     Export it as `@xonava/testing/contracts/object-store`. A new subpath changes the governance files:
-     `packages/testing/package.json` exports, `scripts/verification/approvedFrameworkExports.json`,
-     `docs/governance/public-api-manifest.json`, and the `publicIndexes` list in
-     `scripts/verification/verifyFrameworkHardening.mjs`.
-  2. **In-memory store:** make it pass the suite: verify `sha256` checksums, keep `metadata`, honour
-     `version` on reads.
-  3. **R2 adapter** `R2ObjectStore` in `packages/adapters/src/storage/r2ObjectStore.ts`, exported from
-     `@xonava/adapters/storage`. Type the binding structurally with a local `declare class R2Bucket`
-     exactly as `kvCacheAdapter.ts:5-15` does for KV; do not add `@cloudflare/workers-types`. Map
-     `contentType` to `httpMetadata.contentType`, `metadata` to `customMetadata`, a `sha256` checksum to
-     R2's `sha256` put option, and R2's `version` and `etag` to the result. A versioned `get` or `head`
-     returns `null` when the current version differs. Signed URLs are not available through the
-     binding, so `signUpload` and `signDownload` are omitted; document that.
-  4. **Tests:** run the contract suite against the in-memory store in unit tests, and against R2 in
-     `packages/testing/integration/d1/r2ObjectStore.integration.test.ts` using `new Miniflare({ r2Buckets:
-     ["BUCKET"] })` and `getR2Bucket("BUCKET")`.
-- **Acceptance:** the suite passes for both stores. Changeset: minor.
-
-### F7 Durable upload guide
-
-- [ ] Sonnet. Branch `docs/durable-uploads`. **Depends on:** F6.
-- **Steps:** write `docs/guides/durable-uploads.md` describing the reservation → upload → finalize
-  protocol on top of `ObjectStore` and `defineAttachment` (`packages/core/src/storage/attachment.ts`):
-  - a reservation row written in the operation transaction;
-  - the object put under a reservation-derived key;
-  - finalization that reconciles provider metadata with `head`;
-  - a cleanup job that deletes objects whose reservation expired unfinalized and never deletes a
-    referenced object;
-  - idempotent retry at every step.
-
-  State plainly that the database and the object store are not atomic, and say where authorization and
-  size and type limits run. Include a type-checked example.
-- **Acceptance:** `npm run verify:docs` passes; the example is in the documentation-example test.
-
-### F8 Supporting-read recipe and module catalog (feedback R5, R6)
-
-- [ ] Opus. **Design gate only:** decide whether R5 (catalog introspection) and R6 (supporting reads)
-  become APIs or stay documented application patterns. Record the decision here as new WPs or as a
-  "not planned" note in the spec.
-
-### A1 Concrete lease backends for PostgreSQL and D1
-
-- [ ] Sonnet. Branch `feat/pg-d1-lease-backends`.
-- **Today:** MySQL ships `MySqlAtomicLeaseBackend` and `createMySqlLeaseStore`
-  (`packages/adapters/src/drizzle-mysql/mysqlAtomicBackends.ts:19,34`). PostgreSQL and D1 export only
-  `createDrizzlePgLeaseStore(backend)` and the D1 equivalent, with no backend, so users must write one.
-- **Steps:**
-  1. Add `PgAtomicLeaseBackend` next to `pgAtomicRecordBackend.ts` and `D1AtomicLeaseBackend` next to
-     `d1AtomicRecordBackend.ts`. Implement `AtomicLeaseBackend`
-     (`drizzle-shared/fencedLeaseStore.ts:5`) with the same semantics as the MySQL class: lease time on
-     the database clock, a fenced revision, configurable table names.
-  2. Add convenience factories `createPgLeaseStore` and `createD1LeaseStore`.
-  3. Add `lease_records(resource_key, lease, revision)` tables to the PostgreSQL and D1 fixture
-     migrations as new numbered files, and list them in the migration table in known limitations.
-- **Acceptance:** port the MySQL lease cases from `packages/testing/integration/mysql/ev1.integration.test.ts`
-  and `configurableTables.integration.test.ts` to `pg/` and `d1/`. Changeset: minor.
-
 ## Wave 2: proof (Sonnet, parallel)
 
 Every A2–A8 suite follows the job-store pattern exactly:
@@ -292,7 +98,7 @@ when the wave closes.
 
 ### A4 Lease differential
 
-- [ ] Sonnet. Branch `test/lease-differential`. Area `lease`. **Depends on:** A1.
+- [ ] Sonnet. Branch `test/lease-differential`. Area `lease`.
 - **Model:** acquire, renew, release, expiry on the database clock, fence monotonicity, and concurrent
   takeover.
 
@@ -321,6 +127,24 @@ when the wave closes.
 - **Model:** advance and read tag generations through `dbTagGenerationStore.ts` and
   `mysqlTagGenerationStore.ts` under concurrent invalidation. Include the KV adapter's dual-layout
   reads (`kvCacheAdapter.ts:276-319`) against a fake KV namespace.
+
+### F9 Supporting-read recipe (feedback R6)
+
+- [ ] Sonnet. Branch `docs/supporting-reads`.
+- **Decision (Opus):** supporting reads stay an application pattern, not a framework API.
+- **Steps:** write `docs/guides/supporting-reads.md` with an executable example, following
+  `packages/testing/tests/ownershipGuideExample.ts` and the verbatim-block test in
+  `documentationExamples.test.ts`. The example is a parent operation, "assign an order to a warehouse",
+  that needs warehouse labels from another module. Show:
+  - admission by the parent action through a fresh verified bundle, conditional grants and denies
+    included;
+  - a separate read-only endpoint owned by the parent module, with a fixed response allowlist
+    (id, label);
+  - a bound on the result and explicit overflow behaviour;
+  - `cache-control: no-store`;
+  - that revoking the parent action revokes the read;
+  - that choosing an option grants nothing at save time, where the save re-checks the full records.
+- **Acceptance:** behaviour tests for every point above; `npm run verify:docs` passes.
 
 ### S1 Standalone applications: platform scope end to end
 
@@ -464,7 +288,8 @@ when the wave closes.
     object keys.
 
   Map each threat to the requirement that addresses it and the test that proves it, and list residual
-  risks. Every threat without a test becomes a new WP here.
+  risks. Known inputs: write handlers parse the request body (bounded at 1 MiB by default) before CSRF,
+  session and authorization checks (`docs/typescript/http-adapters.md`, method and body matrix). Every threat without a test becomes a new WP here.
 - **Acceptance:** reviewed by Opus.
 
 ### C6 Decisions on items not implemented
@@ -496,7 +321,7 @@ when the wave closes.
 
 ## Release `0.2.0`
 
-- [ ] When waves 0 and 1 are merged: run `npm run release:version` on `release/0.2.0`, verify that
+- [ ] Waves 0 and 1 are merged. Run `npm run release:version` on `release/0.2.0`, verify that
   the published packages install and import in a clean project (with vitest installed for the testing
   package) and that the README examples type-check, then publish.
 
