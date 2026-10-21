@@ -109,6 +109,30 @@ Uncaught handler/conversion errors use `createFrameworkErrorHandler()`. The opti
 
 To integrate Node peer addresses, set `runtime.adapterDeps.resolveHttpMetadata` to `resolveAdapterHttpMetadata`. It supplies the socket peer address, never an automatic proxy-trust assertion. Continue configuring `resolveClientIp` using the existing trusted-proxy policy. If your application already supplies a metadata resolver, compose it explicitly instead of replacing its policy accidentally.
 
+## Method and body matrix
+
+Every write handler (CRUD `create`, `update` and `delete`, and `createFrameworkWriteHandler`) reads its body with `parseJsonBodySafely` (`packages/adapters/src/http/requestBody.ts`) before session, CSRF or authorization checks. Refusals are mapped by `createFrameworkErrorHandler` (`packages/adapters/src/http/handleFrameworkCoreError.ts`). List and detail handlers never read a body: they parse only the query and path parameters.
+
+| Operation | Reads a body? | Empty body | Non-empty body, no body contract | Non-empty body, contract, not JSON | Malformed JSON | Over the byte limit |
+| --- | --- | --- | --- | --- | --- | --- |
+| list (`GET /`) | No | Answered normally | Ignored; answered normally | Ignored; answered normally | Ignored; answered normally | 413 `REQUEST_BODY_TOO_LARGE` at the Fastify and Express transports, before the handler runs. Hono: a Fetch GET cannot carry a body |
+| detail (`GET /:id`) | No | Answered normally | Ignored; answered normally | Ignored; answered normally | Ignored; answered normally | Same as list |
+| create (`POST /`) | Yes when `createBody` is declared; otherwise only checked | Declared: 400 `INVALID_JSON`. Not declared: passes the body check | 415 `BODY_NOT_ACCEPTED` | 415 `UNSUPPORTED_MEDIA_TYPE` when declared; `BODY_NOT_ACCEPTED` when not | Declared: 400 `INVALID_JSON`. Not declared: 415 `BODY_NOT_ACCEPTED` | 413 `REQUEST_BODY_TOO_LARGE` |
+| update (`PATCH /:id`) | Yes when `updateBody` is declared; otherwise only checked | Declared: 400 `INVALID_JSON`. Not declared: passes the body check | 415 `BODY_NOT_ACCEPTED` | 415 `UNSUPPORTED_MEDIA_TYPE` when declared; `BODY_NOT_ACCEPTED` when not | Declared: 400 `INVALID_JSON`. Not declared: 415 `BODY_NOT_ACCEPTED` | 413 `REQUEST_BODY_TOO_LARGE` |
+| delete (`DELETE /:id`) | No contract; only checked | Passes the body check | 415 `BODY_NOT_ACCEPTED` | 415 `BODY_NOT_ACCEPTED` | 415 `BODY_NOT_ACCEPTED` | 413 `REQUEST_BODY_TOO_LARGE` |
+| custom write (`createFrameworkWriteHandler`) | Yes when `validation.body` is set; otherwise only checked | Declared: 400 `INVALID_JSON`. Not declared: passes the body check | 415 `BODY_NOT_ACCEPTED` | 415 `UNSUPPORTED_MEDIA_TYPE` when declared; `BODY_NOT_ACCEPTED` when not | Declared: 400 `INVALID_JSON`. Not declared: 415 `BODY_NOT_ACCEPTED` | 413 `REQUEST_BODY_TOO_LARGE` |
+
+Checks run in this order for every write handler, and the first failure wins:
+
+1. Size: a declared `Content-Length` above the limit, or more streamed bytes than the limit, gives 413 before the body is read.
+2. Encoding: bytes that are not valid UTF-8 give 400 `INVALID_JSON`, even when no body contract is declared.
+3. Contract: a non-empty body with no body contract gives 415 `BODY_NOT_ACCEPTED`, whatever its content type, and before the JSON is parsed.
+4. Content type: with a contract, a non-empty body must be `application/json` or `application/*+json` with `charset=utf-8` if a charset is given. An empty body skips this check.
+5. JSON: an empty or malformed body gives 400 `INVALID_JSON`.
+6. Schema: a body that fails the declared contract gives 400 `VALIDATION_ERROR`.
+
+An empty body is zero bytes. Whitespace alone is non-empty. Path and query parameters are validated before the body, so a parameter failure is answered first. A refused body never reaches the CSRF, session or authorization stages.
+
 ## Verification
 
 Run the transport and real-framework tests with:

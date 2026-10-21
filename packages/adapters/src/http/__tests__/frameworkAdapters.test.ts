@@ -131,6 +131,30 @@ describe.each(['fastify', 'hono', 'express'])('%s HTTP adapter', kind => {
     expect(rows.has('other-tenant')).toBe(true)
   })
 
+  // The Fetch Request API rejects a body on GET, so the Hono harness cannot send one; Fastify and Express can.
+  it.skipIf(kind === 'hono')('answers list and detail GET requests normally when a body is sent, because they never read one', async () => {
+    const { handlers, rows } = httpCrudFixture()
+    rows.set('person-1', { id: 'person-1', tenantId: 'tenant-1', name: 'Ada', version: 1 })
+    const send = await harness(kind, handlers.list, 1024, handlers)
+    const list = await send('GET', '/api/people', '{"name":"ignored"}', { 'content-type': 'application/json' })
+    expect(list.status, list.text).toBe(200)
+    expect(list.text).toContain('Ada')
+    const detail = await send('GET', '/api/people/person-1', '{"name":"ignored"}', { 'content-type': 'application/json' })
+    expect(detail.status, detail.text).toBe(200)
+    expect(JSON.parse(detail.text)).toMatchObject({ id: 'person-1', name: 'Ada' })
+    expect(rows.get('person-1')?.name).toBe('Ada')
+  })
+
+  // The Node transports buffer and size-check every method's body before routing, so an oversize GET body is refused.
+  it.skipIf(kind === 'hono')('refuses an oversize GET body at the Node transport with 413 before the handler runs', async () => {
+    const { handlers, repository } = httpCrudFixture()
+    const send = await harness(kind, handlers.list, 1024, handlers)
+    const res = await send('GET', '/api/people', 'x'.repeat(2048), { 'content-type': 'application/json' })
+    expect(res.status, res.text).toBe(413)
+    expect(JSON.parse(res.text)).toEqual({ error: "Request body is too large", code: "REQUEST_BODY_TOO_LARGE" })
+    expect(repository.findMany).not.toHaveBeenCalled()
+  })
+
   it('preserves actual CRUD authorization denials and disabled-route responses', async () => {
     for (const disabled of [false, true]) {
       const { handlers, repository } = httpCrudFixture({ deny: true, disabled })
