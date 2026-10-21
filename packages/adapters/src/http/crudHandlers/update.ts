@@ -10,18 +10,17 @@ import {
   PreconditionRequiredError,
   Predicate,
   projectResponseRecord,
-  resolveFieldReadOverrides,
   type PredicateNode,
 } from "@xonava/core/domain"
 import { createFrameworkWriteHandler } from "../createFrameworkWriteHandler"
 import { frameworkJson } from "../handleFrameworkCoreError"
+import { loadCommittedRecord, readCommittedRecord } from "../committedRecord"
 import type { CrudShared, MutationResult, SelectableRow, UpdateOperationInput } from "./types"
 import { assertEntityVersion, type EntityVersion } from "@xonava/core/serialization"
 import type { AbacWriteEnforcer } from "@xonava/core/security"
 import { internalRepositoryForDescriptor } from "../../repository/dynamicRepository"
 import {
   auditEmit,
-  buildCommittedReadResponse,
   buildStructuralScope,
   loadExistingRecord,
   resolveOperationRequestContext,
@@ -29,7 +28,6 @@ import {
   toCrudContext,
   toCrudPostCommitContext,
   assertProtectedUpdateFields,
-  loadReadableMutationRecord,
   resolveActionScopeForContext,
   canUseOwnerBypass,
   enforceFinalWrite,
@@ -257,28 +255,22 @@ export function createUpdateHandler<
        const readablePersistence = withScopedPersistence(session, options.createPersistence(session))
          const committedVersion = entity.versionField ? result.record[entity.versionField] : undefined
          if (committedVersion !== undefined) assertEntityVersion(committedVersion)
-       const readable = await loadReadableMutationRecord(
-        options,
+       const loaded = await loadCommittedRecord({
         entity,
-        session,
-         input.id,
-         readablePersistence,
-           committedVersion as EntityVersion | undefined,
-       )
-      if (!readable)
+        moduleKey: options.moduleKey,
+        context: session,
+        persistence: options.createPersistence(session),
+        adapterDeps: options.adapterDeps,
+        ...(options.entityScope !== undefined ? { entityScope: options.entityScope } : {}),
+        id: input.id,
+        ...(committedVersion !== undefined ? { committedVersion: committedVersion as EntityVersion } : {}),
+       })
+      if (loaded.kind !== "record")
         return {
           success: true,
           reason: "UPDATED_OUTSIDE_READ_SCOPE",
          }
-
-         const bundle = session.identity.actor.kind !== "anonymous" && !canUseOwnerBypass(options.adapterDeps, options.scope.scope, session)
-         ? await options.adapterDeps.resolveAbacBundle({ moduleKey: options.moduleKey, context: session })
-         : undefined
-         if (bundle) await assertAbacSecurityDigest(bundle)
-         const overrides = bundle
-           ? resolveFieldReadOverrides({ policies: bundle.policies, moduleKey: options.moduleKey, record: readable })
-           : undefined
-          const projectedReadable = projectResponseRecord({ entity, record: readable, ...(overrides ? { overrides } : {}) })
+         const { overrides, record: projectedReadable } = loaded
          const projectedExisting = projectResponseRecord({ entity, record: input.existing, ...(overrides ? { overrides } : {}) })
            const hookResult = options.crud?.update?.projectCommittedResult
            ? await options.crud.update.projectCommittedResult({
@@ -294,11 +286,7 @@ export function createUpdateHandler<
          return { record: projectResponseRecord({
         entity,
           record: candidate,
-        ...(bundle
-          ? {
-               overrides: overrides!,
-            }
-          : {}),
+        ...(overrides ? { overrides } : {}),
        }) }
     },
     ...(options.crud?.update?.afterCommit
@@ -388,8 +376,19 @@ export function createUpdateHandler<
        const committedVersion = typeof previousVersion === "number" ? previousVersion + 1 : undefined
        return { entity: options.moduleKey, id: input.id, ...(committedVersion !== undefined ? { version: committedVersion } : {}) }
     },
-    recoverCommittedResponse: async ({ resource, context }) =>
-      buildCommittedReadResponse({ options, entity, context, id: resource.id, ...(resource.version !== undefined ? { resourceVersion: resource.version } : {}) }),
+    recoverCommittedResponse: async ({ resource, context }) => {
+      const committed = await readCommittedRecord({
+        entity,
+        moduleKey: options.moduleKey,
+        context,
+        persistence: options.createPersistence(context),
+        adapterDeps: options.adapterDeps,
+        ...(options.entityScope !== undefined ? { entityScope: options.entityScope } : {}),
+        id: resource.id,
+        ...(resource.version !== undefined ? { committedVersion: resource.version } : {}),
+      })
+      return committed.kind === "record" ? { record: committed.record } : null
+    },
     validation: options.validation?.updateBody
       ? { params: shared.idParamsSchema, body: options.validation.updateBody }
       : { params: shared.idParamsSchema },

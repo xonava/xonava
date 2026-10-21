@@ -136,6 +136,53 @@ const handlers = CRUD(invoiceDefinition, { ...runtime, update: { protectedFields
 
 `approve` is admitted only by its own grant (an `update` grant does not imply it), a missing binding or a reserved name (`read`, `manage`, `create`, `update`, `delete`) fails at construction, and a generic update that touches a `protectedFields` entry is refused with 403. See [Business actions](../spec/operations.md#business-actions-normative).
 
+## Committed responses in custom write handlers
+
+A write handler that returns the row it changed must build that response from a fresh read, not from the value `execute` returned: the response has to honour the caller's read scope and field-read overrides, and an idempotent recovery after a crash has to produce the same bytes as the first response. `readCommittedRecord` is the function built-in create and update use for both. Call it from the operation's `after` hook and from `recoverCommittedResponse`:
+
+```ts
+import { readCommittedRecord } from "@xonava/adapters/http"
+
+const read = (context: RequestContext, id: string, committedVersion?: number) =>
+  readCommittedRecord({
+    entity: invoiceDescriptor,        // versionField drives the revision check
+    moduleKey: "billing.invoices",     // key the ABAC bundle is resolved for
+    context,                           // operation.request in `after`, `context` in recovery
+    persistence: createPersistence(context),
+    adapterDeps,                       // only resolveAbacBundle is used
+    entityScope: { kind: "tenant" },   // the structural scope the entity is registered with
+    id,
+    ...(committedVersion !== undefined ? { committedVersion } : {}),
+  })
+
+const approve = createFrameworkWriteHandler({
+  // ...
+  definition: {
+    // ...
+    after: async ({ operation, result }) => {
+      const committed = await read(operation.request!, result.id, result.version)
+      return committed.kind === "record" ? { record: committed.record } : { success: true }
+    },
+  },
+  resolveResourceIdentity: ({ input }) => ({ entity: "invoice", id: input.id, version: input.expectedVersion + 1 }),
+  recoverCommittedResponse: async ({ resource, context }) => {
+    const committed = await read(context, resource.id, resource.version)
+    return committed.kind === "record" ? { record: committed.record } : null
+  },
+})
+```
+
+Arguments: `entity` is the descriptor (its `versionField` and declared fields); `moduleKey` selects the ABAC bundle; `context` is the trusted request context; `persistence` is the provider to read through (tenant scoping is added for tenant entities); `adapterDeps` supplies `resolveAbacBundle`; `entityScope` is the entity's structural scope declaration; `id` is the primary key; `committedVersion` is the version the write committed. The result is one of:
+
+| `kind` | Meaning |
+| --- | --- |
+| `record` | The committed row, read under the read scope and projected with the caller's overrides. |
+| `outside-read-scope` | The row exists in the structural scope but the caller may not read it. |
+| `revision-unavailable` | The row is readable but its stored version is not `committedVersion`. The newer revision is never substituted. |
+| `deleted` | No row with this id exists in the structural scope. |
+
+These are internal outcomes, not HTTP responses. Do not let an unauthorized client tell `outside-read-scope` from `deleted`: answer both with the same response (built-in create and update return `{ "success": true, "reason": "CREATED_OUTSIDE_READ_SCOPE" }` or `UPDATED_OUTSIDE_READ_SCOPE` and no entity content). In `recoverCommittedResponse`, return `null` for every kind other than `record`; the framework then stores a stable 409 for the receipt. Separating `deleted` from `outside-read-scope` costs one extra read, issued only when the scoped read finds nothing and only with the structural scope (tenant, application and active-row filters), never an unscoped read.
+
 ## Method and body matrix
 
 Every write handler (CRUD `create`, `update` and `delete`, and `createFrameworkWriteHandler`) reads its body with `parseJsonBodySafely` (`packages/adapters/src/http/requestBody.ts`) before session, CSRF or authorization checks. Refusals are mapped by `createFrameworkErrorHandler` (`packages/adapters/src/http/handleFrameworkCoreError.ts`). List and detail handlers never read a body: they parse only the query and path parameters.
