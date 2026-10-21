@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import { CacheService, type CacheAdapter } from "@xonava/core/cache"
@@ -6,9 +7,21 @@ import { createNoopTelemetry, emitTelemetry, explicitlySafeTelemetryAttributes }
 import { validateObjectKey } from "@xonava/core/object-store"
 import { supportsInteractiveTransactions } from "@xonava/core/persistence"
 import { validateQueryPlan } from "@xonava/core/query"
-import { createOperation } from "@xonava/core/operation"
+import { createOperation, createOperationContext } from "@xonava/core/operation"
 import { defineWorkflow } from "@xonava/core/workflow"
 import { CRUD } from "@xonava/adapters/http"
+import { InMemoryObjectStore } from "@xonava/adapters/storage"
+import {
+  cleanupExpiredUploads,
+  createFinalizeUpload,
+  inMemoryDatabase,
+  putReservedObject,
+  reserveUpload,
+  sessionRequest,
+  UPLOAD_LIMITS,
+  type Reservation,
+  type ReserveUploadInput,
+} from "./durableUploadsExample"
 import { adapterDeps, createOrderHandlers, inMemoryOrders, orders, ordersRequestNormalization, type Order, type VerifiedLogin } from "./ownershipGuideExample"
 
 describe("canonical documentation examples", () => {
@@ -146,6 +159,183 @@ describe("canonical documentation examples", () => {
       const blocks = [...guide.matchAll(/```ts\n([\s\S]*?)```/g)].map((match) => match[1]!.trimEnd())
       expect(blocks.length).toBeGreaterThan(0)
       for (const block of blocks) expect(example, `guide block not found in ownershipGuideExample.ts:\n${block}`).toContain(block)
+    })
+  })
+
+  describe("durable uploads guide (docs/guides/durable-uploads.md)", () => {
+    const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex")
+    const BYTES = new TextEncoder().encode("hello durable uploads")
+    const START = new Date("2026-10-01T00:00:00.000Z")
+    const request = (overrides: Partial<ReserveUploadInput> = {}): ReserveUploadInput => ({
+      reservationId: "res-00000001", fileName: "hello.pdf", contentType: "application/pdf", contentLength: BYTES.byteLength, sha256: sha256(BYTES), ...overrides,
+    })
+
+    function setup() {
+      const db = inMemoryDatabase()
+      const store = new InMemoryObjectStore()
+      const clock = { current: START }
+      const as = (operationKey: string, userId = "alice", tenantId = "t1") => createOperationContext({
+        persistence: db.persistence,
+        runtimeCapabilities: { deferredExecution: false, cache: false },
+        request: sessionRequest(tenantId, userId, operationKey),
+        clock: { now: () => clock.current },
+      })
+      const finalize = createFinalizeUpload(store)
+      const reserve = (input = request(), userId = "alice", tenantId = "t1") => reserveUpload.run({ operation: as("uploads.reserve", userId, tenantId), input })
+      const fin = (reservationId = "res-00000001", userId = "alice", tenantId = "t1") => finalize.run({ operation: as("uploads.finalize", userId, tenantId), input: { reservationId } })
+      const cleanup = () => cleanupExpiredUploads({ persistence: db.persistence, store, now: clock.current })
+      const advance = (ms: number) => { clock.current = new Date(clock.current.getTime() + ms) }
+      return { db, store, reserve, fin, cleanup, advance }
+    }
+
+    it("reserves, uploads, and finalizes into an attachment pinned to the stored object version", async () => {
+      const { store, reserve, fin } = setup()
+      const reservation = await reserve()
+      expect(reservation).toMatchObject({ status: "reserved", objectKey: "tenants/t1/uploads/res-00000001", ownerId: "alice" })
+      await putReservedObject({ store, reservation, body: BYTES, now: START })
+      const attachment = await fin()
+      expect(attachment).toMatchObject({ id: "res-00000001", contentLength: BYTES.byteLength, executionScope: { kind: "tenant", tenantId: "t1" } })
+      const head = await store.head({ key: reservation.objectKey })
+      expect(attachment.object).toEqual({ key: reservation.objectKey, version: head?.version })
+    })
+
+    it("applies authorization and size and type limits when reserving", async () => {
+      const { db, reserve } = setup()
+      await expect(reserveUpload.run({ operation: createOperationContext({ persistence: db.persistence, runtimeCapabilities: { deferredExecution: false, cache: false } }), input: request() })).rejects.toThrow()
+      await expect(reserve(request({ contentLength: UPLOAD_LIMITS.maxBytes + 1 }))).rejects.toThrow(/contentLength/)
+      await expect(reserve(request({ contentType: "text/html" }))).rejects.toThrow(/content type/)
+      await expect(reserve(request({ reservationId: "../escape" }))).rejects.toThrow(/reservationId/)
+      expect(db.table("upload_reservation").size).toBe(0)
+    })
+
+    it("refuses to finalize another user's or another tenant's reservation", async () => {
+      const { store, reserve, fin } = setup()
+      const reservation = await reserve()
+      await putReservedObject({ store, reservation, body: BYTES, now: START })
+      await expect(fin("res-00000001", "mallory")).rejects.toThrow(/not found/i)
+      await expect(fin("res-00000001", "alice", "t2")).rejects.toThrow(/not found/i)
+    })
+
+    it("refuses to finalize when the object is missing or the provider metadata disagrees", async () => {
+      const { store, reserve, fin, db } = setup()
+      const reservation = await reserve()
+      const base = { key: reservation.objectKey, contentType: "application/pdf", metadata: { reservationId: reservation.id } }
+      const put = (body: Uint8Array, overrides: Record<string, unknown> = {}) => store.put({
+        ...base, body, contentLength: body.byteLength, checksum: { algorithm: "sha256", value: sha256(body) }, ...overrides,
+      })
+      await expect(fin()).rejects.toThrow(/not been uploaded/)
+
+      await put(BYTES.slice(0, 5))
+      await expect(fin()).rejects.toThrow(/size/)
+
+      // Right size, different bytes: the checksum no longer matches the reservation.
+      await put(new Uint8Array(BYTES.byteLength).fill(7))
+      await expect(fin()).rejects.toThrow(/checksum/)
+
+      // No checksum recorded: nothing to reconcile against.
+      await put(BYTES, { checksum: undefined })
+      await expect(fin()).rejects.toThrow(/checksum/)
+
+      await put(BYTES, { contentType: "image/png" })
+      await expect(fin()).rejects.toThrow(/type/)
+      await put(BYTES, { metadata: { reservationId: "someone-else" } })
+      await expect(fin()).rejects.toThrow(/belong/)
+
+      expect(db.table("attachment").size).toBe(0)
+      expect((db.table("upload_reservation").get(reservation.id) as unknown as Reservation).status).toBe("reserved")
+
+      await put(BYTES)
+      await expect(fin()).resolves.toMatchObject({ id: reservation.id })
+    })
+
+    it("lets the object store reject a body that does not match the declared length or checksum", async () => {
+      const { store, reserve } = setup()
+      const reservation = await reserve()
+      await expect(putReservedObject({ store, reservation, body: BYTES.slice(0, 3), now: START })).rejects.toThrow()
+      const sameLengthOtherBytes = new Uint8Array(BYTES.byteLength).fill(1)
+      await expect(putReservedObject({ store, reservation, body: sameLengthOtherBytes, now: START })).rejects.toThrow(/checksum/)
+      expect(await store.head({ key: reservation.objectKey })).toBeNull()
+    })
+
+    it("removes an object left by a crash between put and finalize, but only after the reservation expires", async () => {
+      const { store, reserve, cleanup, advance, db } = setup()
+      const reservation = await reserve()
+      await putReservedObject({ store, reservation, body: BYTES, now: START })
+      // The process crashed here: no finalize ever runs.
+      advance(UPLOAD_LIMITS.reservationTtlMs - 1)
+      await expect(cleanup()).resolves.toEqual({ deleted: 0, kept: 0 })
+      expect(await store.head({ key: reservation.objectKey })).not.toBeNull()
+      advance(1)
+      await expect(cleanup()).resolves.toEqual({ deleted: 1, kept: 0 })
+      expect(await store.head({ key: reservation.objectKey })).toBeNull()
+      expect((db.table("upload_reservation").get(reservation.id) as unknown as Reservation).status).toBe("deleted")
+    })
+
+    it("never deletes an object referenced by a finalized attachment", async () => {
+      const { store, reserve, fin, cleanup, advance, db } = setup()
+      const reservation = await reserve()
+      await putReservedObject({ store, reservation, body: BYTES, now: START })
+      await fin()
+      advance(UPLOAD_LIMITS.reservationTtlMs * 10)
+      await expect(cleanup()).resolves.toEqual({ deleted: 0, kept: 0 })
+      expect(await store.head({ key: reservation.objectKey })).not.toBeNull()
+
+      // Even a damaged reservation row cannot make cleanup delete a referenced object.
+      db.table("upload_reservation").set(reservation.id, { ...db.table("upload_reservation").get(reservation.id)!, status: "expired" })
+      await expect(cleanup()).resolves.toEqual({ deleted: 0, kept: 1 })
+      expect(await store.head({ key: reservation.objectKey })).not.toBeNull()
+    })
+
+    it("refuses to finalize an expired reservation, before or after cleanup", async () => {
+      const { store, reserve, fin, cleanup, advance } = setup()
+      const reservation = await reserve()
+      await putReservedObject({ store, reservation, body: BYTES, now: START })
+      advance(UPLOAD_LIMITS.reservationTtlMs)
+      await expect(fin()).rejects.toThrow(/expired/)
+      await cleanup()
+      expect(await store.head({ key: reservation.objectKey })).toBeNull()
+      await expect(fin()).rejects.toThrow(/expired/)
+    })
+
+    it("is idempotent on retry at every step", async () => {
+      const { store, reserve, fin, cleanup, advance, db } = setup()
+      const first = await reserve()
+      expect(await reserve()).toEqual(first)
+      await expect(reserve(request({ fileName: "other.pdf" }))).rejects.toThrow(/different upload/)
+      expect(db.table("upload_reservation").size).toBe(1)
+
+      await putReservedObject({ store, reservation: first, body: BYTES, now: START })
+      await putReservedObject({ store, reservation: first, body: BYTES, now: START })
+
+      const attachment = await fin()
+      expect(await fin()).toEqual(attachment)
+      expect(db.table("attachment").size).toBe(1)
+
+      const second = await reserve(request({ reservationId: "res-00000002" }))
+      await putReservedObject({ store, reservation: second, body: BYTES, now: START })
+      advance(UPLOAD_LIMITS.reservationTtlMs * 2)
+      await expect(cleanup()).resolves.toEqual({ deleted: 1, kept: 0 })
+      await expect(cleanup()).resolves.toEqual({ deleted: 0, kept: 0 })
+      expect(await store.head({ key: first.objectKey })).not.toBeNull()
+      expect(await store.head({ key: second.objectKey })).toBeNull()
+    })
+
+    it("finishes a cleanup run that stopped after claiming but before deleting", async () => {
+      const { store, reserve, cleanup, advance, db } = setup()
+      const reservation = await reserve()
+      await putReservedObject({ store, reservation, body: BYTES, now: START })
+      advance(UPLOAD_LIMITS.reservationTtlMs)
+      db.table("upload_reservation").set(reservation.id, { ...db.table("upload_reservation").get(reservation.id)!, status: "expired" })
+      await expect(cleanup()).resolves.toEqual({ deleted: 1, kept: 0 })
+      expect(await store.head({ key: reservation.objectKey })).toBeNull()
+    })
+
+    it("keeps every ts block in the guide identical to the compiled example", () => {
+      const guide = readFileSync(new URL("../../../docs/guides/durable-uploads.md", import.meta.url), "utf8")
+      const example = readFileSync(new URL("./durableUploadsExample.ts", import.meta.url), "utf8")
+      const blocks = [...guide.matchAll(/```ts\n([\s\S]*?)```/g)].map((match) => match[1]!.trimEnd())
+      expect(blocks.length).toBeGreaterThan(0)
+      for (const block of blocks) expect(example, `guide block not found in durableUploadsExample.ts:\n${block}`).toContain(block)
     })
   })
 })

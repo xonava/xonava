@@ -11,6 +11,7 @@ Applications may start with one capability and add orchestration later. No unrel
 ## Next steps
 
 - [Give customers access to only their own records](ownership.md): trusted session, tenant scope, ABAC ownership policy, projection, update and delete
+- [Store uploaded files without orphans](durable-uploads.md): reservation, upload, finalize and cleanup across the database and the object store
 - [Create an operation](create-an-operation.md)
 - [Persistence setup](persistence-setup.md)
 - [Understand errors](understanding-errors.md)
