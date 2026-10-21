@@ -31,11 +31,13 @@ table names, and apply them before you deploy the new adapters.
 |------------|----------------------------------------|-----------------------------------------------------------------------------------------------|
 | PostgreSQL | `0002_workflow_signal_buffering.sql`   | Yes                                                                                           |
 | PostgreSQL | `0003_job_partition_head_index.sql`    | Yes; without it each job claim candidate rescans the jobs table                                |
+| PostgreSQL | `0004_lease_records.sql`               | Only if you use `createPgLeaseStore` / `PgAtomicLeaseBackend`                                  |
 | MySQL      | `0002_workflow_signal_buffering.sql`   | Yes                                                                                           |
 | MySQL      | `0003_schedule_next_run_nullable.sql`  | Yes; without it a schedule with no future occurrence cannot retire                             |
 | MySQL      | `0004_job_partition_head_index.sql`    | Yes; without it each job claim candidate rescans the jobs table                                |
 | D1         | `0002_workflow_signal_buffering.sql`   | Yes                                                                                           |
 | D1         | `0003_job_partition_head_index.sql`    | Yes; without it each job claim candidate rescans the jobs table                                |
+| D1         | `0004_lease_records.sql`               | Only if you use `createD1LeaseStore` / `D1AtomicLeaseBackend`                                  |
 
 The workflow migration is not optional. `commit()` writes `resume_signal_id` on every workflow
 transition, so an un-migrated workflow table breaks every workflow commit, not only signal delivery.
