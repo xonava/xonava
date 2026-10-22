@@ -65,6 +65,28 @@ describe("PostgreSQL transaction outcome classification", () => {
 
   it("lets the operation pipeline re-run the rolled-back transaction to success", async () => {
     await withProvider(async (provider) => {
+      // Write skew between p and q. Both read only the seed row, so SSI lets the first COMMIT win and rolls the other
+      // back with a serialization failure; the pipeline then re-runs the loser. Which of them loses is not fixed.
+      //
+      // The number of attempts is only 3 if the re-run starts after the winner's COMMIT is visible. Nothing orders
+      // the two: the loser's failure can be reported while the winner's COMMIT is still in flight (a loaded machine
+      // makes that common), and the re-run, which reads before and inserts after that COMMIT, is then a write-skew
+      // partner of the winner and is rolled back again (4 attempts), or, with `maxAttempts: 3`, is exhausted
+      // (the run rejects with TransactionRolledBackError although nothing is wrong). Every one of those outcomes is
+      // legal under SSI. This test is about the first re-run succeeding, so the re-run waits, on a separate
+      // connection, until the winner's row is committed; then exactly one initial attempt failed and exactly one
+      // re-run is needed: attempts is exactly 3. SSI aborts only the transaction whose COMMIT finds the committed
+      // partner, so the first committer always survives and the wait cannot be waiting for a row that never comes.
+      const observer = new pg.Pool({ connectionString: pgCertificationUrl(), max: 1 })
+      const winnerCommitted = async (): Promise<void> => {
+        const deadline = Date.now() + scaledMs(10_000)
+        for (;;) {
+          const { rows } = await observer.query<{ n: number }>("SELECT count(*)::int AS n FROM framework_tx_items")
+          if (rows[0]!.n >= 2) return
+          if (Date.now() > deadline) throw new Error("neither write-skew transaction committed")
+          await new Promise((resolve) => setTimeout(resolve, 5))
+        }
+      }
       const sync = barrier(2)
       let attempts = 0
       const run = (id: string) => runOperation({
@@ -74,19 +96,28 @@ describe("PostgreSQL transaction outcome classification", () => {
           atomicity: { kind: "standard", mode: "required", transactionOptions: { isolationLevel: "serializable" } },
           execution: { kind: "retryable-transaction", maxAttempts: 3, delay: 1, backoff: 2, maxDelay: 10 },
           execute: async ({ operation }: { operation: { persistence: PersistenceProvider } }) => {
-            attempts++
+            const attempt = ++attempts
+            if (attempt > 2) await winnerCommitted()
             const repository = operation.persistence.repository<Item>(itemEntity)
             const rows = await repository.findMany({ filter: Predicate.eq("bucket", "b") })
-            if (attempts <= 2) await sync.arrive()
+            if (attempt <= 2) await sync.arrive()
             await repository.insert({ id, bucket: "b", amount: rows.rows.length })
-            if (attempts <= 2) await sync.arrive()
+            if (attempt <= 2) await sync.arrive()
             return id
           },
         },
         input: {},
       })
-      await expect(Promise.all([run("p"), run("q")])).resolves.toEqual(["p", "q"])
-      expect(attempts).toBe(3)
+      try {
+        await expect(Promise.all([run("p"), run("q")])).resolves.toEqual(["p", "q"])
+        expect(attempts).toBe(3)
+        // The winner read only the seed (amount 1); the re-run saw the seed and the winner (amount 2).
+        const { rows } = await observer.query<{ id: string; amount: number }>("SELECT id, amount FROM framework_tx_items ORDER BY id")
+        expect(rows.map((row) => row.id)).toEqual(["p", "q", "seed"])
+        expect(rows.filter((row) => row.id !== "seed").map((row) => row.amount).sort()).toEqual([1, 2])
+      } finally {
+        await observer.end()
+      }
     })
   }, 30_000)
 
