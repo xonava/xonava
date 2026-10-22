@@ -137,7 +137,7 @@ describe("A2 trusted scope normalization", () => {
       platformRoute({ routeKey: "admin.delete", method: "DELETE", pathTemplate: "/admin/items/:id", mutation: { allowed: true, idempotencyRequirement: "optional" } }),
     ]
     for (const r of routes) {
-      await expect(normalizeFrameworkRequest({ ...base({ key: "directory", resolve }), route: r, session, admit })).rejects.toThrow(/session and fixed route scope mismatch/)
+      await expect(normalizeFrameworkRequest({ ...base({ key: "directory", resolve }), route: r, session, admit })).rejects.toThrow(expect.objectContaining({ name: "ForbiddenError", message: expect.stringMatching(/session and fixed route scope mismatch/) }))
     }
     expect(admit).not.toHaveBeenCalled()
     expect(resolve).not.toHaveBeenCalled()

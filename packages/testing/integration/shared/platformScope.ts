@@ -193,7 +193,7 @@ export async function assertPlatformHttp(provider: PersistenceProvider, probe: P
   expect((await anonymous.create(json("POST", "/announcements", { title: "x", region: "eu", priority: 1 }))).status).toBe(401)
 
   // TM13a: a session with a tenant scope on a route whose compiled scope is fixed to the platform is
-  // refused ("session and fixed route scope mismatch") before admission, persistence and the handler,
+  // refused with 403 ("session and fixed route scope mismatch") before admission, persistence and the handler,
   // for read and write routes. The seeded row stays untouched.
   const platformRepository = provider.repository<Announcement>(platformAnnouncementEntity)
   const guarded = announcement(20, { region: "eu" })
@@ -221,7 +221,7 @@ export async function assertPlatformHttp(provider: PersistenceProvider, probe: P
   ]
   for (const response of refused) {
     const text = await response.clone().text()
-    expect(response.status, text).toBe(500)
+    expect(response.status, text).toBe(403)
     expect(text).not.toContain(guarded.title)
   }
   expect(admitTenantCredentials).not.toHaveBeenCalled()
