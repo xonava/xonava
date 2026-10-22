@@ -30,6 +30,7 @@
   "type": "module",
   "files": [
     "dist",
+    "migrations",
     "README.md",
     "LICENSE"
   ],
