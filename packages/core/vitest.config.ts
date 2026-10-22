@@ -12,6 +12,8 @@ export default defineConfig({
     hookTimeout: Math.ceil(10_000 * timeoutScale),
     env: { XONAVA_TIMING_SCALE: String(timingScale) },
     include: ["src/**/*.test.ts"],
+    // Hot-path benchmarks run through `npm run bench` (scripts/verification/verifyBenchmarks.mjs), never through `npm test`.
+    benchmark: { include: ["src/**/__tests__/bench/*.bench.ts"] },
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],

@@ -1,0 +1,393 @@
+{
+  "note": "Median time per operation (ms) of each hot-path benchmark, the median of 3 runs. Regenerate with `npm run bench:update-baseline` after an intentional performance change and review the diff. Numbers are only comparable on a similar machine; the gate allows a 25 % regression.",
+  "statistic": "median of per-run medians, milliseconds per operation",
+  "thresholdFraction": 0.25,
+  "recordedAt": "2026-10-22T02:46:27.526Z",
+  "environment": {
+    "node": "v22.22.0",
+    "platform": "linux-x64",
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+    "cpuCount": 4,
+    "loadAverage1m": 12.5
+  },
+  "benchmarks": {
+    "@xonava/adapters > src/__tests__/bench/cursorPredicate.bench.ts > cursor predicates > build and compile keyset predicate to PostgreSQL SQL": {
+      "medianMs": 0.044320999999399646,
+      "meanMs": 0.14168839076225745,
+      "rmePercent": 26.9656665907956,
+      "samples": 3029,
+      "file": "src/__tests__/bench/cursorPredicate.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/cursorPredicate.bench.ts > cursor predicates > build and compile three-key nullable keyset predicate to SQLite SQL": {
+      "medianMs": 0.06358300000101735,
+      "meanMs": 0.14853625659259947,
+      "rmePercent": 13.621595797917738,
+      "samples": 3170,
+      "file": "src/__tests__/bench/cursorPredicate.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/cursorPredicate.bench.ts > cursor predicates > build keyset predicate, one sort key": {
+      "medianMs": 0.00038799999992988887,
+      "meanMs": 0.000768603676073631,
+      "rmePercent": 11.43863743905393,
+      "samples": 337727,
+      "file": "src/__tests__/bench/cursorPredicate.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/cursorPredicate.bench.ts > cursor predicates > build keyset predicate, three nullable sort keys": {
+      "medianMs": 0.0010689999999158317,
+      "meanMs": 0.0015319926464507862,
+      "rmePercent": 6.421897407882132,
+      "samples": 149234,
+      "file": "src/__tests__/bench/cursorPredicate.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/cursorPredicate.bench.ts > cursor predicates > build keyset predicate, two sort keys": {
+      "medianMs": 0.00071799999977884,
+      "meanMs": 0.0011486712758969964,
+      "rmePercent": 11.112055754677797,
+      "samples": 236403,
+      "file": "src/__tests__/bench/cursorPredicate.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/cursorPredicate.bench.ts > cursor predicates > reverse the sort for a before page": {
+      "medianMs": 0.00024200000007112976,
+      "meanMs": 0.00040834567027080306,
+      "rmePercent": 8.172977103303667,
+      "samples": 1088826,
+      "file": "src/__tests__/bench/cursorPredicate.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (generic) > compile WHERE clause for the nested predicate": {
+      "medianMs": 0.03725899999972171,
+      "meanMs": 0.050871335232472545,
+      "rmePercent": 4.861104763639904,
+      "samples": 7080,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (generic) > compile and render the nested predicate to SQL text": {
+      "medianMs": 0.1988029999997707,
+      "meanMs": 0.3195882460063787,
+      "rmePercent": 13.135437242573492,
+      "samples": 1419,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (generic) > compile equality": {
+      "medianMs": 0.0022770000000491564,
+      "meanMs": 0.0035473971081733035,
+      "rmePercent": 5.789925520113583,
+      "samples": 120988,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (generic) > compile five-way conjunction": {
+      "medianMs": 0.01001300000007177,
+      "meanMs": 0.01702740023032835,
+      "rmePercent": 7.672258486357725,
+      "samples": 28174,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (generic) > compile nested with in(50) and RFC 3339 range": {
+      "medianMs": 0.03838999999970838,
+      "meanMs": 0.06859970443686143,
+      "rmePercent": 8.802183421873396,
+      "samples": 4663,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (generic) > compile text operators": {
+      "medianMs": 0.010276999999405234,
+      "meanMs": 0.016599362127349117,
+      "rmePercent": 5.639186228657065,
+      "samples": 27815,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (mysql) > compile WHERE clause for the nested predicate": {
+      "medianMs": 0.042421500002092216,
+      "meanMs": 0.07595351921618478,
+      "rmePercent": 8.291440369994826,
+      "samples": 5118,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (mysql) > compile and render the nested predicate to SQL text": {
+      "medianMs": 0.12996150000071793,
+      "meanMs": 0.21117184839529674,
+      "rmePercent": 10.702681751912397,
+      "samples": 2187,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (mysql) > compile equality": {
+      "medianMs": 0.002935000000434229,
+      "meanMs": 0.004470438030868972,
+      "rmePercent": 3.969763138898656,
+      "samples": 98225,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (mysql) > compile five-way conjunction": {
+      "medianMs": 0.010817999998835148,
+      "meanMs": 0.014943564763896388,
+      "rmePercent": 5.565323327270143,
+      "samples": 27254,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (mysql) > compile nested with in(50) and RFC 3339 range": {
+      "medianMs": 0.04440400000021327,
+      "meanMs": 0.08290744628646494,
+      "rmePercent": 5.515338471131036,
+      "samples": 5945,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (mysql) > compile text operators": {
+      "medianMs": 0.014279000000897213,
+      "meanMs": 0.022517964647604072,
+      "rmePercent": 5.284491462078229,
+      "samples": 18716,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (postgres) > compile WHERE clause for the nested predicate": {
+      "medianMs": 0.04120199999942997,
+      "meanMs": 0.0596970884670352,
+      "rmePercent": 4.19319650952679,
+      "samples": 7625,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (postgres) > compile and render the nested predicate to SQL text": {
+      "medianMs": 0.3799865000000864,
+      "meanMs": 0.5618969182530714,
+      "rmePercent": 7.656029685922788,
+      "samples": 713,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (postgres) > compile equality": {
+      "medianMs": 0.0023930000006657792,
+      "meanMs": 0.0032578954936988355,
+      "rmePercent": 5.379652746040945,
+      "samples": 145723,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (postgres) > compile five-way conjunction": {
+      "medianMs": 0.01043500000014319,
+      "meanMs": 0.01851792670253703,
+      "rmePercent": 7.208002305591428,
+      "samples": 26702,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (postgres) > compile nested with in(50) and RFC 3339 range": {
+      "medianMs": 0.04059700000107114,
+      "meanMs": 0.06728895612974348,
+      "rmePercent": 7.7625835860488435,
+      "samples": 6402,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (postgres) > compile text operators": {
+      "medianMs": 0.010580000000118162,
+      "meanMs": 0.01764258995801068,
+      "rmePercent": 6.331666135542657,
+      "samples": 27224,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (sqlite) > compile WHERE clause for the nested predicate": {
+      "medianMs": 0.03753400000005058,
+      "meanMs": 0.0626923494232785,
+      "rmePercent": 7.58857080255607,
+      "samples": 7534,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (sqlite) > compile and render the nested predicate to SQL text": {
+      "medianMs": 0.17548399999941466,
+      "meanMs": 0.3291481588969163,
+      "rmePercent": 22.080263102818883,
+      "samples": 1460,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (sqlite) > compile equality": {
+      "medianMs": 0.002379000000473752,
+      "meanMs": 0.004108916581065847,
+      "rmePercent": 6.0144472201301795,
+      "samples": 112151,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (sqlite) > compile five-way conjunction": {
+      "medianMs": 0.009723000001031323,
+      "meanMs": 0.018505095817907543,
+      "rmePercent": 8.616274454817972,
+      "samples": 19906,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (sqlite) > compile nested with in(50) and RFC 3339 range": {
+      "medianMs": 0.03785799999968731,
+      "meanMs": 0.06337485555976131,
+      "rmePercent": 19.92225743819566,
+      "samples": 5949,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/adapters > src/__tests__/bench/predicateCompiler.bench.ts > predicate compiler (sqlite) > compile text operators": {
+      "medianMs": 0.009592000000338885,
+      "meanMs": 0.0147190741536648,
+      "rmePercent": 8.808327469600599,
+      "samples": 27324,
+      "file": "src/__tests__/bench/predicateCompiler.bench.ts"
+    },
+    "@xonava/core > src/__tests__/bench/abacDecision.bench.ts > ABAC record decisions > collection action decision": {
+      "medianMs": 0.0807119999999486,
+      "meanMs": 0.17297099550484085,
+      "rmePercent": 13.712279309070755,
+      "samples": 2713,
+      "file": "src/__tests__/bench/abacDecision.bench.ts"
+    },
+    "@xonava/core > src/__tests__/bench/abacDecision.bench.ts > ABAC record decisions > global capability decision": {
+      "medianMs": 0.00505299999986164,
+      "meanMs": 0.008616537275108688,
+      "rmePercent": 8.26762568298431,
+      "samples": 17246,
+      "file": "src/__tests__/bench/abacDecision.bench.ts"
+    },
+    "@xonava/core > src/__tests__/bench/abacDecision.bench.ts > ABAC record decisions > record action decision (16 policies)": {
+      "medianMs": 0.009810000000015862,
+      "meanMs": 0.025741480591020955,
+      "rmePercent": 12.875974985462719,
+      "samples": 17660,
+      "file": "src/__tests__/bench/abacDecision.bench.ts"
+    },
+    "@xonava/core > src/__tests__/bench/abacDecision.bench.ts > ABAC record decisions > record action with no relevant policy": {
+      "medianMs": 0.0027439999998932763,
+      "meanMs": 0.004495533131934548,
+      "rmePercent": 7.309464894057373,
+      "samples": 101333,
+      "file": "src/__tests__/bench/abacDecision.bench.ts"
+    },
+    "@xonava/core > src/__tests__/bench/abacDecision.bench.ts > ABAC record decisions > record capability decision": {
+      "medianMs": 0.01157599999987724,
+      "meanMs": 0.018114355613522672,
+      "rmePercent": 5.404643476461072,
+      "samples": 19683,
+      "file": "src/__tests__/bench/abacDecision.bench.ts"
+    },
+    "@xonava/core > src/__tests__/bench/abacReadScope.bench.ts > ABAC read-scope compilation > fifty tiered policies": {
+      "medianMs": 0.03691800000069634,
+      "meanMs": 0.05956153519951882,
+      "rmePercent": 5.289676410999591,
+      "samples": 8180,
+      "file": "src/__tests__/bench/abacReadScope.bench.ts"
+    },
+    "@xonava/core > src/__tests__/bench/abacReadScope.bench.ts > ABAC read-scope compilation > no relevant policy": {
+      "medianMs": 0.0006930000001830194,
+      "meanMs": 0.0013345622319199933,
+      "rmePercent": 8.763987864399116,
+      "samples": 206568,
+      "file": "src/__tests__/bench/abacReadScope.bench.ts"
+    },
+    "@xonava/core > src/__tests__/bench/abacReadScope.bench.ts > ABAC read-scope compilation > single allow policy": {
+      "medianMs": 0.0024679999996806146,
+      "meanMs": 0.006112779609518077,
+      "rmePercent": 14.089988721442484,
+      "samples": 63651,
+      "file": "src/__tests__/bench/abacReadScope.bench.ts"
+    },
+    "@xonava/core > src/__tests__/bench/abacReadScope.bench.ts > ABAC read-scope compilation > six tiered allow/deny policies": {
+      "medianMs": 0.005615999999918131,
+      "meanMs": 0.010388480147928895,
+      "rmePercent": 12.24554820329434,
+      "samples": 36868,
+      "file": "src/__tests__/bench/abacReadScope.bench.ts"
+    },
+    "@xonava/core > src/__tests__/bench/evaluatePredicate.bench.ts > evaluatePredicate > RFC 3339 range": {
+      "medianMs": 0.0003550000001268927,
+      "meanMs": 0.0005688330434196898,
+      "rmePercent": 8.236553456576777,
+      "samples": 875218,
+      "file": "src/__tests__/bench/evaluatePredicate.bench.ts"
+    },
+    "@xonava/core > src/__tests__/bench/evaluatePredicate.bench.ts > evaluatePredicate > array includesAny/includesAll": {
+      "medianMs": 0.0005090000013296958,
+      "meanMs": 0.0008400611967504344,
+      "rmePercent": 5.640339250705005,
+      "samples": 592209,
+      "file": "src/__tests__/bench/evaluatePredicate.bench.ts"
+    },
+    "@xonava/core > src/__tests__/bench/evaluatePredicate.bench.ts > evaluatePredicate > five-way conjunction": {
+      "medianMs": 0.000529999999798747,
+      "meanMs": 0.0007913897673312231,
+      "rmePercent": 5.246445037839383,
+      "samples": 600178,
+      "file": "src/__tests__/bench/evaluatePredicate.bench.ts"
+    },
+    "@xonava/core > src/__tests__/bench/evaluatePredicate.bench.ts > evaluatePredicate > in with 100 values": {
+      "medianMs": 0.002094999999826541,
+      "meanMs": 0.0038396676700973758,
+      "rmePercent": 20.29047336889619,
+      "samples": 111575,
+      "file": "src/__tests__/bench/evaluatePredicate.bench.ts"
+    },
+    "@xonava/core > src/__tests__/bench/evaluatePredicate.bench.ts > evaluatePredicate > nested or/not/between/contains": {
+      "medianMs": 0.0007200000000011642,
+      "meanMs": 0.001063039177209126,
+      "rmePercent": 5.151723860887565,
+      "samples": 382144,
+      "file": "src/__tests__/bench/evaluatePredicate.bench.ts"
+    },
+    "@xonava/core > src/__tests__/bench/evaluatePredicate.bench.ts > evaluatePredicate > or of 20 conjunctions": {
+      "medianMs": 0.002719000000070082,
+      "meanMs": 0.004052188033219721,
+      "rmePercent": 4.789665063314079,
+      "samples": 109081,
+      "file": "src/__tests__/bench/evaluatePredicate.bench.ts"
+    },
+    "@xonava/core > src/__tests__/bench/evaluatePredicate.bench.ts > evaluatePredicate > single equality": {
+      "medianMs": 0.00016200000004573667,
+      "meanMs": 0.00021969737786803773,
+      "rmePercent": 7.312696600641791,
+      "samples": 1956732,
+      "file": "src/__tests__/bench/evaluatePredicate.bench.ts"
+    },
+    "@xonava/core > src/__tests__/bench/queryBudget.bench.ts > query budget > compile budget from defaults": {
+      "medianMs": 0.0018029999999953361,
+      "meanMs": 0.003353003520465534,
+      "rmePercent": 17.284425414030274,
+      "samples": 145620,
+      "file": "src/__tests__/bench/queryBudget.bench.ts"
+    },
+    "@xonava/core > src/__tests__/bench/queryBudget.bench.ts > query budget > compile budget from entity limits": {
+      "medianMs": 0.0019389999999930296,
+      "meanMs": 0.0031626096092293586,
+      "rmePercent": 5.344684497160759,
+      "samples": 100267,
+      "file": "src/__tests__/bench/queryBudget.bench.ts"
+    },
+    "@xonava/core > src/__tests__/bench/queryBudget.bench.ts > query budget > validate plan with trusted ABAC scope": {
+      "medianMs": 0.029084000000011656,
+      "meanMs": 0.07218490429518654,
+      "rmePercent": 12.697299897933402,
+      "samples": 6938,
+      "file": "src/__tests__/bench/queryBudget.bench.ts"
+    },
+    "@xonava/core > src/__tests__/bench/queryBudget.bench.ts > query budget > validate rich plan": {
+      "medianMs": 0.08225900000024922,
+      "meanMs": 0.17740861663716295,
+      "rmePercent": 13.574042635335973,
+      "samples": 2713,
+      "file": "src/__tests__/bench/queryBudget.bench.ts"
+    },
+    "@xonava/core > src/__tests__/bench/queryBudget.bench.ts > query budget > validate simple plan": {
+      "medianMs": 0.008217999999942549,
+      "meanMs": 0.014523078569768538,
+      "rmePercent": 7.903442499593711,
+      "samples": 28200,
+      "file": "src/__tests__/bench/queryBudget.bench.ts"
+    },
+    "@xonava/testing > bench/jobClaim.bench.ts > D1 job claim > claim 1 due job": {
+      "medianMs": 108.20242549999966,
+      "meanMs": 119.98992943333324,
+      "rmePercent": 8.463584259611661,
+      "samples": 60,
+      "file": "bench/jobClaim.bench.ts"
+    },
+    "@xonava/testing > bench/jobClaim.bench.ts > D1 job claim > claim 25 due jobs": {
+      "medianMs": 609.7961139999989,
+      "meanMs": 617.6379775499997,
+      "rmePercent": 7.734792679278738,
+      "samples": 20,
+      "file": "bench/jobClaim.bench.ts"
+    },
+    "@xonava/testing > bench/jobClaim.bench.ts > D1 job claim > claim 5 due jobs": {
+      "medianMs": 180.31368450000082,
+      "meanMs": 204.09522050000024,
+      "rmePercent": 7.980447391803244,
+      "samples": 40,
+      "file": "bench/jobClaim.bench.ts"
+    }
+  }
+}
