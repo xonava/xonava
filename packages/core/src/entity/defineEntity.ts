@@ -149,12 +149,14 @@ export interface CrudPostCommitHookContext {
  *   be idempotent under retries. Receives read-only persistence; it MUST NOT
  *   perform arbitrary writes — that would bypass ABAC/OCC/tenant scoping.
  *
- * - `projectCommittedResult`: runs after the durable commit
- *   (or inside the read transaction for list/detail) and is representation-
- *   only. It MUST NOT mutate durable state and must be idempotent — the
- *   persisted row is already authoritative. Result projection hooks run
- *   before the read-projection/ABAC re-application in list/detail and against a
- *   read-only persistence view in mutations.
+ * - `projectCommittedResult`: representation-only; it MUST NOT mutate durable
+ *   state and must be idempotent. On interactive-transaction providers it runs
+ *   inside the writing transaction just before commit, and its read-only
+ *   persistence is bound to that transaction: it sees the just-written row,
+ *   cannot write, and fails if used after the operation ends. On atomic-batch
+ *   providers it runs after the batch commits, with a fresh read-only
+ *   persistence. (For list/detail, result projection hooks run inside the read
+ *   transaction, before the read-projection/ABAC re-application.)
  *
  * - `afterCommit`: post-commit side-effect hook (outbox, notifications).
  *   Not a representation transform — must not mutate the returned row.
