@@ -172,8 +172,6 @@ These differences are intentional. The differential suites accept exactly these 
 
 ## Authorization
 
-- **Query grants from conditional allow policies** are honoured without evaluating their conditions at
-  query time. Only grants that come from deny policies are dropped.
 - **Read allowlists in the lowest tier.** A lowest-tier allow with a read map narrows the readable
   fields even when a higher tier decides the row, because read maps are allowlists.
 - **Soft deletes.** If an ABAC policy condition references a soft-delete field, plan-constrained soft
