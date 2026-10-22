@@ -76,9 +76,10 @@
   "scripts": {
     "build": "tsc -b tsconfig.build.json --force && node ../../scripts/verification/rewriteBuildExtensions.mjs ../core ../adapters .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint src tests fixtures integration crash conformance --max-warnings=0",
+    "lint": "eslint src tests fixtures integration crash conformance bench --max-warnings=0",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "bench": "vitest bench --run",
     "test:property": "vitest run tests/property.test.ts",
     "test:race": "vitest run tests/race.test.ts",
     "test:crash": "vitest run tests/crash-recovery.test.ts",

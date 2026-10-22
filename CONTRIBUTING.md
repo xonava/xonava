@@ -24,10 +24,19 @@ npm install
 | `npm run test:coverage -w @xonava/core` | Runs core unit tests with coverage thresholds |
 | `npm run test:mutation` | Stryker mutation testing of core and adapters. Enforcing: exits non-zero below the gate (core 80 %, adapters 70 %). Expected to fail until the per-module mutation work lands, so it is not part of `npm test` or any verify script |
 | `npm run verify:docs` | Checks documentation links, public import paths, and canonical references |
+| `npm run bench` | Runs the hot-path benchmarks and fails when one is more than 25 % slower than `benchmarks/baseline.json`. Not part of `npm test`. |
 
 Mutation testing runs one package at a time (`npm run test:mutation -w @xonava/core`) and mutates in place, so do not run two mutation runs, or edit `src/`, in the same checkout at the same time. To measure one module without enforcing the gate, run `XONAVA_MUTATION_BREAK=0 npm run test:mutation -w @xonava/core -- --mutate "src/query/**/*.ts,!src/**/__tests__/**"`. Results are cached in the gitignored `.stryker-tmp/incremental.json` and the JSON report is `.stryker-tmp/reports/mutation.json`. If a run is killed, `git checkout -- src` removes any leftover mutation.
 
 Tests that depend on elapsed time scale their budgets and vitest timeouts by `XONAVA_TIMING_SCALE` (default 1, 4 under `--coverage`), so run tests on a loaded machine with `XONAVA_TIMING_SCALE=4`.
+
+## Performance benchmarks
+
+Hot-path benchmarks are vitest `bench` files: predicate evaluation, ABAC decisions, read-scope and query-budget compilation in `packages/core/src/__tests__/bench/`, SQL predicate and cursor compilation for every dialect in `packages/adapters/src/__tests__/bench/`, and a D1 (Miniflare) job claim in `packages/testing/bench/`. `npm run bench` runs them all and compares the median time of each benchmark with `benchmarks/baseline.json` (`scripts/verification/verifyBenchmarks.mjs`).
+
+- The gate fails a benchmark more than 25 % slower than its baseline. A failing benchmark is measured once more and the faster median counts, so a noisy moment on a shared machine does not fail the gate.
+- Baseline numbers depend on the machine. The baseline records its CPU and Node version, and `npm run bench` warns when they differ. On a different machine, or after an intentional performance change, run `npm run bench:update-baseline` (three runs, median of medians) and review the diff.
+- Run benchmarks on an idle machine. `--threshold 0.4` loosens the gate for one run.
 
 ## Database test suites
 

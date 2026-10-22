@@ -39,6 +39,8 @@ export default defineConfig({
   }},
   test: {
     include: ["tests/**/*.test.ts"],
+    // Hot-path benchmarks run through `npm run bench` (scripts/verification/verifyBenchmarks.mjs), never through `npm test`.
+    benchmark: { include: ["bench/**/*.bench.ts"] },
     env: { XONAVA_TIMING_SCALE: String(timingScale) },
     ...(timingScale > 1 ? { testTimeout: 5_000 * timingScale, hookTimeout: 10_000 * timingScale } : {}),
     coverage: {
