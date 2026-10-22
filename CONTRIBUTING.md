@@ -26,6 +26,8 @@ npm install
 | `npm run verify:docs` | Checks documentation links, public import paths, and canonical references |
 | `npm run bench` | Runs the hot-path benchmarks and fails when one is more than 25 % slower than `benchmarks/baseline.json`. Not part of `npm test`. |
 
+There is no code formatter: ESLint enforces the rules that matter, and adopting a formatter would rewrite every file. Follow the style of the file you are editing.
+
 Mutation testing runs one package at a time (`npm run test:mutation -w @xonava/core`) and mutates in place, so do not run two mutation runs, or edit `src/`, in the same checkout at the same time. To measure one module without enforcing the gate, run `XONAVA_MUTATION_BREAK=0 npm run test:mutation -w @xonava/core -- --mutate "src/query/**/*.ts,!src/**/__tests__/**"`. Results are cached in the gitignored `.stryker-tmp/incremental.json` and the JSON report is `.stryker-tmp/reports/mutation.json`. If a run is killed, `git checkout -- src` removes any leftover mutation.
 
 Tests that depend on elapsed time scale their budgets and vitest timeouts by `XONAVA_TIMING_SCALE` (default 1, 4 under `--coverage`), so run tests on a loaded machine with `XONAVA_TIMING_SCALE=4`.
