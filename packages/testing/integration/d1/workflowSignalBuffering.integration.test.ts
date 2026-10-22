@@ -1,4 +1,5 @@
 import { Miniflare } from "miniflare"
+import { ASYNC_D1_WORKER_SCRIPT, asyncD1Binding } from "./asyncD1.js"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { DrizzleD1WorkflowStore } from "@xonava/adapters/drizzle-d1"
 import { applyD1Migration, readD1Migration, d1MigrationStatements } from "../../fixtures/d1/bootstrap.js"
@@ -56,9 +57,9 @@ describe("D1 buffered workflow signals", () => {
   })
 
   it("migration 0002 marks receipts stored before it as consumed, in delivery order, and leaves later receipts pending", async () => {
-    const mf = new Miniflare({ modules: true, script: "export default { fetch() { return new Response('ok') } }", compatibilityDate: "2025-09-01", d1Databases: { DB: "signal-backfill" } })
+    const mf = new Miniflare({ modules: true, script: ASYNC_D1_WORKER_SCRIPT, compatibilityDate: "2025-09-01", d1Databases: { DB: "signal-backfill" } })
     try {
-      const db = tolerateStaleConnections(await mf.getD1Database("DB"))
+      const db = tolerateStaleConnections(asyncD1Binding(mf))
       await db.exec(await readD1Migration("0001_framework.sql"))
       await db.exec(`INSERT INTO framework_workflows (id,workflow_type,workflow_version,execution_scope,status,current_step,variables,waiting_signal,created_at_ms,updated_at_ms) VALUES ('legacy','t',1,'{"kind":"tenant","tenantId":"t1"}','waiting','approve','{}','go',1,1)`)
       // Inserted out of delivery order on purpose: the backfilled seq follows delivered_at_ms, not the rowid.
