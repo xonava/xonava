@@ -34,6 +34,14 @@ describe("job progress properties", () => {
     }, { runs: 100 })
   })
 
+  it("reports checkpoints canonical JSON refuses, and U+0000 anywhere in them, as ConfigurationError", () => {
+    const refused: Array<Record<string, unknown>> = [
+      { big: 2 ** 53 }, { nested: { list: [-(2 ** 60)] } }, { nul: "a\u0000b" }, { "k\u0000": true }, { deep: [{ x: "ok" }, "\u0000"] },
+    ]
+    for (const checkpoint of refused) expect(() => validateJobProgress({ checkpoint }), JSON.stringify(checkpoint)).toThrow(ConfigurationError)
+    expect(() => validateJobProgress({ checkpoint: { safe: 2 ** 53 - 1, text: "\u0001" } })).not.toThrow()
+  })
+
   it("decodes a stored checkpoint only when it is a JSON object within the byte bound", () => {
     const objects: Array<Record<string, unknown>> = [{}, { a: 1 }, { nested: { list: [1, 2, { b: null }] } }, { "é": "\u{1F600}" }]
     forAll("job progress: stored checkpoint decoding", (rng) => {
