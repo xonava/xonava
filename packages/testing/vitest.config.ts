@@ -39,6 +39,8 @@ export default defineConfig({
   }},
   test: {
     include: ["tests/**/*.test.ts"],
+    // One process per test file: tests/guaranteeEvidence.test.ts changes the working directory, which threads would share.
+    pool: "forks",
     // Hot-path benchmarks run through `npm run bench` (scripts/verification/verifyBenchmarks.mjs), never through `npm test`.
     benchmark: { include: ["bench/**/*.bench.ts"] },
     env: { XONAVA_TIMING_SCALE: String(timingScale) },
@@ -55,10 +57,10 @@ export default defineConfig({
       thresholds: {
         // Enforced ratchet floors for the testing package, measured when they were
         // introduced. Raise these only alongside tests; never lower them.
-        lines: 76,
-        statements: 75,
-        functions: 75,
-        branches: 55,
+        lines: 96,
+        statements: 95,
+        functions: 93,
+        branches: 83,
       },
     },
   },
