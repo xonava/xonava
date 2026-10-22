@@ -21,7 +21,7 @@ import { createFrameworkErrorHandler, frameworkJson } from "./handleFrameworkCor
 import { parseJsonBodySafely, parseUniqueQueryParameters, resolveRequestMetadata } from "./requestBody"
 import type { CacheAdapter } from "@xonava/core/cache"
 import type { AuditSink, OutboxSink } from "@xonava/core/events"
-import { boundRateLimitKeyMaterial, buildIdempotencyScopeIdentity, buildIdempotencySecurityContext, deserializeResponse, fingerprintJson, legacyFingerprintJson, MAX_IDEMPOTENCY_KEY_LENGTH, serializeResponse, type SerializedResponse, type SerializedResponseIdempotencyPort } from "./idempotency"
+import { IdempotencyPayloadTooLargeError, boundRateLimitKeyMaterial, buildIdempotencyScopeIdentity, buildIdempotencySecurityContext, deserializeResponse, fingerprintJson, legacyFingerprintJson, MAX_IDEMPOTENCY_KEY_LENGTH, serializeResponse, type SerializedResponse, type SerializedResponseIdempotencyPort } from "./idempotency"
 import { authorizeFrameworkModule, normalizeCrudRequest, tenantIdFromContext } from "./crudHandlers/shared"
 
 const frameworkErrorHandler = createFrameworkErrorHandler()
@@ -138,7 +138,7 @@ async function fingerprintClientMutation(value: unknown, fingerprint: (value: un
   } catch (error) {
     // The client controls this material; anything without a canonical JSON
     // form (e.g. a "__proto__" member or an unsafe integer) is a bad request.
-    if (error instanceof CanonicalJsonError) throw new ValidationError("Request cannot be used with an Idempotency-Key")
+    if (error instanceof CanonicalJsonError || error instanceof IdempotencyPayloadTooLargeError) throw new ValidationError("Request cannot be used with an Idempotency-Key")
     throw error
   }
 }

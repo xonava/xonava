@@ -250,7 +250,7 @@ export function defineJobProgressRegressions(driver: JobProgressStoreDifferentia
     await setup()
     let sequence = 0
     for (const percent of VALID_PERCENTS) {
-      expect((await write(driver.store, JOB, FENCE, sequence, { percent })).outcome, `percent ${percent}`).toMatchObject({ ok: { sequence: sequence + 1, percent } })
+      expect((await write(driver.store, JOB, FENCE, sequence, { percent })).outcome, `percent ${percent}`).toMatchObject({ ok: { sequence: sequence + 1, percent: percent + 0 } })
       sequence++
     }
     for (const percent of INVALID_PERCENTS) {
