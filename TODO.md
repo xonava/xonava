@@ -19,8 +19,8 @@ Status: **experimental**. `0.1.0` is published on npm. Target for `1.0.0`: core 
 | --- | --- | --- |
 | 0: quick fixes | Done (6 of 6) | |
 | 1: pilot feedback and missing adapters | Done (9 of 9, plus 3 follow-ups) | All eight requests from the TanStack Start / Cloudflare pilot |
-| 2: proof | In progress | Done: A2–A8, F9, B1–B7, Q4, Q6, Q5 setup, Q2 core, DF1 baseline. Remaining: Q5 per module, Q2 adapters and testing, B8; CI (Q1) deferred |
-| 3: hardening and decisions | Not started (0 of 4) | |
+| 2: proof | In progress | Done: everything except Q5 per module (`query` done, 86.2 %); CI (Q1) deferred |
+| 3: hardening and decisions | In progress | Done: C5 threat model. In flight: C3, C4. Remaining: C6, C7 (threat-model test gaps) |
 
 Real-database differential suites now cover jobs, schedules, workflows, idempotency, inbox/outbox
 delivery, leases, sequences, temporal history, job progress and cache tag generations on PostgreSQL,
@@ -80,14 +80,14 @@ the release gate and the named scripts. Each gate is created by the WP named aft
 | Gate | Target | Created by |
 | --- | --- | --- |
 | Unit coverage, core | lines 96, branches 90 (met: 96.28 / 90.54, enforced) | Q2 |
-| Unit coverage, adapters | lines 90, branches 82 (today 76 / 61) | Q2 |
+| Unit coverage, adapters | lines 90, branches 82 (met: 94.5 / 85.9, enforced) | Q2 |
 | Mutation score | core ≥ 80 %, adapters `http/` and `drizzle-shared/` ≥ 70 % (today 61–83 %, see Q5) | Q5 |
 | Real-database differential suites | every durable store on PostgreSQL, MySQL and D1 (met) | A2–A8 |
 | HTTP fuzzing | property suites over all CRUD and write handlers in DF1 (met) | Q4 |
 | Performance | hot-path benchmarks within 25 % of the recorded baseline (met: `npm run bench`) | Q6 |
 | Upgrade compatibility | N-1 suite against the previous published release | C3 |
 | Soak | 30-minute crash/lease soak with no invariant violation | C4 |
-| Threat model | reviewed `docs/spec/security.md` threat model | C5 |
+| Threat model | reviewed `docs/spec/security.md` threat model (met; test gaps in C7) | C5 |
 
 ## Wave 2: proof (Sonnet, parallel)
 
@@ -113,7 +113,7 @@ when the wave closes.
 
   | Module | Scope | Score |
   | --- | --- | --- |
-  | core `query` | full | 74.3 % |
+  | core `query` | full | 86.2 % (done) |
   | core `domain` | 3 of 31 files | 62.6 % |
   | core `operation` | 4 of 19 | 60.9 % |
   | core `execution` | `dispatcher.ts` only | 65.4 % |
@@ -130,31 +130,6 @@ when the wave closes.
 - `events/durability/auditRedaction.ts` cannot be mutated yet: its 60 000-string and 200 kB linear-time
   tests time out under instrumentation. Give those tests a lighter variant under mutation first.
 - **Acceptance:** `npm run test:mutation` exits 0 for core (≥ 80 %) and adapters (≥ 70 %).
-
-### Q2 Raise coverage floors, adapters and testing
-
-- [ ] Sonnet for adapters (lines 76 → 90, branches 61 → 82), Haiku for testing. Branch
-  `test/coverage-<package>`. Core is done.
-- **Steps:** list uncovered branches with `npm run test:coverage -w <pkg>`. Write targeted tests module
-  by module until the gate is met, then raise the thresholds in the config. No test may assert only that
-  code runs; each asserts an outcome. Core's lines margin is thin (96.28 against 96): `outbox.ts` and
-  `authority.ts` are the weakest files if headroom is needed.
-
-### B8 Follow-ups found while closing wave 2
-
-- [ ] Sonnet. **D1 suites under load.** With the machine at load average 6 or more, the full D1 suite
-  fails intermittently inside Miniflare 3.20250718.3: its synchronous proxy asserts `message?.id === id`
-  (`miniflare/dist/src/index.js`, `receiveMessageOnPort` after `Atomics.wait`), the fixture breaks, and
-  every remaining property in that file fails. Each failing file passes alone, and the full suite passes
-  on a quiet machine. Separately, `race.integration.test.ts` opens two Miniflare instances on one SQLite
-  file and can get `SQLITE_BUSY`. Find which calls go through the synchronous proxy and avoid them, or
-  upgrade Miniflare; then show three full D1 runs passing under load (for example alongside `npm test`).
-- [ ] Sonnet. **PostgreSQL `transactionOutcome` "re-run the rolled-back transaction".** Failed once in a
-  full run (`attempts` expected 3), passed 3 of 3 alone. Two serializable write-skew transactions share
-  one `attempts` counter; find whether PostgreSQL can abort both and make the assertion exact for every
-  legal outcome.
-- [ ] Opus, input to C5. For platform-scope routes, module entitlements (`enabledModuleKeys`, actions,
-  capabilities) are not consulted; ABAC is the only authorization input. Confirm in the threat model.
 
 ## Wave 3: hardening and decisions
 
@@ -190,21 +165,6 @@ when the wave closes.
   Write evidence like the crash suites.
 - **Acceptance:** a 30-minute run passes.
 
-### C5 Threat model
-
-- [ ] Opus drafts, Sonnet completes. Branch `docs/threat-model`.
-- **Steps:** add a "Threat model" section to `docs/spec/security.md`:
-  - assets: tenant data, policy bundles, idempotency receipts, audit and outbox;
-  - adversaries: an unauthenticated client, an authenticated user of another tenant, a malicious
-    tenant administrator, a compromised worker, and an operator with database access;
-  - entry points: HTTP scope resolution, cursors, idempotency keys, policy authoring, job payloads and
-    object keys.
-
-  Map each threat to the requirement that addresses it and the test that proves it, and list residual
-  risks. Known inputs: write handlers parse the request body (bounded at 1 MiB by default) before CSRF,
-  session and authorization checks (`docs/typescript/http-adapters.md`, method and body matrix). Every threat without a test becomes a new WP here.
-- **Acceptance:** reviewed by Opus.
-
 ### C6 Decisions on items not implemented
 
 - [ ] Opus. **Design gate.** For each item, record "build" with a new WP, or "out of scope" with the
@@ -224,6 +184,46 @@ when the wave closes.
     `packages/adapters/migrations/<database>/` with a generator check.
   - **Persistence-applied codecs.** Rejected today at `packages/core/src/entity/validateEntity.ts:114`.
     Candidate: apply `durableCodec` in each adapter's `drizzleRepository.ts` row mapping.
+
+### C7 Threat-model test gaps
+
+- [ ] Sonnet. Branch `test/threat-model-gaps`. Source: the threat table in
+  [`docs/spec/security.md`](docs/spec/security.md#threats). Tests only; if a test shows a real defect,
+  stop and report it with the reproduction instead of changing code.
+- **Steps:** add one test for each gap, then replace `none` in the threat table's *Test* cell with the
+  new test and delete the bullet.
+  - [ ] **TM8** (CSRF). Show that `assertValidCsrf` is called for a write route whose scope is not public and
+    that a throwing check refuses `create`, `update`, `delete` and a custom write handler with no repository
+    call, no audit record and no idempotency reservation. Also show that it is not called for a public
+    scope, that `csrfRequired: false` skips it on a non-public scope, and that it runs after the body
+    checks and before the anonymous-principal 401 and the ABAC bundle lookup. Suggested file:
+    `packages/adapters/src/http/__tests__/csrfEnforcement.test.ts`.
+  - [ ] **TM10b** (TOCTOU without a version fence). Show that `createUpdateHandler` answers a
+    `ConfigurationError` (500) and writes nothing when a record-dependent field-write policy applies to an
+    entity with no `versionField` or `optimisticConcurrency`, or when the request has no `If-Match`. Show
+    that the update answers 409 and leaves the row unchanged when the conditional update matches no row
+    because a concurrent writer changed a policy-driving field after the pre-image read. Suggested file:
+    `packages/adapters/src/http/crudHandlers/__tests__/updateToctou.test.ts` (its current tests only check
+    construction).
+  - [ ] **TM13a** (tenant credentials on a platform route). Show that a session with a tenant scope on a route
+    whose compiled scope is fixed to `{ kind: "platform" }` is refused with `scope mismatch` before
+    admission, the repository and the handler, for read and write routes. Suggested file:
+    `packages/adapters/src/http/__tests__/scopeResolution.test.ts`, plus one HTTP-level case in
+    `packages/testing/integration/shared/platformScope.ts`.
+  - [ ] **TM13b** (no entitlement check on platform scope). Show that `evaluateModuleAuthorization` allows a
+    platform, application, system and public scope whatever `enabledModuleKeys`, `enabledModuleActions` and
+    `enabledModuleCapabilities` hold, and that a platform route without a verified ABAC bundle still fails
+    closed with 403. Pin the behaviour so a later change cannot start consulting entitlements by accident.
+    Suggested file: `packages/core/src/domain/__tests__/frameworkAuthorization.test.ts`, plus an HTTP case
+    in `packages/adapters/src/http/crudHandlers/__tests__/tenantScopeContext.test.ts`.
+  - [ ] **TM16b** (hostile object keys). Show that `InMemoryObjectStore` and `R2ObjectStore` treat a key
+    as an opaque string: `tenants/a/../b/x` and `tenants/b/x` are different objects, a key with a leading `/`
+    or a trailing space does not collide with its trimmed form, and a key with a NUL character is
+    rejected with a validation error before any provider call. Suggested files:
+    `packages/adapters/src/storage/__tests__/inMemoryObjectStore.test.ts` and
+    `packages/adapters/src/storage/__tests__/r2ObjectStore.test.ts`.
+- **Acceptance:** `npm test` and `npm run verify:docs` pass; no `none` remains in the threat table's *Test*
+  column except the rows marked residual.
 
 ## Deferred
 
