@@ -31,3 +31,14 @@ Providers MUST distinguish a transaction that definitely did not commit from one
 ## Transaction deadline
 
 `TransactionOptions.timeoutMs` bounds a whole transaction. Providers that declare `capabilities.transactionTimeouts` MUST enforce it inside the database (for example `SET LOCAL statement_timeout` or a transaction timeout) and roll back when it elapses. When the provider declares the capability, the operation pipeline sets `timeoutMs` to the operation's remaining execution deadline (or the operation's own smaller value), so a hung statement cannot outlive its request.
+
+## Not provided
+
+These are decided out of scope; adapters fail closed rather than emulate them.
+
+- **Interactive transactions on D1.** D1 offers no interactive transactions, only an atomic batch of statements. The D1
+  adapters declare `interactiveTransactions: false`; an operation that requires an interactive transaction fails with a
+  `ConfigurationError` when it runs, and a mutation that defines an atomic-batch form runs as one atomic batch instead.
+- **A bounded `COMMIT` on MySQL.** MySQL has no server-side limit on the duration of `COMMIT`, and cancelling a `COMMIT`
+  from the client leaves its outcome unknown. When the MySQL adapter declares `transactionTimeouts` (it is given a kill pool), the
+  timeout bounds the statements of a transaction, not its `COMMIT`; a `COMMIT` that does not return is classified as an unknown outcome, never as a rollback.
