@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, it } from "vitest"
 import { CancelledError, ConfigurationError, TimeoutError } from "../../domain/errors"
 import { MAX_PREDICATE_EVALUATION_DEPTH } from "../../domain/evaluatePredicate"
@@ -11,43 +10,43 @@ import { resolveProjection } from "../projection"
 import { validateSearchRequest, validateSearchResult } from "../search"
 
 /** Returns the error thrown synchronously by fn, so its exact message can be compared. */
-function caught(fn) {
+function caught(fn: () => unknown): Error {
   try {
     fn()
   } catch (error) {
-    return error
+    return error as Error
   }
   throw new Error("expected the call to throw")
 }
 
 /** Async variant of caught for the cursor codec. */
-async function caughtAsync(fn) {
+async function caughtAsync(fn: () => Promise<unknown>): Promise<Error> {
   try {
     await fn()
   } catch (error) {
-    return error
+    return error as Error
   }
   throw new Error("expected the call to reject")
 }
 
 const budget = { ...DEFAULT_QUERY_BUDGET }
 const small = { maxPredicateDepth: 2, maxPredicateNodes: 3, maxOrBranches: 2, maxInValues: 2, maxSortFields: 1, maxProjectionFields: 1, maxSearchBytes: 4 }
-const payload = { format: "framework.cursor", version: 1, direction: "after", values: ["a", 1], routeHash: "r", queryHash: "q", scopeHash: "s", sortHash: "o" }
+const payload = { format: "framework.cursor", version: 1, direction: "after", values: ["a", 1], routeHash: "r", queryHash: "q", scopeHash: "s", sortHash: "o" } as const
 
 /** A deterministic, invertible integrity tag so tampering and key mismatch are observable. */
-const mac = (secret) => ({
-  sign: async (bytes) => Uint8Array.of(bytes.reduce((sum, byte) => (sum + byte * secret) % 251, secret)),
-  verify: async (bytes, signature) => signature.length === 1 && signature[0] === bytes.reduce((sum, byte) => (sum + byte * secret) % 251, secret),
+const mac = (secret: number) => ({
+  sign: async (bytes: Uint8Array) => Uint8Array.of(bytes.reduce((sum: number, byte: number) => (sum + byte * secret) % 251, secret)),
+  verify: async (bytes: Uint8Array, signature: Uint8Array) => signature.length === 1 && signature[0] === bytes.reduce((sum: number, byte: number) => (sum + byte * secret) % 251, secret),
 })
 
 describe("query budget error messages and boundaries", () => {
   it("reports exact messages for malformed budget records", () => {
-    expect(caught(() => assertQueryBudget(null)).message).toBe("query budget must be a plain object")
-    expect(caught(() => assertQueryBudget([])).message).toBe("query budget must be a plain object")
-    expect(caught(() => assertQueryBudget({ ...budget, [Symbol("hidden")]: 1 })).message).toBe("query budget must not contain symbol keys")
-    expect(caught(() => assertQueryBudget({ ...budget, extra: 1 })).message).toBe("Unknown field extra in query budget")
+    expect(caught(() => assertQueryBudget(null as never)).message).toBe("query budget must be a plain object")
+    expect(caught(() => assertQueryBudget([] as never)).message).toBe("query budget must be a plain object")
+    expect(caught(() => assertQueryBudget({ ...budget, [Symbol("hidden")]: 1 } as never)).message).toBe("query budget must not contain symbol keys")
+    expect(caught(() => assertQueryBudget({ ...budget, extra: 1 } as never)).message).toBe("Unknown field extra in query budget")
     const { maxSortFields: _removed, ...incomplete } = budget
-    expect(caught(() => assertQueryBudget(incomplete)).message).toBe("query budget.maxSortFields is required")
+    expect(caught(() => assertQueryBudget(incomplete as never)).message).toBe("query budget.maxSortFields is required")
     const accessor = Object.defineProperty({ ...budget }, "maxSortFields", { enumerable: true, get: () => 1 })
     expect(caught(() => assertQueryBudget(accessor)).message).toBe("query budget.maxSortFields must be a data property")
   })
@@ -56,7 +55,7 @@ describe("query budget error messages and boundaries", () => {
     expect(caught(() => assertQueryBudget({ ...budget, maxSortFields: 0 })).message).toBe("maxSortFields must be a positive safe integer")
     expect(caught(() => assertQueryBudget({ ...budget, maxSortFields: Number.MAX_SAFE_INTEGER + 1 })).message).toBe("maxSortFields must be a positive safe integer")
     const allOnes = Object.fromEntries(Object.keys(budget).map((key) => [key, 1]))
-    expect(() => assertQueryBudget(allOnes)).not.toThrow()
+    expect(() => assertQueryBudget(allOnes as never)).not.toThrow()
   })
 
   it("compiles budgets only from own, defined budget keys", () => {
@@ -67,74 +66,74 @@ describe("query budget error messages and boundaries", () => {
   })
 
   it("reports exact plan-level messages", () => {
-    expect(caught(() => validateQueryPlan(null)).message).toBe("query plan must be a plain object")
-    expect(caught(() => validateQueryPlan({ extra: true })).message).toBe("Unknown field extra in query plan")
-    expect(caught(() => validateQueryPlan({ [Symbol("x")]: 1 })).message).toBe("query plan must not contain symbol keys")
-    expect(caught(() => validateQueryPlan({ search: {} })).message).toBe("query search.text is required")
-    expect(caught(() => validateQueryPlan({ search: { text: 1 } })).message).toBe("query search.text must be a string")
+    expect(caught(() => validateQueryPlan(null as never)).message).toBe("query plan must be a plain object")
+    expect(caught(() => validateQueryPlan({ extra: true } as never)).message).toBe("Unknown field extra in query plan")
+    expect(caught(() => validateQueryPlan({ [Symbol("x")]: 1 } as never)).message).toBe("query plan must not contain symbol keys")
+    expect(caught(() => validateQueryPlan({ search: {} } as never)).message).toBe("query search.text is required")
+    expect(caught(() => validateQueryPlan({ search: { text: 1 } } as never)).message).toBe("query search.text must be a string")
     expect(caught(() => validateQueryPlan({ search: { text: "abcde" } }, small)).message).toBe("query search exceeds maximum UTF-8 bytes")
     expect(() => validateQueryPlan({ search: { text: "abcd" } }, small)).not.toThrow()
-    expect(caught(() => validateQueryPlan({ consistency: "causal" })).message).toBe("query consistency is invalid")
+    expect(caught(() => validateQueryPlan({ consistency: "causal" } as never)).message).toBe("query consistency is invalid")
   })
 
   it("reports exact sort messages and the sort field limit", () => {
-    expect(caught(() => validateQueryPlan({ sort: {} })).message).toBe("query sort must be an array")
-    expect(caught(() => validateQueryPlan({ sort: [{ field: " ", direction: "asc" }] })).message).toBe("query sort field must be a non-empty string")
-    expect(caught(() => validateQueryPlan({ sort: [{ field: "a", direction: "up" }] })).message).toBe("query sort direction must be asc or desc")
-    expect(caught(() => validateQueryPlan({ sort: [{ field: "a", direction: "asc", nulls: "middle" }] })).message).toBe("query sort null ordering must be first or last")
+    expect(caught(() => validateQueryPlan({ sort: {} } as never)).message).toBe("query sort must be an array")
+    expect(caught(() => validateQueryPlan({ sort: [{ field: " ", direction: "asc" }] } as never)).message).toBe("query sort field must be a non-empty string")
+    expect(caught(() => validateQueryPlan({ sort: [{ field: "a", direction: "up" }] } as never)).message).toBe("query sort direction must be asc or desc")
+    expect(caught(() => validateQueryPlan({ sort: [{ field: "a", direction: "asc", nulls: "middle" }] } as never)).message).toBe("query sort null ordering must be first or last")
     expect(caught(() => validateQueryPlan({ sort: [{ field: "a", direction: "asc" }, { field: "b", direction: "asc" }] }, small)).message).toBe("query exceeds maximum sort fields")
-    expect(caught(() => validateQueryPlan({ sort: [{ field: "a", direction: "asc" }, { field: "a", direction: "desc" }] }, { ...small, maxSortFields: 2 })).message).toBe("query sort fields must be unique")
+    expect(caught(() => validateQueryPlan({ sort: [{ field: "a", direction: "asc" }, { field: "a", direction: "desc" }] }, { ...small, maxSortFields: 2 } as never)).message).toBe("query sort fields must be unique")
     expect(() => validateQueryPlan({ sort: [{ field: "a", direction: "asc", nulls: "first" }, { field: "b", direction: "desc", nulls: "last" }] })).not.toThrow()
   })
 
   it("reports exact pagination messages", () => {
-    expect(caught(() => validateQueryPlan({ pagination: { kind: "weird" } })).message).toBe("query pagination has unknown kind weird")
+    expect(caught(() => validateQueryPlan({ pagination: { kind: "weird" } } as never)).message).toBe("query pagination has unknown kind weird")
     expect(caught(() => validateQueryPlan({ pagination: { kind: "offset", page: 0, pageSize: 10 } })).message).toBe("offset pagination.page must be a positive safe integer")
     expect(caught(() => validateQueryPlan({ pagination: { kind: "offset", page: 1, pageSize: 0 } })).message).toBe("offset pagination.pageSize must be a positive safe integer")
     expect(caught(() => validateQueryPlan({ pagination: { kind: "cursor", after: "a", limit: 0 } })).message).toBe("cursor pagination.limit must be a positive safe integer")
-    expect(caught(() => validateQueryPlan({ pagination: { kind: "cursor", limit: 1 } })).message).toBe("cursor pagination must set exactly one of after or before")
+    expect(caught(() => validateQueryPlan({ pagination: { kind: "cursor", limit: 1 } } as never)).message).toBe("cursor pagination must set exactly one of after or before")
     expect(caught(() => validateQueryPlan({ pagination: { kind: "cursor", after: " ", limit: 1 } })).message).toBe("cursor pagination boundary must be a non-empty string")
     expect(caught(() => validateQueryPlan({ pagination: { kind: "cursor", after: "x".repeat(16385), limit: 1 } })).message).toBe("cursor pagination boundary exceeds maximum UTF-8 bytes")
     expect(() => validateQueryPlan({ pagination: { kind: "cursor", before: "x".repeat(16384), limit: 1 } })).not.toThrow()
   })
 
   it("reports exact projection messages and the projection limit", () => {
-    expect(caught(() => validateQueryPlan({ projection: { fields: "id" } })).message).toBe("query projection.fields must be an array")
+    expect(caught(() => validateQueryPlan({ projection: { fields: "id" } } as never)).message).toBe("query projection.fields must be an array")
     expect(caught(() => validateQueryPlan({ projection: { fields: ["a", "b"] } }, small)).message).toBe("query exceeds maximum projection fields")
-    expect(caught(() => validateQueryPlan({ projection: { fields: ["a", "a"] } }, { ...small, maxProjectionFields: 2 })).message).toBe("query projection fields must be unique")
+    expect(caught(() => validateQueryPlan({ projection: { fields: ["a", "a"] } }, { ...small, maxProjectionFields: 2 } as never)).message).toBe("query projection fields must be unique")
     expect(caught(() => validateQueryPlan({ projection: { fields: [""] } })).message).toBe("query projection field must be a non-empty string")
   })
 
   it("reports exact predicate structure messages", () => {
-    const condition = (extra) => ({ filter: { kind: "condition", field: "a", ...extra } })
-    expect(caught(() => validateQueryPlan({ filter: "x" })).message).toBe("query predicate must be an object")
-    expect(caught(() => validateQueryPlan({ filter: { kind: "literal", value: "yes" } })).message).toBe("literal predicate.value must be boolean")
-    expect(() => validateQueryPlan({ filter: { kind: "literal", value: false } })).not.toThrow()
-    expect(caught(() => validateQueryPlan({ filter: { kind: "weird" } })).message).toBe("query predicate has unknown kind weird")
-    expect(caught(() => validateQueryPlan(condition({ op: "nope", value: 1 }))).message).toBe("condition predicate has unknown operator nope")
-    expect(caught(() => validateQueryPlan(condition({ op: "isNull", value: 1 }))).message).toBe("predicate operator isNull does not accept a value")
-    expect(caught(() => validateQueryPlan(condition({ op: "eq" }))).message).toBe("predicate operator eq requires a value")
-    expect(caught(() => validateQueryPlan({ filter: { kind: "condition", field: " ", op: "eq", value: 1 } })).message).toBe("condition predicate.field must be a non-empty string")
-    expect(caught(() => validateQueryPlan(condition({ op: "between", value: 5 }))).message).toBe("between predicate.value must be an object")
-    expect(caught(() => validateQueryPlan(condition({ op: "between", value: {} }))).message).toBe("between predicate requires at least one bound")
-    expect(caught(() => validateQueryPlan(condition({ op: "between", value: { from: {} } }))).message).toBe("between predicate.from must be a scalar value")
-    expect(caught(() => validateQueryPlan(condition({ op: "between", value: { to: {} } }))).message).toBe("between predicate.to must be a scalar value")
-    expect(() => validateQueryPlan(condition({ op: "between", value: { to: 2 } }))).not.toThrow()
-    expect(caught(() => validateQueryPlan(condition({ op: "in", value: {} }))).message).toBe("in predicate.value must be an array")
+    const condition = (extra: object) => ({ filter: { kind: "condition", field: "a", ...extra } })
+    expect(caught(() => validateQueryPlan({ filter: "x" } as never)).message).toBe("query predicate must be an object")
+    expect(caught(() => validateQueryPlan({ filter: { kind: "literal", value: "yes" } } as never)).message).toBe("literal predicate.value must be boolean")
+    expect(() => validateQueryPlan({ filter: { kind: "literal", value: false } } as never)).not.toThrow()
+    expect(caught(() => validateQueryPlan({ filter: { kind: "weird" } } as never)).message).toBe("query predicate has unknown kind weird")
+    expect(caught(() => validateQueryPlan(condition({ op: "nope", value: 1 }) as never)).message).toBe("condition predicate has unknown operator nope")
+    expect(caught(() => validateQueryPlan(condition({ op: "isNull", value: 1 }) as never)).message).toBe("predicate operator isNull does not accept a value")
+    expect(caught(() => validateQueryPlan(condition({ op: "eq" }) as never)).message).toBe("predicate operator eq requires a value")
+    expect(caught(() => validateQueryPlan({ filter: { kind: "condition", field: " ", op: "eq", value: 1 } } as never)).message).toBe("condition predicate.field must be a non-empty string")
+    expect(caught(() => validateQueryPlan(condition({ op: "between", value: 5 }) as never)).message).toBe("between predicate.value must be an object")
+    expect(caught(() => validateQueryPlan(condition({ op: "between", value: {} }) as never)).message).toBe("between predicate requires at least one bound")
+    expect(caught(() => validateQueryPlan(condition({ op: "between", value: { from: {} } }) as never)).message).toBe("between predicate.from must be a scalar value")
+    expect(caught(() => validateQueryPlan(condition({ op: "between", value: { to: {} } }) as never)).message).toBe("between predicate.to must be a scalar value")
+    expect(() => validateQueryPlan(condition({ op: "between", value: { to: 2 } }) as never)).not.toThrow()
+    expect(caught(() => validateQueryPlan(condition({ op: "in", value: {} }) as never)).message).toBe("in predicate.value must be an array")
   })
 
   it("reports exact scalar value messages", () => {
-    const eq = (value) => ({ filter: { kind: "condition", field: "a", op: "eq", value } })
-    expect(caught(() => validateQueryPlan(eq({}))).message).toBe("eq predicate.value must be a scalar value")
-    expect(caught(() => validateQueryPlan(eq(Symbol("s")))).message).toBe("eq predicate.value must be a scalar value")
-    expect(caught(() => validateQueryPlan(eq(new Date(Number.NaN)))).message).toBe("eq predicate.value must be a valid Date")
-    expect(caught(() => validateQueryPlan(eq(Number.NaN))).message).toBe("eq predicate.value must be a finite safe number")
-    expect(caught(() => validateQueryPlan(eq(Number.POSITIVE_INFINITY))).message).toBe("eq predicate.value must be a finite safe number")
-    expect(caught(() => validateQueryPlan(eq(Number.MAX_SAFE_INTEGER + 2))).message).toBe("eq predicate.value must be a finite safe number")
-    expect(caught(() => validateQueryPlan(eq("x".repeat(MAX_QUERY_VALUE_BYTES + 1)))).message).toBe(`eq predicate.value exceeds ${MAX_QUERY_VALUE_BYTES} UTF-8 bytes`)
-    expect(() => validateQueryPlan(eq("x".repeat(MAX_QUERY_VALUE_BYTES)))).not.toThrow()
-    expect(() => validateQueryPlan(eq(Number.MAX_SAFE_INTEGER))).not.toThrow()
-    expect(() => validateQueryPlan(eq(0.5))).not.toThrow()
+    const eq = (value: unknown) => ({ filter: { kind: "condition", field: "a", op: "eq", value } })
+    expect(caught(() => validateQueryPlan(eq({}) as never)).message).toBe("eq predicate.value must be a scalar value")
+    expect(caught(() => validateQueryPlan(eq(Symbol("s")) as never)).message).toBe("eq predicate.value must be a scalar value")
+    expect(caught(() => validateQueryPlan(eq(new Date(Number.NaN)) as never)).message).toBe("eq predicate.value must be a valid Date")
+    expect(caught(() => validateQueryPlan(eq(Number.NaN) as never)).message).toBe("eq predicate.value must be a finite safe number")
+    expect(caught(() => validateQueryPlan(eq(Number.POSITIVE_INFINITY) as never)).message).toBe("eq predicate.value must be a finite safe number")
+    expect(caught(() => validateQueryPlan(eq(Number.MAX_SAFE_INTEGER + 2) as never)).message).toBe("eq predicate.value must be a finite safe number")
+    expect(caught(() => validateQueryPlan(eq("x".repeat(MAX_QUERY_VALUE_BYTES + 1)) as never)).message).toBe(`eq predicate.value exceeds ${MAX_QUERY_VALUE_BYTES} UTF-8 bytes`)
+    expect(() => validateQueryPlan(eq("x".repeat(MAX_QUERY_VALUE_BYTES)) as never)).not.toThrow()
+    expect(() => validateQueryPlan(eq(Number.MAX_SAFE_INTEGER) as never)).not.toThrow()
+    expect(() => validateQueryPlan(eq(0.5) as never)).not.toThrow()
   })
 
   it("enforces the total predicate value byte budget with an exact message", () => {
@@ -157,16 +156,16 @@ describe("query budget error messages and boundaries", () => {
   })
 
   it("reports exact container, cycle and nesting messages", () => {
-    expect(caught(() => validateQueryPlan({ filter: { kind: "and", filters: "x" } })).message).toBe("and predicate.filters must be an array")
-    const withExtra = [Predicate.literal(true)]
+    expect(caught(() => validateQueryPlan({ filter: { kind: "and", filters: "x" } } as never)).message).toBe("and predicate.filters must be an array")
+    const withExtra = [Predicate.literal(true)] as unknown as Array<unknown> & { extra?: number }
     withExtra.extra = 1
-    expect(caught(() => validateQueryPlan({ filter: { kind: "and", filters: withExtra } })).message).toBe("and predicate.filters must be a dense array without extra properties")
-    const shared = { kind: "or", filters: [] }
+    expect(caught(() => validateQueryPlan({ filter: { kind: "and", filters: withExtra } } as never)).message).toBe("and predicate.filters must be a dense array without extra properties")
+    const shared: { kind: string; filters: unknown[] } = { kind: "or", filters: [] }
     shared.filters.push(shared)
-    expect(caught(() => validateQueryPlan({ filter: shared })).message).toBe("query plan contains a cycle")
-    let node = { kind: "not", filter: { kind: "literal", value: true } }
+    expect(caught(() => validateQueryPlan({ filter: shared } as never)).message).toBe("query plan contains a cycle")
+    let node: unknown = { kind: "not", filter: { kind: "literal", value: true } }
     for (let index = 0; index < MAX_PREDICATE_EVALUATION_DEPTH + 2; index += 1) node = { kind: "not", filter: node }
-    const error = caught(() => validateQueryPlan({ filter: node }, { ...budget, maxPredicateDepth: 10000, maxPredicateNodes: 10000 }))
+    const error = caught(() => validateQueryPlan({ filter: node } as never, { ...budget, maxPredicateDepth: 10000, maxPredicateNodes: 10000 }))
     expect(error).toBeInstanceOf(ConfigurationError)
     expect(error.message).toBe(`Query predicate combined with trusted scopes exceeds ${MAX_PREDICATE_EVALUATION_DEPTH} levels`)
   })
@@ -174,10 +173,10 @@ describe("query budget error messages and boundaries", () => {
 
 describe("cursor codec error messages and boundaries", () => {
   it("reports exact messages for malformed payloads and byte limits at encode time", async () => {
-    expect((await caughtAsync(() => encodeCursor(null, mac(3)))).message).toBe("malformed cursor payload")
-    expect((await caughtAsync(() => encodeCursor({ ...payload, expiresAt: 1.5 }, mac(3)))).message).toBe("malformed cursor payload")
-    expect((await caughtAsync(() => encodeCursor({ ...payload, direction: "sideways" }, mac(3)))).message).toBe("malformed cursor payload")
-    expect((await caughtAsync(() => encodeCursor({ ...payload, values: [{}] }, mac(3)))).message).toBe("malformed cursor payload")
+    expect((await caughtAsync(() => encodeCursor(null as never, mac(3)))).message).toBe("malformed cursor payload")
+    expect((await caughtAsync(() => encodeCursor({ ...payload, expiresAt: 1.5 } as never, mac(3)))).message).toBe("malformed cursor payload")
+    expect((await caughtAsync(() => encodeCursor({ ...payload, direction: "sideways" } as never, mac(3)))).message).toBe("malformed cursor payload")
+    expect((await caughtAsync(() => encodeCursor({ ...payload, values: [{}] } as never, mac(3)))).message).toBe("malformed cursor payload")
     expect((await caughtAsync(() => encodeCursor({ ...payload, routeHash: "" }, mac(3)))).message).toBe("malformed cursor payload")
     expect((await caughtAsync(() => encodeCursor(payload, mac(3), 1))).message).toBe("cursor payload exceeds byte limit")
     expect((await caughtAsync(() => encodeCursor(payload, mac(3), 0))).message).toBe("cursor byte limit must be a positive safe integer")
@@ -191,7 +190,7 @@ describe("cursor codec error messages and boundaries", () => {
   })
 
   it("reports exact messages for malformed decode input and size limits", async () => {
-    expect((await caughtAsync(() => decodeCursor(123, mac(3)))).message).toBe("cursor must be a string")
+    expect((await caughtAsync(() => decodeCursor(123 as never, mac(3)))).message).toBe("cursor must be a string")
     expect((await caughtAsync(() => decodeCursor("x".repeat(17), mac(3), 8))).message).toBe("cursor exceeds byte limit")
     expect((await caughtAsync(() => decodeCursor("x".repeat(16), mac(3), 8))).message).toBe("malformed cursor")
     expect((await caughtAsync(() => decodeCursor("v1.abc", mac(3)))).message).toBe("malformed cursor")
@@ -204,14 +203,14 @@ describe("cursor codec error messages and boundaries", () => {
     const cursor = await encodeCursor(payload, mac(3))
     expect((await caughtAsync(() => decodeCursor(cursor, mac(5)))).message).toBe("cursor integrity verification failed")
     const truthy = { sign: mac(3).sign, verify: async () => 1 }
-    expect((await caughtAsync(() => decodeCursor(cursor, truthy))).message).toBe("cursor integrity verification failed")
+    expect((await caughtAsync(() => decodeCursor(cursor, truthy as never))).message).toBe("cursor integrity verification failed")
     const bytes = new TextEncoder().encode(canonicalJsonString(payload))
     expect((await caughtAsync(() => decodeCursor(cursor, mac(3), bytes.byteLength - 1))).message).toBe("cursor integrity verification failed")
     await expect(decodeCursor(cursor, mac(3), bytes.byteLength)).resolves.toMatchObject({ routeHash: "r" })
   })
 
   it("reports exact messages for payloads that are not canonical JSON or not a valid cursor", async () => {
-    const signed = async (text) => {
+    const signed = async (text: string) => {
       const bytes = new TextEncoder().encode(text)
       const signature = await mac(3).sign(bytes)
       return `v1.${Buffer.from(bytes).toString("base64url")}.${Buffer.from(signature).toString("base64url")}`
@@ -246,10 +245,10 @@ describe("cursor sort and binding error messages", () => {
   })
 
   it("reports the exact binding mismatch and accepts matching bindings", () => {
-    const expected = { routeHash: "r", queryHash: "q", scopeHash: "s", sortHash: "o" }
-    expect(caught(() => assertCursorBinding({ ...payload }, { ...expected, routeHash: "other" })).message).toBe("cursor routeHash binding mismatch")
-    expect(caught(() => assertCursorBinding({ ...payload }, { ...expected, sortHash: "other" })).message).toBe("cursor sortHash binding mismatch")
-    expect(() => assertCursorBinding({ ...payload }, expected)).not.toThrow()
+    const expected = { routeHash: "r", queryHash: "q", scopeHash: "s", sortHash: "o" } as const
+    expect(caught(() => assertCursorBinding({ ...payload } as never, { ...expected, routeHash: "other" })).message).toBe("cursor routeHash binding mismatch")
+    expect(caught(() => assertCursorBinding({ ...payload } as never, { ...expected, sortHash: "other" })).message).toBe("cursor sortHash binding mismatch")
+    expect(() => assertCursorBinding({ ...payload } as never, expected)).not.toThrow()
   })
 })
 
@@ -268,12 +267,12 @@ describe("projection resolution", () => {
 })
 
 describe("search request messages and branches", () => {
-  const capability = { portKey: "search", searchableFields: new Set(["name"]), filterableFields: new Set(["tenantId"]), sortableFields: new Set(["name"]), consistency: ["eventual"], maxQueryBytes: 5, maxResults: 2 }
-  const request = { scope: { kind: "tenant", tenantId: "t1" }, text: "test", fields: ["name"], filter: { tenantId: "t1" }, sort: [{ field: "name", direction: "asc" }], limit: 2, consistency: "eventual" }
-  const check = (value, cap = capability) => validateSearchRequest(cap, value)
+  const capability = { portKey: "search", searchableFields: new Set(["name"]), filterableFields: new Set(["tenantId"]), sortableFields: new Set(["name"]), consistency: ["eventual"], maxQueryBytes: 5, maxResults: 2 } as const
+  const request = { scope: { kind: "tenant", tenantId: "t1" }, text: "test", fields: ["name"], filter: { tenantId: "t1" }, sort: [{ field: "name", direction: "asc" }], limit: 2, consistency: "eventual" } as const
+  const check = (value: unknown, cap: unknown = capability) => validateSearchRequest(cap as never, value as never)
 
   it("reports exact capability declaration messages", () => {
-    expect(caught(() => validateSearchRequest(null, request)).message).toBe("Search capability portKey is required")
+    expect(caught(() => validateSearchRequest(null as never, request as never)).message).toBe("Search capability portKey is required")
     expect(caught(() => check(request, { ...capability, portKey: 7 })).message).toBe("Search capability portKey is required")
     expect(caught(() => check(request, { ...capability, maxQueryBytes: 0 })).message).toBe("Search capability budgets must be positive safe integers")
     expect(caught(() => check(request, { ...capability, maxResults: 0 })).message).toBe("Search capability budgets must be positive safe integers")
@@ -309,24 +308,24 @@ describe("search request messages and branches", () => {
 
   it("uses the injected clock and reports exact timeout and clock messages", () => {
     const later = { now: () => new Date(3000) }
-    expect(caught(() => validateSearchRequest(capability, { ...request, deadline: 2000 }, later)).message).toBe("Search request deadline expired")
-    expect(caught(() => validateSearchRequest(capability, { ...request, deadline: 2000 }, Number.POSITIVE_INFINITY)).message).toBe("Search clock must return a finite time")
-    expect(caught(() => validateSearchRequest(capability, { ...request, deadline: 2000 }, { now: () => new Date(Number.NaN) })).message).toBe("Search clock must return a finite time")
-    expect(() => validateSearchRequest(capability, { ...request, deadline: 5000 }, 3000)).not.toThrow()
-    expect(caught(() => validateSearchRequest(capability, { ...request, deadline: 2000 }, 2000))).toBeInstanceOf(TimeoutError)
+    expect(caught(() => validateSearchRequest(capability as never, { ...request, deadline: 2000 } as never, later as never)).message).toBe("Search request deadline expired")
+    expect(caught(() => validateSearchRequest(capability as never, { ...request, deadline: 2000 } as never, Number.POSITIVE_INFINITY)).message).toBe("Search clock must return a finite time")
+    expect(caught(() => validateSearchRequest(capability as never, { ...request, deadline: 2000 } as never, { now: () => new Date(Number.NaN) } as never)).message).toBe("Search clock must return a finite time")
+    expect(() => validateSearchRequest(capability as never, { ...request, deadline: 5000 } as never, 3000)).not.toThrow()
+    expect(caught(() => validateSearchRequest(capability as never, { ...request, deadline: 2000 } as never, 2000))).toBeInstanceOf(TimeoutError)
   })
 
   it("reports cancellation as CancelledError with the exact message", () => {
     const controller = new AbortController()
     controller.abort(new Error("gone"))
-    const error = caught(() => validateSearchRequest(capability, { ...request, signal: controller.signal }))
+    const error = caught(() => validateSearchRequest(capability as never, { ...request, signal: controller.signal } as never))
     expect(error).toBeInstanceOf(CancelledError)
     expect(error.message).toBe("Search request is cancelled")
   })
 
   it("reports exact provider-result messages and freezes accepted results", () => {
     const hit = { id: "1", score: 1, fields: { name: "A" } }
-    const result = (value) => validateSearchResult(capability, request, value)
+    const result = (value: unknown) => validateSearchResult(capability as never, request as never, value as never)
     expect(caught(() => result(null)).message).toBe("Search provider returned an invalid or excessive result")
     expect(caught(() => result({ hits: [hit, { ...hit, id: "2" }, { ...hit, id: "3" }], consistency: "eventual" })).message).toBe("Search provider returned an invalid or excessive result")
     expect(caught(() => result({ hits: [hit], consistency: "strong" })).message).toBe("Search provider did not satisfy requested consistency")
