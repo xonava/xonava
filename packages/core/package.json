@@ -44,6 +44,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "bench": "vitest bench --run",
+    "test:mutation": "stryker run",
     "prepack": "npm run build"
   },
   "exports": {

@@ -26,6 +26,7 @@
     "build": "npm run clean && npm run build:workspaces && npm run verify:generated-surface",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "test:mutation": "npm run test:mutation -w @xonava/core -w @xonava/adapters",
     "lint": "npm run lint --workspaces --if-present",
     "verify:framework:fixtures": "node scripts/verification/verifyFrameworkFixtures.mjs",
     "verify:framework:isolation": "node scripts/verification/verifyFrameworkIsolation.mjs",
@@ -89,6 +90,8 @@
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.1",
+    "@stryker-mutator/core": "^10.0.0",
+    "@stryker-mutator/vitest-runner": "^10.0.0",
     "@types/node": "^24.3.1",
     "@typescript-eslint/eslint-plugin": "^8.43.0",
     "@typescript-eslint/parser": "^8.43.0",
