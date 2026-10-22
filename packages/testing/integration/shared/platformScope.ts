@@ -1,4 +1,4 @@
-import { expect } from "vitest"
+import { expect, vi } from "vitest"
 import { z } from "zod"
 import { CRUD } from "@xonava/adapters/http"
 import { Predicate, TenantScopeViolationError, type ExecutionScope } from "@xonava/core/domain"
@@ -191,6 +191,44 @@ export async function assertPlatformHttp(provider: PersistenceProvider, probe: P
   const anonymous = createAnnouncementHandlers(runtime, async () => undefined)
   expect((await anonymous.list(json("GET", "/announcements"))).status).toBe(401)
   expect((await anonymous.create(json("POST", "/announcements", { title: "x", region: "eu", priority: 1 }))).status).toBe(401)
+
+  // TM13a: a session with a tenant scope on a route whose compiled scope is fixed to the platform is
+  // refused ("session and fixed route scope mismatch") before admission, persistence and the handler,
+  // for read and write routes. The seeded row stays untouched.
+  const platformRepository = provider.repository<Announcement>(platformAnnouncementEntity)
+  const guarded = announcement(20, { region: "eu" })
+  await platformRepository.insert(guarded)
+  const platformRoutes = canonicalRequestNormalization(trustedSession({ kind: "platform", platformKey: "default" }), "app.announcements")
+  const admitTenantCredentials = vi.fn(platformRoutes.resolveAdmissionEvidence)
+  const createTenantPersistence = vi.fn(() => provider)
+  const tenantCredentials = CRUD(unfilteredAnnouncements, {
+    adapterDeps: { assertValidCsrf: () => undefined, resolveModuleAuthorizationFacts: allowAllModuleFacts, resolveAbacBundle: async ({ moduleKey }) => allowAllAbacBundle(moduleKey) },
+    requestNormalization: {
+      ...platformRoutes,
+      resolveTrustedSession: async () => trustedSession({ kind: "tenant", tenantId: "tenant-a" }),
+      resolveAdmissionEvidence: admitTenantCredentials,
+    },
+    scope: { scope: "platform", idempotency: { required: false } },
+    createPersistence: createTenantPersistence,
+    getCacheAdapter: runtime.getCacheAdapter,
+  })
+  const refused = [
+    await tenantCredentials.list(json("GET", "/announcements")),
+    await tenantCredentials.detail(json("GET", `/announcements/${guarded.id}`), { id: guarded.id }),
+    await tenantCredentials.create(json("POST", "/announcements", { title: "x", region: "eu", priority: 1 })),
+    await tenantCredentials.update(json("PATCH", `/announcements/${guarded.id}`, { title: "hijack" }, { "if-match": "1" }), params(guarded.id)),
+    await tenantCredentials.delete(json("DELETE", `/announcements/${guarded.id}`, undefined, { "if-match": "1" }), params(guarded.id)),
+  ]
+  for (const response of refused) {
+    const text = await response.clone().text()
+    expect(response.status, text).toBe(500)
+    expect(text).not.toContain(guarded.title)
+  }
+  expect(admitTenantCredentials).not.toHaveBeenCalled()
+  expect(createTenantPersistence).not.toHaveBeenCalled()
+  expect(await platformRepository.findById(guarded.id)).toEqual(guarded)
+  expect((await platformRepository.findMany({ pagination: { kind: "offset", page: 1, pageSize: 10 } })).rows).toEqual([guarded])
+  await platformRepository.delete(guarded.id, { optimisticConcurrency: { expectedVersion: 1 } })
 
   // scopeFilter: only region "eu" is reachable; the other rows are untouched.
   const repository = provider.repository<Announcement>(platformAnnouncementEntity)

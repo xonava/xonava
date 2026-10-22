@@ -20,7 +20,7 @@ Status: **experimental**. `0.1.0` is published on npm. Target for `1.0.0`: core 
 | 0: quick fixes | Done (6 of 6) | |
 | 1: pilot feedback and missing adapters | Done (9 of 9, plus 3 follow-ups) | All eight requests from the TanStack Start / Cloudflare pilot |
 | 2: proof | In progress | Done: everything except Q5 per module (`query` done, 86.2 %); CI (Q1) deferred |
-| 3: hardening and decisions | In progress | Done: C5 threat model. In flight: C3, C4. Remaining: C6, C7 (threat-model test gaps) |
+| 3: hardening and decisions | In progress | Done: C5 threat model, C7 threat-model test gaps. In flight: C3, C4. Remaining: C6 |
 
 Real-database differential suites now cover jobs, schedules, workflows, idempotency, inbox/outbox
 delivery, leases, sequences, temporal history, job progress and cache tag generations on PostgreSQL,
@@ -87,7 +87,7 @@ the release gate and the named scripts. Each gate is created by the WP named aft
 | Performance | hot-path benchmarks within 25 % of the recorded baseline (met: `npm run bench`) | Q6 |
 | Upgrade compatibility | N-1 suite against the previous published release | C3 |
 | Soak | 30-minute crash/lease soak with no invariant violation | C4 |
-| Threat model | reviewed `docs/spec/security.md` threat model (met; test gaps in C7) | C5 |
+| Threat model | reviewed `docs/spec/security.md` threat model (met) | C5 |
 
 ## Wave 2: proof (Sonnet, parallel)
 
@@ -184,46 +184,6 @@ when the wave closes.
     `packages/adapters/migrations/<database>/` with a generator check.
   - **Persistence-applied codecs.** Rejected today at `packages/core/src/entity/validateEntity.ts:114`.
     Candidate: apply `durableCodec` in each adapter's `drizzleRepository.ts` row mapping.
-
-### C7 Threat-model test gaps
-
-- [ ] Sonnet. Branch `test/threat-model-gaps`. Source: the threat table in
-  [`docs/spec/security.md`](docs/spec/security.md#threats). Tests only; if a test shows a real defect,
-  stop and report it with the reproduction instead of changing code.
-- **Steps:** add one test for each gap, then replace `none` in the threat table's *Test* cell with the
-  new test and delete the bullet.
-  - [ ] **TM8** (CSRF). Show that `assertValidCsrf` is called for a write route whose scope is not public and
-    that a throwing check refuses `create`, `update`, `delete` and a custom write handler with no repository
-    call, no audit record and no idempotency reservation. Also show that it is not called for a public
-    scope, that `csrfRequired: false` skips it on a non-public scope, and that it runs after the body
-    checks and before the anonymous-principal 401 and the ABAC bundle lookup. Suggested file:
-    `packages/adapters/src/http/__tests__/csrfEnforcement.test.ts`.
-  - [ ] **TM10b** (TOCTOU without a version fence). Show that `createUpdateHandler` answers a
-    `ConfigurationError` (500) and writes nothing when a record-dependent field-write policy applies to an
-    entity with no `versionField` or `optimisticConcurrency`, or when the request has no `If-Match`. Show
-    that the update answers 409 and leaves the row unchanged when the conditional update matches no row
-    because a concurrent writer changed a policy-driving field after the pre-image read. Suggested file:
-    `packages/adapters/src/http/crudHandlers/__tests__/updateToctou.test.ts` (its current tests only check
-    construction).
-  - [ ] **TM13a** (tenant credentials on a platform route). Show that a session with a tenant scope on a route
-    whose compiled scope is fixed to `{ kind: "platform" }` is refused with `scope mismatch` before
-    admission, the repository and the handler, for read and write routes. Suggested file:
-    `packages/adapters/src/http/__tests__/scopeResolution.test.ts`, plus one HTTP-level case in
-    `packages/testing/integration/shared/platformScope.ts`.
-  - [ ] **TM13b** (no entitlement check on platform scope). Show that `evaluateModuleAuthorization` allows a
-    platform, application, system and public scope whatever `enabledModuleKeys`, `enabledModuleActions` and
-    `enabledModuleCapabilities` hold, and that a platform route without a verified ABAC bundle still fails
-    closed with 403. Pin the behaviour so a later change cannot start consulting entitlements by accident.
-    Suggested file: `packages/core/src/domain/__tests__/frameworkAuthorization.test.ts`, plus an HTTP case
-    in `packages/adapters/src/http/crudHandlers/__tests__/tenantScopeContext.test.ts`.
-  - [ ] **TM16b** (hostile object keys). Show that `InMemoryObjectStore` and `R2ObjectStore` treat a key
-    as an opaque string: `tenants/a/../b/x` and `tenants/b/x` are different objects, a key with a leading `/`
-    or a trailing space does not collide with its trimmed form, and a key with a NUL character is
-    rejected with a validation error before any provider call. Suggested files:
-    `packages/adapters/src/storage/__tests__/inMemoryObjectStore.test.ts` and
-    `packages/adapters/src/storage/__tests__/r2ObjectStore.test.ts`.
-- **Acceptance:** `npm test` and `npm run verify:docs` pass; no `none` remains in the threat table's *Test*
-  column except the rows marked residual.
 
 ## Deferred
 
