@@ -9,6 +9,7 @@ import {
   type ExecutionIdentity,
   type ExecutionScope,
   type ExecutionScopeId,
+  ForbiddenError,
   type RequestContext,
   UnauthorizedError,
 } from "@xonava/core/domain"
@@ -72,7 +73,9 @@ async function resolveScope(input: NormalizeFrameworkRequestInput): Promise<Exec
   if (plan.kind === "fixed") {
     if (input.route.exposure === "public") throw new ConfigurationError("public route cannot use a fixed execution scope")
     if (!input.session) throw missingSessionError(input.route)
-    if (!executionScopesEqual(input.session.scope, plan.scope)) throw new ConfigurationError("session and fixed route scope mismatch")
+    // A valid session for another scope (for example a tenant user on a platform route) is a caller that may not use
+    // this route, not a misconfiguration: refuse it as forbidden instead of answering 500.
+    if (!executionScopesEqual(input.session.scope, plan.scope)) throw new ForbiddenError("session and fixed route scope mismatch")
     return plan.scope
   }
   const binding = input.resolverBindings.get(plan.resolverKey)

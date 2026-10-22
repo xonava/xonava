@@ -120,6 +120,37 @@ describe("A2 trusted scope normalization", () => {
     await expect(normalizeFrameworkRequest({ ...base(resolver), route: route({ exposure: "authenticated", anonymousPrincipal: { allowed: false }, scopeResolution: { kind: "fixed", scope: { kind: "tenant", tenantId: "expected" } } }), session })).rejects.toThrow(/scope mismatch/)
   })
 
+  it("refuses a tenant session on a route fixed to the platform scope before admission, for read and write routes", async () => {
+    // TM13a: tenant credentials never reach a platform-scope route. The fixed scope plan wins over the session.
+    const principal: Principal = { id: "u", kind: "human", authentication: { kind: "authenticated", method: "session", authenticatedAt: "2026-09-10T00:00:00.000Z" } }
+    const session: TrustedFrameworkSession = { identity: { actor: principal, subject: principal }, scope: { kind: "tenant", tenantId: "tenant-a" } }
+    const resolve = vi.fn(async () => createVerifiedScopeResolution("directory", { kind: "tenant", tenantId: "tenant-a" }))
+    const admit = vi.fn(async () => admission)
+    const platformRoute = (overrides: Partial<CompiledRouteBinding>) => route({
+      exposure: "authenticated", anonymousPrincipal: { allowed: false },
+      scopeResolution: { kind: "fixed", scope: { kind: "platform", platformKey: "ops" } }, ...overrides,
+    })
+    const routes = [
+      platformRoute({ routeKey: "admin.list", method: "GET", pathTemplate: "/admin/items" }),
+      platformRoute({ routeKey: "admin.create", method: "POST", pathTemplate: "/admin/items", mutation: { allowed: true, idempotencyRequirement: "optional" } }),
+      platformRoute({ routeKey: "admin.update", method: "PATCH", pathTemplate: "/admin/items/:id", mutation: { allowed: true, idempotencyRequirement: "optional" } }),
+      platformRoute({ routeKey: "admin.delete", method: "DELETE", pathTemplate: "/admin/items/:id", mutation: { allowed: true, idempotencyRequirement: "optional" } }),
+    ]
+    for (const r of routes) {
+      await expect(normalizeFrameworkRequest({ ...base({ key: "directory", resolve }), route: r, session, admit })).rejects.toThrow(expect.objectContaining({ name: "ForbiddenError", message: expect.stringMatching(/session and fixed route scope mismatch/) }))
+    }
+    expect(admit).not.toHaveBeenCalled()
+    expect(resolve).not.toHaveBeenCalled()
+    // A tenant session whose tenant differs, and a platform session with another key, are refused the same way.
+    const otherPlatform: TrustedFrameworkSession = { identity: session.identity, scope: { kind: "platform", platformKey: "other" } }
+    await expect(normalizeFrameworkRequest({ ...base({ key: "directory", resolve }), route: routes[0]!, session: otherPlatform, admit })).rejects.toThrow(/scope mismatch/)
+    expect(admit).not.toHaveBeenCalled()
+    // Control: the matching platform session is admitted on the same route.
+    const platformSession: TrustedFrameworkSession = { identity: session.identity, scope: { kind: "platform", platformKey: "ops" } }
+    await expect(normalizeFrameworkRequest({ ...base({ key: "directory", resolve }), route: routes[0]!, session: platformSession, admit })).resolves.toMatchObject({ scope: { kind: "platform", platformKey: "ops" } })
+    expect(admit).toHaveBeenCalledOnce()
+  })
+
   it("rejects an authenticated tenant resolver attempting to rebind to another tenant", async () => {
     const principal: Principal = { id: "u", kind: "human", authentication: { kind: "authenticated", method: "session", authenticatedAt: "2026-09-10T00:00:00.000Z" } }
     const session: TrustedFrameworkSession = { identity: { actor: principal, subject: principal }, scope: { kind: "tenant", tenantId: "tenant-a" } }
