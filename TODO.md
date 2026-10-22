@@ -20,7 +20,7 @@ Status: **experimental**. `0.1.0` is published on npm. Target for `1.0.0`: core 
 | 0: quick fixes | Done (6 of 6) | |
 | 1: pilot feedback and missing adapters | Done (9 of 9, plus 3 follow-ups) | All eight requests from the TanStack Start / Cloudflare pilot |
 | 2: proof | In progress | Done: everything except Q5 per module (`query` done, 86.2 %); CI (Q1) deferred |
-| 3: hardening and decisions | In progress | Done: C5 threat model. In flight: C3, C4. Remaining: C7 (threat-model test gaps), C8, C9. C6 decided: see below and the spec files |
+| 3: hardening and decisions | In progress | Done: C3 upgrade compatibility, C5 threat model, C6 decisions. In flight: C4. Remaining: C7 (threat-model test gaps), C8, C9. C6 decided: see below and the spec files |
 
 Real-database differential suites now cover jobs, schedules, workflows, idempotency, inbox/outbox
 delivery, leases, sequences, temporal history, job progress and cache tag generations on PostgreSQL,
@@ -85,7 +85,7 @@ the release gate and the named scripts. Each gate is created by the WP named aft
 | Real-database differential suites | every durable store on PostgreSQL, MySQL and D1 (met) | A2–A8 |
 | HTTP fuzzing | property suites over all CRUD and write handlers in DF1 (met) | Q4 |
 | Performance | hot-path benchmarks within 25 % of the recorded baseline (met: `npm run bench`) | Q6 |
-| Upgrade compatibility | N-1 suite against the previous published release | C3 |
+| Upgrade compatibility | N-1 suite against the previous published release (met: `test:framework:upgrade:*`, in the release gate) | C3 |
 | Soak | 30-minute crash/lease soak with no invariant violation | C4 |
 | Threat model | reviewed `docs/spec/security.md` threat model (met; test gaps in C7) | C5 |
 
@@ -132,23 +132,6 @@ when the wave closes.
 - **Acceptance:** `npm run test:mutation` exits 0 for core (≥ 80 %) and adapters (≥ 70 %).
 
 ## Wave 3: hardening and decisions
-
-### C3 N-1 upgrade compatibility suite
-
-- [ ] Sonnet. Branch `test/upgrade-compatibility`.
-- **Steps:** in `packages/testing`, add dev dependencies aliasing the previous published release, for
-  example `"xonava-core-prev": "npm:@xonava/core@0.1.0"` and `"xonava-adapters-prev":
-  "npm:@xonava/adapters@0.1.0"`. In `packages/testing/integration/upgrade/`, test each pair of an old
-  writer with a new reader and a new writer with an old reader on D1 (and PostgreSQL and MySQL when
-  configured):
-  - job fingerprints (`packages/core/src/execution/jobFingerprint.ts:15-84`);
-  - list cursors (`packages/core/src/query/cursorCodec.ts`);
-  - KV tag-generation layouts (`kvCacheAdapter.ts:25-34`);
-  - workflow `resume_signal_id` receipts (`workflowDispatcher.ts:326-337`);
-  - outbox and HTTP idempotency fingerprints (`drizzle-shared/outbox.ts:10`, `http/idempotency.ts:10`).
-
-  Document in CONTRIBUTING that `release:version` must bump the alias to the release being replaced.
-- **Acceptance:** the suite passes against `0.1.0` and becomes part of the release gate.
 
 ### C4 Soak testing
 
