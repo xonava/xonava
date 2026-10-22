@@ -52,6 +52,14 @@ export type MutationResult<TRow> =
        * `after` runs and a fresh read sees it.
        */
       committedRead?: LoadedCommittedRecord<TRow & Record<string, unknown>>
+      /**
+       * The writing transaction's persistence, handed to the
+       * `projectCommittedResult` hook (read-only and scoped by `toCrudContext`)
+       * so it sees the row just written. Absent on the atomic-batch path, where
+       * the hook receives a fresh persistence. Internal: `after` builds a new
+       * result, so this never reaches the response, audit payload or afterCommit.
+       */
+      hookPersistence?: PersistenceProvider
     }
   | MutationOutsideReadScope
 
