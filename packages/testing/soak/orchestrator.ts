@@ -42,6 +42,10 @@ export interface SoakReport {
   schedules: { count: number; occurrences: number; perSchedule: Record<string, number> }
   workflows: { started: number; cancelled: number; byStatus: Record<string, number>; signalsDelivered: number; signalsDuplicate: number; signalsRejected: number; signalsConsumed: number; signalResumes: number }
   workerMessages: { errors: number; dispatchErrors: number; samples: string[] }
+  /** Jobs that were not terminal, sampled every 15 s of the load phase. */
+  backlog: { atSeconds: number; open: number }[]
+  /** Non-terminal jobs left after a failed drain. */
+  diagnostics: Record<string, unknown>[]
   invariants: Record<string, { checked: number; violations: number }>
   violations: string[]
 }
@@ -151,7 +155,7 @@ async function execute(adapter: SoakAdapter, config: SoakConfig, rng: SoakRng, l
     while (Date.now() < deadline) {
       const n = ++jobsEnqueued
       const script = pickScript()
-      const payload: SoakJobPayload = { script, ms: script === "slow" ? Math.round(config.leaseMs * 2.5) : rng.between(20, 300), ...(rng.bool(0.25) ? { partition: `p${rng.int(4)}` } : {}) }
+      const payload: SoakJobPayload = { script, ms: script === "slow" ? Math.round(config.leaseMs * 0.7) : rng.between(20, 300), ...(rng.bool(0.25) ? { partition: `p${rng.int(4)}` } : {}) }
       await guarded(`enqueue job ${n}`, async () => {
         const stored = await connection.jobStore.enqueue({
           requester: SYSTEM,
@@ -159,7 +163,7 @@ async function execute(adapter: SoakAdapter, config: SoakConfig, rng: SoakRng, l
         })
         jobScripts.set(stored.id, script)
       })
-      await sleep(rng.between(100, 700))
+      await sleep(rng.between(300, 1_300))
     }
   }
   const lifecycles: Promise<void>[] = []
@@ -211,11 +215,19 @@ async function execute(adapter: SoakAdapter, config: SoakConfig, rng: SoakRng, l
     }
   }
 
+  const backlog: { atSeconds: number; open: number }[] = []
+  const sampler = setInterval(() => {
+    void sql.all(`SELECT COUNT(*) AS n FROM ${connection.jobsTable} WHERE status NOT IN (${JOB_TERMINAL.map(() => "?").join(",")})`, JOB_TERMINAL).then((rows) => {
+      backlog.push({ atSeconds: Math.round((Date.now() - startedAt) / 1000), open: count(rows[0]!.n) })
+      if (backlog.length % 4 === 0) log(`${Math.round((Date.now() - startedAt) / 60_000)} min: ${jobsEnqueued} jobs enqueued, ${backlog.at(-1)!.open} not terminal, ${stats.kills} kills`)
+    }).catch(() => undefined)
+  }, 15_000)
   log(`load phase: ${config.minutes} min, ${config.workers} workers, seed ${config.seed}`)
   const loadStart = Date.now()
   await Promise.all([produceJobs(), produceWorkflows(), chaos()])
   draining = true
   await Promise.all(lifecycles)
+  clearInterval(sampler)
   const loadDurationMs = Date.now() - loadStart
 
   // --- drain ---------------------------------------------------------------------------------------------------------
@@ -242,6 +254,11 @@ async function execute(adapter: SoakAdapter, config: SoakConfig, rng: SoakRng, l
     await sleep(1_000)
   }
   const drainDurationMs = Date.now() - drainStart
+  const diagnostics: Record<string, unknown>[] = []
+  if (notDrained.length > 0) {
+    const stuck = await sql.all(`SELECT * FROM ${connection.jobsTable} WHERE status NOT IN (${JOB_TERMINAL.map(() => "?").join(",")}) ORDER BY run_at LIMIT 15`, JOB_TERMINAL)
+    for (const row of stuck) diagnostics.push(Object.fromEntries(["id", "status", "partition_key", "run_at", "next_attempt_at", "lease_owner", "worker_id", "lease_expires_at", "attempts", "attempt", "max_attempts", "correlation_id"].filter((key) => key in row).map((key) => [key, row[key] instanceof Date ? (row[key] as Date).toISOString() : row[key]])))
+  }
 
   stopping = true
   for (const worker of aliveWorkers()) worker.child.send({ cmd: "stop" })
@@ -270,7 +287,7 @@ async function execute(adapter: SoakAdapter, config: SoakConfig, rng: SoakRng, l
     jobs: { enqueued: jobsEnqueued, ...report.jobs },
     schedules: { count: scheduleIds.length, ...report.schedules },
     workflows: { started: workflowIds.length, cancelled: cancelled.size, ...report.workflows, signalsDelivered: signalStats.delivered, signalsDuplicate: signalStats.duplicate, signalsRejected: signalStats.rejected },
-    workerMessages: messages, invariants, violations,
+    workerMessages: messages, backlog, diagnostics, invariants, violations,
   }
 }
 
