@@ -32,7 +32,8 @@ export function createScriptedMySqlPool(respond: PoolResponder): ScriptedMySqlPo
 }
 
 export interface ScriptedPgPool {
-  readonly pool: { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[]; rowCount: number }>; connect: () => Promise<Record<string, unknown>> }
+  /** Typed `never` so it can be handed to any store expecting a driver pool without a cast at each call site. */
+  readonly pool: never
   readonly calls: PoolCall[]
   readonly events: string[]
 }
@@ -53,5 +54,5 @@ export function createScriptedPgPool(respond: PoolResponder): ScriptedPgPool {
     query: (sql: string, params?: unknown[]) => { events.push(sql.trim().split(/\s+/).slice(0, 2).join(" ").toUpperCase()); return run("connection", sql, params) },
     release: () => { events.push("release") },
   }
-  return { pool: { query: (sql, params) => run("pool", sql, params), connect: async () => client }, calls, events }
+  return { pool: { query: (sql: string, params?: unknown[]) => run("pool", sql, params), connect: async () => client } as never, calls, events }
 }

@@ -39,7 +39,7 @@ describe("MySQL schedule store", () => {
     expect(claim).toMatchObject({ scope: "tenant", tenantId: "t1", payload: '{"s":1}', lastRunAt: NOW, lastStatus: "failed", executionScope: { kind: "tenant", tenantId: "t1" } })
     expect(claim!.lifecycle).toEqual({ paused: true, effectiveFrom: "2026-01-01T00:00:00.000Z", effectiveUntil: "2027-01-01T00:00:00.000Z", remainingOccurrences: 0, calendarExclusionKey: "cal", owner: "ops", description: "d" })
     const platform = build((call) => (isSelect(call) ? [row({ scope: "platform", scope_key: "ops" })] : header(1)))
-    expect((await platform.store.claimDueSchedules({ ...claimArgs, now: undefined }))[0]!.executionScope).toEqual({ kind: "platform", platformKey: "ops" })
+    expect((await platform.store.claimDueSchedules({ workerId: "w1", limit: 5, leaseDurationMs: 60_000 }))[0]!.executionScope).toEqual({ kind: "platform", platformKey: "ops" })
   })
 
   it("rolls back on failures and ignores invalid claim arguments", async () => {
@@ -70,11 +70,11 @@ describe("MySQL schedule store", () => {
     expect(await store.releaseSchedule({ scheduleId: "s1", workerId: "w1", claimToken: "ct" })).toBe(true)
     expect(await store.releaseSchedule({ scheduleId: "s1", workerId: "w1", claimToken: "" })).toBe(false)
     expect(await build(() => header(0)).store.releaseSchedule({ scheduleId: "s1", workerId: "w1", claimToken: "ct" })).toBe(false)
-    expect(await store.renewScheduleLease({ scheduleId: "s1", workerId: "w1", claimToken: "ct", extendByMs: 500 })).toBe(true)
-    expect(await store.renewScheduleLease({ scheduleId: "s1", workerId: "w1", claimToken: "ct", extendByMs: 0 })).toBe(false)
-    expect(await store.renewScheduleLease({ scheduleId: "s1", workerId: "w1", claimToken: "ct", extendByMs: Number.POSITIVE_INFINITY })).toBe(false)
-    await expect(store.renewScheduleLease({ scheduleId: "s1", workerId: "w".repeat(101), claimToken: "ct", extendByMs: 1 })).rejects.toThrow("workerId exceeds")
-    expect(await build(() => header(0)).store.renewScheduleLease({ scheduleId: "s1", workerId: "w1", claimToken: "ct", extendByMs: 500 })).toBe(false)
+    expect(await store.renewScheduleLease({ now: new Date(), scheduleId: "s1", workerId: "w1", claimToken: "ct", extendByMs: 500 })).toBe(true)
+    expect(await store.renewScheduleLease({ now: new Date(), scheduleId: "s1", workerId: "w1", claimToken: "ct", extendByMs: 0 })).toBe(false)
+    expect(await store.renewScheduleLease({ now: new Date(), scheduleId: "s1", workerId: "w1", claimToken: "ct", extendByMs: Number.POSITIVE_INFINITY })).toBe(false)
+    await expect(store.renewScheduleLease({ now: new Date(), scheduleId: "s1", workerId: "w".repeat(101), claimToken: "ct", extendByMs: 1 })).rejects.toThrow("workerId exceeds")
+    expect(await build(() => header(0)).store.renewScheduleLease({ now: new Date(), scheduleId: "s1", workerId: "w1", claimToken: "ct", extendByMs: 500 })).toBe(false)
   })
 
   it("honours table overrides", async () => {

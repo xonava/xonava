@@ -42,10 +42,10 @@ export default defineConfig({
       thresholds: {
         // Enforced ratchet floors for the adapters package, measured when they were
         // introduced. Raise these only alongside tests; never lower them.
-        lines: 76,
-        statements: 67,
-        functions: 70,
-        branches: 61,
+        lines: 94,
+        statements: 92,
+        functions: 93,
+        branches: 85,
       },
     },
   },

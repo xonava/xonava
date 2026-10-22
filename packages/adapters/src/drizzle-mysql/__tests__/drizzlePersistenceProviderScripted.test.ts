@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import { int, mysqlTable, varchar } from "drizzle-orm/mysql-core"
 import { ConfigurationError, ConflictError, TimeoutError, TransactionRolledBackError } from "@xonava/core/domain"
 import type { AuditRecord, OutboxRecord } from "@xonava/core/events"
+import type { InteractiveTransactionProvider } from "@xonava/core/persistence"
 import { createDrizzleMySqlPersistenceProvider, DrizzleMySqlEntityRegistry, getDrizzleMySqlSession } from "../drizzlePersistenceProvider"
 import { createDrizzleMySqlAuditSinkFactory, DrizzleMySqlAuditSink } from "../drizzleAuditSink"
 import { createDrizzleMySqlOutboxSinkFactory, DrizzleMySqlOutboxSink } from "../drizzleOutboxSink"
@@ -104,7 +105,7 @@ describe("MySQL persistence provider", () => {
   it("refuses nested transactions and invalid timeouts", async () => {
     const { db } = database()
     const provider = createDrizzleMySqlPersistenceProvider({ db: db as never, registry: registry() })
-    await expect(provider.runInTransaction(async (scoped) => scoped.runInTransaction(async () => 1))).rejects.toThrow("Nested MySQL transactions are not supported")
+    await expect(provider.runInTransaction(async (scoped) => (scoped as InteractiveTransactionProvider).runInTransaction(async () => 1))).rejects.toThrow("Nested MySQL transactions are not supported")
     await expect(provider.runInTransaction(async () => 1, { timeoutMs: 0 })).rejects.toBeInstanceOf(ConfigurationError)
   })
 

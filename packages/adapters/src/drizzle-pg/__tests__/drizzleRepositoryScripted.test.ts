@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest"
 import { integer, pgTable, text } from "drizzle-orm/pg-core"
 import { ConfigurationError, ConflictError, NotFoundError, OptimisticConcurrencyError, PersistenceError, Predicate, RetryablePersistenceError, ValidationError } from "@xonava/core/domain"
-import { createDrizzleRepository, type DrizzleColumnMap } from "../drizzleRepository"
+import { createDrizzleRepository } from "../drizzleRepository"
+import type { DrizzleColumnMap } from "../../drizzle-shared/predicateCompiler"
 import { createScriptedDb, type ScriptedHandler } from "../../__tests__/support/scriptedDb"
 
 const widgets = pgTable("widgets", { id: text("id").primaryKey(), name: text("name").notNull(), score: integer("score"), version: integer("version").notNull(), createdAt: integer("created_at") })

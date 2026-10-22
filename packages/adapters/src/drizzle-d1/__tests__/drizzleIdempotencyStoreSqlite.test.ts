@@ -53,9 +53,9 @@ describe("D1 idempotency store on a real SQLite engine", () => {
     expect(Number((d1.sqlite.prepare("SELECT created_at AS c FROM idem_full").get() as { c: number }).c)).toBeGreaterThan(1_000_000)
     await expect(store.renew({ ...lease, token: "stale" })).rejects.toBeInstanceOf(ConflictError)
     await expect(store.renew({ ...lease, token, leaseDurationMs: -1 })).rejects.toThrow("lease duration")
-    await store.abandon({ ...lease, token: "stale" })
+    await store.abandon!({ ...lease, token: "stale" })
     expect(count("idem_full")).toBe(1)
-    await store.abandon({ ...lease, token })
+    await store.abandon!({ ...lease, token })
     expect(count("idem_full")).toBe(0)
   })
 

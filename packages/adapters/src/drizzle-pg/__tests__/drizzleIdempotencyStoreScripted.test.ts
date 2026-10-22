@@ -85,7 +85,7 @@ describe("PostgreSQL idempotency store: ownership and finalizer", () => {
     const { store, ops } = build(() => affected(1))
     await store.renew({ ...lease, leaseDurationMs: 1_000 })
     await store.complete({ ...lease, result: { ok: 1 } })
-    await store.abandon(lease)
+    await store.abandon!(lease)
     expect(ops.map((op) => op.kind)).toEqual(["update", "update", "delete"])
     expect(ops[1]!.set).toMatchObject({ status: "completed", result: '{"ok":1}', pendingInvalidations: null })
     expect(ops[2]!.where!.sql).toContain("status = 'in-progress'")
