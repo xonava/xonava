@@ -72,10 +72,18 @@ function assertHeader(name: string, value: string): void {
   if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name) || /[\r\n]/.test(value)) throw new Error("Invalid serialized idempotency response header")
 }
 
+/** The material to fingerprint exceeds {@link MAX_IDEMPOTENCY_CANONICAL_BYTES}; for client input this is a bad request, not a fault. */
+export class IdempotencyPayloadTooLargeError extends Error {
+  constructor() {
+    super("Idempotency fingerprint payload is too large")
+    this.name = "IdempotencyPayloadTooLargeError"
+  }
+}
+
 async function digestFingerprintInput(version: string, canonical: string): Promise<string> {
   const encoded = new TextEncoder().encode(`${version}\0${canonical}`)
   if (encoded.byteLength > MAX_IDEMPOTENCY_CANONICAL_BYTES) {
-    throw new Error("Idempotency fingerprint payload is too large")
+    throw new IdempotencyPayloadTooLargeError()
   }
   const digest = await crypto.subtle.digest("SHA-256", encoded)
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")
