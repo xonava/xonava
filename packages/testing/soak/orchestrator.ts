@@ -4,20 +4,16 @@ import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { scheduleCorrelationId } from "@xonava/core/execution"
 import type { WorkflowInstance } from "@xonava/core/workflow"
-import { signalLedgerViolations } from "../../core/src/__tests__/differential/workflowFixtures.js"
 import { insertRow, readRows } from "../integration/shared/scheduleStoreDifferential.js"
 import { scheduleRow } from "../integration/shared/scheduleStoreDifferentialScenarios.js"
 import { connectSoak, hostSoakDatabase, type SoakConnection, type SoakDescriptor } from "./backends.js"
 import type { SoakAdapter, SoakConfig } from "./config.js"
+import { EXECUTION_TERMINAL, JOB_TERMINAL, MINUTE, WORKFLOW_TERMINAL, expectedOccurrences, historyViolations, jobConsistencyViolations, leftInFlight, nonTerminalJobs, nonTerminalWorkflows, recordedViolations, scheduleViolations, signalViolations, type HistoryRow, type JobRow, type RunRow, type ScheduleObservation, type ViolationRow } from "./invariants.js"
 import { createSoakRng, type SoakRng } from "./rng.js"
 import { JOB_TYPE, SIGNAL_NAME, WORKFLOW_TYPE, type JobScript, type SoakJobPayload } from "./workload.js"
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-const MINUTE = 60_000
 const SIGNALS_PER_WORKFLOW = 3
-const JOB_TERMINAL = ["succeeded", "failed", "dead_letter", "cancelled"]
-const EXECUTION_TERMINAL = ["succeeded", "failed", "dead_letter"]
-const WORKFLOW_TERMINAL = new Set(["succeeded", "failed", "cancelled", "compensation_failed"])
 const SYSTEM = { scope: "system" } as const
 const SYSTEM_SCOPE = { kind: "system", systemKey: "framework" } as const
 const WORKFLOW_SCOPE = { kind: "tenant", tenantId: "soak" } as const
@@ -155,7 +151,7 @@ async function execute(adapter: SoakAdapter, config: SoakConfig, rng: SoakRng, l
     while (Date.now() < deadline) {
       const n = ++jobsEnqueued
       const script = pickScript()
-      const payload: SoakJobPayload = { script, ms: script === "slow" ? Math.round(config.leaseMs * 0.7) : rng.between(20, 300), ...(rng.bool(0.25) ? { partition: `p${rng.int(4)}` } : {}) }
+      const payload: SoakJobPayload = { script, ms: script === "slow" ? Math.round(config.leaseMs * config.slowFactor) : rng.between(20, 300), ...(rng.bool(0.25) ? { partition: `p${rng.int(4)}` } : {}) }
       await guarded(`enqueue job ${n}`, async () => {
         const stored = await connection.jobStore.enqueue({
           requester: SYSTEM,
@@ -163,7 +159,7 @@ async function execute(adapter: SoakAdapter, config: SoakConfig, rng: SoakRng, l
         })
         jobScripts.set(stored.id, script)
       })
-      await sleep(rng.between(300, 1_300))
+      await sleep(rng.between(config.jobIntervalMinMs, Math.max(config.jobIntervalMinMs, config.jobIntervalMaxMs)))
     }
   }
   const lifecycles: Promise<void>[] = []
@@ -281,7 +277,7 @@ async function execute(adapter: SoakAdapter, config: SoakConfig, rng: SoakRng, l
   const failed = violations.length > 0
   return {
     schemaVersion: 1, adapter, status: failed ? "failed" : "passed", runId: config.runId, location,
-    config: { minutes: config.minutes, workers: config.workers, seed: config.seed, leaseMs: config.leaseMs, skewMs: config.skewMs, killMinMs: config.killMinMs, killMaxMs: config.killMaxMs, drainTimeoutMs: config.drainTimeoutMs, schedules: config.schedules },
+    config: { minutes: config.minutes, workers: config.workers, seed: config.seed, leaseMs: config.leaseMs, skewMs: config.skewMs, killMinMs: config.killMinMs, killMaxMs: config.killMaxMs, drainTimeoutMs: config.drainTimeoutMs, schedules: config.schedules, slowFactor: config.slowFactor, jobIntervalMinMs: config.jobIntervalMinMs, jobIntervalMaxMs: config.jobIntervalMaxMs },
     startedAt: new Date(startedAt).toISOString(), finishedAt: new Date(finishedAt).toISOString(), durationMs: finishedAt - startedAt, loadDurationMs, drainDurationMs,
     kills: { total: stats.kills, simultaneous: stats.simultaneous, respawns: stats.respawns },
     jobs: { enqueued: jobsEnqueued, ...report.jobs },
@@ -304,100 +300,58 @@ interface VerifyInput {
 async function verify(connection: SoakConnection, input: VerifyInput) {
   const { sql } = connection
   const { check } = input
+  const text = (value: unknown): string => String(value)
 
   // Recorded by the handlers themselves: concurrent executions, repeated attempts.
-  const recorded = await sql.all(`SELECT kind, unit, detail FROM ${sql.table("soak_violations")}`)
-  check("no unit of work runs twice concurrently", count((await sql.all(`SELECT COUNT(*) AS n FROM ${sql.table("soak_runs")}`))[0]!.n), recorded.filter((row) => row.kind === "concurrent-execution").map((row) => `${String(row.unit)}: ${String(row.detail)}`))
-  check("no attempt starts twice", 0, recorded.filter((row) => row.kind === "attempt-ran-twice").map((row) => `${String(row.unit)}: ${String(row.detail)}`))
-  const stale = await sql.all(`SELECT unit, worker FROM ${sql.table("soak_inflight")}`)
-  check("nothing is left in flight after the drain", stale.length, stale.map((row) => `${String(row.unit)} still held by ${String(row.worker)}`))
+  const recorded: ViolationRow[] = (await sql.all(`SELECT kind, unit, detail FROM ${sql.table("soak_violations")}`)).map((row) => ({ kind: text(row.kind), unit: text(row.unit), detail: text(row.detail) }))
+  check("no unit of work runs twice concurrently", count((await sql.all(`SELECT COUNT(*) AS n FROM ${sql.table("soak_runs")}`))[0]!.n), recordedViolations(recorded, "concurrent-execution"))
+  check("no attempt starts twice", 0, recordedViolations(recorded, "attempt-ran-twice"))
+  const stale = (await sql.all(`SELECT unit, worker FROM ${sql.table("soak_inflight")}`)).map((row) => ({ unit: text(row.unit), worker: text(row.worker) }))
+  check("nothing is left in flight after the drain", stale.length, leftInFlight(stale))
 
   // Jobs: every one terminal, within budget, consistent with what the handlers did.
-  const jobs = await sql.all(`SELECT id, status, ${connection.jobAttemptsColumn} AS attempts, max_attempts FROM ${connection.jobsTable}`)
+  const jobs: JobRow[] = (await sql.all(`SELECT id, status, ${connection.jobAttemptsColumn} AS attempts, max_attempts FROM ${connection.jobsTable}`)).map((row) => ({ id: text(row.id), status: text(row.status), attempts: count(row.attempts), maxAttempts: count(row.max_attempts) }))
   const byStatus: Record<string, number> = {}
-  for (const job of jobs) byStatus[String(job.status)] = (byStatus[String(job.status)] ?? 0) + 1
-  check("every job reaches a terminal status", jobs.length, jobs.filter((job) => !JOB_TERMINAL.includes(String(job.status))).map((job) => `job ${String(job.id)} ended ${String(job.status)}`))
-  const runs = await sql.all(`SELECT unit, attempt, outcome FROM ${sql.table("soak_runs")} WHERE unit LIKE 'job:%'`)
-  const runsByJob = new Map<string, { attempt: number; outcome: string | null }[]>()
+  for (const job of jobs) byStatus[job.status] = (byStatus[job.status] ?? 0) + 1
+  check("every job reaches a terminal status", jobs.length, nonTerminalJobs(jobs))
+  const runs: RunRow[] = (await sql.all(`SELECT unit, attempt, outcome FROM ${sql.table("soak_runs")} WHERE unit LIKE 'job:%'`)).map((row) => ({ unit: text(row.unit), attempt: count(row.attempt), outcome: row.outcome === null ? null : text(row.outcome) }))
   const handlerRunsByOutcome: Record<string, number> = {}
-  for (const run of runs) {
-    const id = String(run.unit).slice("job:".length)
-    runsByJob.set(id, [...(runsByJob.get(id) ?? []), { attempt: count(run.attempt), outcome: run.outcome === null ? null : String(run.outcome) }])
-    const outcome = run.outcome === null ? "killed-mid-run" : String(run.outcome)
-    handlerRunsByOutcome[outcome] = (handlerRunsByOutcome[outcome] ?? 0) + 1
-  }
-  const consistency: string[] = []
-  for (const job of jobs) {
-    const id = String(job.id)
-    const attempts = count(job.attempts)
-    const budget = Math.min(count(job.max_attempts), 3)
-    const own = runsByJob.get(id) ?? []
-    if (attempts > budget) consistency.push(`job ${id}: ${attempts} attempts exceed the budget of ${budget}`)
-    if (own.some((run) => run.attempt > attempts)) consistency.push(`job ${id}: a handler ran attempt ${Math.max(...own.map((run) => run.attempt))} but the job records ${attempts}`)
-    if (own.length > attempts) consistency.push(`job ${id}: ${own.length} handler runs for ${attempts} attempts`)
-    if (job.status === "succeeded" && !own.some((run) => run.outcome === "success")) consistency.push(`job ${id} succeeded but no handler run reported success`)
-    const script = input.jobScripts.get(id)
-    if (job.status === "succeeded" && (script === "permanent" || script === "always-retry")) consistency.push(`job ${id} (${script}) succeeded`)
-  }
-  check("job attempts, handler runs and statuses agree", jobs.length, consistency)
-  const history = await sql.all(`SELECT job_id, COUNT(*) AS n FROM ${connection.jobExecutionsTable} WHERE status IN (${EXECUTION_TERMINAL.map(() => "?").join(",")}) GROUP BY job_id`, EXECUTION_TERMINAL)
-  const terminalHistoryRows = history.reduce((sum, row) => sum + count(row.n), 0)
-  check("a job has at most one terminal history row", history.length, history.filter((row) => count(row.n) > 1).map((row) => `job ${String(row.job_id)} has ${String(row.n)} terminal history rows`))
+  for (const run of runs) { const outcome = run.outcome ?? "killed-mid-run"; handlerRunsByOutcome[outcome] = (handlerRunsByOutcome[outcome] ?? 0) + 1 }
+  check("job attempts, handler runs and statuses agree", jobs.length, jobConsistencyViolations(jobs, runs, input.jobScripts))
+  const history: HistoryRow[] = (await sql.all(`SELECT job_id, COUNT(*) AS n FROM ${connection.jobExecutionsTable} WHERE status IN (${EXECUTION_TERMINAL.map(() => "?").join(",")}) GROUP BY job_id`, EXECUTION_TERMINAL)).map((row) => ({ jobId: text(row.job_id), terminalRows: count(row.n) }))
+  const terminalHistoryRows = history.reduce((sum, row) => sum + row.terminalRows, 0)
+  check("a job has at most one terminal history row", history.length, historyViolations(history))
 
   // Schedules: exactly the contiguous run of minute occurrences from the first to the one before next_run_at.
   const rows = await readRows(connection.scheduleDriver)
+  const observed: ScheduleObservation[] = []
   const perSchedule: Record<string, number> = {}
-  const scheduleProblems: string[] = []
   let occurrences = 0
   for (const id of input.scheduleIds) {
-    const next = rows.get(id)?.nextRunAt
-    if (next === null || next === undefined) { scheduleProblems.push(`${id} has no next_run_at`); continue }
-    if (next <= input.cutoff) scheduleProblems.push(`${id} next_run_at ${new Date(next).toISOString()} is not past the cutoff`)
-    const expected: string[] = []
-    for (let at = input.firstRun; at < next; at += MINUTE) expected.push(`schedule:${id}:${new Date(at).toISOString()}`)
-    const stored = (await sql.all(`SELECT idempotency_key FROM ${connection.jobsTable} WHERE correlation_id = ?`, [scheduleCorrelationId(id)])).map((row) => String(row.idempotency_key))
-    const seen = new Set(stored)
-    if (seen.size !== stored.length) scheduleProblems.push(`${id}: an occurrence is stored more than once`)
-    for (const key of expected) if (!seen.has(key)) scheduleProblems.push(`${id}: occurrence lost: ${key}`)
-    const wanted = new Set(expected)
-    for (const key of seen) if (!wanted.has(key)) scheduleProblems.push(`${id}: unexpected occurrence ${key}`)
-    perSchedule[id] = expected.length
-    occurrences += expected.length
+    const nextRunAt = rows.get(id)?.nextRunAt ?? null
+    const storedKeys = (await sql.all(`SELECT idempotency_key FROM ${connection.jobsTable} WHERE correlation_id = ?`, [scheduleCorrelationId(id)])).map((row) => text(row.idempotency_key))
+    observed.push({ id, nextRunAt, storedKeys })
+    perSchedule[id] = nextRunAt === null ? 0 : expectedOccurrences(nextRunAt, input.firstRun)
+    occurrences += perSchedule[id]
   }
-  check("no schedule occurrence is lost or duplicated", occurrences, scheduleProblems)
+  check("no schedule occurrence is lost or duplicated", occurrences, scheduleViolations(observed, input.firstRun, input.cutoff))
 
   // Workflows: terminal, signals consumed at most once and none lost.
   const instances: WorkflowInstance[] = []
   for (const id of input.workflowIds) { const instance = await connection.workflowStore.get(id); if (instance) instances.push(instance) }
   const workflowByStatus: Record<string, number> = {}
   for (const instance of instances) workflowByStatus[instance.status] = (workflowByStatus[instance.status] ?? 0) + 1
-  check("every workflow reaches a terminal status", input.workflowIds.length, input.workflowIds.filter((id) => !instances.some((instance) => instance.id === id && WORKFLOW_TERMINAL.has(instance.status))).map((id) => `workflow ${id} is not terminal`))
+  check("every workflow reaches a terminal status", input.workflowIds.length, nonTerminalWorkflows(input.workflowIds, instances))
   // D1 allows 100 bound variables per statement: read the receipts in chunks.
   const receipts: Awaited<ReturnType<SoakConnection["receipts"]>> = []
   for (let from = 0; from < input.workflowIds.length; from += 50) receipts.push(...await connection.receipts(input.workflowIds.slice(from, from + 50)))
-  const consumed = new Set(receipts.filter((receipt) => receipt.consumed).map((receipt) => receipt.id))
-  const uses = await sql.all(`SELECT signal_id, COUNT(*) AS n FROM ${sql.table("soak_signal_uses")} GROUP BY signal_id`)
-  const useCount = new Map(uses.map((row) => [String(row.signal_id), count(row.n)]))
-  const signalProblems = signalLedgerViolations({ receipts, consumed, rows: instances })
-  for (const [signalId, uses] of useCount) if (uses > 1) signalProblems.push(`receipt ${signalId} resumed ${uses} different waits`)
-  for (const receipt of receipts) {
-    if (!receipt.consumed && (useCount.get(receipt.id) ?? 0) > 0) signalProblems.push(`receipt ${receipt.id} resumed a wait but is not marked consumed`)
-    if (receipt.consumed && receipt.consumedRevision === null) signalProblems.push(`receipt ${receipt.id} is consumed without a consuming revision`)
-  }
-  for (const instance of instances) {
-    const own = receipts.filter((receipt) => receipt.instanceId === instance.id)
-    if (instance.status === "succeeded") {
-      if (Number(instance.variables.n) !== SIGNALS_PER_WORKFLOW) signalProblems.push(`${instance.id} succeeded with n=${String(instance.variables.n)}`)
-      if (own.length !== SIGNALS_PER_WORKFLOW || own.some((receipt) => !receipt.consumed)) signalProblems.push(`${instance.id} succeeded with ${own.filter((receipt) => receipt.consumed).length}/${own.length} receipts consumed`)
-      if (own.some((receipt) => useCount.get(receipt.id) !== 1)) signalProblems.push(`${instance.id}: a receipt was not used by exactly one wait`)
-    }
-  }
-  check("workflow signals are consumed at most once and none is lost", receipts.length, signalProblems)
+  const useCount = new Map((await sql.all(`SELECT signal_id, COUNT(*) AS n FROM ${sql.table("soak_signal_uses")} GROUP BY signal_id`)).map((row) => [text(row.signal_id), count(row.n)]))
+  check("workflow signals are consumed at most once and none is lost", receipts.length, signalViolations({ ids: input.workflowIds, instances, receipts, useCount, signalsPerWorkflow: SIGNALS_PER_WORKFLOW }))
 
   return {
     jobs: { total: jobs.length, byStatus, byScript: tally(input.jobScripts), handlerRuns: runs.length, handlerRunsByOutcome, killedMidRun: handlerRunsByOutcome["killed-mid-run"] ?? 0, terminalHistoryRows },
     schedules: { occurrences, perSchedule },
-    workflows: { byStatus: workflowByStatus, signalsConsumed: consumed.size, signalResumes: [...useCount.values()].reduce((sum, value) => sum + value, 0) },
+    workflows: { byStatus: workflowByStatus, signalsConsumed: receipts.filter((receipt) => receipt.consumed).length, signalResumes: [...useCount.values()].reduce((sum, value) => sum + value, 0) },
   }
 }
 

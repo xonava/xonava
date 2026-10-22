@@ -13,6 +13,10 @@ export interface SoakConfig {
   readonly killMaxMs: number
   readonly drainTimeoutMs: number
   readonly schedules: number
+  /** How long a "slow" job works, as a multiple of the lease. Above 1 it outlasts the job timeout (= lease) and is dead-lettered. */
+  readonly slowFactor: number
+  readonly jobIntervalMinMs: number
+  readonly jobIntervalMaxMs: number
   readonly runId: string
 }
 
@@ -38,6 +42,9 @@ export function readSoakConfig(): SoakConfig {
     killMaxMs: integer("SOAK_KILL_MAX_MS", 9_000, 300),
     drainTimeoutMs: integer("SOAK_DRAIN_TIMEOUT_MS", 180_000, 5_000),
     schedules: Math.floor(integer("SOAK_SCHEDULES", 6, 1)),
+    slowFactor: integer("SOAK_SLOW_FACTOR", 0.7, 0.1),
+    jobIntervalMinMs: integer("SOAK_JOB_INTERVAL_MIN_MS", 300, 1),
+    jobIntervalMaxMs: integer("SOAK_JOB_INTERVAL_MAX_MS", 1_300, 1),
     runId: process.env.FRAMEWORK_CONFORMANCE_RUN_ID ?? "local-latest",
   }
 }

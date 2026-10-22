@@ -98,7 +98,11 @@ Any violation fails the run. Evidence is written to `artifacts/framework-conform
 | `SOAK_LEASE_MS`, `SOAK_SKEW_MS` | `4000`, `300` | Lease length and the clock offset bound (at most a quarter of the lease). |
 | `SOAK_KILL_MIN_MS`, `SOAK_KILL_MAX_MS` | `3000`, `9000` | Interval between kills. |
 | `SOAK_SCHEDULES` | `6` | Every-minute schedules. |
+| `SOAK_SLOW_FACTOR` | `0.7` | How long "slow" jobs work, as a multiple of the lease. They outlast several heartbeats and must stay below 1: the job timeout equals the lease, so a longer job is timed out and dead-lettered by design. |
+| `SOAK_JOB_INTERVAL_MIN_MS`, `SOAK_JOB_INTERVAL_MAX_MS` | `300`, `1300` | Gap between enqueued jobs (about 1.2 jobs/s). |
 | `SOAK_DRAIN_TIMEOUT_MS` | `180000` | How long the drain may take before the run fails. |
+
+The defaults are chosen so the workers keep up with the producer on a shared four-core machine (the not-terminal backlog stays in the single digits to low tens); a drain that times out with pending jobs means the load was too high for the machine, so the run fails and the evidence records the backlog samples and the stuck jobs' lease rows. The heavier settings (`SOAK_SLOW_FACTOR=2.5`, a 100-700 ms job interval, about 2.5 jobs/s, with many jobs dead-lettered by timeout) were also run on D1 for 3 and for 30 minutes and drained in under two seconds with no violation, so the defaults are a choice of load and not a workaround for a stall. Unit tests in `packages/testing/tests/soakInvariants.test.ts` prove that every invariant checker reports a synthetic violation.
 
 The soak is a `1.0.0` quality gate (see TODO.md). It is an optional step of `npm run verify:framework-release`: set `FRAMEWORK_RELEASE_SOAK=1` to run the full 30-minute soak on all three databases (about 1.5 hours) before the certification manifest is built; without it the release prints that the soak was skipped.
 
