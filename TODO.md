@@ -19,7 +19,7 @@ Status: **experimental**. `0.1.0` is published on npm. Target for `1.0.0`: core 
 | --- | --- | --- |
 | 0: quick fixes | Done (6 of 6) | |
 | 1: pilot feedback and missing adapters | Done (9 of 9, plus 3 follow-ups) | All eight requests from the TanStack Start / Cloudflare pilot |
-| 2: proof | In progress | Done: A2–A8, F9, B1–B7, Q4, Q6, Q5 setup, Q2 core, DF1 baseline. Remaining: Q5 per module, Q2 adapters and testing, B8; CI (Q1) deferred |
+| 2: proof | In progress | Done: everything except Q5 per module (`query` done, 86.2 %); CI (Q1) deferred |
 | 3: hardening and decisions | In progress | Done: C5 threat model. In flight: C3, C4. Remaining: C6, C7 (threat-model test gaps) |
 
 Real-database differential suites now cover jobs, schedules, workflows, idempotency, inbox/outbox
@@ -80,7 +80,7 @@ the release gate and the named scripts. Each gate is created by the WP named aft
 | Gate | Target | Created by |
 | --- | --- | --- |
 | Unit coverage, core | lines 96, branches 90 (met: 96.28 / 90.54, enforced) | Q2 |
-| Unit coverage, adapters | lines 90, branches 82 (today 76 / 61) | Q2 |
+| Unit coverage, adapters | lines 90, branches 82 (met: 94.5 / 85.9, enforced) | Q2 |
 | Mutation score | core ≥ 80 %, adapters `http/` and `drizzle-shared/` ≥ 70 % (today 61–83 %, see Q5) | Q5 |
 | Real-database differential suites | every durable store on PostgreSQL, MySQL and D1 (met) | A2–A8 |
 | HTTP fuzzing | property suites over all CRUD and write handlers in DF1 (met) | Q4 |
@@ -113,7 +113,7 @@ when the wave closes.
 
   | Module | Scope | Score |
   | --- | --- | --- |
-  | core `query` | full | 74.3 % |
+  | core `query` | full | 86.2 % (done) |
   | core `domain` | 3 of 31 files | 62.6 % |
   | core `operation` | 4 of 19 | 60.9 % |
   | core `execution` | `dispatcher.ts` only | 65.4 % |
@@ -130,31 +130,6 @@ when the wave closes.
 - `events/durability/auditRedaction.ts` cannot be mutated yet: its 60 000-string and 200 kB linear-time
   tests time out under instrumentation. Give those tests a lighter variant under mutation first.
 - **Acceptance:** `npm run test:mutation` exits 0 for core (≥ 80 %) and adapters (≥ 70 %).
-
-### Q2 Raise coverage floors, adapters and testing
-
-- [ ] Sonnet for adapters (lines 76 → 90, branches 61 → 82), Haiku for testing. Branch
-  `test/coverage-<package>`. Core is done.
-- **Steps:** list uncovered branches with `npm run test:coverage -w <pkg>`. Write targeted tests module
-  by module until the gate is met, then raise the thresholds in the config. No test may assert only that
-  code runs; each asserts an outcome. Core's lines margin is thin (96.28 against 96): `outbox.ts` and
-  `authority.ts` are the weakest files if headroom is needed.
-
-### B8 Follow-ups found while closing wave 2
-
-- [ ] Sonnet. **D1 suites under load.** With the machine at load average 6 or more, the full D1 suite
-  fails intermittently inside Miniflare 3.20250718.3: its synchronous proxy asserts `message?.id === id`
-  (`miniflare/dist/src/index.js`, `receiveMessageOnPort` after `Atomics.wait`), the fixture breaks, and
-  every remaining property in that file fails. Each failing file passes alone, and the full suite passes
-  on a quiet machine. Separately, `race.integration.test.ts` opens two Miniflare instances on one SQLite
-  file and can get `SQLITE_BUSY`. Find which calls go through the synchronous proxy and avoid them, or
-  upgrade Miniflare; then show three full D1 runs passing under load (for example alongside `npm test`).
-- [ ] Sonnet. **PostgreSQL `transactionOutcome` "re-run the rolled-back transaction".** Failed once in a
-  full run (`attempts` expected 3), passed 3 of 3 alone. Two serializable write-skew transactions share
-  one `attempts` counter; find whether PostgreSQL can abort both and make the assertion exact for every
-  legal outcome.
-- [ ] Opus, input to C5. For platform-scope routes, module entitlements (`enabledModuleKeys`, actions,
-  capabilities) are not consulted; ABAC is the only authorization input. Confirm in the threat model.
 
 ## Wave 3: hardening and decisions
 
