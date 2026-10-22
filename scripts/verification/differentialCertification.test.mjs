@@ -12,12 +12,14 @@ import { dirname, join, resolve } from "node:path"
 import { after, before, describe, it } from "node:test"
 import { fileURLToPath } from "node:url"
 import {
+  DATABASE_SPECIFIC_PROPERTIES,
   DF1_ARTIFACT,
   DF1_MINIMUM_SCALES,
   DF1_PHASE,
   Df1Refusal,
   STORE_DIFFERENTIAL_AREAS,
   aggregateSuiteReports,
+  appliesToDatabase,
   composeDf1Artifact,
   createDf1SourceManifest,
   deriveDf1Seed,
@@ -133,6 +135,26 @@ describe("DF1 real-database store differential suites", () => {
       for (const fragment of ["job store lifecycle differential", "job store concurrent transitions", "job store concurrent claim", "core job dispatcher", "schedule store lifecycle differential", "schedule store concurrent claims", "workflow store differential lifecycle", "workflow store differential concurrent dispatch"]) {
         assert.ok(names.some(name => name.includes(fragment)), `${suite.id} requires "${fragment}"`)
       }
+    }
+  })
+
+  it("requires a database-specific property only on its databases, and every other property everywhere", async () => {
+    const sites = await requiredCallSites(repositoryRoot, await df1Suites(repositoryRoot))
+    const sequenceTransactions = "sequence store concurrent transactions"
+    for (const database of ["pg", "mysql"]) assert.ok(sites[database].some(site => site.display.startsWith(sequenceTransactions)), `${database} requires it`)
+    assert.ok(!sites.d1.some(site => site.display.startsWith(sequenceTransactions)), "d1 does not")
+    const plain = { file: "packages/testing/integration/shared/sequenceStoreDifferential.ts", display: "sequence store lifecycle differential (${…})" }
+    for (const database of ["pg", "mysql", "d1"]) assert.equal(appliesToDatabase(plain, database), true)
+    for (const entry of Object.values(DATABASE_SPECIFIC_PROPERTIES)) assert.ok(entry.reason.length > 0 && entry.databases.length > 0)
+  })
+
+  it("refuses a database-specific entry that matches no call site", async () => {
+    const key = "packages/testing/integration/shared/sequenceStoreDifferential.ts::no such property"
+    DATABASE_SPECIFIC_PROPERTIES[key] = { databases: ["pg"], reason: "probe" }
+    try {
+      await assert.rejects(requiredCallSites(repositoryRoot, await df1Suites(repositoryRoot)), refused(/matches no differential call site/))
+    } finally {
+      delete DATABASE_SPECIFIC_PROPERTIES[key]
     }
   })
 

@@ -54,6 +54,17 @@ export const STORE_DIFFERENTIAL_AREAS = ["job", "schedule", "workflow", "idempot
 const STORE_SIGNAL_BUFFERING = "workflowSignalBuffering"
 const STORE_DIFFERENTIAL_SHARED_PATTERN = new RegExp(`^(?:${STORE_DIFFERENTIAL_AREAS.join("|")})StoreDifferential[A-Za-z]*\\.ts$`)
 const STORE_DIFFERENTIAL_SHARED = name => STORE_DIFFERENTIAL_SHARED_PATTERN.test(name) || name === `${STORE_SIGNAL_BUFFERING}.ts`
+/**
+ * Shared-store properties that apply only to some databases, keyed by "<shared file>::<property display>". Every
+ * other shared property must have evidence on every database whose runner exists. An entry that matches no call
+ * site is refused, so the list cannot go stale.
+ */
+export const DATABASE_SPECIFIC_PROPERTIES = {
+  [`${SHARED_DIRECTORY}/sequenceStoreDifferential.ts::sequence store concurrent transactions (\${…})`]: {
+    databases: ["pg", "mysql"],
+    reason: "D1 has no interactive transactions; its runner defines no `transact` driver",
+  },
+}
 /** Fixture migration directory per database adapter. */
 const FIXTURE_MIGRATIONS = { pg: "postgres", mysql: "mysql", d1: "d1" }
 /** Roots scanned for harness call sites that are not part of any DF1 suite. */
@@ -336,6 +347,7 @@ async function filesUnder(repositoryRoot, directory) {
 export async function requiredCallSites(repositoryRoot, suites) {
   const bySuite = {}
   const covered = new Set([HARNESS, HARNESS_SELF_TEST])
+  const scanned = new Set()
   for (const suite of suites) {
     const sites = []
     for (const path of suite.propertySources) {
@@ -343,7 +355,11 @@ export async function requiredCallSites(repositoryRoot, suites) {
       sites.push(...scanPropertyCallSites(await readFile(resolve(repositoryRoot, path), "utf8"), path))
     }
     if (sites.length === 0) refuse(`suite ${suite.id} declares no differential properties`)
-    bySuite[suite.id] = sites
+    for (const site of sites) scanned.add(`${site.file}::${site.display}`)
+    bySuite[suite.id] = suite.kind === "database" ? sites.filter(site => appliesToDatabase(site, suite.id)) : sites
+  }
+  for (const key of Object.keys(DATABASE_SPECIFIC_PROPERTIES)) {
+    if (!scanned.has(key)) refuse(`database-specific property ${key} matches no differential call site`)
   }
   // A shared store file of an area that runs on no database yet still follows the harness rules, but it may not
   // declare properties: they would never run. An area that runs on at least one database is a DF1 suite there.
@@ -362,6 +378,12 @@ export async function requiredCallSites(repositoryRoot, suites) {
     }
   }
   return bySuite
+}
+
+/** Whether a call site is required on a database: every site is, unless DATABASE_SPECIFIC_PROPERTIES limits it. */
+export function appliesToDatabase(site, database) {
+  const entry = DATABASE_SPECIFIC_PROPERTIES[`${site.file}::${site.display}`]
+  return entry === undefined || entry.databases.includes(database)
 }
 
 /** The DF1 source manifest paths, recomputed from the current tree. */
