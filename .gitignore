@@ -17,3 +17,6 @@ Thumbs.db
 # See docs/governance/artifact-retention.md.
 artifacts/framework-conformance/local-*/
 artifacts/framework-conformance/canonical-*/
+
+# Stryker mutation testing: sandbox, reports and the incremental cache
+.stryker-tmp/
