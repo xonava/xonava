@@ -8,6 +8,8 @@
 -- next to the other key parts. They stay in a utf8mb4_0900_bin column and the keys use scope_hash = SHA-256 of the scope's UTF-8 bytes
 -- (a STORED generated column; lookups use scope_hash=UNHEX(SHA2(?,256))). Two scopes are the same key only if their SHA-256 digests match.
 -- jobs/schedules.scope_key (0005, platform/system keys) is converted too and active_partition_tenant keeps 0005's COALESCE(tenant_id, scope_key, '').
+-- cache_generations.scope holds cache tags, which may be up to 256 UTF-8 bytes (MAX_CACHE_TAG_BYTES); 0001 and this migration size it VARCHAR(256) (it was VARCHAR(100),
+-- which rejected longer tags with "Data too long" on every advance).
 -- MODIFY and the primary-key change rebuild the tables: run in a maintenance window. The sequence/temporal statements are not re-runnable
 -- (ADD COLUMN); the fixture bootstrap applies them only while scope_hash is missing.
 ALTER TABLE sequences MODIFY scope_id VARCHAR(1024) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL, ADD COLUMN scope_hash BINARY(32) GENERATED ALWAYS AS (UNHEX(SHA2(scope_id,256))) STORED NOT NULL, DROP PRIMARY KEY, ADD PRIMARY KEY (scope_hash, name, period);
@@ -35,7 +37,7 @@ ALTER TABLE outbox
   MODIFY aggregate_type VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL,
   MODIFY aggregate_id VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL;
 ALTER TABLE cache_generations
-  MODIFY `scope` VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL;
+  MODIFY `scope` VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL;
 ALTER TABLE idempotency
   MODIFY id VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL,
   MODIFY `scope` VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL,

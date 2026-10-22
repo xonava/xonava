@@ -37,7 +37,7 @@ table names, and apply them before you deploy the new adapters.
 | MySQL      | `0003_schedule_next_run_nullable.sql`  | Yes; without it a schedule with no future occurrence cannot retire                             |
 | MySQL      | `0004_job_partition_head_index.sql`    | Yes; without it each job claim candidate rescans the jobs table                                |
 | MySQL      | `0005_job_scope_key.sql`               | Yes; the job and schedule stores read and write `scope_key`                                    |
-| MySQL      | `0006_byte_exact_identifiers.sql`      | Yes; without it keys differing by case or trailing space collide and non-ASCII sequence/temporal scopes fail |
+| MySQL      | `0006_byte_exact_identifiers.sql`      | Yes; without it keys differing by case or trailing space collide and non-ASCII sequence/temporal scopes fail; also widens `cache_generations.scope` to `VARCHAR(256)` so cache tags of up to 256 bytes fit |
 | D1         | `0002_workflow_signal_buffering.sql`   | Yes                                                                                           |
 | D1         | `0003_job_partition_head_index.sql`    | Yes; without it each job claim candidate rescans the jobs table                                |
 | D1         | `0004_lease_records.sql`               | Only if you use `createD1LeaseStore` / `D1AtomicLeaseBackend`                                  |
