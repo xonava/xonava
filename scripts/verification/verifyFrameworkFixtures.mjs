@@ -52,6 +52,26 @@ for (const [database, file, constant] of migrationLists) {
   const onDisk = (await readdir(new URL(`../../packages/testing/fixtures/${database}/migrations/`, import.meta.url))).filter((name) => name.endsWith(".sql")).sort()
   if (!listed || JSON.stringify(listed) !== JSON.stringify(onDisk)) throw new Error(`${constant} (${JSON.stringify(listed)}) does not match the ${database} migration files (${JSON.stringify(onDisk)})`)
 }
+// The migrations published in @xonava/adapters must be copies of the fixture migrations (same file set). Every file is byte-identical
+// except mysql/0001_framework.sql: the fixture re-applies it on every run and so resets seven tables with `DROP TABLE IF EXISTS`,
+// which a production migration must never do. Its published copy is the fixture text with exactly this rewrite and nothing else:
+// the header comment below is prepended, every `DROP TABLE IF EXISTS <t>;` line is removed, and the `CREATE TABLE <t>` that
+// followed becomes `CREATE TABLE IF NOT EXISTS <t>`.
+const MYSQL_0001_HEADER = "-- Reference migration: the @xonava/testing fixture migration without the fixture's table resets (no table drops; every CREATE TABLE is IF NOT EXISTS), so it is safe to re-run.\n"
+const publishedMysql0001 = (fixtureSource) => MYSQL_0001_HEADER + fixtureSource.replace(/^DROP TABLE IF EXISTS \w+;\r?\n/gm, "").replace(/^CREATE TABLE (?!IF NOT EXISTS )/gm, "CREATE TABLE IF NOT EXISTS ")
+for (const database of ["postgres", "mysql", "d1"]) {
+  const fixtureDirectory = new URL(`../../packages/testing/fixtures/${database}/migrations/`, import.meta.url)
+  const publishedDirectory = new URL(`../../packages/adapters/migrations/${database}/`, import.meta.url)
+  const fixtureFiles = (await readdir(fixtureDirectory)).sort()
+  const publishedFiles = (await readdir(publishedDirectory)).sort()
+  if (JSON.stringify(fixtureFiles) !== JSON.stringify(publishedFiles)) throw new Error(`packages/adapters/migrations/${database} files (${JSON.stringify(publishedFiles)}) differ from the fixture migrations (${JSON.stringify(fixtureFiles)}); copy them from packages/testing/fixtures/${database}/migrations`)
+  for (const name of fixtureFiles) {
+    const [fixture, published] = await Promise.all([readFile(new URL(name, fixtureDirectory), "utf8"), readFile(new URL(name, publishedDirectory), "utf8")])
+    if (/\b(?:DROP\s+TABLE|TRUNCATE)\b/i.test(published.split("\n").filter((line) => !line.trim().startsWith("--")).join("\n"))) throw new Error(`packages/adapters/migrations/${database}/${name} contains DROP TABLE or TRUNCATE; a published migration must never destroy data`)
+    const expected = database === "mysql" && name === "0001_framework.sql" ? publishedMysql0001(fixture) : fixture
+    if (published !== expected) throw new Error(`packages/adapters/migrations/${database}/${name} differs from ${database === "mysql" && name === "0001_framework.sql" ? "the fixture with the documented no-DROP rewrite applied" : `packages/testing/fixtures/${database}/migrations/${name}`}; regenerate the published copy from the fixture`)
+  }
+}
 const rootPackage = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8"))
 const commands = ["test:framework:integration:pg", "test:framework:integration:d1", "test:framework:integration:mysql", "test:framework:upgrade:pg", "test:framework:upgrade:d1", "test:framework:upgrade:mysql", "test:framework:conformance:pg", "test:framework:conformance:d1", "test:framework:conformance:mysql", "test:framework:race:pg", "test:framework:race:d1", "test:framework:race:mysql", "test:framework:crash:pg", "test:framework:crash:d1", "test:framework:crash:mysql"]
 for (const command of commands) {
