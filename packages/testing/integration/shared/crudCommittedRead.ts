@@ -32,7 +32,19 @@ export const CRUD_COMMITTED_READ_PLATFORM_ENTITY = "ccrPlatformItem"
 export const crudCommittedReadTenantDescriptor: EntityDescriptor<TenantRow> = { name: CRUD_COMMITTED_READ_TENANT_ENTITY, primaryKey: "id", tenantField: "tenantId", versionField: "version", fields: tenantFields }
 export const crudCommittedReadPlatformDescriptor: EntityDescriptor<PlatformRow> = { name: CRUD_COMMITTED_READ_PLATFORM_ENTITY, primaryKey: "id", versionField: "version", fields: platformFields }
 
-function handlersFor(driver: CrudCommittedReadDriver, kind: "tenant" | "platform") {
+type NamedRow = { id: string; name: string }
+
+/**
+ * A `projectCommittedResult` hook that re-reads the written row through its
+ * context persistence and returns a field derived from what it read. The field
+ * is absent from the response unless the hook saw the just-written row.
+ */
+const projectHookSawRow = async ({ result, context }: { result: NamedRow; context: { persistence: { repository: (entity: never) => { findById: (id: string) => Promise<NamedRow | null> } } } }, descriptor: unknown) => {
+  const reread = await context.persistence.repository(descriptor as never).findById(result.id)
+  return { ...result, hookSaw: reread ? `saw:${reread.name}` : "missing" }
+}
+
+function handlersFor(driver: CrudCommittedReadDriver, kind: "tenant" | "platform", withHook = false) {
   const session = kind === "tenant" ? trustedSession({ kind: "tenant", tenantId: "tenant-1" }) : trustedSession({ kind: "platform", platformKey: "test" })
   const moduleKey = `ccr.${kind}`
   const runtime = {
@@ -47,11 +59,13 @@ function handlersFor(driver: CrudCommittedReadDriver, kind: "tenant" | "platform
         moduleKey,
         entity: crudCommittedReadTenantDescriptor,
         entityScope: { kind: "tenant" }, policy: { skipCapabilityCheck: true }, cache: false, audit: false, validation: bodies,
+        ...(withHook ? { entity: { ...crudCommittedReadTenantDescriptor, fields: { ...tenantFields, hookSaw: { type: "string" } } } as never, crud: { create: { projectCommittedResult: (args: never) => projectHookSawRow(args, crudCommittedReadTenantDescriptor) }, update: { projectCommittedResult: (args: never) => projectHookSawRow(args, crudCommittedReadTenantDescriptor) } } as never } : {}),
       }), runtime as never)
     : CRUD(defineEntity<PlatformRow, { name: string }, { name: string }>({
         moduleKey,
         entity: crudCommittedReadPlatformDescriptor,
         entityScope: { kind: "platform", acknowledged: true }, policy: { skipCapabilityCheck: true }, cache: false, audit: false, validation: bodies,
+        ...(withHook ? { entity: { ...crudCommittedReadPlatformDescriptor, fields: { ...platformFields, hookSaw: { type: "string" } } } as never, crud: { create: { projectCommittedResult: (args: never) => projectHookSawRow(args, crudCommittedReadPlatformDescriptor) }, update: { projectCommittedResult: (args: never) => projectHookSawRow(args, crudCommittedReadPlatformDescriptor) } } as never } : {}),
       }), runtime as never)
 }
 
@@ -84,6 +98,28 @@ export function defineCrudCommittedReadSuite(label: string, driver: CrudCommitte
         expect(response.status).toBe(200)
         expect(body).not.toHaveProperty("reason")
         expect(body).toMatchObject({ id: created.id, name: "after", version: 2 })
+      })
+
+      it(`create projectCommittedResult hook reads the just-created ${kind}-scoped row through its context persistence`, async () => {
+        const handlers = handlersFor(driver, kind, true)
+        const response = await handlers.create(json("POST", { name: "hooked" }))
+        const body = await response.json() as Record<string, unknown>
+        expect(body).not.toHaveProperty("error")
+        expect(response.status).toBe(201)
+        expect(body).toMatchObject({ name: "hooked", version: 1, hookSaw: "saw:hooked" })
+        expect(body).not.toHaveProperty("hookPersistence")
+      })
+
+      it(`update projectCommittedResult hook reads the just-updated ${kind}-scoped row through its context persistence`, async () => {
+        const handlers = handlersFor(driver, kind, true)
+        const seed = kind === "tenant" ? { id: `hook-${kind}-${crypto.randomUUID()}`, tenantId: "tenant-1", name: "before", version: 1 } : { id: `hook-${kind}-${crypto.randomUUID()}`, name: "before", version: 1 }
+        await driver.provider().repository((kind === "tenant" ? crudCommittedReadTenantDescriptor : crudCommittedReadPlatformDescriptor) as VersionedEntityDescriptor<Record<string, unknown>>).insert(seed as never)
+        const response = await handlers.update(json("PATCH", { name: "after" }, { "if-match": '"1"' }), { params: Promise.resolve({ id: seed.id }) })
+        const body = await response.json() as Record<string, unknown>
+        expect(body).not.toHaveProperty("error")
+        expect(response.status).toBe(200)
+        expect(body).toMatchObject({ id: seed.id, name: "after", version: 2, hookSaw: "saw:after" })
+        expect(body).not.toHaveProperty("hookPersistence")
       })
     }
   })
