@@ -52,6 +52,20 @@ for (const [database, file, constant] of migrationLists) {
   const onDisk = (await readdir(new URL(`../../packages/testing/fixtures/${database}/migrations/`, import.meta.url))).filter((name) => name.endsWith(".sql")).sort()
   if (!listed || JSON.stringify(listed) !== JSON.stringify(onDisk)) throw new Error(`${constant} (${JSON.stringify(listed)}) does not match the ${database} migration files (${JSON.stringify(onDisk)})`)
 }
+// The migrations published in @xonava/adapters must be byte-identical copies of the fixture migrations (same file set, same bytes).
+const adaptersPackage = JSON.parse(await readFile(new URL("../../packages/adapters/package.json", import.meta.url), "utf8"))
+if (!adaptersPackage.files?.includes("migrations")) throw new Error('packages/adapters/package.json "files" must include "migrations"')
+for (const database of ["postgres", "mysql", "d1"]) {
+  const fixtureDirectory = new URL(`../../packages/testing/fixtures/${database}/migrations/`, import.meta.url)
+  const publishedDirectory = new URL(`../../packages/adapters/migrations/${database}/`, import.meta.url)
+  const fixtureFiles = (await readdir(fixtureDirectory)).sort()
+  const publishedFiles = (await readdir(publishedDirectory)).sort()
+  if (JSON.stringify(fixtureFiles) !== JSON.stringify(publishedFiles)) throw new Error(`packages/adapters/migrations/${database} files (${JSON.stringify(publishedFiles)}) differ from the fixture migrations (${JSON.stringify(fixtureFiles)}); copy them from packages/testing/fixtures/${database}/migrations`)
+  for (const name of fixtureFiles) {
+    const [fixture, published] = await Promise.all([readFile(new URL(name, fixtureDirectory)), readFile(new URL(name, publishedDirectory))])
+    if (!fixture.equals(published)) throw new Error(`packages/adapters/migrations/${database}/${name} differs from packages/testing/fixtures/${database}/migrations/${name}; copy the fixture file over the published copy`)
+  }
+}
 const rootPackage = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8"))
 const commands = ["test:framework:integration:pg", "test:framework:integration:d1", "test:framework:integration:mysql", "test:framework:upgrade:pg", "test:framework:upgrade:d1", "test:framework:upgrade:mysql", "test:framework:conformance:pg", "test:framework:conformance:d1", "test:framework:conformance:mysql", "test:framework:race:pg", "test:framework:race:d1", "test:framework:race:mysql", "test:framework:crash:pg", "test:framework:crash:d1", "test:framework:crash:mysql"]
 for (const command of commands) {
