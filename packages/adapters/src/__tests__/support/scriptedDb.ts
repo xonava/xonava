@@ -47,7 +47,12 @@ export interface ScriptedDb {
   readonly ops: ScriptedOp[]
 }
 
-export function createScriptedDb(dialect: Dialect, handler: ScriptedHandler): ScriptedDb {
+export interface ScriptedDbOptions {
+  /** When set, the session exposes `atomicJobTransition`, answered by this function (its argument is the adapter's request). */
+  readonly atomicJobTransition?: (request: Record<string, unknown>) => unknown
+}
+
+export function createScriptedDb(dialect: Dialect, handler: ScriptedHandler, options: ScriptedDbOptions = {}): ScriptedDb {
   const ops: ScriptedOp[] = []
 
   const finish = (state: Partial<ScriptedOp> & { kind: ScriptedOp["kind"] }) => {
@@ -77,6 +82,7 @@ export function createScriptedDb(dialect: Dialect, handler: ScriptedHandler): Sc
     insert: (table: unknown) => ({ values: (values: unknown) => chain({ kind: "insert", table, values }) }),
     update: (table: unknown) => ({ set: (set: unknown) => chain({ kind: "update", table, set }) }),
     delete: (table: unknown) => chain({ kind: "delete", table }),
+    ...(options.atomicJobTransition ? { atomicJobTransition: async (request: Record<string, unknown>) => options.atomicJobTransition!(request) } : {}),
   }
   return { db: db as never, ops }
 }
