@@ -20,7 +20,7 @@ Status: **experimental**. `0.1.0` is published on npm. Target for `1.0.0`: core 
 | 0: quick fixes | Done (6 of 6) | |
 | 1: pilot feedback and missing adapters | Done (9 of 9, plus 3 follow-ups) | All eight requests from the TanStack Start / Cloudflare pilot |
 | 2: proof | In progress | Done: everything except Q5 per module (`query` 86.2 % and `operation` 81.3 % done); CI (Q1) deferred |
-| 3: hardening and decisions | In progress | Done: C3 upgrade compatibility, C5 threat model, C6 decisions, C7 threat-model test gaps. In flight: C4, C8. Remaining: C9 |
+| 3: hardening and decisions | In progress | Done: C3, C5, C6, C7, C9. In flight: C4 soak, C8 conditional query grants |
 
 Real-database differential suites now cover jobs, schedules, workflows, idempotency, inbox/outbox
 delivery, leases, sequences, temporal history, job progress and cache tag generations on PostgreSQL,
@@ -164,15 +164,6 @@ when the wave closes.
   condition; an ABAC differential property that a query grant never lifts a denial the record decision would keep for
   some row; an HTTP test (`list` with a filter on the masked field) that now answers 403.
 
-### C9 Reference production DDL
-
-- [ ] Sonnet. Branch `feat/reference-migrations`. Decided in C6.
-- **Steps:** publish the fixture migrations of each database as `packages/adapters/migrations/<postgres|mysql|d1>/`,
-  included in the package `files`. Add a verification script (wired into `verify:framework:fixtures`) that fails when
-  the published copies differ from `packages/testing/fixtures/<database>/migrations`. Document them in the adapters
-  README and the migrations table in `docs/KNOWN-LIMITATIONS.md`, including that the fixture table names are defaults
-  the store factories let you change.
-- **Acceptance:** `npm pack -w @xonava/adapters --dry-run` lists the migrations; the check fails on a one-byte change.
 
 ## Deferred
 
