@@ -55,10 +55,10 @@ export default defineConfig({
       thresholds: {
         // Enforced ratchet floors for the testing package, measured when they were
         // introduced. Raise these only alongside tests; never lower them.
-        lines: 76,
-        statements: 75,
-        functions: 75,
-        branches: 55,
+        lines: 96,
+        statements: 95,
+        functions: 93,
+        branches: 83,
       },
     },
   },
