@@ -96,7 +96,7 @@ export function createCreateHandler<
          id: input.id,
          ...(committedVersion !== undefined ? { committedVersion: committedVersion as EntityVersion } : {}),
        })
-       return { record, committedRead }
+       return { record, committedRead, hookPersistence: operation.persistence }
      },
     atomicBatch: {
       prepare: async ({ operation, input }) => {
@@ -149,7 +149,7 @@ export function createCreateHandler<
           input: input.body,
           originalInput: input.originalBody,
            result: projectedReadable,
-             context: toCrudContext(session, operation, readablePersistence),
+             context: toCrudContext(session, operation, result.hookPersistence ?? readablePersistence),
         })
         : undefined
 

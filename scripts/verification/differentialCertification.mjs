@@ -38,6 +38,9 @@ const CORE_DIFFERENTIAL_DIR = "packages/core/src/__tests__/differential"
 const HARNESS = `${CORE_DIFFERENTIAL_DIR}/harness.ts`
 /** Harness self-tests plant failing properties on purpose; they are not certification properties. */
 const HARNESS_SELF_TEST = `${CORE_DIFFERENTIAL_DIR}/harness.test.ts`
+/** HTTP fuzz suites: hostile-input properties over the CRUD and write handlers through the Express, Fastify and Hono adapters. */
+const HTTP_FUZZ_DIRECTORY = "packages/adapters/src/http/__tests__/fuzz"
+const HTTP_FUZZ_TESTS = name => name.endsWith(".test.ts") && name.endsWith("HttpFuzz.test.ts")
 const SHARED_PARITY = ["packages/testing/integration/shared/richParity.ts", "packages/testing/integration/shared/predicateParity.ts"]
 const DATABASE_ADAPTERS = ["pg", "mysql", "d1"]
 /**
@@ -139,6 +142,18 @@ export async function df1Suites(repositoryRoot) {
     testFiles: coreTests,
     propertySources: differentialFiles.filter(path => path !== HARNESS && path !== HARNESS_SELF_TEST),
   }]
+  // The fuzz generators and invariants carry no properties; only the *HttpFuzz.test.ts files declare them. The
+  // regression file in the same directory runs with the ordinary adapters tests.
+  const httpFuzzTests = await listDirectory(repositoryRoot, HTTP_FUZZ_DIRECTORY, HTTP_FUZZ_TESTS)
+  suites.push({
+    id: "http-fuzz",
+    kind: "core",
+    workspace: "@xonava/adapters",
+    workspaceDirectory: "packages/adapters",
+    config: undefined,
+    testFiles: httpFuzzTests,
+    propertySources: httpFuzzTests,
+  })
   const { shared: storeDifferentialShared, databases } = await df1StoreDifferential(repositoryRoot)
   for (const adapter of DATABASE_ADAPTERS) {
     const units = databases[adapter]
