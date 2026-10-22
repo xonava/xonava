@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 import { drizzle } from "drizzle-orm/d1"
 import { integer, sqliteTable, text, uniqueIndex, type AnySQLiteTable } from "drizzle-orm/sqlite-core"
 import { encodeExecutionScopeId } from "@xonava/core/domain"
@@ -110,4 +112,21 @@ export const newJob = (overrides: Record<string, unknown> = {}) => ({ jobType: "
 export function jobStore(db: ReturnType<typeof drizzle>, executionHistory: "best_effort" | "required" = "best_effort", executionsTable: AnySQLiteTable = execs) {
   const session = createDrizzleD1Adapter(db as never).repository
   return createDrizzleJobStore(session, { jobsTable: jobs, executionsTable, executionHistory, columnMap: { jobs: columnMap(jobs), executions: columnMap(executionsTable) } })
+}
+
+const MIGRATIONS_DIRECTORY = new URL("../../../../testing/fixtures/d1/migrations/", import.meta.url)
+
+/**
+ * Applies the certified framework D1 migrations (workflow, temporal, sequence, lease and progress tables) the same way the
+ * D1 conformance fixture does: one statement per line, comments dropped. Migrations 0003 and 0005 target deployment-owned
+ * tables that this fixture defines itself, so only the framework-owned ones are applied.
+ */
+export function applyFrameworkMigrations(d1: FakeD1): void {
+  for (const name of ["0001_framework.sql", "0002_workflow_signal_buffering.sql", "0004_lease_records.sql"]) {
+    const source = readFileSync(fileURLToPath(new URL(name, MIGRATIONS_DIRECTORY)), "utf8")
+    for (const line of source.split("\n")) {
+      const statement = line.trim()
+      if (statement !== "" && !statement.startsWith("--")) d1.sqlite.exec(statement)
+    }
+  }
 }
