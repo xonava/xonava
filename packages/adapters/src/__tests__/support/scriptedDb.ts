@@ -25,6 +25,7 @@ export interface ScriptedOp {
   readonly offset?: number
   readonly returning: boolean
   readonly conflictDoNothing: boolean
+  readonly conflictUpdate?: unknown
 }
 
 export type ScriptedHandler = (op: ScriptedOp) => unknown
@@ -71,6 +72,7 @@ export function createScriptedDb(dialect: Dialect, handler: ScriptedHandler, opt
       offset: (offset: number) => next({ offset }),
       returning: () => next({ returning: true }),
       onConflictDoNothing: () => next({ conflictDoNothing: true }),
+      onDuplicateKeyUpdate: (config: unknown) => next({ conflictUpdate: config }),
       then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => finish(state).then(resolve, reject),
       catch: (reject: (reason: unknown) => unknown) => finish(state).catch(reject),
     }
