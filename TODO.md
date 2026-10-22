@@ -20,7 +20,7 @@ Status: **experimental**. `0.1.0` is published on npm. Target for `1.0.0`: core 
 | 0: quick fixes | Done (6 of 6) | |
 | 1: pilot feedback and missing adapters | Done (9 of 9, plus 3 follow-ups) | All eight requests from the TanStack Start / Cloudflare pilot |
 | 2: proof | In progress | Done: everything except Q5 per module (`query` done, 86.2 %); CI (Q1) deferred |
-| 3: hardening and decisions | In progress | Done: C5 threat model. In flight: C3, C4. Remaining: C6, C7 (threat-model test gaps) |
+| 3: hardening and decisions | In progress | Done: C5 threat model. In flight: C3, C4. Remaining: C7 (threat-model test gaps), C8, C9. C6 decided: see below and the spec files |
 
 Real-database differential suites now cover jobs, schedules, workflows, idempotency, inbox/outbox
 delivery, leases, sequences, temporal history, job progress and cache tag generations on PostgreSQL,
@@ -165,25 +165,31 @@ when the wave closes.
   Write evidence like the crash suites.
 - **Acceptance:** a 30-minute run passes.
 
-### C6 Decisions on items not implemented
+### C8 Conditional allow policies stop granting query access
 
-- [ ] Opus. **Design gate.** For each item, record "build" with a new WP, or "out of scope" with the
-  reason in the relevant spec file, then delete it from this list.
-  - **Interactive transactions on D1.** Blocked by the platform. Expected: out of scope.
-  - **Savepoints for nested operations.** Today nested operations join the parent transaction
-    (`operationPipeline.ts:100-152`) and adapters reject nested transactions
-    (`drizzle-pg/drizzlePersistenceProvider.ts:154`). Candidate: opt-in savepoints on PostgreSQL and
-    MySQL.
-  - **Bounded `COMMIT` on MySQL.** Expected: out of scope (server limitation).
-  - **Query-time evaluation of conditional allow grants.** `collectQueryGrants`
-    (`packages/core/src/domain/fieldAccess.ts:340`) ignores conditions. Candidate: compile the condition
-    into the field-grant predicate.
-  - **A code formatter.** Adopting one rewrites every file, so run it in a single dedicated pull request
-    if accepted.
-  - **Reference production DDL.** Candidate: publish the fixture migrations as
-    `packages/adapters/migrations/<database>/` with a generator check.
-  - **Persistence-applied codecs.** Rejected today at `packages/core/src/entity/validateEntity.ts:114`.
-    Candidate: apply `durableCodec` in each adapter's `drizzleRepository.ts` row mapping.
+- [ ] Sonnet. Branch `fix/conditional-query-grants`. **Breaking.** Decided in C6.
+- **Defect:** `collectQueryGrants` (`packages/core/src/domain/fieldAccess.ts`) takes `fieldAccess.query` from every allow
+  policy without looking at its condition. An allow policy whose condition can never hold for the caller (for example
+  `department = 'x'`) still lifts a mask's query denial, so the caller can filter, sort and search a masked field over
+  every row, which reveals its values. This contradicts the rule in `docs/spec/domain.md` that a record-less decision
+  is granted only by an unconditional allow.
+- **Fix:** a query grant counts only when the policy's `compiledConditions` is always true (the same test the global
+  capability decision uses). Update `docs/spec/domain.md` with a MUST sentence, remove the entry from
+  `docs/KNOWN-LIMITATIONS.md`, and add a `minor` changeset starting with **Breaking:** that tells users to move such
+  grants to an unconditional policy. Compiling the condition into a query predicate is out of scope for `1.0`.
+- **Acceptance:** unit tests in `fieldAccess.test.ts` for a statically false, a resource-dependent and an always-true
+  condition; an ABAC differential property that a query grant never lifts a denial the record decision would keep for
+  some row; an HTTP test (`list` with a filter on the masked field) that now answers 403.
+
+### C9 Reference production DDL
+
+- [ ] Sonnet. Branch `feat/reference-migrations`. Decided in C6.
+- **Steps:** publish the fixture migrations of each database as `packages/adapters/migrations/<postgres|mysql|d1>/`,
+  included in the package `files`. Add a verification script (wired into `verify:framework:fixtures`) that fails when
+  the published copies differ from `packages/testing/fixtures/<database>/migrations`. Document them in the adapters
+  README and the migrations table in `docs/KNOWN-LIMITATIONS.md`, including that the fixture table names are defaults
+  the store factories let you change.
+- **Acceptance:** `npm pack -w @xonava/adapters --dry-run` lists the migrations; the check fails on a one-byte change.
 
 ### C7 Threat-model test gaps
 
@@ -268,7 +274,7 @@ back.
 ## Release `1.0.0`
 
 - [ ] Every quality gate green in the full local release gate on dedicated databases.
-- [ ] Every C6 item decided; full release gate (`npm run verify:framework-release`) green on dedicated
+- [ ] Full release gate (`npm run verify:framework-release`) green on dedicated
       databases.
 - [ ] Freeze the public API manifest and durable formats; drop compatibility-only fingerprint versions
       that are no longer needed.
