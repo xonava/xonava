@@ -37,7 +37,7 @@ table names, and apply them before you deploy the new adapters.
 | MySQL      | `0003_schedule_next_run_nullable.sql`  | Yes; without it a schedule with no future occurrence cannot retire                             |
 | MySQL      | `0004_job_partition_head_index.sql`    | Yes; without it each job claim candidate rescans the jobs table                                |
 | MySQL      | `0005_job_scope_key.sql`               | Yes; the job and schedule stores read and write `scope_key`                                    |
-| MySQL      | `0006_byte_exact_identifiers.sql`      | Yes; without it keys differing by case or trailing space collide and non-ASCII sequence/temporal scopes fail |
+| MySQL      | `0006_byte_exact_identifiers.sql`      | Yes; without it keys differing by case or trailing space collide and non-ASCII sequence/temporal scopes fail; also widens `cache_generations.scope` to `VARCHAR(256)` so cache tags of up to 256 bytes fit |
 | D1         | `0002_workflow_signal_buffering.sql`   | Yes                                                                                           |
 | D1         | `0003_job_partition_head_index.sql`    | Yes; without it each job claim candidate rescans the jobs table                                |
 | D1         | `0004_lease_records.sql`               | Only if you use `createD1LeaseStore` / `D1AtomicLeaseBackend`                                  |
@@ -157,6 +157,10 @@ These differences are intentional. The differential suites accept exactly these 
 
 ## Operations and transactions
 
+- **MySQL sequence first allocation can deadlock.** Concurrent first allocations of one `sequences` key
+  can deadlock (InnoDB error 1213) when the transaction holding the key rolls back. The database aborts one
+  caller, so callers must retry the whole transaction. Committed numbers stay gapless and unique; a rolled-back
+  allocation restores the counter.
 - **No savepoints.** A failed nested operation fails its parent, but its own writes are not rolled back
   individually. The parent's whole transaction rolls back.
 - **Driver errors.** Drizzle adapters report any non-framework error that escapes a transaction as
@@ -203,6 +207,10 @@ These differences are intentional. The differential suites accept exactly these 
   row.
 - **Schedule backoff.** Failure backoff grows with the time since the previous failure, not with a
   failure count.
+- **Job checkpoints and U+0000.** A job checkpoint whose strings or keys contain U+0000 is refused with a
+  `ConfigurationError` on every database, because PostgreSQL `jsonb` cannot store it. Unlike failure text, a
+  checkpoint is not replaced, so the resumed state is never silently altered. Checkpoints MySQL or D1 stored
+  before this rule still read back, so their jobs resume; only new writes are refused.
 - **Unknown job definitions** are held for at most `unknownDefinitionMaxDeferralMs` (24 hours by default)
   from their first deferral, then dead-lettered.
 
