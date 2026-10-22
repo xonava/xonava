@@ -9,7 +9,7 @@
 
 Xonava gives backend services the parts that are tedious to get right: entities with tenant scoping and optimistic concurrency, authorization enforced inside queries, transactions, transactional outbox and inbox events, durable jobs, schedules and workflows, caching, rate limiting and resilience. Each capability is a separate subpath of `@xonava/core`, which has no runtime dependencies, so you import only what you use and add the rest later. Reference adapters connect the contracts to PostgreSQL, MySQL, Cloudflare D1, Express, Fastify and Hono. The packages are native ES modules and require Node.js 22 or later.
 
-> **Experimental.** Xonava is in its `0.x` series. APIs, persistence schemas and wire formats may change in any minor release before `1.0.0`, and the repository ships no production DDL. Read [Known limitations](docs/KNOWN-LIMITATIONS.md) before adopting it.
+> **Experimental.** Xonava is in its `0.x` series. APIs, persistence schemas and wire formats may change in any minor release before `1.0.0`, and the reference migrations are fixture-derived DDL, not a managed migration tool. Read [Known limitations](docs/KNOWN-LIMITATIONS.md) before adopting it.
 
 ## Why Xonava
 
@@ -50,7 +50,7 @@ npm install -D @xonava/testing vitest
 
 ## Quick start
 
-This defines a tenant-scoped entity, backs it with PostgreSQL, and serves list, detail, create, update and delete routes with Hono. It uses the PostgreSQL install above plus `npm install hono zod`; entity schemas are written with [Zod](https://zod.dev). The table must exist; the repository ships no production DDL, and the reference schema is in the fixture migrations under `packages/testing/fixtures/`.
+This defines a tenant-scoped entity, backs it with PostgreSQL, and serves list, detail, create, update and delete routes with Hono. It uses the PostgreSQL install above plus `npm install hono zod`; entity schemas are written with [Zod](https://zod.dev). The table must exist; the reference DDL ships in `@xonava/adapters` under `migrations/<postgres|mysql|d1>/` (see its README for the apply order and which files are safe to re-run).
 
 **1. Define the entity.** Routes that update or delete require a version field, which provides optimistic concurrency.
 

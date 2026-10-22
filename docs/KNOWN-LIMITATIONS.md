@@ -23,9 +23,12 @@ A green unit or interface suite is not evidence of provider behaviour. See the
 
 ### Apply the migrations first
 
-The repository ships no production DDL. The reference schema is the fixture migrations under
-`packages/testing/fixtures/<database>/migrations/`. Port the migrations below to your own schema or
-table names, and apply them before you deploy the new adapters.
+The reference schema ships in the package as `@xonava/adapters/migrations/<postgres|mysql|d1>/` (files in
+`node_modules/@xonava/adapters/migrations/`), copies of the fixture migrations (MySQL `0001` without the fixture's `DROP TABLE` resets) under
+`packages/testing/fixtures/<database>/migrations/` (`npm run verify:framework:fixtures` enforces this). The table, schema and
+column names in them are fixture defaults that the store factories let you change; rename them in the files you apply, or
+port the migrations to your own schema. Apply them before you deploy the new adapters. Apply the files in order; the
+adapters README lists which files are safe to re-run (the published MySQL `0001` omits the fixture's table resets and is safe to re-run).
 
 | Database   | Migration                              | Required                                                                                      |
 |------------|----------------------------------------|-----------------------------------------------------------------------------------------------|
@@ -172,8 +175,6 @@ These differences are intentional. The differential suites accept exactly these 
 
 ## Authorization
 
-- **Query grants from conditional allow policies** are honoured without evaluating their conditions at
-  query time. Only grants that come from deny policies are dropped.
 - **Read allowlists in the lowest tier.** A lowest-tier allow with a read map narrows the readable
   fields even when a higher tier decides the row, because read maps are allowlists.
 - **Soft deletes.** If an ABAC policy condition references a soft-delete field, plan-constrained soft

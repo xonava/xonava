@@ -212,6 +212,52 @@ describe("resolveFieldQueryAccess", () => {
   })
 })
 
+describe("query grants from conditional allow policies", () => {
+  const masked = { read: { salary: "mask" as const }, query: { filter: ["salary"], search: ["salary"], sort: ["salary"] } }
+  const denialsFor = (compiledConditions: NormalizedAbacPolicy["compiledConditions"]) =>
+    resolveFieldQueryDenials({
+      policies: [makeReadPolicy(masked, { compiledConditions })],
+      moduleKey: "test.module",
+      fields: QUERY_FIELDS,
+    })
+
+  it("grants nothing when the condition is statically false", () => {
+    const denials = denialsFor(Predicate.alwaysFalse())
+    expect(denials.filter).toContain("salary")
+    expect(denials.search).toContain("salary")
+    expect(denials.sort).toContain("salary")
+  })
+
+  it("grants nothing when the condition depends on the resource", () => {
+    const policies = [makeReadPolicy(masked, { compiledConditions: Predicate.eq("department", "__no_such_department__") })]
+    const denials = resolveFieldQueryDenials({ policies, moduleKey: "test.module", fields: QUERY_FIELDS })
+    expect(denials.filter).toContain("salary")
+    expect(denials.search).toContain("salary")
+    expect(denials.sort).toContain("salary")
+    const access = resolveFieldQueryAccess({ policies, moduleKey: "test.module", fields: QUERY_FIELDS })
+    expect(access.filter).not.toContain("salary")
+  })
+
+  it("grants when the condition is always true", () => {
+    const denials = denialsFor(Predicate.alwaysTrue())
+    expect(denials.filter).not.toContain("salary")
+    expect(denials.search).not.toContain("salary")
+    expect(denials.sort).not.toContain("salary")
+  })
+
+  it("a conditional grant does not lift a denial that an unconditional policy does not grant", () => {
+    const denials = resolveFieldQueryDenials({
+      policies: [
+        makeReadPolicy({ read: { salary: "mask" } }, { source: { policyId: "mask", scopeType: "tenant_default" } }),
+        makeReadPolicy({ query: { filter: ["salary"] } }, { source: { policyId: "grant", scopeType: "tenant_default" }, compiledConditions: Predicate.eq("department", "__no_such_department__") }),
+      ],
+      moduleKey: "test.module",
+      fields: QUERY_FIELDS,
+    })
+    expect(denials.filter).toContain("salary")
+  })
+})
+
 describe("resolveFieldQueryDenials", () => {
   it("denies masked fields until a matching query grant re-allows the mode", () => {
     const denials = resolveFieldQueryDenials({

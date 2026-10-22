@@ -159,6 +159,36 @@ describe("defect 1: list query allowlists come from the compiled entity", () => 
   })
 })
 
+describe("conditional allow policies do not grant query access", () => {
+  const listWith = (handlers: ReturnType<typeof build>["handlers"], query: Record<string, unknown>) =>
+    handlers.list(new Request(`https://x/people?${new URLSearchParams(Object.fromEntries(Object.entries(query).map(([k, v]) => [k, JSON.stringify(v)]))).toString()}`))
+  const conditions = { version: 2, systemScope: { logic: "AND", conditions: [] }, userFilters: { logic: "AND", conditions: [] } }
+  // A read policy that masks ownerId plus a second allow policy that grants
+  // filtering on it under `grantCondition`.
+  const maskedOwnerBundle = (grantCondition: unknown) => (moduleKey: string) => bindAbacSecurityDigest({ mode: "platform", moduleKey, policies: [
+    { source: { policyId: "mask", scopeType: "platform_default" }, moduleKey, effect: "allow", priority: 1,
+      payload: { actions: ["read"], capabilities: [], fieldAccess: { read: { ownerId: "mask" } }, conditions }, compiledConditions: { kind: "and", filters: [] } },
+    { source: { policyId: "grant", scopeType: "platform_default" }, moduleKey, effect: "allow", priority: 1,
+      payload: { actions: ["read"], capabilities: [], fieldAccess: { query: { filter: ["ownerId"] } }, conditions }, compiledConditions: grantCondition },
+  ] as never, context: {}, defaultEffect: "deny", fieldCatalog: {} } as never)
+  const filterOnOwner = { filters: { conditions: [{ field: "ownerId", operator: "eq", value: "x" }] } }
+
+  it("rejects a filter on a masked field when the granting policy's condition can fail", async () => {
+    const { handlers, findMany } = build({ filterableColumns: ["name", "ownerId"] }, {
+      bundle: maskedOwnerBundle({ kind: "condition", field: "name", op: "eq", value: "__no_such_name__" }),
+    })
+    const res = await listWith(handlers, filterOnOwner)
+    expect(res.status).toBe(400)
+    expect(findMany).not.toHaveBeenCalled()
+  })
+
+  it("still accepts the filter when the granting policy is unconditional", async () => {
+    const { handlers } = build({ filterableColumns: ["name", "ownerId"] }, { bundle: maskedOwnerBundle({ kind: "and", filters: [] }) })
+    const res = await listWith(handlers, filterOnOwner)
+    expect(res.status, await res.clone().text()).toBe(200)
+  })
+})
+
 describe("defect 2: idempotent replay runs before resource resolution", () => {
   it("replays a completed DELETE after the row is gone", async () => {
     const { handlers, rows } = build({})

@@ -12,7 +12,7 @@ Signed upload/download are OPTIONAL; the Cloudflare R2 binding cannot sign URLs,
 
 ## Cancellation, deadlines, and security
 
-An already-cancelled request MUST fail before provider I/O. An absolute epoch-millisecond deadline is expired when current time is greater than or equal to it. Cancellation/deadline stops new work and closes streams/resources but cannot undo a completed provider commit. Trusted scope-to-bucket/key policy is enforced before the port call.
+An already-cancelled request MUST fail before provider I/O. An absolute epoch-millisecond deadline is expired when current time is greater than or equal to it. Cancellation/deadline stops new work and closes streams/resources but cannot undo a completed provider commit. Trusted scope-to-bucket/key policy is enforced before the port call. The port does not prefix, rewrite or normalize keys: a key is an opaque string, `/` and `..` carry no meaning, and the caller MUST derive every key from trusted scope and never from client-supplied names.
 
 ## Errors and conformance
 

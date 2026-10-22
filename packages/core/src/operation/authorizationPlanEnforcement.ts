@@ -278,17 +278,16 @@ function constrainRepository<T, TId>(repository: ReturnType<PersistenceProvider[
   // Dynamic-fact equalities guard the pre-image only (compare-and-set); the
   // post-image must satisfy the mandatory resource predicate.
   const mandatory = plan.mandatoryResourcePredicate ?? undefined
+  const findOneWhere = async (filter: PredicateNode): Promise<T | null> => {
+    const row = await (repository as { findOneWhere(filter: PredicateNode): Promise<T | null> }).findOneWhere(addRequiredPredicate(filter, required)!)
+    return permittedRecord(row, required) ? row : null
+  }
   const read = {
     findById: async (id: TId): Promise<T | null> => {
       const row = await (repository as { findById(id: TId): Promise<T | null> }).findById(id)
       return permittedRecord(row, required) ? row : null
     },
-    ...(typeof (repository as { findOneWhere?: unknown }).findOneWhere === "function" ? {
-      findOneWhere: async (filter: PredicateNode): Promise<T | null> => {
-        const row = await (repository as { findOneWhere(filter: PredicateNode): Promise<T | null> }).findOneWhere(addRequiredPredicate(filter, required)!)
-        return permittedRecord(row, required) ? row : null
-      },
-    } : {}),
+    ...(typeof (repository as { findOneWhere?: unknown }).findOneWhere === "function" ? { findOneWhere } : {}),
     findMany: async (options?: QueryOptions) => {
       const filter = addRequiredPredicate(options?.filter, required)
       const constrainedOptions: QueryOptions | undefined = filter === undefined
