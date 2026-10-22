@@ -1,8 +1,8 @@
-import { readdir, readFile, stat } from "node:fs/promises"
+import { access, readdir, readFile, stat } from "node:fs/promises"
 import { extname, join, relative, resolve } from "node:path"
 
 const root = process.cwd()
-const roots = ["packages", "scripts/verification", "docs", "artifacts", "release", "spec"]
+const roots = ["packages", "scripts/verification", "docs", "artifacts"]
 const rootFiles = [".gitignore", "CHANGELOG.md", "eslint.config.mjs", "README.md", "package.json", "package-lock.json", "tsconfig.base.json"]
 const ignoredSegments = new Set(["node_modules", ".npm-cache"])
 
@@ -47,7 +47,8 @@ function semanticOwner(path) {
 }
 
 const absolute = []
-for (const path of roots) absolute.push(...await walk(resolve(path)))
+// Optional roots (e.g. artifacts/) may be absent in a fresh checkout.
+for (const path of roots) if (await access(resolve(path)).then(() => true, () => false)) absolute.push(...await walk(resolve(path)))
 for (const path of rootFiles) absolute.push(resolve(path))
 const unique = [...new Set(absolute)].sort()
 const rows = []

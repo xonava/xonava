@@ -19,18 +19,20 @@ Status: **experimental**. `0.1.0` is published on npm. Target for `1.0.0`: core 
 | --- | --- | --- |
 | 0: quick fixes | Done (6 of 6) | |
 | 1: pilot feedback and missing adapters | Done (9 of 9, plus 3 follow-ups) | All eight requests from the TanStack Start / Cloudflare pilot |
-| 2: proof | In progress (8 of 13, plus 6 follow-ups) | Remaining: A8, Q2, Q4, Q5, Q6, and the wave close below; CI (Q1) deferred |
+| 2: proof | In progress | Done: A2–A8, F9, B1–B7, Q4, Q6, Q5 setup, Q2 core, DF1 baseline. Remaining: Q5 per module, Q2 adapters and testing, B8; CI (Q1) deferred |
 | 3: hardening and decisions | Not started (0 of 4) | |
 
 Real-database differential suites now cover jobs, schedules, workflows, idempotency, inbox/outbox
-delivery, leases, sequences, temporal history and job progress on PostgreSQL, MySQL and D1. Writing
-them found and fixed 16 store and adapter defects; each fix shipped with its regression test and a
+delivery, leases, sequences, temporal history, job progress and cache tag generations on PostgreSQL,
+MySQL and D1, and HTTP fuzz suites cover the CRUD and write handlers through Express, Fastify and Hono.
+Writing them found and fixed 20 store and adapter defects; each fix shipped with its regression test and a
 changeset. `dev` carries the pending changesets for `0.2.0`, including two required migrations
 (`0005_job_scope_key`, `0006_byte_exact_identifiers` on MySQL).
 
 **Merge rule learnt in wave 2:** before merging any change to adapter or store code, Opus runs the
 complete PostgreSQL, MySQL and D1 integration suites on the branch merged with `dev`, not only the
 files the subagent touched. Subagents share one database server, so they run only their own files.
+Run D1 gates with no other agent loading the machine (see B8).
 
 ## How to run this plan
 
@@ -77,12 +79,12 @@ the release gate and the named scripts. Each gate is created by the WP named aft
 
 | Gate | Target | Created by |
 | --- | --- | --- |
-| Unit coverage, core | lines 96, branches 90 (today 94 / 86) | Q2 |
+| Unit coverage, core | lines 96, branches 90 (met: 96.28 / 90.54, enforced) | Q2 |
 | Unit coverage, adapters | lines 90, branches 82 (today 76 / 61) | Q2 |
-| Mutation score | core ≥ 80 %, adapters `http/` and `drizzle-shared/` ≥ 70 % | Q5 |
-| Real-database differential suites | every durable store on PostgreSQL, MySQL and D1 (all but cache tag generations done) | A8 |
-| HTTP fuzzing | property suites over all CRUD and write handlers in DF1 | Q4 |
-| Performance | hot-path benchmarks within 25 % of the recorded baseline | Q6 |
+| Mutation score | core ≥ 80 %, adapters `http/` and `drizzle-shared/` ≥ 70 % (today 61–83 %, see Q5) | Q5 |
+| Real-database differential suites | every durable store on PostgreSQL, MySQL and D1 (met) | A2–A8 |
+| HTTP fuzzing | property suites over all CRUD and write handlers in DF1 (met) | Q4 |
+| Performance | hot-path benchmarks within 25 % of the recorded baseline (met: `npm run bench`) | Q6 |
 | Upgrade compatibility | N-1 suite against the previous published release | C3 |
 | Soak | 30-minute crash/lease soak with no invariant violation | C4 |
 | Threat model | reviewed `docs/spec/security.md` threat model | C5 |
@@ -102,96 +104,55 @@ name with no alias, with at least 50 base runs (`DF1_MIN_BASE_RUNS`). Opus regen
 `scripts/verification/differentialBaseline.json` with `npm run verify:framework:df1 -- --update-baseline`
 when the wave closes.
 
-### A8 Cache tag-generation differential
+### Q5 Mutation testing, per module
 
-- [ ] Sonnet. Branch `test/tag-generation-differential`. Area `tagGeneration`.
-- **Model:** advance and read tag generations through `dbTagGenerationStore.ts` and
-  `mysqlTagGenerationStore.ts` under concurrent invalidation. Include the KV adapter's dual-layout
-  reads (`kvCacheAdapter.ts:276-319`) against a fake KV namespace.
+- [ ] Haiku per module. Branch `test/mutation-<module>`. The setup is on `dev`: `npm run test:mutation -w
+  <pkg> -- --mutate "<glob>"`, with `XONAVA_MUTATION_BREAK=0` to measure without failing. Mutation runs
+  in place, so never run two in one checkout or edit `src/` meanwhile (see CONTRIBUTING).
+- **Baseline** (only `query` ran in full; the rest are samples of files):
 
-### Q4 HTTP fuzzing
+  | Module | Scope | Score |
+  | --- | --- | --- |
+  | core `query` | full | 74.3 % |
+  | core `domain` | 3 of 31 files | 62.6 % |
+  | core `operation` | 4 of 19 | 60.9 % |
+  | core `execution` | `dispatcher.ts` only | 65.4 % |
+  | core `workflow` | 3 of 10 | 82.9 % |
+  | core `events` | 10 of 15 | 75.7 % |
+  | core `entity` | 5 of 12 | 67.5 % |
+  | adapters `http` | 3 of 22 | 73.6 % |
+  | adapters `drizzle-shared` | 5 of 14 | 68.0 % |
 
-- [ ] Sonnet. Branch `test/http-fuzzing`.
-- **Steps:** property suites in `packages/adapters/src/http/__tests__/fuzz/` using `forAllAsync`, over
-  the CRUD and write handlers built with `httpCrudFixture.ts`. Generate hostile:
-  - bodies: wrong types, huge strings, deep nesting, prototype keys such as `__proto__`, invalid UTF-8;
-  - headers: duplicate and oversize values, bad `If-Match` and `Idempotency-Key`;
-  - query strings: repeated parameters, malformed filters, forged and truncated cursors;
-  - scope inputs.
-
-  Invariants:
-  - no 500 except for injected faults;
-  - no response contains internal error text or stack frames;
-  - every 4xx code is in the documented set;
-  - no write occurs without a 2xx;
-  - all three framework adapters (Express, Fastify, Hono) return the same status and code for the same
-    input.
-
-  Register the suite directory as a DF1 core suite in `scripts/verification/differentialCertification.mjs`,
-  because DF1 refuses `forAll` call sites outside its suites.
-- **Acceptance:** suites pass at DF1 release volume (`FRAMEWORK_DIFFERENTIAL_SCALE=5`). Every defect
-  found is fixed in the same pull request with a regression test.
-
-### Q5 Mutation testing
-
-- [ ] Sonnet for setup, then Haiku per module. Branch `test/mutation-setup`, then
-  `test/mutation-<module>`.
-- **Setup:** add `@stryker-mutator/core` and `@stryker-mutator/vitest-runner` as root dev dependencies,
-  with one config per package that mutates `src/**/*.ts` minus tests. Add `npm run test:mutation -w <pkg>
-  -- --mutate <glob>` so a module can run alone. Record the baseline score per module in the pull request.
 - **Per module** (`domain`, `query`, `operation`, `execution`, `workflow`, `events`, `entity`, then
-  adapters `http` and `drizzle-shared`): for each surviving mutant, add a test that kills it, or mark it
-  equivalent with a one-line reason in `stryker-equivalent.md` next to the config. Stop when the module
-  meets the gate.
-- **Acceptance:** gate thresholds in the quality table, enforced by `npm run test:mutation` with a
-  failing exit code below threshold.
+  adapters `http` and `drizzle-shared`): measure the whole module first, then for each surviving mutant
+  add a test that kills it, or mark it equivalent with a one-line reason in `stryker-equivalent.md` next
+  to the config. Stop when the module meets the gate.
+- `events/durability/auditRedaction.ts` cannot be mutated yet: its 60 000-string and 200 kB linear-time
+  tests time out under instrumentation. Give those tests a lighter variant under mutation first.
+- **Acceptance:** `npm run test:mutation` exits 0 for core (≥ 80 %) and adapters (≥ 70 %).
 
-### Q6 Performance baselines
+### Q2 Raise coverage floors, adapters and testing
 
-- [ ] Sonnet. Branch `perf/baselines`.
-- **Steps:** add vitest `bench` files:
-  - `packages/core/src/__tests__/bench/` for predicate evaluation (`evaluatePredicate.ts`), ABAC record
-    decisions (`abacDecision.ts`), read-scope compilation (`abacReadScope.ts`) and query budget
-    compilation (`queryBudget.ts`);
-  - `packages/adapters/src/__tests__/bench/` for SQL predicate compilation (`drizzle-shared/predicateCompiler.ts`,
-    every dialect) and cursor predicates;
-  - a D1-backed job claim benchmark in `packages/testing`.
-
-  Add `npm run bench` and `scripts/verification/verifyBenchmarks.mjs`, which compares results with a
-  committed `benchmarks/baseline.json` and fails on a regression above 25 %.
-- **Acceptance:** the baseline is recorded in the pull request; the verifier fails when a benchmark is
-  artificially slowed (check by hand, then revert).
-
-### Q2 Raise coverage floors
-
-- [ ] Haiku per package. Branch `test/coverage-<package>`.
+- [ ] Sonnet for adapters (lines 76 → 90, branches 61 → 82), Haiku for testing. Branch
+  `test/coverage-<package>`. Core is done.
 - **Steps:** list uncovered branches with `npm run test:coverage -w <pkg>`. Write targeted tests module
   by module until the gate is met, then raise the thresholds in the config. No test may assert only that
-  code runs; each asserts an outcome.
+  code runs; each asserts an outcome. Core's lines margin is thin (96.28 against 96): `outbox.ts` and
+  `authority.ts` are the weakest files if headroom is needed.
 
-### W2-close Close wave 2
+### B8 Follow-ups found while closing wave 2
 
-- [ ] Opus. When A8 is merged: regenerate `scripts/verification/differentialBaseline.json` with
-  `npm run verify:framework:df1 -- --update-baseline` against PostgreSQL and MySQL, review the diff, run
-  the full release gate locally (`npm run verify:framework-release`), and update this file.
-
-### B7 Follow-ups found in wave 2
-
-Small items found by the wave 2 suites and reviews. Each is one Haiku or Sonnet package.
-
-- [ ] Haiku. `FencedLeaseStore.acquire` and `renew` (`packages/adapters/src/drizzle-shared/fencedLeaseStore.ts`)
-  throw synchronously on an invalid owner or duration; make them reject asynchronously like every other
-  store method, and tighten the lease differential to expect a rejected promise.
-- [ ] Haiku. `validateJobProgress` rejects an out-of-range integer in a checkpoint with a canonical-JSON
-  error instead of `ConfigurationError`; map it, and add `-0` percent and a `\u0000` checkpoint string
-  (PostgreSQL `jsonb`) to the job-progress differential.
-- [ ] Haiku. Document in known limitations that concurrent first allocations of one MySQL sequence key
-  can deadlock (InnoDB 1213) when a holder rolls back, so callers must retry the transaction; committed
-  numbers stay gapless.
-- [ ] Sonnet, **design gate**. Custom `projectCommittedResult` hooks receive a fresh-connection
-  persistence, so on PostgreSQL and MySQL they cannot see the row the operation just wrote (built-in
-  CRUD was fixed in B6). Decide whether hooks get the transaction-bound persistence or the limitation is
-  documented.
+- [ ] Sonnet. **D1 suites under load.** With the machine at load average 6 or more, the full D1 suite
+  fails intermittently inside Miniflare 3.20250718.3: its synchronous proxy asserts `message?.id === id`
+  (`miniflare/dist/src/index.js`, `receiveMessageOnPort` after `Atomics.wait`), the fixture breaks, and
+  every remaining property in that file fails. Each failing file passes alone, and the full suite passes
+  on a quiet machine. Separately, `race.integration.test.ts` opens two Miniflare instances on one SQLite
+  file and can get `SQLITE_BUSY`. Find which calls go through the synchronous proxy and avoid them, or
+  upgrade Miniflare; then show three full D1 runs passing under load (for example alongside `npm test`).
+- [ ] Sonnet. **PostgreSQL `transactionOutcome` "re-run the rolled-back transaction".** Failed once in a
+  full run (`attempts` expected 3), passed 3 of 3 alone. Two serializable write-skew transactions share
+  one `attempts` counter; find whether PostgreSQL can abort both and make the assertion exact for every
+  legal outcome.
 - [ ] Opus, input to C5. For platform-scope routes, module entitlements (`enabledModuleKeys`, actions,
   capabilities) are not consulted; ABAC is the only authorization input. Confirm in the threat model.
 
