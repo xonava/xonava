@@ -20,7 +20,7 @@ Status: **experimental**. `0.1.0` is published on npm. Target for `1.0.0`: core 
 | 0: quick fixes | Done (6 of 6) | |
 | 1: pilot feedback and missing adapters | Done (9 of 9, plus 3 follow-ups) | All eight requests from the TanStack Start / Cloudflare pilot |
 | 2: proof | In progress | Done: A2–A8, F9, B1–B7, Q4, Q6, Q5 setup, Q2 core, DF1 baseline. Remaining: Q5 per module, Q2 adapters and testing, B8; CI (Q1) deferred |
-| 3: hardening and decisions | Not started (0 of 4) | |
+| 3: hardening and decisions | In progress | Done: C5 threat model. In flight: C3, C4. Remaining: C6, C7 (threat-model test gaps) |
 
 Real-database differential suites now cover jobs, schedules, workflows, idempotency, inbox/outbox
 delivery, leases, sequences, temporal history, job progress and cache tag generations on PostgreSQL,
@@ -87,7 +87,7 @@ the release gate and the named scripts. Each gate is created by the WP named aft
 | Performance | hot-path benchmarks within 25 % of the recorded baseline (met: `npm run bench`) | Q6 |
 | Upgrade compatibility | N-1 suite against the previous published release | C3 |
 | Soak | 30-minute crash/lease soak with no invariant violation | C4 |
-| Threat model | reviewed `docs/spec/security.md` threat model | C5 |
+| Threat model | reviewed `docs/spec/security.md` threat model (met; test gaps in C7) | C5 |
 
 ## Wave 2: proof (Sonnet, parallel)
 
@@ -189,21 +189,6 @@ when the wave closes.
 
   Write evidence like the crash suites.
 - **Acceptance:** a 30-minute run passes.
-
-### C5 Threat model
-
-- [ ] Opus drafts, Sonnet completes. Branch `docs/threat-model`.
-- **Steps:** add a "Threat model" section to `docs/spec/security.md`:
-  - assets: tenant data, policy bundles, idempotency receipts, audit and outbox;
-  - adversaries: an unauthenticated client, an authenticated user of another tenant, a malicious
-    tenant administrator, a compromised worker, and an operator with database access;
-  - entry points: HTTP scope resolution, cursors, idempotency keys, policy authoring, job payloads and
-    object keys.
-
-  Map each threat to the requirement that addresses it and the test that proves it, and list residual
-  risks. Known inputs: write handlers parse the request body (bounded at 1 MiB by default) before CSRF,
-  session and authorization checks (`docs/typescript/http-adapters.md`, method and body matrix). Every threat without a test becomes a new WP here.
-- **Acceptance:** reviewed by Opus.
 
 ### C6 Decisions on items not implemented
 
