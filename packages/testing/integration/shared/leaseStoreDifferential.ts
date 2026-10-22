@@ -201,8 +201,12 @@ export function defineLeaseRegressions(driver: LeaseDriver): void {
 
   it(`invalid owners and durations are rejected before any state changes (${driver.label})`, async () => {
     await driver.reset()
-    // The port may reject or throw synchronously; either way the call must fail.
-    const fails = async (call: () => Promise<unknown>): Promise<void> => { await expect((async () => call())()).rejects.toThrow() }
+    // Every store method must fail by rejecting its promise, never by throwing synchronously.
+    const fails = async (call: () => Promise<unknown>): Promise<void> => {
+      let pending: Promise<unknown> | undefined
+      expect(() => { pending = call() }, "fails asynchronously, not synchronously").not.toThrow()
+      await expect(pending, "returns a rejected promise").rejects.toThrow()
+    }
     await fails(() => store().acquire(resource, "", MINUTE))
     for (const duration of [0, -1, DAY + 1, Number.NaN]) await fails(() => store().acquire(resource, "w1", duration))
     const lease = (await store().acquire(resource, "w1", MINUTE))!
