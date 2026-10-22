@@ -56,7 +56,13 @@ function entityOf(formats: Record<string, FieldFormat | undefined>): { fields: R
   return { fields }
 }
 
-/** Fields an allow policy's query grant re-opens for `mode`: never one a deny's read map hides. */
+/** True only for the unconditional predicate (`and` with no filters), the one condition that holds for every row. */
+function isUnconditional(policy: NormalizedAbacPolicy): boolean {
+  const condition = policy.compiledConditions
+  return condition.kind === "and" && condition.filters.length === 0
+}
+
+/** Fields an allow policy's query grant re-opens for `mode`: never one a deny's read map hides, and only from an unconditional policy. */
 function grantedQueryFields(policies: readonly NormalizedAbacPolicy[], mode: "filter" | "search" | "sort"): Set<string> {
   // A deny read map naming "*" omits every field by default, so it hard-denies them all.
   const hardDenied = new Set(policies.filter((policy) => policy.moduleKey === ABAC_MODULE && policy.effect === "deny").flatMap((policy) => {
@@ -65,7 +71,7 @@ function grantedQueryFields(policies: readonly NormalizedAbacPolicy[], mode: "fi
   }))
   const granted = new Set<string>()
   for (const policy of policies) {
-    if (policy.moduleKey !== ABAC_MODULE || policy.effect !== "allow") continue
+    if (policy.moduleKey !== ABAC_MODULE || policy.effect !== "allow" || !isUnconditional(policy)) continue
     for (const field of policy.payload.fieldAccess?.query?.[mode] ?? []) if (!hardDenied.has(field)) granted.add(field)
   }
   return granted
@@ -113,6 +119,32 @@ describe("ABAC differential: read plan ⇒ query denials ⇒ projection", () => 
       }, { runs: 300, ...POLICY_CASE_OPTIONS, shrink: shrinkPolicyCase<FieldCase> })
     })
   }
+
+  it("a query grant never lifts a denial the record decision would keep for some row", async () => {
+    // Grants are static (a query is not evaluated per row), so only an
+    // unconditional allow may lift a denial. A conditional allow's grant, or a
+    // grant naming a field a row's plan hides, must leave the field denied.
+    await forAllAsync("abac query grant vs record decision", generateFieldCase({ fieldAccessRate: 0.9, unconditionalRate: 0.3, min: 2, max: 7 }), async ({ policies, rows }) => {
+      const bundle = await bindPolicies(policies)
+      const denials = queryDenials(bundle)
+      const unconditionallyGranted = (mode: "filter" | "search" | "sort") => {
+        const fields = new Set<string>()
+        for (const policy of bundle.policies) {
+          if (policy.effect !== "allow" || !isUnconditional(policy)) continue
+          for (const field of policy.payload.fieldAccess?.query?.[mode] ?? []) fields.add(field)
+        }
+        return fields
+      }
+      for (const mode of ["filter", "search", "sort"] as const) {
+        const grantedByUnconditional = unconditionallyGranted(mode)
+        for (const field of FIELD_KEYS) {
+          const hiddenForSomeRow = rows.some((row) => effectiveReadMode(readPlan(bundle, row), field) !== "allow")
+          if (!hiddenForSomeRow || denials[mode].includes(field)) continue
+          expect(grantedByUnconditional.has(field), `${mode}: ${field} hidden for a row yet not denied without an unconditional grant`).toBe(true)
+        }
+      }
+    }, { runs: 300, ...POLICY_CASE_OPTIONS, shrink: shrinkPolicyCase<FieldCase> })
+  })
 
   it("a deny's read map hides its fields on every row it may match and is never re-opened by a grant", async () => {
     await forAllAsync("abac deny read map", generateFieldCase({ fieldAccessRate: 1, wildcardRate: 0 }), async ({ policies, rows }) => {
