@@ -164,16 +164,6 @@ when the wave closes.
   condition; an ABAC differential property that a query grant never lifts a denial the record decision would keep for
   some row; an HTTP test (`list` with a filter on the masked field) that now answers 403.
 
-### C9 Reference production DDL
-
-- [ ] Sonnet. Branch `feat/reference-migrations`. Decided in C6.
-- **Steps:** publish the fixture migrations of each database as `packages/adapters/migrations/<postgres|mysql|d1>/`,
-  included in the package `files`. Add a verification script (wired into `verify:framework:fixtures`) that fails when
-  the published copies differ from `packages/testing/fixtures/<database>/migrations`. Document them in the adapters
-  README and the migrations table in `docs/KNOWN-LIMITATIONS.md`, including that the fixture table names are defaults
-  the store factories let you change.
-- **Acceptance:** `npm pack -w @xonava/adapters --dry-run` lists the migrations; the check fails on a one-byte change.
-
 ### C7 Threat-model test gaps
 
 - [ ] Sonnet. Branch `test/threat-model-gaps`. Source: the threat table in
