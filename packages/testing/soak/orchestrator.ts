@@ -257,7 +257,9 @@ async function execute(adapter: SoakAdapter, config: SoakConfig, rng: SoakRng, l
     if (found.length > 20) violations.push(`${name}: ... and ${found.length - 20} more`)
   }
   check("drained", 1, notDrained)
-  const report = await verify(connection, { scheduleIds, firstRun, cutoff, jobScripts, workflowIds, cancelled, check })
+  const empty: Awaited<ReturnType<typeof verify>> = { jobs: { total: 0, byStatus: {}, byScript: {}, handlerRuns: 0, handlerRunsByOutcome: {}, killedMidRun: 0, terminalHistoryRows: 0 }, schedules: { occurrences: 0, perSchedule: {} }, workflows: { byStatus: {}, signalsConsumed: 0, signalResumes: 0 } }
+  // A failure of the verification itself is reported (and recorded as evidence) instead of losing the whole run.
+  const report = await verify(connection, { scheduleIds, firstRun, cutoff, jobScripts, workflowIds, cancelled, check }).catch((error: unknown) => { violations.push(`verification failed to run: ${String((error as Error)?.message ?? error)}`); return empty })
   const finishedAt = Date.now()
   const failed = violations.length > 0
   return {
@@ -353,7 +355,9 @@ async function verify(connection: SoakConnection, input: VerifyInput) {
   const workflowByStatus: Record<string, number> = {}
   for (const instance of instances) workflowByStatus[instance.status] = (workflowByStatus[instance.status] ?? 0) + 1
   check("every workflow reaches a terminal status", input.workflowIds.length, input.workflowIds.filter((id) => !instances.some((instance) => instance.id === id && WORKFLOW_TERMINAL.has(instance.status))).map((id) => `workflow ${id} is not terminal`))
-  const receipts = input.workflowIds.length === 0 ? [] : await connection.receipts(input.workflowIds)
+  // D1 allows 100 bound variables per statement: read the receipts in chunks.
+  const receipts: Awaited<ReturnType<SoakConnection["receipts"]>> = []
+  for (let from = 0; from < input.workflowIds.length; from += 50) receipts.push(...await connection.receipts(input.workflowIds.slice(from, from + 50)))
   const consumed = new Set(receipts.filter((receipt) => receipt.consumed).map((receipt) => receipt.id))
   const uses = await sql.all(`SELECT signal_id, COUNT(*) AS n FROM ${sql.table("soak_signal_uses")} GROUP BY signal_id`)
   const useCount = new Map(uses.map((row) => [String(row.signal_id), count(row.n)]))
