@@ -53,7 +53,7 @@ for (const [database, file, constant] of migrationLists) {
   if (!listed || JSON.stringify(listed) !== JSON.stringify(onDisk)) throw new Error(`${constant} (${JSON.stringify(listed)}) does not match the ${database} migration files (${JSON.stringify(onDisk)})`)
 }
 const rootPackage = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8"))
-const commands = ["test:framework:integration:pg", "test:framework:integration:d1", "test:framework:integration:mysql", "test:framework:conformance:pg", "test:framework:conformance:d1", "test:framework:conformance:mysql", "test:framework:race:pg", "test:framework:race:d1", "test:framework:race:mysql", "test:framework:crash:pg", "test:framework:crash:d1", "test:framework:crash:mysql"]
+const commands = ["test:framework:integration:pg", "test:framework:integration:d1", "test:framework:integration:mysql", "test:framework:upgrade:pg", "test:framework:upgrade:d1", "test:framework:upgrade:mysql", "test:framework:conformance:pg", "test:framework:conformance:d1", "test:framework:conformance:mysql", "test:framework:race:pg", "test:framework:race:d1", "test:framework:race:mysql", "test:framework:crash:pg", "test:framework:crash:d1", "test:framework:crash:mysql"]
 for (const command of commands) {
   const script = rootPackage.scripts?.[command]
   if (typeof script !== "string" || !script.includes("testing")) throw new Error(`missing independent framework command: ${command}`)
