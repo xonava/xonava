@@ -24,10 +24,10 @@ export default defineConfig({
       thresholds: {
         // Enforced ratchet floors for the complete core, including defensive
         // error branches. Raise these only alongside tests; never lower them.
-        lines: 94,
+        lines: 96,
         statements: 90,
         functions: 96,
-        branches: 86,
+        branches: 90,
       },
     },
   },
