@@ -42,6 +42,11 @@ describe("job progress properties", () => {
     expect(() => validateJobProgress({ checkpoint: { safe: 2 ** 53 - 1, text: "\u0001" } })).not.toThrow()
   })
 
+  it("still decodes a stored checkpoint containing U+0000, which only writes refuse", () => {
+    expect(decodeStoredJobCheckpoint(JSON.stringify({ nul: "a\u0000b", ["k\u0000"]: 1 }))).toEqual({ nul: "a\u0000b", ["k\u0000"]: 1 })
+    expect(decodeStoredJobCheckpoint({ deep: ["\u0000"] })).toEqual({ deep: ["\u0000"] })
+  })
+
   it("decodes a stored checkpoint only when it is a JSON object within the byte bound", () => {
     const objects: Array<Record<string, unknown>> = [{}, { a: 1 }, { nested: { list: [1, 2, { b: null }] } }, { "é": "\u{1F600}" }]
     forAll("job progress: stored checkpoint decoding", (rng) => {

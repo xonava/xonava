@@ -9,9 +9,13 @@ export interface JobProgressPort { read(jobId: string): Promise<JobProgress | nu
 export function validateJobProgress(progress: { percent?: number; checkpoint?: Record<string, unknown> }): void {
   if (progress.percent !== undefined && (!Number.isFinite(progress.percent) || progress.percent < 0 || progress.percent > 100)) throw new ConfigurationError("Job progress percent must be between 0 and 100")
   if (progress.checkpoint === undefined) return
-  const bytes = new TextEncoder().encode(canonicalCheckpointJson(progress.checkpoint)).byteLength
-  if (bytes > MAX_JOB_CHECKPOINT_BYTES) throw new ConfigurationError(`Job checkpoint exceeds ${MAX_JOB_CHECKPOINT_BYTES} bytes`)
+  assertCheckpointWithinBounds(progress.checkpoint)
   if (containsNul(progress.checkpoint)) throw new ConfigurationError("Job checkpoint must not contain U+0000 (PostgreSQL jsonb cannot store it)")
+}
+
+function assertCheckpointWithinBounds(checkpoint: Record<string, unknown>): void {
+  const bytes = new TextEncoder().encode(canonicalCheckpointJson(checkpoint)).byteLength
+  if (bytes > MAX_JOB_CHECKPOINT_BYTES) throw new ConfigurationError(`Job checkpoint exceeds ${MAX_JOB_CHECKPOINT_BYTES} bytes`)
 }
 
 /** Canonical JSON rejects values the bound cannot represent (e.g. integers beyond the safe range); report them as configuration errors. */
@@ -46,7 +50,9 @@ export function decodeStoredJobCheckpoint(raw: unknown): Record<string, unknown>
   if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) {
     throw new ConfigurationError("Stored job checkpoint must be a JSON object")
   }
-  validateJobProgress({ checkpoint: decoded as Record<string, unknown> })
+  // U+0000 is refused on write only: checkpoints MySQL or D1 stored before
+  // that rule still decode, so their jobs can resume.
+  assertCheckpointWithinBounds(decoded as Record<string, unknown>)
   return decoded as Record<string, unknown>
 }
 export function assertJobProgressFence(current: JobProgressFence, supplied: JobProgressFence): void { if (current.jobId !== supplied.jobId || current.workerId !== supplied.workerId || current.claimToken !== supplied.claimToken || current.attempt !== supplied.attempt) throw new StaleClaimError("Job progress ownership was lost") }

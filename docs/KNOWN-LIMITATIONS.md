@@ -209,7 +209,8 @@ These differences are intentional. The differential suites accept exactly these 
   failure count.
 - **Job checkpoints and U+0000.** A job checkpoint whose strings or keys contain U+0000 is refused with a
   `ConfigurationError` on every database, because PostgreSQL `jsonb` cannot store it. Unlike failure text, a
-  checkpoint is not replaced, so the resumed state is never silently altered.
+  checkpoint is not replaced, so the resumed state is never silently altered. Checkpoints MySQL or D1 stored
+  before this rule still read back, so their jobs resume; only new writes are refused.
 - **Unknown job definitions** are held for at most `unknownDefinitionMaxDeferralMs` (24 hours by default)
   from their first deferral, then dead-lettered.
 
