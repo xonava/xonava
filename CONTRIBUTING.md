@@ -22,7 +22,10 @@ npm install
 | `npm run lint` | Lints every workspace with zero warnings allowed |
 | `npm test` | Runs the unit suites of every workspace. It needs no database. |
 | `npm run test:coverage -w @xonava/core` | Runs core unit tests with coverage thresholds |
+| `npm run test:mutation` | Stryker mutation testing of core and adapters. Enforcing: exits non-zero below the gate (core 80 %, adapters 70 %). Expected to fail until the per-module mutation work lands, so it is not part of `npm test` or any verify script |
 | `npm run verify:docs` | Checks documentation links, public import paths, and canonical references |
+
+Mutation testing runs one package at a time (`npm run test:mutation -w @xonava/core`) and mutates in place, so do not run two mutation runs, or edit `src/`, in the same checkout at the same time. To measure one module without enforcing the gate, run `XONAVA_MUTATION_BREAK=0 npm run test:mutation -w @xonava/core -- --mutate "src/query/**/*.ts,!src/**/__tests__/**"`. Results are cached in the gitignored `.stryker-tmp/incremental.json` and the JSON report is `.stryker-tmp/reports/mutation.json`. If a run is killed, `git checkout -- src` removes any leftover mutation.
 
 Tests that depend on elapsed time scale their budgets and vitest timeouts by `XONAVA_TIMING_SCALE` (default 1, 4 under `--coverage`), so run tests on a loaded machine with `XONAVA_TIMING_SCALE=4`.
 

@@ -43,6 +43,7 @@
     "lint": "eslint src --max-warnings=0",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:mutation": "stryker run",
     "prepack": "npm run build"
   },
   "exports": {
