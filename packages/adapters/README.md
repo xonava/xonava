@@ -129,12 +129,12 @@ Only the paths in the package `exports` map are public. Do not deep-import `src`
 
 ## Reference migrations
 
-The package ships the reference DDL for each database under `node_modules/@xonava/adapters/migrations/<postgres|mysql|d1>/`. The files are numbered; apply them in order. They are byte-identical copies of the migrations the `@xonava/testing` suites run against (a repository check fails when they differ).
+The package ships the reference DDL for each database under `node_modules/@xonava/adapters/migrations/<postgres|mysql|d1>/`. The files are numbered; apply them in order. They are copies of the migrations the `@xonava/testing` suites run against, byte-identical except MySQL `0001`, which omits the fixture's table resets (a repository check fails on any other difference and refuses `DROP TABLE` or `TRUNCATE` in a published file).
 
 | Database | Files | Re-running |
 | --- | --- | --- |
 | PostgreSQL | `0001` to `0005` | Every file is idempotent and safe to re-run. `0002` holds a lock on `workflow_signals` while it backfills. |
-| MySQL | `0001` to `0006` | `0001` is **not** safe to re-run on a database with data: it drops and recreates `audit`, `outbox`, `idempotency`, `jobs`, `job_executions`, `job_progress` and `schedules`. `0002`, `0004`, `0005` and the `scope_hash` statements of `0006` add columns or keys that MySQL cannot guard, so apply them once. `0003` and the `MODIFY` statements of `0006` are safe to re-apply. |
+| MySQL | `0001` to `0006` | `0001` is safe to re-run: the published copy omits the fixture's `DROP TABLE IF EXISTS` resets and creates every table with `IF NOT EXISTS` (the fixture copy keeps the drops so tests start clean). `0002`, `0004`, `0005` and the `scope_hash` statements of `0006` add columns or keys that MySQL cannot guard, so apply them once. `0003` and the `MODIFY` statements of `0006` are safe to re-apply. |
 | D1 | `0001` to `0005` | `0001`, `0003` and `0004` use `IF NOT EXISTS` and are safe to re-run. `0002` and `0005` add columns, which SQLite cannot guard, so apply them once. |
 
 The `@xonava/testing` fixtures guard the statements that cannot be re-run: the MySQL fixture applies `0002` only while `workflow_signals.seq` is missing, `0004` only while `jobs_partition_head_idx` is missing, `0005` only while `jobs.scope_key` is missing, and the `scope_hash` statements of `0006` only while that column is missing. The D1 fixture treats a `duplicate column name` error on a file's first statement as already applied. A production migration tool must do the same (or record applied files) because the files themselves do not guard those statements.
