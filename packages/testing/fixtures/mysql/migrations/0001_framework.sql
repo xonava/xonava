@@ -13,7 +13,7 @@ DROP TABLE IF EXISTS audit;
 CREATE TABLE audit (id VARCHAR(100) PRIMARY KEY, created_at DATETIME(3) NOT NULL, tenant_id VARCHAR(100) NULL, action VARCHAR(100) NOT NULL, resource_type VARCHAR(100) NOT NULL, resource_id VARCHAR(100) NOT NULL, actor_id VARCHAR(100) NOT NULL, actor_type VARCHAR(50) NOT NULL, old_value JSON NULL, new_value JSON NULL, metadata JSON NULL) ENGINE=InnoDB;
 DROP TABLE IF EXISTS outbox;
 CREATE TABLE outbox (id VARCHAR(100) PRIMARY KEY, tenant_id VARCHAR(100) NULL, idempotency_scope VARCHAR(255) NOT NULL, idempotency_key VARCHAR(255) NOT NULL, event_fingerprint VARCHAR(128) NOT NULL, event_type VARCHAR(100) NOT NULL, event_version INT NOT NULL, aggregate_type VARCHAR(100) NOT NULL, aggregate_id VARCHAR(100) NOT NULL, payload JSON NOT NULL, occurred_at DATETIME(3) NOT NULL, UNIQUE KEY outbox_scope_key_uq(idempotency_scope,idempotency_key)) ENGINE=InnoDB;
-CREATE TABLE IF NOT EXISTS cache_generations (scope VARCHAR(100) PRIMARY KEY, generation BIGINT NOT NULL) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS cache_generations (scope VARCHAR(256) PRIMARY KEY, generation BIGINT NOT NULL) ENGINE=InnoDB;
 DROP TABLE IF EXISTS idempotency;
 CREATE TABLE idempotency (
   id VARCHAR(100) NOT NULL, `scope` VARCHAR(255) NOT NULL, `key` VARCHAR(255) NOT NULL,
