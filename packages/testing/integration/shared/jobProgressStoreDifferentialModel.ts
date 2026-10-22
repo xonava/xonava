@@ -46,9 +46,19 @@ export function canonical(value: unknown): string {
 
 const utf8 = (text: string): number => new TextEncoder().encode(text).byteLength
 
+/** A string or key containing U+0000, or an integer outside the safe range (canonical JSON refuses it). */
+function unrepresentable(value: unknown): boolean {
+  if (typeof value === "string") return value.includes("\u0000")
+  if (typeof value === "number") return Number.isInteger(value) && !Number.isSafeInteger(value)
+  if (Array.isArray(value)) return value.some(unrepresentable)
+  if (value !== null && typeof value === "object") return Object.entries(value).some(([key, nested]) => key.includes("\u0000") || unrepresentable(nested))
+  return false
+}
+
 export function invalidProgress(progress: ProgressSpec): boolean {
   if (progress.percent !== undefined && !(Number.isFinite(progress.percent) && progress.percent >= 0 && progress.percent <= 100)) return true
-  return progress.checkpoint !== undefined && utf8(canonical(progress.checkpoint)) > CHECKPOINT_LIMIT
+  if (progress.checkpoint === undefined) return false
+  return utf8(canonical(progress.checkpoint)) > CHECKPOINT_LIMIT || unrepresentable(progress.checkpoint)
 }
 
 export class RefJobProgress {
@@ -73,7 +83,8 @@ export class RefJobProgress {
     if (existing === undefined ? op.expected !== 0 : existing.sequence !== op.expected) return { error: "ConflictError" }
     const row: ProgressRow = {
       attempt: job.attempt, sequence: op.expected + 1,
-      ...(op.progress.percent === undefined ? {} : { percent: op.progress.percent }),
+      // -0 is stored as 0, as every store (and canonical JSON) does; `+ 0` maps negative zero to positive zero.
+      ...(op.progress.percent === undefined ? {} : { percent: op.progress.percent + 0 }),
       ...(op.progress.checkpoint === undefined ? {} : { checkpoint: op.progress.checkpoint }),
     }
     this.rows.set(op.job, row)
@@ -95,13 +106,18 @@ export function compareRaw(a: RawProgress, b: RawProgress): number { return a.jo
 // Generation
 
 /** Finite percents at and around the bounds, a denormal, and values a decimal round trip could disturb. */
-export const VALID_PERCENTS: readonly number[] = [0, 100, 50, 0.5, 33.3333, 99.99999999999999, 1e-7, 12.345678901234567, Number.MIN_VALUE, 1]
+export const VALID_PERCENTS: readonly number[] = [0, -0, 100, 50, 0.5, 33.3333, 99.99999999999999, 1e-7, 12.345678901234567, Number.MIN_VALUE, 1]
 export const INVALID_PERCENTS: readonly number[] = [-1, 101, 100.0000001, -0.0000001, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.MAX_VALUE]
 
 const CHECKPOINTS: ReadonlyArray<Record<string, unknown>> = [
   {}, { cursor: 4 }, { cursor: "page-2", done: false }, { nested: { list: [1, 2, { b: null }], empty: {} } }, { "é": "\u{1F600}", "€": "€" },
   { n: [0.1, -1.5e-7, 4.5e-9, 123456789.125, 2 ** 53 - 1, -3] }, { quote: "a\"b\\c\nd\te", slash: "/", html: "<&>" }, { z: 1, a: 2, m: { y: 1, b: 2 } },
   { flag: true, none: null, text: "" }, { "": "empty key", " ": "space key" },
+]
+
+/** Checkpoints the store must refuse with a ConfigurationError: U+0000 in a string or key, and integers beyond the safe range. */
+export const INVALID_CHECKPOINTS: ReadonlyArray<Record<string, unknown>> = [
+  { nul: "a\u0000b" }, { "k\u0000": 1 }, { list: ["ok", { deep: "\u0000" }] }, { big: 2 ** 53 }, { nested: { n: -(2 ** 60) } },
 ]
 
 /** A checkpoint whose canonical size is the bound plus `delta` bytes (ASCII filler). */
@@ -118,6 +134,7 @@ function generateProgress(rng: Rng): ProgressSpec {
   const c = rng.int(100)
   if (c < 3) progress.checkpoint = checkpointOfSize(rng.pick([0, 1, -1, 5]))
   else if (c < 65) progress.checkpoint = rng.pick(CHECKPOINTS)
+  else if (c < 70) progress.checkpoint = rng.pick(INVALID_CHECKPOINTS)
   return progress
 }
 

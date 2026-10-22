@@ -26,7 +26,7 @@ await app.register(fastifyCrudPlugin, {
 await app.listen({ port: 3000 })
 ```
 
-The plugin installs an encapsulated raw Buffer parser so malformed JSON, UTF-8, media types, and schema validation still reach the shared handlers. Other Fastify routes keep their existing parsers. Fastify's parser rejects oversized bodies before calling the adapter, using its native 413 response.
+The plugin installs an encapsulated raw Buffer parser so malformed JSON, UTF-8, media types, and schema validation still reach the shared handlers. Other Fastify routes keep their existing parsers. Fastify's parser rejects oversized bodies before calling the adapter; the plugin's encapsulated error handler answers that refusal with the framework's 413 `REQUEST_BODY_TOO_LARGE`, the same status and code as Express and Hono. A route registered with `createFastifyHandler` instead keeps Fastify's own error handling for that refusal.
 
 For individual handlers, use `createFastifyHandler(handler, options)`. Register raw parsing in the same encapsulated plugin as those routes:
 
@@ -241,6 +241,6 @@ npm run build
 npm test
 ```
 
-Tests cover real framework routing, compiled CRUD lifecycles, tenant isolation, authorization, OCC, idempotent replay, body validation/limits, cookies, binary streaming, host spoofing, cancellation, stream failures, and middleware/parser integration. CRUD lifecycle tests use an in-memory repository fixture; database adapter certification remains a separate suite.
+Property suites in `packages/adapters/src/http/__tests__/fuzz/` send hostile bodies, headers, query strings, cursors, path identifiers and scope inputs to the CRUD and write handlers through Express, Fastify and Hono on every `npm test`, and DF1 reruns them at release volume (`http-fuzz` suite). They assert: no 5xx except for injected faults, no internal error text or stack frame in any response, every 4xx status and code in the documented set, no state change without a 2xx, no cross-tenant access, and the same status and code from all three adapters. Tests cover real framework routing, compiled CRUD lifecycles, tenant isolation, authorization, OCC, idempotent replay, body validation/limits, cookies, binary streaming, host spoofing, cancellation, stream failures, and middleware/parser integration. CRUD lifecycle tests use an in-memory repository fixture; database adapter certification remains a separate suite.
 
 Framework references: [Fastify content-type parsers](https://fastify.dev/docs/latest/Reference/ContentTypeParser/), [Fastify replies](https://fastify.dev/docs/latest/Reference/Reply/), [Hono requests](https://hono.dev/docs/api/request), and [Express API](https://expressjs.com/en/5x/api.html).

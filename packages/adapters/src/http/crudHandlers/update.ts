@@ -187,7 +187,7 @@ export function createUpdateHandler<
           id: input.id,
           ...(committedVersion !== undefined ? { committedVersion: committedVersion as EntityVersion } : {}),
         })
-        return { record: updated, committedRead }
+        return { record: updated, committedRead, hookPersistence: operation.persistence }
       }
       throw new ConfigurationError(
         `Secure update for ${entity.name} requires updateOneWhereReturning support`
@@ -297,7 +297,7 @@ export function createUpdateHandler<
           patch: input.patch,
           originalPatch: input.originalPatch,
             result: projectedReadable,
-             context: toCrudContext(session, operation, readablePersistence),
+             context: toCrudContext(session, operation, result.hookPersistence ?? readablePersistence),
         })
         : undefined
 
