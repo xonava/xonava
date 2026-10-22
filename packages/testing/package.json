@@ -92,6 +92,9 @@
     "test:race:pg": "vitest run --config vitest.integration.config.ts integration/pg/race.integration.test.ts integration/pg/temporal.integration.test.ts integration/pg/sequence.integration.test.ts",
     "test:race:d1": "vitest run --config vitest.integration.config.ts integration/d1/race.integration.test.ts integration/d1/new-capabilities-race.integration.test.ts",
     "test:race:mysql": "vitest run --config vitest.integration.config.ts integration/mysql/race.integration.test.ts integration/mysql/job.integration.test.ts integration/mysql/schedule.integration.test.ts integration/mysql/temporal.integration.test.ts integration/mysql/sequence.integration.test.ts",
+    "test:upgrade:d1": "vitest run --config vitest.integration.config.ts integration/upgrade/d1 integration/upgrade/portable",
+    "test:upgrade:pg": "vitest run --config vitest.integration.config.ts integration/upgrade/pg",
+    "test:upgrade:mysql": "vitest run --config vitest.integration.config.ts integration/upgrade/mysql",
     "test:crash:pg": "vitest run --config vitest.integration.config.ts crash/pg.crash.test.ts",
     "test:crash:d1": "vitest run --config vitest.integration.config.ts crash/d1.crash.test.ts",
     "test:crash:mysql": "vitest run --config vitest.integration.config.ts crash/mysql.crash.test.ts",
@@ -108,7 +111,9 @@
     "miniflare": "3.20250718.3",
     "mysql2": "^3.24.4",
     "pg": "8.23.0",
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.7",
+    "xonava-adapters-prev": "npm:@xonava/adapters@0.1.0",
+    "xonava-core-prev": "npm:@xonava/core@0.1.0"
   },
   "dependencies": {
     "@xonava/core": "0.1.0"
