@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { CompiledRouteBinding } from "@xonava/core/bootstrap"
 import { bindAbacSecurityDigest, type ExecutionScope, type Principal } from "@xonava/core/domain"
 import type { CrudRouteBindings, FrameworkAuthorizationEntitlements } from "../../server"

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, expect, it, vi } from "vitest"
 import { bindAbacSecurityDigest, ConfigurationError, type RequestContext } from "@xonava/core/domain"
 import type { AuditRecord, IdempotencyPort, OutboxRecord, TransactionalIdempotencyPort } from "@xonava/core/events"

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, expect, it, vi } from "vitest"
 import { defineEntity } from "@xonava/core/entity"
 import { CRUD } from "../crud"

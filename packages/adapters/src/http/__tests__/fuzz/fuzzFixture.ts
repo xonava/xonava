@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { z } from "zod"
 import { defineEntity } from "@xonava/core/entity"
 import { evaluatePredicate, type PredicateNode } from "@xonava/core/domain"

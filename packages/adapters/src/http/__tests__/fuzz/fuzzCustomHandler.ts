@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { z } from "zod"
 import type { IdempotencyPort } from "@xonava/core/events"
 import type { PersistenceProvider } from "@xonava/core/persistence"

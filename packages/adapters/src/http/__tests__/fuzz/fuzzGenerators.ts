@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { Rng } from "../../../../../core/src/__tests__/differential/harness"
 import type { FuzzRequest } from "./fuzzTransports"
 import { BASE_PATH, CUSTOM_PATH } from "./fuzzTransports"

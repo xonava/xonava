@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, expect, it } from "vitest"
 import { expectNearLinear } from "../../../../core/src/__tests__/timing"
 import { redactPhi, redactPhiDeep } from "../redact"

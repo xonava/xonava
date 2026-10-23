@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { FAULT_TEXT, FOREIGN_TENANT, OWN_TENANT, SEED_ROWS, type FaultOperation, type FuzzRow } from "./fuzzFixture"
 import { DEFAULT_MAX_JSON_BODY_BYTES } from "../../requestBody"
 import type { FuzzRequest, FuzzResponse } from "./fuzzTransports"

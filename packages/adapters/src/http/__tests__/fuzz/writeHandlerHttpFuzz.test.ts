@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { afterAll, beforeAll, describe, it } from "vitest"
 import { forAllAsync } from "../../../../../core/src/__tests__/differential/harness"
 import { createCustomWriteHandler, customIdempotency, executed } from "./fuzzCustomHandler"

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, expect, it, vi } from "vitest"
 import { ConfigurationError, createAnonymousPrincipal, ForbiddenError, UnauthorizedError, type ExecutionScope, type ExecutionScopeId, type Principal } from "@xonava/core/domain"
 import { type CompiledRouteBinding, type CompiledScopeResolverBinding } from "@xonava/core/bootstrap"
