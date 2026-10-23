@@ -20,7 +20,7 @@ Status: **experimental**. `0.1.0` is published on npm. Target for `1.0.0`: core 
 | 0: quick fixes | Done (6 of 6) | |
 | 1: pilot feedback and missing adapters | Done (9 of 9, plus 3 follow-ups) | All eight requests from the TanStack Start / Cloudflare pilot |
 | 2: proof | In progress | Done: everything except Q5 per module (`query` 86.2 % and `operation` 81.3 % done); CI (Q1) deferred |
-| 3: hardening and decisions | In progress | Done: C3, C5, C6, C7, C8, C9. In flight: C4 soak |
+| 3: hardening and decisions | Done (C3–C9) | Soak (C4) runs with `npm run soak`, optional in the release gate via `FRAMEWORK_RELEASE_SOAK=1` |
 
 Real-database differential suites now cover jobs, schedules, workflows, idempotency, inbox/outbox
 delivery, leases, sequences, temporal history, job progress and cache tag generations on PostgreSQL,
@@ -86,7 +86,7 @@ the release gate and the named scripts. Each gate is created by the WP named aft
 | HTTP fuzzing | property suites over all CRUD and write handlers in DF1 (met) | Q4 |
 | Performance | hot-path benchmarks within 25 % of the recorded baseline (met: `npm run bench`) | Q6 |
 | Upgrade compatibility | N-1 suite against the previous published release (met: `test:framework:upgrade:*`, in the release gate) | C3 |
-| Soak | 30-minute crash/lease soak with no invariant violation | C4 |
+| Soak | 30-minute crash/lease soak with no invariant violation (met on D1, PostgreSQL and MySQL) | C4 |
 | Threat model | reviewed `docs/spec/security.md` threat model (met) | C5 |
 
 ## Wave 2: proof (Sonnet, parallel)
@@ -117,7 +117,7 @@ when the wave closes.
   | core `domain` | 3 of 31 files | 62.6 % |
   | core `operation` | full | 81.3 % (done) |
   | core `execution` | `dispatcher.ts` only | 65.4 % |
-  | core `workflow` | 3 of 10 | 82.9 % |
+  | core `workflow` | full | 92.4 % (done, no new tests needed) |
   | core `events` | 10 of 15 | 75.7 % |
   | core `entity` | 5 of 12 | 67.5 % |
   | adapters `http` | 3 of 22 | 73.6 % |
@@ -132,21 +132,6 @@ when the wave closes.
 - **Acceptance:** `npm run test:mutation` exits 0 for core (≥ 80 %) and adapters (≥ 70 %).
 
 ## Wave 3: hardening and decisions
-
-### C4 Soak testing
-
-- [ ] Sonnet. Branch `test/soak`.
-- **Steps:** add `npm run soak`, which runs the job, schedule and workflow dispatchers against D1 (and
-  PostgreSQL and MySQL when configured) for `SOAK_MINUTES` (default 30). It uses short leases, random
-  worker kills via the crash harness (`packages/testing/crash/processHarness.ts`) and random clock skew
-  within lease tolerance. It checks:
-  - no job runs twice concurrently;
-  - every job reaches a terminal status;
-  - no schedule occurrence is lost or duplicated;
-  - workflow signals are consumed at most once.
-
-  Write evidence like the crash suites.
-- **Acceptance:** a 30-minute run passes.
 
 ## Deferred
 
