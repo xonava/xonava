@@ -120,7 +120,7 @@ when the wave closes.
   | core `workflow` | full | 92.4 % (done, no new tests needed) |
   | core `events` | 10 of 15 | 75.7 % |
   | core `entity` | full | 93.0 % (done) |
-  | adapters `http` | 3 of 22 | 73.6 % |
+  | adapters `http` | full | ≥ 77.2 % (done; create/detail/list/idempotency/nodeAdapter counted at pre-test scores) |
   | adapters `drizzle-shared` | 5 of 14 | 68.0 % |
 
 - **Per module** (`domain`, `query`, `operation`, `execution`, `workflow`, `events`, `entity`, then
