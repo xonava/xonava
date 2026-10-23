@@ -19,7 +19,7 @@ Status: **experimental**. `0.1.0` is published on npm. Target for `1.0.0`: core 
 | --- | --- | --- |
 | 0: quick fixes | Done (6 of 6) | |
 | 1: pilot feedback and missing adapters | Done (9 of 9, plus 3 follow-ups) | All eight requests from the TanStack Start / Cloudflare pilot |
-| 2: proof | In progress | Done: everything except Q5 per module (`query` 86.2 % and `operation` 81.3 % done); CI (Q1) deferred |
+| 2: proof | In progress | Done: everything except Q5 per module (`query` 86.2 %, `operation` 81.3 %, `workflow` 92.4 % and `domain` 86.8 % done); CI (Q1) deferred |
 | 3: hardening and decisions | Done (C3–C9) | Soak (C4) runs with `npm run soak`, optional in the release gate via `FRAMEWORK_RELEASE_SOAK=1` |
 
 Real-database differential suites now cover jobs, schedules, workflows, idempotency, inbox/outbox
@@ -114,7 +114,7 @@ when the wave closes.
   | Module | Scope | Score |
   | --- | --- | --- |
   | core `query` | full | 86.2 % (done) |
-  | core `domain` | 3 of 31 files | 62.6 % |
+  | core `domain` | full | 86.8 % (done) |
   | core `operation` | full | 81.3 % (done) |
   | core `execution` | `dispatcher.ts` only | 65.4 % |
   | core `workflow` | full | 92.4 % (done, no new tests needed) |
