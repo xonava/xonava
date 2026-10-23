@@ -44,3 +44,39 @@ Redundant layers (either check alone yields the same observable result):
 - src/execution/dispatcher.ts:397,400,414-416,474,541,691, ConditionalExpression/OptionalChaining/BooleanLiteral: idempotent repeat of an abort/reject, callbacks assigned synchronously, and `stopped` is set again by the finally block.
 - src/execution/dispatcher.ts:518,585,587,667,701,273, StringLiteral/ArrowFunction/ConditionalExpression: a permanent failure dead-letters for any non-retryable kind and ignores `now`; a null marker and a regex on "null" agree; `since === now` yields the same instant; an undefined timeoutMs fails the timer check identically; the retry time is never null after `shouldRetry`; the invalid-clock message is swallowed.
 - src/execution/dispatcher.ts, OptionalChaining on `log.warn?.`/`log.debug?.`: the telemetry logger always defines every level.
+
+## core entity
+
+Module-load initialisers (static mutants): the vitest runner does not re-evaluate module initialisers per mutant, so these report Survived although tests assert the values exactly (`validateEntityMutationKills`, `defineEntityMutationKills`, `entityHelpersMutationKills`, `compileEntityMutationKills`).
+
+- src/entity/validateEntity.ts:10-14, ArrayDeclaration/StringLiteral: `ENTITY_QUERY_LIMIT_KEYS` (every default and the three extra limit keys are accepted by tests).
+- src/entity/validateEntity.ts:278-284, ArrayDeclaration/StringLiteral/ObjectLiteral: `ALLOWED_CRUD_ROUTES` and `CRUD_HOOK_ALLOWLIST` (every hook on every route is accepted, every foreign hook rejected with the exact message).
+- src/entity/compileEntity.ts:93, ArrowFunction: the `routesFor` initialiser; compileEntity.ts:133, ObjectLiteral: `AUDIT_CLASSIFICATION_RANK`.
+- src/entity/defineEntity.ts:292,328,330, ArrayDeclaration/StringLiteral: `DEFAULT_AUDIT_EMIT_ON`, `ENTITY_CACHE_NAMESPACE_PREFIX` and `TENANT_CACHE_TAG_PREFIX` (default tags, emit list and the reserved-prefix error are asserted).
+- src/entity/capabilityCheck.ts:27, Regex: `CAPABILITY_KEY_PATTERN` (valid and invalid keys, including anchors and the character classes, are asserted).
+
+Redundant or unreachable code:
+
+- src/entity/validateEntity.ts:50, ConditionalExpression/ArrayDeclaration: a non-object `fields` is rejected by the "must declare fields" check before `fieldNames` is read.
+- src/entity/validateEntity.ts:93,100, ConditionalExpression: `Set.has` of a non-string is false, so the `typeof` pre-check rejects the same values.
+- src/entity/validateEntity.ts:123,142,190, OptionalChaining: `requireField` already proved the field exists, so its descriptor is defined.
+- src/entity/validateEntity.ts:158, CallExpression: `resolveCapabilityKey` repeats `assertCapabilityConfigValid` immediately after.
+- src/entity/validateEntity.ts:160, ConditionalExpression/LogicalOperator: a skipped capability resolves to `{ enabled: false }`, an enabled one always has a key, and `isRuntimeCapability(undefined)` is false.
+- src/entity/validateEntity.ts:231-233, ConditionalExpression/LogicalOperator/BooleanLiteral/StringLiteral/BlockStatement: unreachable, `requireField(input.entity.primaryKey, ...)` already rejected a missing primary key.
+- src/entity/validateEntity.ts:243, ConditionalExpression/BooleanLiteral: for `audit === false` the expression `false?.fieldClassification ?? {}` is `{}` as well.
+- src/entity/validateEntity.ts:316, ArrayDeclaration: the route is always a key of `CRUD_HOOK_ALLOWLIST` here.
+- src/entity/compileEntity.ts:41, ConditionalExpression/LogicalOperator: `WeakSet.has` of a non-object is false, so the guards are redundant.
+- src/entity/compileEntity.ts:94, ConditionalExpression/OptionalChaining: `route` is never undefined and `defineEntity` always normalises `routes`.
+- src/entity/compileEntity.ts:103-105,109, ConditionalExpression/LogicalOperator/BooleanLiteral: `defineEntity` normalises `cache` and `audit` to `false` or an object, so the `undefined` branches are unreachable and `false.auditGuarantee` is undefined.
+- src/entity/compileEntity.ts:140, EqualityOperator: equal ranks mean the same classification, so reassigning it changes nothing.
+- src/entity/compileEntity.ts:173,214,216, ConditionalExpression/BooleanLiteral: reading a property of `false` is undefined, which takes the same default as the disabled branch.
+- src/entity/compileEntity.ts:177, ObjectLiteral: `compileEntityScope` falls back to the tenant field passed as its second argument.
+- src/entity/compileEntity.ts:198, BooleanLiteral: `Object.defineProperty` at line 222 redefines the brand with `value: true`.
+- src/entity/defineEntity.ts:351, ConditionalExpression/StringLiteral: `validateEntity` rejects `idempotency.required` with the same message; the idempotency object is kept as is.
+- src/entity/defineEntity.ts:362,367, ConditionalExpression/ObjectLiteral: `...input.entity` already carries `primaryKey` and `immutableFields`, and `compileEntity` rebuilds the immutable list.
+- src/entity/defineEntity.ts:376-388, OptionalChaining: `input.audit` and `input.cache` are objects inside these branches.
+- src/entity/defineEntity.ts:390, ConditionalExpression/BooleanLiteral: `cloneAndFreezeDefinition(false ?? {})` is `false`.
+- src/entity/defineEntity.ts:408, ObjectLiteral/BooleanLiteral: the brand on `normalized` is replaced by the one `compileEntity` puts on the compiled copy.
+- src/entity/queryableFields.ts:8, ConditionalExpression: `Object.entries` of a non-object value is empty.
+- src/entity/brands.ts:5, ConditionalExpression: `WeakSet.has(null)` is false.
+- src/entity/cachePrefixes.ts:30, ArrayDeclaration: a stray string element destructures to `undefined`/`undefined`, which never collides.
