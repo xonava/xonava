@@ -34,3 +34,13 @@ Redundant layers (either check alone yields the same observable result):
 - src/domain/executionScope.ts:69-70, all mutators: `CANONICAL_JSON_LIMITS_V1.maxUtf8Bytes` (16 MiB) is larger than the identity-source limit (4 KiB) checked just above, so the absolute-ceiling branch is unreachable.
 - src/domain/abacPolicySchema.ts:170-171,319-320, all mutators: `clonePolicyInput` enforces the same depth, node and array limits as `policyInputWithinBudget`, so the second check never fails for cloned data.
 - src/domain/coercePolicyValue.ts:67-68, StringLiteral: the `case "identifier"`/`case "string"` labels fall through to `default`, which has the same body.
+
+## core execution
+
+- src/execution/dispatcher.ts:38, ConditionalExpression/EqualityOperator: a UTF-8 encoded message always has a lead byte at index 0, so `cut > 0` never decides the loop.
+- src/execution/dispatcher.ts:103-115 (abortableSleep), all mutators: the signal handed to the system clock is never aborted before the sleep starts (`stopped` is set first), and a late abort only clears or resolves an already-settled wait; `signal?.` is always defined, `once` is irrelevant after the timer fired.
+- src/execution/dispatcher.ts:151,567,572,570,367, EqualityOperator/ConditionalExpression/BooleanLiteral: a `retryable` kind falls through to the same default; versions of one type are unique so `>=` equals `>`; an exact definition decodes identically through the registry.
+- src/execution/dispatcher.ts:171,188,501,546,553,499, ConditionalExpression: timer handles and the settled execution promise are always defined at these points; awaiting an undefined renewal only adds a microtask.
+- src/execution/dispatcher.ts:397,400,414-416,474,541,691, ConditionalExpression/OptionalChaining/BooleanLiteral: idempotent repeat of an abort/reject, callbacks assigned synchronously, and `stopped` is set again by the finally block.
+- src/execution/dispatcher.ts:518,585,587,667,701,273, StringLiteral/ArrowFunction/ConditionalExpression: a permanent failure dead-letters for any non-retryable kind and ignores `now`; a null marker and a regex on "null" agree; `since === now` yields the same instant; an undefined timeoutMs fails the timer check identically; the retry time is never null after `shouldRetry`; the invalid-clock message is swallowed.
+- src/execution/dispatcher.ts, OptionalChaining on `log.warn?.`/`log.debug?.`: the telemetry logger always defines every level.
