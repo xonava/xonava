@@ -218,3 +218,25 @@ export function keylessEntity(over: Partial<EntityDescriptor<Row>> = {}): Entity
   const { primaryKey: _primaryKey, ...rest } = widgetEntity()
   return { ...rest, ...over }
 }
+
+/** An in-memory cache adapter with shared linearizable tag generations, recording the keys it serves. */
+export function memoryCache() {
+  const store = new Map<string, unknown>()
+  const generations = new Map<string, number>()
+  const reads: string[] = []
+  const tagged: Array<[string, string]> = []
+  const adapter = {
+    capabilities: { tagGenerationConsistency: "linearizable", coherenceScope: "shared" },
+    get: async (key: string) => { reads.push(key); return store.get(key) },
+    set: async (key: string, value: unknown) => { store.set(key, value) },
+    delete: async (key: string) => store.delete(key),
+    has: async (key: string) => store.has(key),
+    clear: async () => store.clear(),
+    addToTag: async (tag: string, key: string) => { tagged.push([tag, key]) },
+    getTagKeys: async () => [] as string[],
+    deleteTag: async () => undefined,
+    getTagGeneration: async (tag: string) => String(generations.get(tag) ?? 0),
+    advanceTagGeneration: async (tag: string) => { const next = (generations.get(tag) ?? 0) + 1; generations.set(tag, next); return String(next) },
+  }
+  return { adapter: adapter as never, store, reads, tagged }
+}
