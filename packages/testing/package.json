@@ -76,7 +76,7 @@
   "scripts": {
     "build": "tsc -b tsconfig.build.json --force && node ../../scripts/verification/rewriteBuildExtensions.mjs ../core ../adapters .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint src tests fixtures integration crash conformance bench --max-warnings=0",
+    "lint": "eslint src tests fixtures integration crash conformance bench soak --max-warnings=0",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "bench": "vitest bench --run",
@@ -98,6 +98,7 @@
     "test:crash:pg": "vitest run --config vitest.integration.config.ts crash/pg.crash.test.ts",
     "test:crash:d1": "vitest run --config vitest.integration.config.ts crash/d1.crash.test.ts",
     "test:crash:mysql": "vitest run --config vitest.integration.config.ts crash/mysql.crash.test.ts",
+    "soak": "vitest run --config vitest.soak.config.ts",
     "prepack": "npm run build"
   },
   "peerDependencies": {

@@ -76,6 +76,36 @@ npm run test:framework:race:d1
 npm run test:framework:crash:d1
 ```
 
+## Soak testing
+
+`npm run soak` runs the job, schedule and workflow dispatchers for `SOAK_MINUTES` (default 30) per database while worker processes are killed at random. It runs against D1 (local Miniflare) and, when `FRAMEWORK_TEST_PG_URL` and `FRAMEWORK_TEST_MYSQL_URL` are set, PostgreSQL and MySQL, one after the other. A database whose URL is not set is reported as not run. The soak is not part of `npm test`.
+
+Each run gets a private database (a D1 instance, a `soak_*` PostgreSQL schema or a `framework_soak_*` MySQL database), so it can share a server with other suites. It starts `SOAK_WORKERS` worker processes (default 3) that dispatch jobs, materialize schedules and advance workflows with a 4 s lease and a clock offset by up to +-300 ms. The test process keeps adding jobs, workflow instances and signals, and every few seconds kills one worker (sometimes all but one) with `SIGKILL` and starts a replacement. After the load it stops the chaos, drains the system and checks, exactly:
+
+- no job, partition or workflow instance is executed twice concurrently, and no attempt starts twice;
+- every job reaches a terminal status, and attempts, handler runs, statuses and terminal history rows agree;
+- no schedule occurrence is lost or duplicated: each schedule has exactly the minute occurrences from its first one up to the one before its `next_run_at`;
+- every workflow instance reaches a terminal status, workflow signals are consumed at most once (a receipt resumes exactly one wait), and none is lost.
+
+Any violation fails the run. Evidence is written to `artifacts/framework-conformance/<run>/soak/<adapter>-soak.json` with the counts (jobs, kills, terminal statuses, occurrences, signals) and durations; local runs are git-ignored. On D1 the database lives in the test process and the workers reach it over HTTP, as Workers reach the real service, because two processes cannot open one D1 database file.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `SOAK_MINUTES` | `30` | Load duration per database (use `1` or `2` while developing). |
+| `SOAK_ADAPTERS` | all configured | Comma list of `d1`, `pg`, `mysql`. Naming an adapter whose URL is missing is an error. |
+| `SOAK_WORKERS` | `3` | Worker processes. |
+| `SOAK_SEED` | random | Seed for the workload and the kill schedule (printed in the evidence). |
+| `SOAK_LEASE_MS`, `SOAK_SKEW_MS` | `4000`, `300` | Lease length and the clock offset bound (at most a quarter of the lease). |
+| `SOAK_KILL_MIN_MS`, `SOAK_KILL_MAX_MS` | `3000`, `9000` | Interval between kills. |
+| `SOAK_SCHEDULES` | `6` | Every-minute schedules. |
+| `SOAK_SLOW_FACTOR` | `0.7` | How long "slow" jobs work, as a multiple of the lease. They outlast several heartbeats and must stay below 1: the job timeout equals the lease, so a longer job is timed out and dead-lettered by design. |
+| `SOAK_JOB_INTERVAL_MIN_MS`, `SOAK_JOB_INTERVAL_MAX_MS` | `300`, `1300` | Gap between enqueued jobs (about 1.2 jobs/s). |
+| `SOAK_DRAIN_TIMEOUT_MS` | `180000` | How long the drain may take before the run fails. |
+
+The defaults are chosen so the workers keep up with the producer on a shared four-core machine (the not-terminal backlog stays in the single digits to low tens); a drain that times out with pending jobs means the load was too high for the machine, so the run fails and the evidence records the backlog samples and the stuck jobs' lease rows. The heavier settings (`SOAK_SLOW_FACTOR=2.5`, a 100-700 ms job interval, about 2.5 jobs/s, with many jobs dead-lettered by timeout) were also run on D1 for 3 and for 30 minutes and drained in under two seconds with no violation, so the defaults are a choice of load and not a workaround for a stall. Unit tests in `packages/testing/tests/soakInvariants.test.ts` prove that every invariant checker reports a synthetic violation.
+
+The soak is a `1.0.0` quality gate (see TODO.md). It is an optional step of `npm run verify:framework-release`: set `FRAMEWORK_RELEASE_SOAK=1` to run the full 30-minute soak on all three databases (about 1.5 hours) before the certification manifest is built; without it the release prints that the soak was skipped.
+
 ## Release gate
 
 `npm run verify:framework-release` is the full release gate. Maintainers run it before a release. It requires both `FRAMEWORK_TEST_PG_URL` and `FRAMEWORK_TEST_MYSQL_URL`. It runs the baseline checks, the suites for all three database providers (including the N-1 upgrade compatibility suite), the differential suites at release volume, and the crash suites with 20 repetitions. It takes a long time and should run against dedicated databases.

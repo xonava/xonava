@@ -11,6 +11,8 @@ export type D1Database = Awaited<ReturnType<Miniflare["getD1Database"]>>
 export interface D1Fixture {
   readonly db: D1Database
   readonly persistPath?: string
+  /** The HTTP address of the Miniflare worker in front of the database, for clients in other processes (the soak workers). */
+  endpoint(): Promise<URL>
   close(): Promise<void>
 }
 
@@ -24,7 +26,7 @@ export async function openD1Fixture(persistPath?: string): Promise<D1Fixture> {
   })
   const db = tolerateStaleConnections(asyncD1Binding(mf))
   await bootstrapD1Fixture(db)
-  return { db, ...(persistPath === undefined ? {} : { persistPath }), close: () => mf.dispose() }
+  return { db, ...(persistPath === undefined ? {} : { persistPath }), endpoint: () => mf.ready, close: () => mf.dispose() }
 }
 
 export async function temporaryD1Fixture(): Promise<D1Fixture & { cleanup(): Promise<void> }> {

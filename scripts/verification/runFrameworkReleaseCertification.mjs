@@ -50,5 +50,9 @@ npm(["run", "verify:framework-release:baseline"])
 // DF1: differential/property suites at release volume with a run-derived seed.
 npm(["run", "verify:framework:df1"])
 for (const adapter of ["pg", "mysql", "d1"]) npm(["run", `test:framework:crash:${adapter}`], { FRAMEWORK_CRASH_REPETITIONS: "20" })
+// Optional 1.0.0 quality gate: the 30-minute soak (SOAK_MINUTES, default 30) on D1, PostgreSQL and MySQL. It adds about 1.5 hours,
+// so it only runs when FRAMEWORK_RELEASE_SOAK=1. Its evidence goes to <run>/soak/ and does not change the certified manifest.
+if (process.env.FRAMEWORK_RELEASE_SOAK === "1") npm(["run", "soak"], { FRAMEWORK_CONFORMANCE_PHASE: "soak" })
+else console.log("Soak skipped (set FRAMEWORK_RELEASE_SOAK=1 to run the 30-minute soak as part of the release gate)")
 npm(["run", "verify:framework:cert"])
 console.log(`Framework release certification completed for run ${runId}`)
