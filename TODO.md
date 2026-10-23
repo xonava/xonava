@@ -173,12 +173,12 @@ back.
   examples type-check, then publish. The release notes must call out the breaking changes listed in the
   changesets and the two required migrations (`0005_job_scope_key`, MySQL `0006_byte_exact_identifiers`).
 
-## Release `1.0.0`
+## Release `0.3.0`: repository clean-up
 
-- [ ] Every quality gate green in the full local release gate on dedicated databases.
-- [ ] Full release gate (`npm run verify:framework-release`) green on dedicated
-      databases.
-- [ ] Freeze the public API manifest and durable formats; drop compatibility-only fingerprint versions
-      that are no longer needed.
-- [ ] Add a major changeset, run `RELEASE_MAJOR=1 npm run release:version` on `release/1.0.0`, update
-      known limitations, and publish.
+- [ ] After 0.2.0: follow `CLEANUP.md` (remove work tracking, run evidence, ID-named certification gates,
+      compatibility code and work-item references). That change also deletes this file and `CLEANUP.md`.
+
+## Release `1.0.0` (not planned yet)
+
+- [ ] Not before the clean-up. Freezing the public API manifest and durable formats and the major changeset are
+      decided later; the compatibility fingerprints are already removed in 0.3.0.
