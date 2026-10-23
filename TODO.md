@@ -119,7 +119,7 @@ when the wave closes.
   | core `execution` | full | 85.0 % (done; `types.ts` 68.0 % is the weakest file) |
   | core `workflow` | full | 92.4 % (done, no new tests needed) |
   | core `events` | 10 of 15 | 75.7 % |
-  | core `entity` | 5 of 12 | 67.5 % |
+  | core `entity` | full | 93.0 % (done) |
   | adapters `http` | 3 of 22 | 73.6 % |
   | adapters `drizzle-shared` | 5 of 14 | 68.0 % |
 
