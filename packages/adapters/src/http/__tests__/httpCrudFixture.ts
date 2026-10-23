@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { vi } from "vitest"
 import { z } from "zod"
 import { defineEntity } from "@xonava/core/entity"

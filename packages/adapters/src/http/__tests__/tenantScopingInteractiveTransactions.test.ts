@@ -1,6 +1,4 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/unbound-method, @typescript-eslint/no-unnecessary-type-assertion */
-// @ts-nocheck
-
 import { describe, expect, it, vi } from "vitest"
 import { createFrameworkWriteHandler } from "../createFrameworkWriteHandler"
 import type { FrameworkAdapterDeps, TrustedFrameworkSession } from "../../server"

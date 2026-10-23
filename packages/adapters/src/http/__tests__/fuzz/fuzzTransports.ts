@@ -1,4 +1,3 @@
-// @ts-nocheck
 import http from "node:http"
 import type { AddressInfo } from "node:net"
 import express from "express"

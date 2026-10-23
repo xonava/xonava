@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, it, vi } from "vitest"
 import { ZodError } from "zod"
 import { CapabilityError, ForbiddenError, OptimisticConcurrencyError, PreconditionRequiredError, PublicBusinessError, RequiredHeaderMissingError, RetryablePersistenceError, UnauthorizedError, ValidationError } from "@xonava/core/domain"

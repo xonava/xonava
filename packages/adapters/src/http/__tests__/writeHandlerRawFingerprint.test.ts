@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, it, vi } from "vitest"
 import type { IdempotencyPort, TransactionalIdempotencyPort } from "@xonava/core/events"
 import type { PersistenceProvider } from "@xonava/core/persistence"

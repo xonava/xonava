@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, it, vi } from "vitest"
 import { z } from "zod"
 import { createAnonymousPrincipal, ForbiddenError, type RequestContext } from "@xonava/core/domain"

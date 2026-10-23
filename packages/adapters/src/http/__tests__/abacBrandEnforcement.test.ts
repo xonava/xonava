@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, it, vi } from "vitest"
 import type { EntityDescriptor, PersistenceProvider } from "@xonava/core/persistence"
 import {

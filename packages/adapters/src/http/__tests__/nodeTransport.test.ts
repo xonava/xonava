@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { createServer, request as httpRequest, type Server } from 'node:http'
 import { once } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, it, vi, type Mock } from "vitest"
 import { Predicate, bindAbacSecurityDigest, evaluatePredicate, type PredicateNode, type RequestContext } from "@xonava/core/domain"
 import type { IdempotencyPort, TransactionalIdempotencyPort } from "@xonava/core/events"

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, it } from "vitest"
 import { ConfigurationError, Predicate } from "@xonava/core/domain"
 import { filtersToPredicate, parseSortString, predicateFromFilterCondition, predicateFromFilterGroup, searchToPredicate } from "../filterInterop"

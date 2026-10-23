@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { forAllAsync, type Rng } from "../../../../../core/src/__tests__/differential/harness"
 import { createFuzzFixture, type FaultOperation, type FuzzFixture } from "./fuzzFixture"

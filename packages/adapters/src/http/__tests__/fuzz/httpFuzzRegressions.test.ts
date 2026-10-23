@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { createFuzzFixture, type FuzzFixture } from "./fuzzFixture"
 import { createFuzzTransports, type FuzzRequest, type FuzzTransports } from "./fuzzTransports"

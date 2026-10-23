@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, it, vi } from "vitest"
 import { createAnonymousPrincipal } from "@xonava/core/domain"
 import type { CompiledRouteBinding } from "@xonava/core/bootstrap"
