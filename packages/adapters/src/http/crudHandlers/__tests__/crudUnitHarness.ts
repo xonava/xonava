@@ -204,3 +204,17 @@ export function mutationOperation(context: RequestContext, persistence: Persiste
     ...extra,
   }
 }
+
+/** The same request context, but acting anonymously: no ABAC action scope applies to it. */
+export function asAnonymous(context: RequestContext): RequestContext {
+  return { ...context, identity: { ...context.identity, actor: { ...context.identity.actor, kind: "anonymous" } } } as never
+}
+
+/** The literal-true action scope that the allow-all test bundle yields. */
+export const ALLOW_ALL_SCOPE = { kind: "literal", value: true } as const
+
+/** A widget whose descriptor declares no primary key (the handlers then key by "id"). */
+export function keylessEntity(over: Partial<EntityDescriptor<Row>> = {}): EntityDescriptor<Row> {
+  const { primaryKey: _primaryKey, ...rest } = widgetEntity()
+  return { ...rest, ...over }
+}
