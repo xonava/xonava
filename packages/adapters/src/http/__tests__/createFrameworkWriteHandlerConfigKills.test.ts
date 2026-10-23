@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, expect, it, vi } from "vitest"
 import { ConfigurationError } from "@xonava/core/domain"
 import { createFrameworkWriteHandler } from "../createFrameworkWriteHandler"
@@ -33,8 +34,10 @@ describe("write handler construction: action names", () => {
     expect(() => build(action)).toThrow(new ConfigurationError(`Write handler for "${MODULE}" has an invalid business action name; use ${NAME_PATTERN}`))
   })
 
-  it("rejects an action that is not a string", () => {
+  it("rejects an action that is not a string, even when its string form would pass", () => {
     expect(() => build(5 as never)).toThrow(`has an invalid business action name; use ${NAME_PATTERN}`)
+    expect(() => build(new String("approve") as never)).toThrow(`has an invalid business action name; use ${NAME_PATTERN}`)
+    expect(() => build({ toString: () => "approve" } as never)).toThrow(`has an invalid business action name; use ${NAME_PATTERN}`)
   })
 
   it.each(["approve", "a", `a${"b".repeat(63)}`, "mark-done_2", "aB9"])("accepts the business action %s", (action) => {

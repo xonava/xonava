@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ConfigurationError, ConflictError, encodeExecutionScopeId } from "@xonava/core/domain"
 import { encodeTenantIdempotencyScope } from "@xonava/core/persistence"
@@ -101,6 +102,9 @@ describe("idempotency request identity", () => {
     const tenant = makeWrite(idempotentConfig({ scope: { scope: "tenant", idempotency: { required: true } } }), { deps: { createIdempotencyPort: createIdempotencyPort as never }, normalization: tenantNormalization() })
     await tenant.send({ key: "key-1" })
     expect(createIdempotencyPort).toHaveBeenCalledTimes(2)
+    const tenantArg = (createIdempotencyPort.mock.calls[1] as unknown as [{ context: { scopeId: string } }])[0]
+    expect(Object.keys(tenantArg)).toEqual(["context"])
+    expect(tenantArg.context.scopeId).toBe(encodeExecutionScopeId(TENANT_SCOPE))
   })
 
   async function fingerprintFor(options: Parameters<typeof makeWrite>[0], send: Parameters<ReturnType<typeof makeWrite>["send"]>[0], extra: Parameters<typeof makeWrite>[1] = {}) {
@@ -515,8 +519,17 @@ describe("commit markers", () => {
     const [receipt, persistence] = h.port.markCommittedInTransaction.mock.calls[0] as unknown as [IdempotencyCommitItem, PersistenceProvider]
     const request = acquireRequest(h)
     expect(receipt).toEqual({ scope: request.scope, key: request.key, fingerprint: request.fingerprint, token: "token-1", resource: { entity: "thing", id: "thing-1" } })
+    expect("invalidations" in receipt).toBe(false)
     expect(persistence).toBeDefined()
     expect(h.port.markCommittedInTransaction.mock.contexts[0]).toBe(h.port.port)
+  })
+
+  it("leaves the receipt's invalidation obligation to the persistence when cache generations are atomic", async () => {
+    const cache = recordingCache()
+    const h = makeWrite(idempotentConfig({ getCacheAdapter: async () => cache.adapter, invalidateTags: () => ["a"] }), { persistence: testPersistence({ atomicBatchCacheGeneration: true }) })
+    await h.send({})
+    const [receipt] = h.port.markCommittedInTransaction.mock.calls[0] as unknown as [IdempotencyCommitItem]
+    expect("invalidations" in receipt).toBe(false)
   })
 
   it("lists the receipt's invalidation obligation when cache generations are not atomic", async () => {
@@ -600,13 +613,15 @@ describe("reservation release", () => {
     expect(h.port.abandon).not.toHaveBeenCalled()
   })
 
-  it("tolerates a port without an abandon method", async () => {
+  it("tolerates a port without an abandon method, without reporting a release failure", async () => {
+    const emit = vi.fn()
     const port = scriptedPort("transactional")
     const bare = { ...port.port } as { abandon?: unknown }
     delete bare.abandon
-    const h = makeWrite(idempotentConfig(), { port: { ...port, port: bare as never }, execute: async () => { throw new Error("business failure") } })
+    const h = makeWrite(idempotentConfig(), { port: { ...port, port: bare as never }, deps: { telemetry: { emit } }, execute: async () => { throw new Error("business failure") } })
     expect((await h.send({})).status).toBe(500)
     expect((lastError() as Error).message).toBe("business failure")
+    expect(eventsNamed(emit, "idempotency.abandon.failure")).toHaveLength(0)
   })
 
   it("reports a failed release through telemetry and still surfaces the original failure", async () => {

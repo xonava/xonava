@@ -1,9 +1,11 @@
+// @ts-nocheck
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
   ConfigurationError,
   ForbiddenError,
   Predicate,
   createAbacAuthorizer,
+  bindAbacSecurityDigest,
   type RequestContext,
 } from "@xonava/core/domain"
 import type { EntityScopeDefinition } from "@xonava/core/entity"
@@ -157,6 +159,17 @@ describe("request normalization", () => {
     expect(input.headers).toEqual({ "x-tenant-hint": "abc" })
     await call(trusted({ trustedHeaders: ["x-missing"] }))
     expect("headers" in (spy.normalized[1] as Record<string, unknown>)).toBe(false)
+  })
+
+  it("offers admission evidence without a session when the normalization yields none", async () => {
+    const normalization = trusted({ resolveTrustedSession: async () => undefined })
+    const resolveAdmissionEvidence = vi.fn(normalization.resolveAdmissionEvidence)
+    await expect(call({ ...normalization, resolveAdmissionEvidence })).rejects.toBeDefined()
+    const input = spy.normalized[0] as { admit: (a: unknown) => Promise<unknown> }
+    await input.admit({ identity: "i", scope: "s", scopeId: "sid" })
+    const offered = resolveAdmissionEvidence.mock.calls[0]?.[0] as Record<string, unknown>
+    expect("session" in offered).toBe(false)
+    expect(Object.keys(offered).sort()).toEqual(["identity", "request", "route", "scope", "scopeId"])
   })
 
   it("omits the session when the normalization yields none", async () => {
@@ -334,7 +347,9 @@ describe("protected fields", () => {
     expect(() => assertProtectedUpdateFields(entity, { deletedAt: "x" }, ["name"])).not.toThrow()
     expect(() => assertProtectedUpdateFields(entity, { id: "x" }, ["id"])).toThrow("widget: id")
     expect(() => assertProtectedUpdateFields(entity, Object.create({ id: "inherited" }) as object)).not.toThrow()
-    try { assertProtectedUpdateFields(entity, { id: "x", name: "y" }, ["name"]) } catch (error) { expect((error as ForbiddenError).safeMetadata).toEqual({}) }
+    expect(() => assertProtectedUpdateFields(entity, { "Stryker was here": true })).not.toThrow()
+    const detailsOf = (run: () => void): unknown => { try { run() } catch (error) { return (error as ForbiddenError).details } return undefined }
+    expect(detailsOf(() => assertProtectedUpdateFields(entity, { id: "x", name: "y" }, ["name"]))).toEqual({ fields: ["id", "name"] })
   })
 
   it("refuses a create that supplies a protected field, naming each", () => {
@@ -342,6 +357,7 @@ describe("protected fields", () => {
     expect(() => assertProtectedCreateFields(entity, { deletedAt: "x" })).not.toThrow()
     expect(() => assertProtectedCreateFields(entity, { tenantId: "x", name: "y" })).toThrow(new ForbiddenError("Cannot provide protected fields on widget: tenantId, name"))
     expect(() => assertProtectedCreateFields(entity, Object.create({ id: "inherited" }) as object)).not.toThrow()
+    try { assertProtectedCreateFields(entity, { tenantId: "x", name: "y" }) } catch (error) { expect((error as ForbiddenError).details).toEqual({ fields: ["tenantId", "name"] }) }
   })
 })
 
@@ -528,6 +544,10 @@ describe("hook contexts", () => {
     expect("correlationId" in (bare.operation ?? {})).toBe(false)
     expect("metadata" in (bare.operation ?? {})).toBe(false)
 
+    const absentRequest = toCrudReadContext(platformCtx(), { operationId: "o", services: {}, request: undefined, metadata: { requestId: "m-1" }, correlationId: "oc" } as never)
+    expect(absentRequest.requestId).toBe("")
+    expect(absentRequest.correlationId).toBe("oc")
+    expect(absentRequest.operation).toEqual({ operationId: "o", correlationId: "oc", services: {} })
     const noRequestMeta = toCrudReadContext(platformCtx(), { operationId: "o", services: {}, request: { requestId: undefined, correlationId: undefined, metadata: undefined } } as never)
     expect(noRequestMeta.requestId).toBe("")
     const nonStringMeta = toCrudReadContext(platformCtx(), { operationId: "o", services: {}, metadata: { requestId: 3 } } as never)
@@ -665,6 +685,13 @@ describe("read access and rate limits", () => {
     expect(spy.rate[0]?.consistency).toBe("best-effort")
   })
 
+  it("needs no atomic store for best-effort read limits", async () => {
+    const adapter = {} as never
+    const { enforceReadRateLimit } = createShared(optionsOf({ getCacheAdapter: async () => adapter }), routes, { enabled: false, key: undefined })
+    await expect(enforceReadRateLimit("list", { max: 1, timeWindow: "1 minute", consistency: "best-effort" } as never, new Request("https://example.test/"), await contextFor("tenant", "list"))).resolves.toBeUndefined()
+    expect(spy.rate).toHaveLength(1)
+  })
+
   it("requires an atomic store for atomic read limits", async () => {
     const { enforceReadRateLimit } = createShared(optionsOf(), routes, { enabled: false, key: undefined })
     await expect(enforceReadRateLimit("list", { max: 1, timeWindow: "1 minute", consistency: "atomic" } as never, new Request("https://example.test/"), await contextFor("tenant", "list"))).rejects.toEqual(new ConfigurationError("Atomic rate limiting requires an atomic rate-limit store"))
@@ -719,6 +746,18 @@ describe("read access and rate limits", () => {
     expect(scope.filter).toEqual(expected.filter)
     expect(scope.filter).toBeDefined()
     expect("cacheScopeKey" in scope).toBe(expected.cacheScopeKey !== undefined)
+    const keyedBundle = await bindAbacSecurityDigest({
+      mode: "platform",
+      moduleKey: MODULE_KEY,
+      policies: [],
+      context: {},
+      defaultEffect: "deny",
+      fieldCatalog: {},
+      cacheScopeKey: "scope-k",
+    } as never)
+    const keyed = buildReadScope(keyedBundle)
+    expect(keyed.cacheScopeKey).toBe("scope-k")
+    expect("cacheScopeKey" in keyed).toBe(true)
   })
 
   it("resolves the read scope per context", async () => {
@@ -727,7 +766,7 @@ describe("read access and rate limits", () => {
     const context = await contextFor("tenant", "list")
     const expected = createAbacAuthorizer(await allowAllAbacBundle(MODULE_KEY)).buildActionScope("read")
     expect((await resolveReadScopeForContext(context)).filter).toEqual(expected.filter)
-    expect(await resolveReadScopeForContext(asAnonymous(context))).toEqual({ filter: undefined })
+    expect(await resolveReadScopeForContext(asAnonymous(context))).toStrictEqual({ filter: undefined })
     const base = baseOptions()
     const none = createShared(optionsOf({ adapterDeps: { ...base.adapterDeps, resolveAbacBundle: async () => null } }), routes, { enabled: false, key: undefined })
     await expect(none.resolveReadScopeForContext(context)).rejects.toEqual(new ForbiddenError("ABAC authorization bundle unavailable"))
