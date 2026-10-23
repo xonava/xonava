@@ -116,7 +116,7 @@ when the wave closes.
   | core `query` | full | 86.2 % (done) |
   | core `domain` | full | 86.8 % (done) |
   | core `operation` | full | 81.3 % (done) |
-  | core `execution` | `dispatcher.ts` only | 65.4 % |
+  | core `execution` | full | 85.0 % (done; `types.ts` 68.0 % is the weakest file) |
   | core `workflow` | full | 92.4 % (done, no new tests needed) |
   | core `events` | 10 of 15 | 75.7 % |
   | core `entity` | 5 of 12 | 67.5 % |
