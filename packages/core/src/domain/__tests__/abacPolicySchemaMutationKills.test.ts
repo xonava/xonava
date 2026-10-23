@@ -369,7 +369,7 @@ describe("validatePayloadAgainstCatalog", () => {
       { path: "fieldAccess.query.search", message: "Unknown field for query access: ghost4", value: "ghost4" },
       { path: "fieldAccess.query.sort", message: "Unknown field for query access: ghost5", value: "ghost5" },
     ])
-    expect(validatePayloadAgainstCatalog(payload({}, { fieldAccess: { read: { toString: "mask" } } }), catalog)[0]?.message).toBe("Unknown field for read access: toString")
+    expect(validatePayloadAgainstCatalog(payload({}, { fieldAccess: { read: { toString: "mask" as const } } }), catalog)[0]?.message).toBe("Unknown field for read access: toString")
   })
 
   it("validates clause fields, operators and values", () => {
