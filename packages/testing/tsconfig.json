@@ -10,5 +10,5 @@
       "@xonava/adapters/*": ["../adapters/src/*"]
     }
   },
-  "include": ["src", "tests", "fixtures", "integration", "bench", "crash", "conformance/guarantees", "v1", "vitest.integration.config.ts"]
+  "include": ["src", "tests", "fixtures", "integration", "bench", "crash", "soak", "conformance/guarantees", "v1", "vitest.integration.config.ts", "vitest.soak.config.ts"]
 }
