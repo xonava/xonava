@@ -330,3 +330,33 @@ describe("MySQL repository writes", () => {
     expect(await settle(miss.repo.deleteWhere!(Predicate.eq("name", "a"), oc(4)))).toEqual(new NotFoundError("widget record not found"))
   })
 })
+
+describe("MySQL repository all-row guard shapes and terminal versions", () => {
+  const T = Predicate.alwaysTrue()
+  const F = Predicate.alwaysFalse()
+  const eq = Predicate.eq("body", "x")
+  const lit = (value: boolean) => ({ kind: "literal", value }) as never
+  it("rejects every predicate that matches all rows", async () => {
+    const note = build(() => changed(0), {}, "note")
+    const shapes = [lit(true), T, Predicate.and(T, T), Predicate.and(), Predicate.or(eq, T), Predicate.not(F), Predicate.not(lit(false)), Predicate.and(Predicate.not(F))]
+    for (const shape of shapes) {
+      await expect(note.repo.deleteWhere!(shape)).rejects.toThrow(new ConfigurationError("All-row deleteWhere is forbidden"))
+    }
+    expect(note.ops).toEqual([])
+  })
+
+  it("lets predicates that do not match every row through", async () => {
+    const note = build(() => changed(0), {}, "note")
+    const shapes = [lit(false), F, Predicate.and(eq, T), Predicate.or(eq), Predicate.not(eq), Predicate.not(T), Predicate.and(F, T), Predicate.or(eq, F)]
+    for (const shape of shapes) expect(await note.repo.deleteWhere!(shape)).toEqual({ deletedCount: 0 })
+    expect(note.ops).toHaveLength(shapes.length)
+  })
+
+  it("allows deleting at the terminal safe version", async () => {
+    const f = build(() => changed(1))
+    await f.repo.delete!("w1", oc(Number.MAX_SAFE_INTEGER))
+    await f.repo.deleteWhere!(Predicate.eq("name", "a"), oc(Number.MAX_SAFE_INTEGER))
+    expect(f.ops.map((op) => op.kind)).toEqual(["delete", "delete"])
+  })
+})
+
