@@ -443,7 +443,7 @@ describe("MySQL transaction failure classification", () => {
 
   it("rejects nested transactions with and without a deadline", async () => {
     for (const options of [undefined, { timeoutMs: 5_000 }]) {
-      const failure = await settle(providerOf(fake().db).runInTransaction(async (scoped) => scoped.runInTransaction(async () => 1), options))
+      const failure = await settle(providerOf(fake().db).runInTransaction(async (scoped) => (scoped as InteractiveTransactionProvider).runInTransaction(async () => 1), options))
       expect(failure).toEqual(new ConfigurationError("Nested MySQL transactions are not supported"))
     }
   })
