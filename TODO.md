@@ -120,7 +120,7 @@ when the wave closes.
   | core `workflow` | full | 92.4 % (done, no new tests needed) |
   | core `events` | full except `auditRedaction.ts` | 92.0 % (done) |
   | core `entity` | full | 93.0 % (done) |
-  | adapters `http` | full | ≥ 77.2 % (done; create/detail/list/idempotency/nodeAdapter counted at pre-test scores) |
+  | adapters `http` | full | 87.8 % (done) |
   | adapters `drizzle-shared` | full | 75.5 % (done, no new tests needed; weakest `transactionOutcome` 54.8 %, `workflowFailureCodec` 58.8 %) |
 
 - **Per module** (`domain`, `query`, `operation`, `execution`, `workflow`, `events`, `entity`, then
