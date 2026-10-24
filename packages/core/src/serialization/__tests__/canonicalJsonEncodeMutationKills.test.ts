@@ -200,6 +200,9 @@ describe("RFC 3339 millisecond timestamps", () => {
       "2024-04-31T00:00:00.000Z",
       "2024-01-01T24:00:00.000Z",
       "2024-01-01T00:60:00.000Z",
+      "+275760-09-13T00:00:00.000Z", // extended years round-trip through toISOString but are not 4 digit
+      "-000001-01-01T00:00:00.000Z",
+      "+010000-01-01T00:00:00.000Z",
     ]
     for (const value of bad) {
       expect(isValidRfc3339Millis(value), value).toBe(false)

@@ -199,6 +199,13 @@ describe("decodeCanonicalJson numbers", () => {
     expectDecodeError("1e+x", "exponent requires digit")
     expectDecodeError("1E-x", "exponent requires digit")
     expectDecodeError("[1e]", "exponent requires digit")
+    // characters just below "0" and just above "9" are not digits either
+    for (const bad of ["/", " ", "!", "-", "+", ":", "a"]) {
+      expectDecodeError(`1.${bad}`, "fraction requires digit")
+      expectDecodeError(`1e${bad}`, "exponent requires digit")
+      expectDecodeError(`1e+${bad}`, "exponent requires digit")
+      expectDecodeError(`1e-${bad}`, "exponent requires digit")
+    }
     expectDecodeError("1.5.5", "trailing characters after JSON value")
     expectDecodeError("1e5e5", "trailing characters after JSON value")
     expectDecodeError("1e5.5", "trailing characters after JSON value")
