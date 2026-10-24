@@ -85,6 +85,27 @@ describe("DrizzleOutboxSink inserted row", () => {
   })
 })
 
+describe("DrizzleOutboxSink preconditions", () => {
+  it("checks the scope identity before mapping the record or touching the database", async () => {
+    const mapRecord = vi.fn(() => ({}))
+    const f = build({ rowCount: 1 })
+    const forged = { ...record, scopeId: "fscope:v1:forged" as never }
+    await expect(new DrizzleOutboxSink(f.db, tenantTable, mapRecord).append(forged)).rejects.toThrow("outbox scope identity mismatch")
+    expect(mapRecord).not.toHaveBeenCalled()
+    expect(f.inserted()).toBeUndefined()
+  })
+
+  it("requires a scope column and an idempotency key column", async () => {
+    const noKey = pgTable("outbox_events", { id: text("id"), tenantId: text("tenant_id") })
+    const noScope = pgTable("outbox_events", { id: text("id"), idempotencyKey: text("idempotency_key") })
+    for (const bad of [noKey, noScope]) {
+      await expect(new DrizzleOutboxSink(build({ rowCount: 1 }).db, bad, mapper).append(record)).rejects.toThrow(
+        new ConfigurationError("PostgreSQL outbox requires tenantId or idempotencyScope and idempotencyKey columns"),
+      )
+    }
+  })
+})
+
 describe("DrizzleOutboxSink conflict handling", () => {
   it("returns without re-reading when rows were inserted (nonzero rowCount)", async () => {
     const f = build({ rowCount: 1 })

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { integer, pgTable, text } from "drizzle-orm/pg-core"
 import { createDrizzlePgIdempotencyStore } from "../drizzleIdempotencyStore"
 import { createDrizzlePersistenceProvider, DrizzleEntityRegistry } from "../drizzlePersistenceProvider"
-import { createScriptedDb, type ScriptedHandler, type ScriptedOp } from "../../__tests__/support/scriptedDb"
+import { createScriptedDb, renderSql, type ScriptedHandler, type ScriptedOp } from "../../__tests__/support/scriptedDb"
 
 const table = pgTable("idempotency_records", {
   id: text("id").primaryKey(), scope: text("scope"), key: text("key"), fingerprint: text("fingerprint"), token: text("token"), status: text("status"), result: text("result"),
@@ -19,6 +19,7 @@ function build(handler: ScriptedHandler) {
   const scripted = createScriptedDb("pg", handler)
   return { store: createDrizzlePgIdempotencyStore<{ ok: number }>(scripted.db as never, table), ops: scripted.ops, db: scripted.db }
 }
+const nowSql = (value: unknown) => renderSql("pg", value)
 const norm = (sql: string | undefined) => sql?.replace(/\s+/g, " ")
 const wheres = (ops: ScriptedOp[]) => ops.map((op) => [op.kind, norm(op.where?.sql), op.where?.params])
 
@@ -32,7 +33,16 @@ describe("idempotency store: unique violation detection", () => {
     const found = build((op) => { if (op.kind === "insert") throw chain(4); return [stored({ status: "completed", result: JSON.stringify({ ok: 1 }) })] })
     expect(await found.store.acquire(request)).toEqual({ outcome: "replay", result: { ok: 1 } })
     const tooDeep = chain(5)
-    await expect(build((op) => { if (op.kind === "insert") throw tooDeep; return [] }).store.acquire(request)).rejects.toBe(tooDeep)
+    const deep = build((op) => { if (op.kind === "insert") throw tooDeep; return [stored({ status: "completed", result: JSON.stringify({ ok: 9 }) })] })
+    await expect(deep.store.acquire(request)).rejects.toBe(tooDeep)
+    expect(deep.ops.map((op) => op.kind)).toEqual(["insert"])
+  })
+
+  it("rethrows other database errors without looking the key up", async () => {
+    const boom = Object.assign(new Error("boom"), { code: "XX000" })
+    const f = build((op) => { if (op.kind === "insert") throw boom; return [stored()] })
+    await expect(f.store.acquire(request)).rejects.toBe(boom)
+    expect(f.ops.map((op) => op.kind)).toEqual(["insert"])
   })
 
   it("ignores a non-string code and keeps walking the cause chain", async () => {
@@ -189,5 +199,43 @@ describe("idempotency store: claiming pending invalidations", () => {
     expect(Object.keys(ops[0]!.set as object).sort()).toEqual(["finalizerClaimExpiresAt", "finalizerClaimOwner", "finalizerClaimToken", "pendingInvalidations"])
     expect(ops[1]!.set).toMatchObject({ status: "completed", result: '{"ok":1}', pendingInvalidations: null })
     expect(Object.keys(ops[1]!.set as object).sort()).toEqual(["completedAt", "finalizerClaimExpiresAt", "finalizerClaimOwner", "finalizerClaimToken", "pendingInvalidations", "result", "status"])
+  })
+})
+
+describe("idempotency store: database clock expressions and result decoding", () => {
+  it("stamps timestamps and lease expiry with the database clock", async () => {
+    const lease = { scope: "tenant:t1", key: "k1", fingerprint: "fp", token: "tok" }
+    const taken = build((op) => { if (op.kind === "insert") throw duplicate(); if (op.kind === "select") return [stored()]; return affected(1) })
+    await taken.store.acquire(request)
+    const takeover = taken.ops.find((op) => op.kind === "update")!
+    expect(nowSql((takeover.set as { createdAt: unknown }).createdAt)).toMatchObject({ sql: "now()", params: [] })
+
+    const f = build(() => affected(1))
+    await f.store.renew({ ...lease, leaseDurationMs: 1_000 })
+    await f.store.complete({ ...lease, result: { ok: 1 } })
+    await f.store.completeClaimedInvalidation({ ...lease, claimToken: "c", result: { ok: 1 } })
+    expect(nowSql((f.ops[0]!.set as { createdAt: unknown }).createdAt)).toMatchObject({ sql: "now()", params: [] })
+    expect(nowSql((f.ops[1]!.set as { completedAt: unknown }).completedAt)).toMatchObject({ sql: "now()", params: [] })
+    expect(nowSql((f.ops[2]!.set as { completedAt: unknown }).completedAt)).toMatchObject({ sql: "now()", params: [] })
+
+    const scripted = createScriptedDb("pg", () => affected(1))
+    const provider = createDrizzlePersistenceProvider({ db: scripted.db as never, registry: new DrizzleEntityRegistry() })
+    await createDrizzlePgIdempotencyStore<unknown>(scripted.db as never, table).markCommittedInTransaction(lease as never, provider)
+    expect(nowSql((scripted.ops[0]!.set as { completedAt: unknown }).completedAt)).toMatchObject({ sql: "now()", params: [] })
+
+    const claim = build((op) => (op.kind === "select" ? [stored({ status: "business-committed", pendingInvalidations: '["a"]' })] : affected(1)))
+    await claim.store.claimPendingInvalidations({ claimOwner: "fin", leaseMs: 7_000 })
+    expect(nowSql((claim.ops[1]!.set as { finalizerClaimExpiresAt: unknown }).finalizerClaimExpiresAt)).toEqual({ sql: "now() + ($1 * interval '1 millisecond')", params: [7_000] })
+  })
+
+  it("decodes only string results and treats any other stored result as absent", async () => {
+    const pending = (result: unknown) => stored({ status: "business-committed", pendingInvalidations: '["a"]', result })
+    for (const result of [5, true, { ok: 1 }, undefined]) {
+      const f = build((op) => (op.kind === "select" ? [pending(result)] : affected(1)))
+      const claimed = await f.store.claimPendingInvalidations({ claimOwner: "fin", leaseMs: 1_000 })
+      expect(claimed.map((c) => c.result)).toEqual([null])
+    }
+    const parsed = build((op) => (op.kind === "select" ? [pending('{"ok":4}')] : affected(1)))
+    expect((await parsed.store.claimPendingInvalidations({ claimOwner: "fin", leaseMs: 1_000 }))[0]!.result).toEqual({ ok: 4 })
   })
 })

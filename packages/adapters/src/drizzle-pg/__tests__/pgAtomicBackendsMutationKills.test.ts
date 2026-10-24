@@ -120,6 +120,8 @@ describe("createPgLeaseStore table resolution", () => {
     expect(() => pgSchemaName("a".repeat(64))).toThrow("Unsafe PostgreSQL schema name")
     expect(() => pgSchemaName("bad-name")).toThrow("Unsafe PostgreSQL schema name")
     expect(() => pgSchemaName(5 as never)).toThrow("Unsafe PostgreSQL schema name")
+    expect(() => pgSchemaName(["abc"] as never)).toThrow("Unsafe PostgreSQL schema name")
+    expect(() => pgSchemaName({ toString: () => "abc" } as never)).toThrow("Unsafe PostgreSQL schema name")
     expect(pgSchemaName("a".repeat(63))).toBe("a".repeat(63))
     expect(pgSchemaName("_A9")).toBe("_A9")
   })
