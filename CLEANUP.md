@@ -70,6 +70,11 @@ This file is part of that work and is deleted by the same change.
   `scripts/` contain them today. Rename tests and `describe` blocks by behaviour, not by ID.
 - Test file names that describe how they were written rather than what they test. `*MutationKills.test.ts`
   becomes `<unit>.<behaviour>.test.ts`, or the tests merge into the existing test file for that unit.
+- Decide on `packages/adapters/src/drizzle-shared/__tests__/predicateCompilerMutationKills.test.ts` (168 KB) and
+  its snapshot (`__snapshots__/…snap`, 545 KB, exact SQL and parameters for about 3,200 predicates). These are
+  the largest files in the repository. A snapshot records current output and does not prove it is correct.
+  The option is to replace both with a hand-written table of about 100–200 representative cases with explicit
+  expected SQL per dialect, then re-measure that the mutation score stays close to 96.8 %.
 - Comments that explain history ("added for", "was", "previously", "fix for review finding") instead of the
   current behaviour.
 - The threat model in `docs/spec/security.md` stays, but without plan cross-references.
