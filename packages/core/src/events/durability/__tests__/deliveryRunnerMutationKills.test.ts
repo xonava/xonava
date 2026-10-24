@@ -193,7 +193,7 @@ describe("consumeInboxMessage", () => {
     consumeInboxMessage({ inbox, envelope, consumer, owner: "w", leaseMs: 1000, handle: async () => "done", now: () => t0, ...extra })
 
   it("creates the initial pending record", () => {
-    expect(base).toEqual({
+    expect(createInboxRecord(envelope, consumer, t0)).toEqual({
       messageId: "m1", consumerKey: "ledger", consumerDefinitionVersion: 1, scopeId, state: "pending", attempt: 0, replayGeneration: 0, claim: null,
       firstObservedAt: t0.toISOString(), lastObservedAt: t0.toISOString(), eventFormatVersion: 1, eventPayloadVersion: 1, originalProvenance: provenance,
       replay: { kind: "original-delivery" }, history: [],
