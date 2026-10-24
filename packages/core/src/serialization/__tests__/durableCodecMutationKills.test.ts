@@ -125,7 +125,11 @@ describe("assertDurableRoundTrip", () => {
     const toText: DurableCodec = { key: "text", encode: (value) => (value as Date).toISOString(), decode: (value) => value }
     expectValidation(() => assertDurableRoundTrip(toText, new Date(0)), "durable codec 'text' did not round-trip the value")
     // value has a canonical form (string) but the decoded value does not (Date)
-    const toDate: DurableCodec = { key: "toDate", encode: (value) => value, decode: (value) => new Date(value as string) }
+    const toDate: DurableCodec = {
+      key: "toDate",
+      encode: (value) => (typeof value === "string" ? value : (value as Date).toISOString()),
+      decode: (value) => new Date(value as string),
+    }
     expectValidation(() => assertDurableRoundTrip(toDate, "2020-01-01T00:00:00.000Z"), "durable codec 'toDate' did not round-trip the value")
   })
 
