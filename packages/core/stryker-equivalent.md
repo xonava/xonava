@@ -80,3 +80,16 @@ Redundant or unreachable code:
 - src/entity/queryableFields.ts:8, ConditionalExpression: `Object.entries` of a non-object value is empty.
 - src/entity/brands.ts:5, ConditionalExpression: `WeakSet.has(null)` is false.
 - src/entity/cachePrefixes.ts:30, ArrayDeclaration: a stray string element destructures to `undefined`/`undefined`, which never collides.
+
+## core events
+
+- src/events/durability/deliveryRunner.ts:54, OptionalChaining: the abort listener only fires when `parent` is defined, so `parent.reason` equals `parent?.reason`.
+- src/events/durability/deliveryRunner.ts:57, LogicalOperator: a pre-aborted parent never reaches the work and the abort reason is only mapped to `cancelled`, so `&& new CancelledError()` is not observable.
+- src/events/durability/deliveryRunner.ts:60, CallExpression: dropping `reject(error)` changes nothing because the abort listener on the next line rejects with the same `TimeoutError`.
+- src/events/durability/deliveryRunner.ts:69, ConditionalExpression: `timer` is always assigned synchronously by the Promise executor, so the guard is always true.
+- src/events/durability/deliveryRunner.ts:156, BlockStatement: `delay` is declared as `undefined`, so an empty catch block leaves the same value.
+- src/events/eventEnvelope.ts:51, OptionalChaining: `assertDurableAuthorityProvenance` rejects a provenance without target before this line.
+- src/events/eventEnvelope.ts:52, ConditionalExpression/LogicalOperator: `assertDurableAuthorityProvenance` already guarantees the target scope matches its scopeId, so the three terms cannot disagree independently.
+- src/events/durability/delivery.ts:120,123,125, ConditionalExpression/StringLiteral: `stableJsonForm` only builds a comparison key for two payloads through the same function, so a changed bracket, brace or separator string, or treating an array like an object, maps both sides identically.
+- src/events/durability/delivery.ts:126,133, ConditionalExpression/StringLiteral: `String(number)` equals `JSON.stringify(number)` for JSON-normalised numbers, and the `?? "null"` fallbacks are unreachable after the JSON round trip.
+- src/events/durability/auditRedaction.ts, all mutants: excluded from mutation runs because its linear-time tests time out under Stryker.
