@@ -93,3 +93,15 @@ Redundant or unreachable code:
 - src/events/durability/delivery.ts:120,123,125, ConditionalExpression/StringLiteral: `stableJsonForm` only builds a comparison key for two payloads through the same function, so a changed bracket, brace or separator string, or treating an array like an object, maps both sides identically.
 - src/events/durability/delivery.ts:126,133, ConditionalExpression/StringLiteral: `String(number)` equals `JSON.stringify(number)` for JSON-normalised numbers, and the `?? "null"` fallbacks are unreachable after the JSON round trip.
 - src/events/durability/auditRedaction.ts, all mutants: excluded from mutation runs because its linear-time tests time out under Stryker.
+
+## core security
+
+- src/security/authorizedExecutionPlan.ts:30, ConditionalExpression/LogicalOperator: `WeakSet.has` returns false for `null` and primitives, so the `typeof`/`null` guards in `isAuthorizedExecutionPlan` cannot change the result.
+- src/security/authorizedExecutionPlan.ts:50, ConditionalExpression/LogicalOperator: `Object.isFrozen` is true for primitives and `null`, and re-freezing or re-walking an already frozen object has no effect, so every reordered guard in `deepFreeze` is equivalent.
+- src/security/authorizedExecutionPlan.ts:73, ConditionalExpression: `cloneAndFreezeDefinition` rejects any object deeper than 64 levels before the snapshot runs, so the snapshot `depth` operand is never the only reason to throw (the node-count and the `>=` boundary operands are killed).
+- src/security/authorizedExecutionPlan.ts:85,87, BooleanLiteral: `Object.freeze(copy)` makes every own property non-configurable and non-writable anyway, so the `configurable`/`writable` flags of the Date mutator guards are redundant (`enumerable` is asserted).
+- src/security/authorizedExecutionPlan.ts:105,113, ArithmeticOperator: the snapshot depth limit is unreachable (see line 73), so `depth + 1` and `depth - 1` behave identically.
+- src/security/authorizedExecutionPlan.ts:129, OptionalChaining: `plan.identity?.actor` has already thrown for a missing identity, so `identity?.subject` is never evaluated on an undefined identity.
+- src/security/authorizedExecutionPlan.ts:144, ConditionalExpression/StringLiteral/BlockStatement/ArrowFunction: the "no revalidation strategy" check is a second copy of the check in `assertDynamicFactEvidence` (line 191), which always throws first with the same message; the two copies cover each other.
+- src/security/authorizedExecutionPlan.ts:186,191, ConditionalExpression/StringLiteral: `typeof fact !== "object"` and the line 191 mutation check are covered by the next conjunct and by the copy on line 144 (same message), so neither changes an outcome.
+- src/security/scopeResolver.ts:43, ConditionalExpression/LogicalOperator: `WeakSet.has` returns false for `null` and primitives, so the guards in `isVerifiedScopeResolution` cannot change the result.
