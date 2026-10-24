@@ -125,6 +125,17 @@ describe("repository reads", () => {
     }
   })
 
+  it("validates the consistency level as part of the query plan, and ignores unknown pagination kinds", async () => {
+    const f = build(countThen([]))
+    await expect(f.repo.findMany!({ consistency: "bogus" })).rejects.toThrow(new ValidationError("query consistency is invalid"))
+    await expect(f.repo.findMany!({ consistency: "eventual" })).rejects.toThrow("read consistency eventual is not proven for the selected datasource topology")
+    expect(f.ops).toEqual([])
+    const g = build(countThen([]))
+    const result = await g.repo.findMany!({ pagination: { kind: "other", page: 3, pageSize: 5 } }) as { page: number; pageSize: number }
+    expect(result).toMatchObject({ page: 1, pageSize: 20 })
+    expect(pageOp(g.ops)).toMatchObject({ limit: 20, offset: 0 })
+  })
+
   it("requires a non-empty sort for cursor pagination and reads one extra row for the next-page probe", async () => {
     const f = build(countThen([]))
     const cursor = { kind: "cursor", limit: 3, direction: "after" }
@@ -289,6 +300,8 @@ describe("repository writes", () => {
       expect(error).toBeInstanceOf(ConflictError)
       expect(error.details).toEqual({ dialect: "postgresql", providerCode: "23505" })
     }
+    const undefinedKey = build(() => { throw providerError("23505") }, { constraintMap: { undefined: "ghost" } })
+    expect(((await undefinedKey.repo.insert!({ id: "w", name: "a" }).catch((e: unknown) => e)) as ConflictError).details).toEqual({ dialect: "postgresql", providerCode: "23505" })
     const alreadyConflict = new ConflictError("already", { field: "keep" })
     const passthrough = build(() => { throw alreadyConflict }, mapped)
     expect(await passthrough.repo.insert!({ id: "w", name: "a" }).catch((e: unknown) => e)).toBe(alreadyConflict)
@@ -366,6 +379,7 @@ describe("updateOneWhereReturning", () => {
     const hit = build((op) => (op.kind === "select" ? [{ primaryKey: "n1" }] : [{ id: "n1", body: "y" }]), {}, "note")
     expect(await hit.repo.updateOneWhereReturning!(noteFilter, { body: "y" })).toEqual({ id: "n1", body: "y" })
     expect(whereOf(hit.ops[1])).toEqual({ sql: '("notes"."body" = $1) AND "notes"."id" = $2', params: ["x", "n1"] })
+    expect(hit.ops[1]!.set).toEqual({ body: "y" })
     const miss = build((op) => (op.kind === "select" ? [{ primaryKey: "n1" }] : []), {}, "note")
     expect(await miss.repo.updateOneWhereReturning!(noteFilter, { body: "y" })).toBeNull()
   })
@@ -406,6 +420,9 @@ describe("delete and deleteWhere", () => {
     const note = build(() => [], {}, "note")
     await expect(note.repo.delete!("n1")).rejects.toThrow(new NotFoundError("note record not found"))
     await expect(note.repo.delete!("n1", { idempotent: true })).resolves.toBeUndefined()
+    const visible = build((op) => (op.kind === "select" ? [{ primaryKey: "n1" }] : []), {}, "note")
+    await expect(visible.repo.delete!("n1")).rejects.toThrow(new NotFoundError("note record not found"))
+    expect(visible.ops.map((op) => op.kind)).toEqual(["delete"])
     const failing = build(() => { throw providerError("40001") })
     await expect(failing.repo.delete!("w1", oc(3))).rejects.toThrow("retry")
     await expect(note.repo.delete!("n1", oc(1))).rejects.toThrow(new ConfigurationError('Optimistic concurrency for "note" requires a mapped version field'))
@@ -417,6 +434,9 @@ describe("delete and deleteWhere", () => {
     expect(await f.repo.deleteWhere!(filter, oc(3))).toEqual({ deletedCount: 2 })
     expect(whereOf(f.ops[0])).toEqual({ sql: '(("widgets"."name" = $1) and "widgets"."version" = $2)', params: ["a", 3] })
     expect(f.ops[0]!.returning).toBe(true)
+    const terminal = build(() => [row()])
+    expect(await terminal.repo.deleteWhere!(filter, oc(Number.MAX_SAFE_INTEGER))).toEqual({ deletedCount: 1 })
+    expect(terminal.ops[0]!.where!.params).toEqual(["a", Number.MAX_SAFE_INTEGER])
     const stale = build((op) => (op.kind === "select" ? [{ primaryKey: "w1" }] : []))
     await expect(stale.repo.deleteWhere!(filter, oc(3))).rejects.toThrow(new OptimisticConcurrencyError("widget version mismatch: expected version 3"))
     expect(whereOf(stale.ops[1])).toEqual({ sql: '("widgets"."name" = $1)', params: ["a"] })

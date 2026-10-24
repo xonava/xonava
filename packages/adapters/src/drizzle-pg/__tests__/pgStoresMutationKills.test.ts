@@ -135,6 +135,12 @@ describe("job progress store", () => {
     expect(calls[0]!.params).toEqual(["j1", "w1", "tok", 2, 3, 55, '{"a":1}', 2])
   })
 
+  it("omits a null checkpoint and percent from the written row", async () => {
+    const { pool } = createScriptedPgPool(() => [progressRow({ percent: null, checkpoint: null })])
+    const written = await new DrizzlePgJobProgressStore(pool).write(fence, 0, {})
+    expect(written).toEqual({ jobId: "j1", attempt: 2, sequence: 1, updatedAt: at(5).toISOString() })
+  })
+
   it("validates progress before issuing any SQL", async () => {
     const { pool, calls } = createScriptedPgPool(() => [progressRow()])
     await expect(new DrizzlePgJobProgressStore(pool).write(fence, 0, { percent: 500 })).rejects.toThrow()

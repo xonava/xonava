@@ -327,6 +327,28 @@ describe("job store claiming", () => {
   })
 })
 
+describe("job store claim ordering and partition SQL without a scope-key column", () => {
+  it("orders claims that tie on priority and run time by id, whatever the input order", async () => {
+    for (const ids of [["d", "b", "a", "c", "e"], ["e", "d", "c", "b", "a"], ["a", "b", "c", "d", "e"], ["c", "a", "e", "b", "d"]]) {
+      const f = build((op) => (op.returning ? ids.map((id) => jobRow({ id })) : affected(0)))
+      const claimed = await f.store.claimDue({ workerId: "w", leaseDurationMs: 1, limit: 5, requester: system })
+      expect(claimed.map((job) => job.id)).toEqual(["a", "b", "c", "d", "e"])
+    }
+  })
+
+  it("compares only the mapped partition columns when the table has no scope-key column", async () => {
+    const { scopeKey: _scopeKey, ...withoutScopeKey } = jobColumns
+    const f = build((op) => (op.returning ? [] : affected(0)), { jobsMap: withoutScopeKey })
+    await f.store.claimDue({ workerId: "w", leaseDurationMs: 1, limit: 1, requester: system, now: RUN_AT })
+    const text = norm(f.ops[1]!.where!.sql)
+    expect(text).not.toContain("scope_key")
+    expect(text).not.toContain("Stryker")
+    const part = (alias: string) => `"${alias}"."partition_key" = ${J}"partition_key" AND "${alias}"."scope" = ${J}"scope" AND "${alias}"."tenant_id" IS NOT DISTINCT FROM ${J}"tenant_id" AND "${alias}"."id" <> ${J}"id"`
+    expect(text).toContain(`NOT EXISTS (SELECT 1 FROM "platform_jobs" sibling WHERE ${part("sibling")} AND "sibling"."status" = 'running'`)
+    expect(text).toContain(`NOT EXISTS (SELECT 1 FROM "platform_jobs" ahead WHERE ${part("ahead")} AND ((`)
+  })
+})
+
 describe("job store lease renewal and release", () => {
   it("renewal only extends a live, owned, running claim and never shortens the lease", async () => {
     const f = build(() => affected(1))

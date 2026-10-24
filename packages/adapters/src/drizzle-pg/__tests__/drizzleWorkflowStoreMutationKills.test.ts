@@ -318,6 +318,7 @@ describe("workflow store signal delivery", () => {
     const error = await failing.store.deliverSignal(signal).catch((e: unknown) => e)
     expect(error).toBeInstanceOf(ConflictError)
     expect((error as Error).message).toBe("A record with this value already exists")
+    expect(failing.calls.at(-1)!.sql).toBe("ROLLBACK")
     expect(failing.events.at(-1)).toBe("release")
     const noRelease = { query: async (text: string) => { if (norm(text) === INSTANCE) throw new Error("x"); return { rows: [], rowCount: 0 } } }
     await expect(new DrizzlePgWorkflowStore({ connect: async () => noRelease, query: async () => ({ rows: [], rowCount: 0 }) } as never).deliverSignal(signal)).rejects.toThrow()
