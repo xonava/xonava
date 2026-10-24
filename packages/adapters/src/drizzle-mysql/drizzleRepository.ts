@@ -18,7 +18,10 @@ import {getMySqlAffectedRows,validateMySqlConstraintMap} from "./mysqlUtils"
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type MySqlDatabaseLike=MySql2Database<any>
 type Row=Record<string,unknown>
-const guard=(filter:PredicateNode|undefined,operation:string)=>{if(!filter)throw new ValidationError(`${operation} requires a predicate`);if(filter.kind==="literal"&&filter.value)throw new ConfigurationError(`All-row ${operation} is forbidden`)}
+// Rejects every predicate shape that matches all rows (literal true, empty AND, NOT of always-false, ...), not only literal true.
+const isAlwaysTruePredicate=(node:PredicateNode):boolean=>{switch(node.kind){case "literal":return node.value===true;case "and":return node.filters.length===0||node.filters.every(isAlwaysTruePredicate);case "or":return node.filters.length>0&&node.filters.some(isAlwaysTruePredicate);case "not":return isAlwaysFalsePredicate(node.filter);default:return false}}
+const isAlwaysFalsePredicate=(node:PredicateNode):boolean=>{switch(node.kind){case "literal":return node.value===false;case "or":return node.filters.length===0||node.filters.every(isAlwaysFalsePredicate);case "and":return node.filters.length>0&&node.filters.some(isAlwaysFalsePredicate);case "not":return isAlwaysTruePredicate(node.filter);default:return false}}
+const guard=(filter:PredicateNode|undefined,operation:string)=>{if(!filter)throw new ValidationError(`${operation} requires a predicate`);if(isAlwaysTruePredicate(filter))throw new ConfigurationError(`All-row ${operation} is forbidden`)}
 
 export function createDrizzleMySqlRepository<T extends Row,TId=string>(args:{db:MySqlDatabaseLike;table:AnyMySqlTable;entity:VersionedEntityDescriptor<T>;columnMap:DrizzleColumnMap;maxPageSize?:number;mysqlBinaryCollation?:boolean;constraintMap?:Record<string,string>}):VersionedRepository<T,TId>
 export function createDrizzleMySqlRepository<T extends Row,TId=string>(args:{db:MySqlDatabaseLike;table:AnyMySqlTable;entity:UnversionedEntityDescriptor<T>;columnMap:DrizzleColumnMap;maxPageSize?:number;mysqlBinaryCollation?:boolean;constraintMap?:Record<string,string>}):UnversionedRepository<T,TId>

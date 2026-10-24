@@ -82,12 +82,27 @@ describe("MySQL repository construction and guards", () => {
     expect(note.ops).toEqual([])
   })
 
-  // KNOWN BUG (reported, source not changed): the MySQL guard only recognises a `literal true` filter, so an empty AND
-  // (Predicate.alwaysTrue()) compiles to `WHERE (1 = 1)` and deletes/updates every row. PostgreSQL and D1 reject it.
-  it.fails("rejects Predicate.alwaysTrue() for all-row writes like the PostgreSQL and D1 repositories do", async () => {
+  it("rejects every always-true predicate shape for all-row writes, like the PostgreSQL and D1 repositories", async () => {
     const note = build(() => changed(5), {}, "note")
-    await expect(note.repo.deleteWhere!(Predicate.alwaysTrue())).rejects.toThrow("All-row deleteWhere")
-    await expect(note.repo.updateManyWhere!(Predicate.alwaysTrue(), { body: "x" })).rejects.toThrow("All-row updateManyWhere")
+    const allRows = [
+      Predicate.alwaysTrue(),
+      Predicate.and(),
+      Predicate.not(Predicate.alwaysFalse()),
+      Predicate.or(Predicate.eq("body", "a"), Predicate.alwaysTrue()),
+      Predicate.and(Predicate.alwaysTrue(), Predicate.not(Predicate.or())),
+    ]
+    for (const filter of allRows) {
+      await expect(note.repo.deleteWhere!(filter)).rejects.toThrow(new ConfigurationError("All-row deleteWhere is forbidden"))
+      await expect(note.repo.updateManyWhere!(filter, { body: "x" })).rejects.toThrow(new ConfigurationError("All-row updateManyWhere is forbidden"))
+      await expect(note.repo.updateOneWhere!(filter, { body: "x" })).rejects.toThrow(new ConfigurationError("All-row updateOneWhere is forbidden"))
+    }
+  })
+
+  it("still accepts filters that are not always true", async () => {
+    const note = build(() => changed(1), {}, "note")
+    for (const filter of [Predicate.eq("body", "a"), Predicate.or(), Predicate.and(Predicate.alwaysTrue(), Predicate.eq("body", "a")), Predicate.not(Predicate.alwaysTrue())]) {
+      await expect(note.repo.deleteWhere!(filter)).resolves.not.toThrow()
+    }
   })
 
   it("reports the provider dialect and constraint field on normalized failures", async () => {
