@@ -162,4 +162,24 @@ describe("resolveVerifiedScope", () => {
     })
     expect(both.scope).toEqual({ kind: "application", applicationKey: "app" })
   })
+
+  it("denies a registered resolution whose frozen scope no longer matches its scope id", async () => {
+    // A hostile resolver can hand over a scope whose fields change between reads, so the frozen copy and the id disagree.
+    let reads = 0
+    const shifting = { kind: "tenant" } as Record<string, unknown>
+    Object.defineProperty(shifting, "tenantId", { enumerable: true, get: () => (reads++ === 0 ? "tenant-a" : "tenant-b") })
+    const inconsistent = createVerifiedScopeResolution("tenant", shifting as never)
+    expect(isVerifiedScopeResolution(inconsistent)).toBe(true)
+    expect(inconsistent.scope).toEqual({ kind: "tenant", tenantId: "tenant-a" })
+    expect(inconsistent.scopeId).not.toBe(encodeExecutionScopeId(inconsistent.scope))
+
+    const error = await rejection(resolveVerifiedScope({ route: route(), input: {}, binding: binding(async () => inconsistent) }))
+    expect(error).toBeInstanceOf(ForbiddenError)
+    expect(error.message).toBe("verified scope identity mismatch")
+
+    let assertion: unknown
+    try { assertVerifiedScopeIdentity(inconsistent) } catch (caught) { assertion = caught }
+    expect(assertion).toBeInstanceOf(ConfigurationError)
+    expect((assertion as Error).message).toBe("verified scope identity mismatch")
+  })
 })
