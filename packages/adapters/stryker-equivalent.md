@@ -57,3 +57,42 @@ Line numbers refer to the source before instrumentation.
 - src/drizzle-shared/predicateCompiler.ts:533-534, ConditionalExpression (`case "includesAny"` / `case "includesAll"` labels): without the label the operator reaches `default`, which throws the same "Unsupported predicate operator" error.
 - src/drizzle-shared/predicateCompiler.ts:542-543, ConditionalExpression / StringLiteral (empty-`clauses` guard and `and(...) ?? sql\`1 = 0\``): `and()` of no clauses is undefined and falls back to the same `1 = 0`; and() of two clauses is never undefined.
 - src/drizzle-shared/predicateCompiler.ts:586, 588, 591, 593, ConditionalExpression / StringLiteral (empty and single-child guards of and/or): `and()`/`or()` of nothing falls back to the same `1 = 1` / `1 = 0`, a single child renders identically with or without the explicit parentheses, and the `??` fallbacks are unreachable for two or more children.
+
+## adapters drizzle-pg
+
+### src/drizzle-pg/drizzleIdempotencyStore.ts
+
+- src/drizzle-pg/drizzleIdempotencyStore.ts:15, ConditionalExpression (`property in current` -> `true`): reading a property the object lacks yields `undefined`, which fails the `typeof value === "string"` test exactly as the skipped read does.
+- src/drizzle-pg/drizzleIdempotencyStore.ts:19, ConditionalExpression (`"cause" in current` -> `true`): `current.cause` is `undefined` when absent, which ends the walk exactly as the `undefined` branch does.
+
+### src/drizzle-pg/drizzleJobStore.ts
+
+- src/drizzle-pg/drizzleJobStore.ts:41, ConditionalExpression (`!raw` -> `false` in `parseMetadata`): the only caller is `row.metadata ? parseMetadata(row.metadata) : null`, so the guard never sees a falsy value.
+- src/drizzle-pg/drizzleJobStore.ts:60, StringLiteral (`includes("\u0000")` -> `includes("")`): `replaceAll("\u0000", ...)` is a no-op for a string without NUL, so the result is identical.
+- src/drizzle-pg/drizzleJobStore.ts:140, StringLiteral (`?? "best_effort"` -> `""`): the history mode is only ever compared with `"required"`, so `""` behaves as `"best_effort"`.
+- src/drizzle-pg/drizzleJobStore.ts:149-152, all mutators: `partitionKeyColumnName`, `leaseExpiresAtColumnName`, `physicalIdColumn` and `physicalStatusColumn` are assigned in the constructor and never read.
+- src/drizzle-pg/drizzleJobStore.ts:231, ConditionalExpression (`tenantFilter`): only called with a non-null tenant id (`requesterFilters` checks `!== null` first), so the `isNull` branch is unreachable and `eq` is used either way.
+- src/drizzle-pg/drizzleJobStore.ts:253, CallExpression (`assertJobScopeCanEnqueue`): `encodeJobScope` always returns a consistent scope and tenant id, so the assertion can never fail here.
+- src/drizzle-pg/drizzleJobStore.ts:340, ConditionalExpression/EqualityOperator (`requesterScope.length > 0`): `requesterFilters` always returns at least the scope filter, so the guard is always true.
+- src/drizzle-pg/drizzleJobStore.ts:347, 362, 370, ArrayDeclaration (the `[]` arm of `scope ? [scope] : []`): `scope` is always defined (see 340), so the empty arm is unreachable.
+- src/drizzle-pg/drizzleJobStore.ts:371, ConditionalExpression/EqualityOperator (inner `left.id > right.id ? 1 : 0`): the sort only distinguishes negative from non-negative results, so returning 0 or 1 for equal or greater ids orders identically (verified with shuffled batches of 40 to 300 ids against each mutant).
+- src/drizzle-pg/drizzleJobStore.ts:479-480, all mutators (`recordExecution`'s `executionHistory === "required"` branch): required history goes through `atomicTransition`, so `recordExecution` only runs in best-effort mode and the returned `error` is never read.
+
+### src/drizzle-pg/drizzleRepository.ts
+
+- src/drizzle-pg/drizzleRepository.ts:120, ConditionalExpression (`clauses.length === 1` -> `false`): `sql.join` of a single clause renders the same SQL as the clause itself.
+- src/drizzle-pg/drizzleRepository.ts:159, 161, 174, 176, ConditionalExpression/EqualityOperator (empty `and`/`or` guards in `isAlwaysTruePredicate`/`isAlwaysFalsePredicate`): `[].every(...)` is `true` and `[].some(...)` is `false`, so the explicit `length` guards and their mutants give the same answer.
+- src/drizzle-pg/drizzleRepository.ts:164, 179, ConditionalExpression (removed `default:` clause): the switch then falls off the end and returns `undefined`, which is falsy exactly like the `false` it replaces.
+- src/drizzle-pg/drizzleRepository.ts:266, StringLiteral (`kind: "offset"` -> `""`): `resolvePagination` reads only `page` and `pageSize`, never `kind`.
+- src/drizzle-pg/drizzleRepository.ts:268, OptionalChaining (`options?.filter` -> `options.filter`): a cursor exists only when `options` does.
+- src/drizzle-pg/drizzleRepository.ts:327, LogicalOperator (`options?.optimisticConcurrency && versionField` -> `||`): a versioned entity requires the option and an unversioned one rejects it earlier, so both operands are always equally truthy.
+- src/drizzle-pg/drizzleRepository.ts:397, 408, 472, OptionalChaining/ConditionalExpression (`options?.optimisticConcurrency` in the versioned branches): `assertVersionedWriteHasExpectedVersion` has already required the option for a versioned entity, so it is always defined there.
+- src/drizzle-pg/drizzleRepository.ts:416, 487, 516, 552, ConditionalExpression/LogicalOperator (explicit rethrow of `OptimisticConcurrencyError`, `NotFoundError`, `ConfigurationError`): the fall-through `rethrowConstraintError` returns a `FrameworkCoreError` unchanged and throws it, so the same error object escapes either way.
+
+### src/drizzle-pg/drizzleWorkflowStore.ts
+
+- src/drizzle-pg/drizzleWorkflowStore.ts:14, ConditionalExpression (`row.outcome == null ? null : row.outcome` -> `false`): for a `null` outcome the unguarded read is also `null`.
+
+### src/drizzle-pg/pgUtils.ts
+
+- src/drizzle-pg/pgUtils.ts:19, ConditionalExpression (`typeof obj.meta === "object"` -> `true`): a truthy non-object `meta` has no `rowCount` or `changes`, so the lookups fall through to the same error.
