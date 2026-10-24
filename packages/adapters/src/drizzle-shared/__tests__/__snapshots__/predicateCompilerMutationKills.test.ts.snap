@@ -137,6 +137,8 @@ exports[`predicate compiler row-matching SQL, generic #4 > emits the exact SQL t
     "params": [],
     "sql": "COALESCE((1 = NULL), FALSE)",
   },
+  "{"kind":"condition","field":"ip","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": "THROW Predicate references unmapped field "ip"",
+  "{"kind":"condition","field":"ip","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": "THROW Predicate references unmapped field "ip"",
   "{"kind":"condition","field":"j","op":"between","value":{"from":1,"to":5}}": {
     "params": [
       "1",
@@ -471,6 +473,12 @@ exports[`predicate compiler row-matching SQL, generic #4 > emits the exact SQL t
     ],
     "sql": "COALESCE("t"."s" LIKE ? ESCAPE '\\', FALSE)",
   },
+  "{"kind":"condition","field":"s","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
   "{"kind":"condition","field":"s","op":"eq","value":"1"}": {
     "params": [
       "1",
@@ -510,6 +518,12 @@ exports[`predicate compiler row-matching SQL, generic #4 > emits the exact SQL t
   "{"kind":"condition","field":"s","op":"eq","value":true}": {
     "params": [],
     "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"s","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE("t"."s" > ?, FALSE)",
   },
   "{"kind":"condition","field":"s","op":"gt","value":"1"}": {
     "params": [
@@ -807,6 +821,290 @@ exports[`predicate compiler row-matching SQL, generic #4 > emits the exact SQL t
     "params": [],
     "sql": "COALESCE((1 = NULL), FALSE)",
   },
+  "{"kind":"condition","field":"u","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": "THROW Predicate references unmapped field "u"",
+  "{"kind":"condition","field":"u","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": "THROW Predicate references unmapped field "u"",
+  "{"kind":"condition","field":"x_decimalx","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_decimalx","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE("t"."s" > ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"contains","value":"a"}": {
+    "params": [
+      "%a%",
+    ],
+    "sql": "COALESCE("t"."s" LIKE ? ESCAPE '\\', FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"1"}": {
+    "params": [
+      "1",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"12:00:00"}": {
+    "params": [
+      "12:00:00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"2024-01-01 12:00:00"}": {
+    "params": [
+      "2024-01-01 12:00:00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"2024-01-01 12:00:00+00"}": {
+    "params": [
+      "2024-01-01 12:00:00+00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"2024-01-01"}": {
+    "params": [
+      "2024-01-01",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"2024-01-01T05:30:00+05:30"}": {
+    "params": [
+      "2024-01-01T05:30:00+05:30",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"x"}": {
+    "params": [
+      "x",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":1}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":true}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"gt","value":"1"}": {
+    "params": [
+      "1",
+    ],
+    "sql": "COALESCE("t"."s" > ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"gt","value":"x"}": {
+    "params": [
+      "x",
+    ],
+    "sql": "COALESCE("t"."s" > ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"gt","value":1}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"gt","value":true}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"isEmpty"}": {
+    "params": [
+      "",
+    ],
+    "sql": "COALESCE(("t"."s" is null or "t"."s" = ?), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"isTrue"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"contains","value":"a"}": {
+    "params": [
+      "%a%",
+    ],
+    "sql": "COALESCE("t"."s" LIKE ? ESCAPE '\\', FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"1"}": {
+    "params": [
+      "1",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"12:00:00"}": {
+    "params": [
+      "12:00:00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"2024-01-01 12:00:00"}": {
+    "params": [
+      "2024-01-01 12:00:00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"2024-01-01 12:00:00+00"}": {
+    "params": [
+      "2024-01-01 12:00:00+00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"2024-01-01"}": {
+    "params": [
+      "2024-01-01",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"2024-01-01T05:30:00+05:30"}": {
+    "params": [
+      "2024-01-01T05:30:00+05:30",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"x"}": {
+    "params": [
+      "x",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":1}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":true}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE("t"."s" > ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"gt","value":"1"}": {
+    "params": [
+      "1",
+    ],
+    "sql": "COALESCE("t"."s" > ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"gt","value":"x"}": {
+    "params": [
+      "x",
+    ],
+    "sql": "COALESCE("t"."s" > ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"gt","value":1}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"gt","value":true}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"isEmpty"}": {
+    "params": [
+      "",
+    ],
+    "sql": "COALESCE(("t"."s" is null or "t"."s" = ?), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"isTrue"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"contains","value":"a"}": {
+    "params": [
+      "%a%",
+    ],
+    "sql": "COALESCE("t"."s" LIKE ? ESCAPE '\\', FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":"1"}": {
+    "params": [
+      "1",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":"12:00:00"}": {
+    "params": [
+      "12:00:00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":"2024-01-01 12:00:00"}": {
+    "params": [
+      "2024-01-01 12:00:00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":"2024-01-01 12:00:00+00"}": {
+    "params": [
+      "2024-01-01 12:00:00+00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":"2024-01-01"}": {
+    "params": [
+      "2024-01-01",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":"2024-01-01T05:30:00+05:30"}": {
+    "params": [
+      "2024-01-01T05:30:00+05:30",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":"x"}": {
+    "params": [
+      "x",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":1}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":true}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"gt","value":"1"}": {
+    "params": [
+      "1",
+    ],
+    "sql": "COALESCE("t"."s" > ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"gt","value":"x"}": {
+    "params": [
+      "x",
+    ],
+    "sql": "COALESCE("t"."s" > ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"gt","value":1}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"gt","value":true}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"isEmpty"}": {
+    "params": [
+      "",
+    ],
+    "sql": "COALESCE(("t"."s" is null or "t"."s" = ?), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"isTrue"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
   "{"kind":"condition","field":"x_nosql","op":"contains","value":"a"}": {
     "params": [
       "%a%",
@@ -1030,6 +1328,236 @@ exports[`predicate compiler row-matching SQL, generic #4 > emits the exact SQL t
     "sql": "COALESCE(("t"."s" is null or "t"."s" = ?), FALSE)",
   },
   "{"kind":"condition","field":"x_padded","op":"isTrue"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_timeDate","op":"contains","value":"a"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_timeDate","op":"eq","value":"1"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_timeDate","op":"eq","value":"12:00:00"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_timeDate","op":"eq","value":"2024-01-01 12:00:00"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_timeDate","op":"eq","value":"2024-01-01 12:00:00+00"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_timeDate","op":"eq","value":"2024-01-01"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_timeDate","op":"eq","value":"2024-01-01T05:30:00+05:30"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_timeDate","op":"eq","value":"x"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_timeDate","op":"eq","value":1}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_timeDate","op":"eq","value":true}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_timeDate","op":"gt","value":"1"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_timeDate","op":"gt","value":"x"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_timeDate","op":"gt","value":1}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_timeDate","op":"gt","value":true}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_timeDate","op":"isEmpty"}": {
+    "params": [],
+    "sql": "COALESCE("t"."s" is null, FALSE)",
+  },
+  "{"kind":"condition","field":"x_timeDate","op":"isTrue"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_tsDate","op":"contains","value":"a"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_tsDate","op":"eq","value":"1"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_tsDate","op":"eq","value":"12:00:00"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_tsDate","op":"eq","value":"2024-01-01 12:00:00"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_tsDate","op":"eq","value":"2024-01-01 12:00:00+00"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_tsDate","op":"eq","value":"2024-01-01"}": {
+    "params": [
+      2024-01-01T00:00:00.000Z,
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_tsDate","op":"eq","value":"2024-01-01T05:30:00+05:30"}": {
+    "params": [
+      2024-01-01T00:00:00.000Z,
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_tsDate","op":"eq","value":"x"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_tsDate","op":"eq","value":1}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_tsDate","op":"eq","value":true}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_tsDate","op":"gt","value":"1"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_tsDate","op":"gt","value":"x"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_tsDate","op":"gt","value":1}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_tsDate","op":"gt","value":true}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_tsDate","op":"isEmpty"}": {
+    "params": [],
+    "sql": "COALESCE("t"."s" is null, FALSE)",
+  },
+  "{"kind":"condition","field":"x_tsDate","op":"isTrue"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"contains","value":"a"}": {
+    "params": [
+      "%a%",
+    ],
+    "sql": "COALESCE("t"."s" LIKE ? ESCAPE '\\', FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":"1"}": {
+    "params": [
+      "1",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":"12:00:00"}": {
+    "params": [
+      "12:00:00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":"2024-01-01 12:00:00"}": {
+    "params": [
+      "2024-01-01 12:00:00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":"2024-01-01 12:00:00+00"}": {
+    "params": [
+      "2024-01-01 12:00:00+00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":"2024-01-01"}": {
+    "params": [
+      "2024-01-01",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":"2024-01-01T05:30:00+05:30"}": {
+    "params": [
+      "2024-01-01T05:30:00+05:30",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":"x"}": {
+    "params": [
+      "x",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":1}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":true}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE("t"."s" > ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"gt","value":"1"}": {
+    "params": [
+      "1",
+    ],
+    "sql": "COALESCE("t"."s" > ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"gt","value":"x"}": {
+    "params": [
+      "x",
+    ],
+    "sql": "COALESCE("t"."s" > ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"gt","value":1}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"gt","value":true}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"isEmpty"}": {
+    "params": [
+      "",
+    ],
+    "sql": "COALESCE(("t"."s" is null or "t"."s" = ?), FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"isTrue"}": {
     "params": [],
     "sql": "COALESCE((1 = NULL), FALSE)",
   },
@@ -2625,6 +3153,8 @@ exports[`predicate compiler row-matching SQL, mysql #2 > emits the exact SQL tex
     "params": [],
     "sql": "COALESCE((1 = NULL), FALSE)",
   },
+  "{"kind":"condition","field":"ip","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": "THROW Predicate references unmapped field "ip"",
+  "{"kind":"condition","field":"ip","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": "THROW Predicate references unmapped field "ip"",
   "{"kind":"condition","field":"j","op":"between","value":{"from":1,"to":5}}": {
     "params": [
       "1",
@@ -2999,6 +3529,12 @@ exports[`predicate compiler row-matching SQL, mysql #2 > emits the exact SQL tex
     ],
     "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) LIKE ? ESCAPE '!', FALSE)",
   },
+  "{"kind":"condition","field":"s","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
+  },
   "{"kind":"condition","field":"s","op":"eq","value":"1"}": {
     "params": [
       "1",
@@ -3042,6 +3578,12 @@ exports[`predicate compiler row-matching SQL, mysql #2 > emits the exact SQL tex
   "{"kind":"condition","field":"s","op":"eq"}": {
     "params": [],
     "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"s","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) > ?, FALSE)",
   },
   "{"kind":"condition","field":"s","op":"gt","value":"1"}": {
     "params": [
@@ -4861,6 +5403,8 @@ exports[`predicate compiler row-matching SQL, mysql #2 > emits the exact SQL tex
     ],
     "sql": "COALESCE((CONVERT(\`t\`.\`tst\` USING utf8mb4) COLLATE utf8mb4_0900_bin) LIKE ? ESCAPE '!', FALSE)",
   },
+  "{"kind":"condition","field":"u","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": "THROW Predicate references unmapped field "u"",
+  "{"kind":"condition","field":"u","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": "THROW Predicate references unmapped field "u"",
   "{"kind":"condition","field":"x_bpchar","op":"contains","value":"a"}": {
     "params": [
       "%a%",
@@ -5129,6 +5673,18 @@ exports[`predicate compiler row-matching SQL, mysql #2 > emits the exact SQL tex
     "params": [],
     "sql": "COALESCE((1 = NULL), FALSE)",
   },
+  "{"kind":"condition","field":"x_decimalx","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_decimalx","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) > ?, FALSE)",
+  },
   "{"kind":"condition","field":"x_mydate","op":"contains","value":"a"}": {
     "params": [
       "%a%",
@@ -5209,6 +5765,30 @@ exports[`predicate compiler row-matching SQL, mysql #2 > emits the exact SQL tex
     ],
     "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
   },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"12:00:00"}": {
+    "params": [
+      "12:00:00",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"2024-01-01 12:00:00"}": {
+    "params": [
+      "2024-01-01 12:00:00",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"2024-01-01 12:00:00+00"}": {
+    "params": [
+      "2024-01-01 12:00:00+00",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"2024-01-01"}": {
+    "params": [
+      "2024-01-01",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
+  },
   "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"2024-01-01T05:30:00+05:30"}": {
     "params": [
       "2024-01-01T05:30:00+05:30",
@@ -5265,9 +5845,39 @@ exports[`predicate compiler row-matching SQL, mysql #2 > emits the exact SQL tex
     ],
     "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) LIKE ? ESCAPE '!', FALSE)",
   },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
+  },
   "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"1"}": {
     "params": [
       "1",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"12:00:00"}": {
+    "params": [
+      "12:00:00",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"2024-01-01 12:00:00"}": {
+    "params": [
+      "2024-01-01 12:00:00",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"2024-01-01 12:00:00+00"}": {
+    "params": [
+      "2024-01-01 12:00:00+00",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"2024-01-01"}": {
+    "params": [
+      "2024-01-01",
     ],
     "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
   },
@@ -5290,6 +5900,12 @@ exports[`predicate compiler row-matching SQL, mysql #2 > emits the exact SQL tex
   "{"kind":"condition","field":"x_mynumeric","op":"eq","value":true}": {
     "params": [],
     "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) > ?, FALSE)",
   },
   "{"kind":"condition","field":"x_mynumeric","op":"gt","value":"1"}": {
     "params": [
@@ -5330,6 +5946,30 @@ exports[`predicate compiler row-matching SQL, mysql #2 > emits the exact SQL tex
   "{"kind":"condition","field":"x_mytime","op":"eq","value":"1"}": {
     "params": [
       "1",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":"12:00:00"}": {
+    "params": [
+      "12:00:00",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":"2024-01-01 12:00:00"}": {
+    "params": [
+      "2024-01-01 12:00:00",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":"2024-01-01 12:00:00+00"}": {
+    "params": [
+      "2024-01-01 12:00:00+00",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":"2024-01-01"}": {
+    "params": [
+      "2024-01-01",
     ],
     "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
   },
@@ -5969,9 +6609,39 @@ exports[`predicate compiler row-matching SQL, mysql #2 > emits the exact SQL tex
     ],
     "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) LIKE ? ESCAPE '!', FALSE)",
   },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
+  },
   "{"kind":"condition","field":"x_uuid","op":"eq","value":"1"}": {
     "params": [
       "1",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":"12:00:00"}": {
+    "params": [
+      "12:00:00",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":"2024-01-01 12:00:00"}": {
+    "params": [
+      "2024-01-01 12:00:00",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":"2024-01-01 12:00:00+00"}": {
+    "params": [
+      "2024-01-01 12:00:00+00",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":"2024-01-01"}": {
+    "params": [
+      "2024-01-01",
     ],
     "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)",
   },
@@ -5994,6 +6664,12 @@ exports[`predicate compiler row-matching SQL, mysql #2 > emits the exact SQL tex
   "{"kind":"condition","field":"x_uuid","op":"eq","value":true}": {
     "params": [],
     "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE((CONVERT(\`t\`.\`s\` USING utf8mb4) COLLATE utf8mb4_0900_bin) > ?, FALSE)",
   },
   "{"kind":"condition","field":"x_uuid","op":"gt","value":"1"}": {
     "params": [
@@ -8223,6 +8899,12 @@ exports[`predicate compiler row-matching SQL, postgres #1 > emits the exact SQL 
     ],
     "sql": "COALESCE((CASE WHEN "t"."ip" IS NULL THEN NULL ELSE format('%s', "t"."ip") END COLLATE "C") LIKE $1 ESCAPE '\\', FALSE)",
   },
+  "{"kind":"condition","field":"ip","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE((CASE WHEN "t"."ip" IS NULL THEN NULL ELSE format('%s', "t"."ip") END COLLATE "C") = $1, FALSE)",
+  },
   "{"kind":"condition","field":"ip","op":"eq","value":"1"}": {
     "params": [
       "1",
@@ -8256,6 +8938,12 @@ exports[`predicate compiler row-matching SQL, postgres #1 > emits the exact SQL 
   "{"kind":"condition","field":"ip","op":"eq","value":true}": {
     "params": [],
     "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"ip","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE((CASE WHEN "t"."ip" IS NULL THEN NULL ELSE format('%s', "t"."ip") END COLLATE "C") > $1, FALSE)",
   },
   "{"kind":"condition","field":"ip","op":"gt","value":"1"}": {
     "params": [
@@ -8865,6 +9553,12 @@ exports[`predicate compiler row-matching SQL, postgres #1 > emits the exact SQL 
     ],
     "sql": "COALESCE("t"."s" LIKE $1 ESCAPE '\\', FALSE)",
   },
+  "{"kind":"condition","field":"s","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE("t"."s" = $1, FALSE)",
+  },
   "{"kind":"condition","field":"s","op":"eq","value":"1"}": {
     "params": [
       "1",
@@ -8916,6 +9610,12 @@ exports[`predicate compiler row-matching SQL, postgres #1 > emits the exact SQL 
   "{"kind":"condition","field":"s","op":"eq"}": {
     "params": [],
     "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"s","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE(("t"."s" COLLATE "C") > $1, FALSE)",
   },
   "{"kind":"condition","field":"s","op":"gt","value":"1"}": {
     "params": [
@@ -11334,6 +12034,12 @@ exports[`predicate compiler row-matching SQL, postgres #1 > emits the exact SQL 
     ],
     "sql": "COALESCE((CASE WHEN "t"."u" IS NULL THEN NULL ELSE format('%s', "t"."u") END COLLATE "C") = $1, FALSE)",
   },
+  "{"kind":"condition","field":"u","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE("t"."u" = $1, FALSE)",
+  },
   "{"kind":"condition","field":"u","op":"eq","value":"00000000-0000-4000-8000-0000000000001"}": {
     "params": [
       "00000000-0000-4000-8000-0000000000001",
@@ -11397,6 +12103,12 @@ exports[`predicate compiler row-matching SQL, postgres #1 > emits the exact SQL 
   "{"kind":"condition","field":"u","op":"eq","value":true}": {
     "params": [],
     "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"u","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE("t"."u" > $1, FALSE)",
   },
   "{"kind":"condition","field":"u","op":"gt","value":"1"}": {
     "params": [
@@ -11937,6 +12649,12 @@ exports[`predicate compiler row-matching SQL, postgres #1 > emits the exact SQL 
     ],
     "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") LIKE $1 ESCAPE '\\', FALSE)",
   },
+  "{"kind":"condition","field":"x_decimalx","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") = $1, FALSE)",
+  },
   "{"kind":"condition","field":"x_decimalx","op":"eq","value":"1"}": {
     "params": [
       "1",
@@ -11962,6 +12680,12 @@ exports[`predicate compiler row-matching SQL, postgres #1 > emits the exact SQL 
   "{"kind":"condition","field":"x_decimalx","op":"eq","value":true}": {
     "params": [],
     "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_decimalx","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") > $1, FALSE)",
   },
   "{"kind":"condition","field":"x_decimalx","op":"gt","value":"1"}": {
     "params": [
@@ -12067,6 +12791,30 @@ exports[`predicate compiler row-matching SQL, postgres #1 > emits the exact SQL 
     ],
     "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") = $1, FALSE)",
   },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"12:00:00"}": {
+    "params": [
+      "12:00:00",
+    ],
+    "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") = $1, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"2024-01-01 12:00:00"}": {
+    "params": [
+      "2024-01-01 12:00:00",
+    ],
+    "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") = $1, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"2024-01-01 12:00:00+00"}": {
+    "params": [
+      "2024-01-01 12:00:00+00",
+    ],
+    "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") = $1, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"2024-01-01"}": {
+    "params": [
+      "2024-01-01",
+    ],
+    "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") = $1, FALSE)",
+  },
   "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"2024-01-01T05:30:00+05:30"}": {
     "params": [
       "2024-01-01T05:30:00+05:30",
@@ -12123,9 +12871,39 @@ exports[`predicate compiler row-matching SQL, postgres #1 > emits the exact SQL 
     ],
     "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") LIKE $1 ESCAPE '\\', FALSE)",
   },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") = $1, FALSE)",
+  },
   "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"1"}": {
     "params": [
       "1",
+    ],
+    "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") = $1, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"12:00:00"}": {
+    "params": [
+      "12:00:00",
+    ],
+    "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") = $1, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"2024-01-01 12:00:00"}": {
+    "params": [
+      "2024-01-01 12:00:00",
+    ],
+    "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") = $1, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"2024-01-01 12:00:00+00"}": {
+    "params": [
+      "2024-01-01 12:00:00+00",
+    ],
+    "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") = $1, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"2024-01-01"}": {
+    "params": [
+      "2024-01-01",
     ],
     "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") = $1, FALSE)",
   },
@@ -12148,6 +12926,12 @@ exports[`predicate compiler row-matching SQL, postgres #1 > emits the exact SQL 
   "{"kind":"condition","field":"x_mynumeric","op":"eq","value":true}": {
     "params": [],
     "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") > $1, FALSE)",
   },
   "{"kind":"condition","field":"x_mynumeric","op":"gt","value":"1"}": {
     "params": [
@@ -12188,6 +12972,30 @@ exports[`predicate compiler row-matching SQL, postgres #1 > emits the exact SQL 
   "{"kind":"condition","field":"x_mytime","op":"eq","value":"1"}": {
     "params": [
       "1",
+    ],
+    "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") = $1, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":"12:00:00"}": {
+    "params": [
+      "12:00:00",
+    ],
+    "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") = $1, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":"2024-01-01 12:00:00"}": {
+    "params": [
+      "2024-01-01 12:00:00",
+    ],
+    "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") = $1, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":"2024-01-01 12:00:00+00"}": {
+    "params": [
+      "2024-01-01 12:00:00+00",
+    ],
+    "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") = $1, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":"2024-01-01"}": {
+    "params": [
+      "2024-01-01",
     ],
     "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") = $1, FALSE)",
   },
@@ -12953,9 +13761,39 @@ exports[`predicate compiler row-matching SQL, postgres #1 > emits the exact SQL 
     ],
     "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") LIKE $1 ESCAPE '\\', FALSE)",
   },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE("t"."s" = $1, FALSE)",
+  },
   "{"kind":"condition","field":"x_uuid","op":"eq","value":"1"}": {
     "params": [
       "1",
+    ],
+    "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") = $1, FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":"12:00:00"}": {
+    "params": [
+      "12:00:00",
+    ],
+    "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") = $1, FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":"2024-01-01 12:00:00"}": {
+    "params": [
+      "2024-01-01 12:00:00",
+    ],
+    "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") = $1, FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":"2024-01-01 12:00:00+00"}": {
+    "params": [
+      "2024-01-01 12:00:00+00",
+    ],
+    "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") = $1, FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":"2024-01-01"}": {
+    "params": [
+      "2024-01-01",
     ],
     "sql": "COALESCE((CASE WHEN "t"."s" IS NULL THEN NULL ELSE format('%s', "t"."s") END COLLATE "C") = $1, FALSE)",
   },
@@ -12978,6 +13816,12 @@ exports[`predicate compiler row-matching SQL, postgres #1 > emits the exact SQL 
   "{"kind":"condition","field":"x_uuid","op":"eq","value":true}": {
     "params": [],
     "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE("t"."s" > $1, FALSE)",
   },
   "{"kind":"condition","field":"x_uuid","op":"gt","value":"1"}": {
     "params": [
@@ -13296,6 +14140,8 @@ exports[`predicate compiler row-matching SQL, sqlite #3 > emits the exact SQL te
   },
   "{"kind":"condition","field":"constructor","op":"eq","value":1}": "THROW Predicate references unmapped field "constructor"",
   "{"kind":"condition","field":"hasOwnProperty","op":"eq","value":1}": "THROW Predicate references unmapped field "hasOwnProperty"",
+  "{"kind":"condition","field":"ip","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": "THROW Predicate references unmapped field "ip"",
+  "{"kind":"condition","field":"ip","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": "THROW Predicate references unmapped field "ip"",
   "{"kind":"condition","field":"j","op":"between","value":{"from":1,"to":5}}": {
     "params": [
       "1",
@@ -13700,6 +14546,12 @@ exports[`predicate compiler row-matching SQL, sqlite #3 > emits the exact SQL te
     ],
     "sql": "COALESCE(substr("t"."s", -length(?)) = ?, FALSE)",
   },
+  "{"kind":"condition","field":"s","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
   "{"kind":"condition","field":"s","op":"eq","value":"1"}": {
     "params": [
       "1",
@@ -13751,6 +14603,12 @@ exports[`predicate compiler row-matching SQL, sqlite #3 > emits the exact SQL te
   "{"kind":"condition","field":"s","op":"eq"}": {
     "params": [],
     "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"s","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE("t"."s" > ?, FALSE)",
   },
   "{"kind":"condition","field":"s","op":"gt","value":"1"}": {
     "params": [
@@ -14100,6 +14958,8 @@ exports[`predicate compiler row-matching SQL, sqlite #3 > emits the exact SQL te
     "params": [],
     "sql": "COALESCE((1 = NULL), FALSE)",
   },
+  "{"kind":"condition","field":"u","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": "THROW Predicate references unmapped field "u"",
+  "{"kind":"condition","field":"u","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": "THROW Predicate references unmapped field "u"",
   "{"kind":"condition","field":"x_bpchar","op":"contains","value":"a"}": {
     "params": [
       "a",
@@ -14234,6 +15094,18 @@ exports[`predicate compiler row-matching SQL, sqlite #3 > emits the exact SQL te
     ],
     "sql": "COALESCE("t"."s" = ?, FALSE)",
   },
+  "{"kind":"condition","field":"x_decimalx","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_decimalx","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE("t"."s" > ?, FALSE)",
+  },
   "{"kind":"condition","field":"x_mydate","op":"contains","value":"a"}": {
     "params": [
       "a",
@@ -14293,6 +15165,276 @@ exports[`predicate compiler row-matching SQL, sqlite #3 > emits the exact SQL te
     "sql": "COALESCE(("t"."s" is null or "t"."s" = ?), FALSE)",
   },
   "{"kind":"condition","field":"x_mydate","op":"isTrue"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"contains","value":"a"}": {
+    "params": [
+      "a",
+    ],
+    "sql": "COALESCE(instr("t"."s", ?) > 0, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"1"}": {
+    "params": [
+      "1",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"12:00:00"}": {
+    "params": [
+      "12:00:00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"2024-01-01 12:00:00"}": {
+    "params": [
+      "2024-01-01 12:00:00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"2024-01-01 12:00:00+00"}": {
+    "params": [
+      "2024-01-01 12:00:00+00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"2024-01-01"}": {
+    "params": [
+      "2024-01-01",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"2024-01-01T05:30:00+05:30"}": {
+    "params": [
+      "2024-01-01T05:30:00+05:30",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":"x"}": {
+    "params": [
+      "x",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":1}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"eq","value":true}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"gt","value":"1"}": {
+    "params": [
+      "1",
+    ],
+    "sql": "COALESCE("t"."s" > ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"gt","value":"x"}": {
+    "params": [
+      "x",
+    ],
+    "sql": "COALESCE("t"."s" > ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"gt","value":1}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"gt","value":true}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"isEmpty"}": {
+    "params": [
+      "",
+    ],
+    "sql": "COALESCE(("t"."s" is null or "t"."s" = ?), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mydatetime","op":"isTrue"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"contains","value":"a"}": {
+    "params": [
+      "a",
+    ],
+    "sql": "COALESCE(instr("t"."s", ?) > 0, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"1"}": {
+    "params": [
+      "1",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"12:00:00"}": {
+    "params": [
+      "12:00:00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"2024-01-01 12:00:00"}": {
+    "params": [
+      "2024-01-01 12:00:00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"2024-01-01 12:00:00+00"}": {
+    "params": [
+      "2024-01-01 12:00:00+00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"2024-01-01"}": {
+    "params": [
+      "2024-01-01",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"2024-01-01T05:30:00+05:30"}": {
+    "params": [
+      "2024-01-01T05:30:00+05:30",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":"x"}": {
+    "params": [
+      "x",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":1}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"eq","value":true}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE("t"."s" > ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"gt","value":"1"}": {
+    "params": [
+      "1",
+    ],
+    "sql": "COALESCE("t"."s" > ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"gt","value":"x"}": {
+    "params": [
+      "x",
+    ],
+    "sql": "COALESCE("t"."s" > ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"gt","value":1}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"gt","value":true}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"isEmpty"}": {
+    "params": [
+      "",
+    ],
+    "sql": "COALESCE(("t"."s" is null or "t"."s" = ?), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mynumeric","op":"isTrue"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"contains","value":"a"}": {
+    "params": [
+      "a",
+    ],
+    "sql": "COALESCE(instr("t"."s", ?) > 0, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":"1"}": {
+    "params": [
+      "1",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":"12:00:00"}": {
+    "params": [
+      "12:00:00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":"2024-01-01 12:00:00"}": {
+    "params": [
+      "2024-01-01 12:00:00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":"2024-01-01 12:00:00+00"}": {
+    "params": [
+      "2024-01-01 12:00:00+00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":"2024-01-01"}": {
+    "params": [
+      "2024-01-01",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":"2024-01-01T05:30:00+05:30"}": {
+    "params": [
+      "2024-01-01T05:30:00+05:30",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":"x"}": {
+    "params": [
+      "x",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":1}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"eq","value":true}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"gt","value":"1"}": {
+    "params": [
+      "1",
+    ],
+    "sql": "COALESCE("t"."s" > ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"gt","value":"x"}": {
+    "params": [
+      "x",
+    ],
+    "sql": "COALESCE("t"."s" > ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"gt","value":1}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"gt","value":true}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"isEmpty"}": {
+    "params": [
+      "",
+    ],
+    "sql": "COALESCE(("t"."s" is null or "t"."s" = ?), FALSE)",
+  },
+  "{"kind":"condition","field":"x_mytime","op":"isTrue"}": {
     "params": [],
     "sql": "COALESCE((1 = NULL), FALSE)",
   },
@@ -14592,6 +15734,22 @@ exports[`predicate compiler row-matching SQL, sqlite #3 > emits the exact SQL te
     "params": [],
     "sql": "COALESCE((1 = NULL), FALSE)",
   },
+  "{"kind":"condition","field":"x_timeDate","op":"eq","value":"12:00:00"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_timeDate","op":"eq","value":"2024-01-01 12:00:00"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_timeDate","op":"eq","value":"2024-01-01 12:00:00+00"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_timeDate","op":"eq","value":"2024-01-01"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
   "{"kind":"condition","field":"x_timeDate","op":"eq","value":"2024-01-01T05:30:00+05:30"}": {
     "params": [],
     "sql": "COALESCE((1 = NULL), FALSE)",
@@ -14639,6 +15797,24 @@ exports[`predicate compiler row-matching SQL, sqlite #3 > emits the exact SQL te
   "{"kind":"condition","field":"x_tsDate","op":"eq","value":"1"}": {
     "params": [],
     "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_tsDate","op":"eq","value":"12:00:00"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_tsDate","op":"eq","value":"2024-01-01 12:00:00"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_tsDate","op":"eq","value":"2024-01-01 12:00:00+00"}": {
+    "params": [],
+    "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_tsDate","op":"eq","value":"2024-01-01"}": {
+    "params": [
+      2024-01-01T00:00:00.000Z,
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
   },
   "{"kind":"condition","field":"x_tsDate","op":"eq","value":"2024-01-01T05:30:00+05:30"}": {
     "params": [
@@ -14688,9 +15864,39 @@ exports[`predicate compiler row-matching SQL, sqlite #3 > emits the exact SQL te
     ],
     "sql": "COALESCE(instr("t"."s", ?) > 0, FALSE)",
   },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
   "{"kind":"condition","field":"x_uuid","op":"eq","value":"1"}": {
     "params": [
       "1",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":"12:00:00"}": {
+    "params": [
+      "12:00:00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":"2024-01-01 12:00:00"}": {
+    "params": [
+      "2024-01-01 12:00:00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":"2024-01-01 12:00:00+00"}": {
+    "params": [
+      "2024-01-01 12:00:00+00",
+    ],
+    "sql": "COALESCE("t"."s" = ?, FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"eq","value":"2024-01-01"}": {
+    "params": [
+      "2024-01-01",
     ],
     "sql": "COALESCE("t"."s" = ?, FALSE)",
   },
@@ -14713,6 +15919,12 @@ exports[`predicate compiler row-matching SQL, sqlite #3 > emits the exact SQL te
   "{"kind":"condition","field":"x_uuid","op":"eq","value":true}": {
     "params": [],
     "sql": "COALESCE((1 = NULL), FALSE)",
+  },
+  "{"kind":"condition","field":"x_uuid","op":"gt","value":"00000000-0000-4000-8000-000000000000"}": {
+    "params": [
+      "00000000-0000-4000-8000-000000000000",
+    ],
+    "sql": "COALESCE("t"."s" > ?, FALSE)",
   },
   "{"kind":"condition","field":"x_uuid","op":"gt","value":"1"}": {
     "params": [
