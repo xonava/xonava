@@ -105,3 +105,41 @@ Redundant or unreachable code:
 - src/security/authorizedExecutionPlan.ts:144, ConditionalExpression/StringLiteral/BlockStatement/ArrowFunction: the "no revalidation strategy" check is a second copy of the check in `assertDynamicFactEvidence` (line 191), which always throws first with the same message; the two copies cover each other.
 - src/security/authorizedExecutionPlan.ts:186,191, ConditionalExpression/StringLiteral: `typeof fact !== "object"` and the line 191 mutation check are covered by the next conjunct and by the copy on line 144 (same message), so neither changes an outcome.
 - src/security/scopeResolver.ts:43, ConditionalExpression/LogicalOperator: `WeakSet.has` returns false for `null` and primitives, so the guards in `isVerifiedScopeResolution` cannot change the result.
+
+## core serialization
+
+Module-load constants (static mutants): the vitest runner does not re-evaluate module initialisers per mutant, so these report Survived although tests kill them when the mutation is applied by hand (each replacement was applied to the source and the named tests failed).
+
+- src/serialization/fingerprint.ts:20, Regex (10 mutants): `DOMAIN_SEPARATOR` is a module-load initialiser (static); every variant is killed by `fingerprintMutationKills.test.ts` ("rejects malformed separators", "accepts well-formed separators") when applied by hand.
+- src/serialization/formatEnvelope.ts:25, Regex (2 mutants): `FORMAT_ID_PATTERN` is a module-load initialiser (static); killed by `formatEnvelopeMutationKills.test.ts` ("isValidFormatId") when applied by hand.
+- src/serialization/sha256.ts:7,12, ArrayDeclaration: `INITIAL_HASH` and `ROUND_CONSTANTS` are module-load initialisers (static); emptying either breaks every digest in `sha256.test.ts` and `smallFilesMutationKills.test.ts` when applied by hand.
+
+Unreachable or redundant (the observable result is identical):
+
+- src/serialization/fingerprint.ts:39-40, BlockStatement/ConditionalExpression/EqualityOperator/StringLiteral/ObjectLiteral: the per-format limit (at most 1 MiB) is always below `maxUtf8Bytes` (16 MiB) and is checked first, so the second ceiling check can never fire.
+- src/serialization/hmac.ts:11, EqualityOperator: `index <= BLOCK_SIZE` only writes `inner[64]`/`outer[64]`, which the following `set` calls overwrite (or a zero-length message leaves out of bounds, where typed arrays ignore the write).
+- src/serialization/sha256.ts:35, ArithmeticOperator/BooleanLiteral: the high word of the bit length is 0 for every input below 512 MiB (`x * 2**32` wraps to 0 in `setUint32`, and the byte order of a zero word is irrelevant); testing it needs a 512 MiB input.
+- src/serialization/sha256.ts:45, EqualityOperator: `index <= 64` writes `words[64]`, an out-of-bounds typed-array write that is ignored, and nothing reads it.
+- src/serialization/version.ts:6, ConditionalExpression: `Number.isSafeInteger` is already false for every non-number, so the `typeof value === "number"` guard is redundant.
+- src/serialization/formatEnvelope.ts:35, ConditionalExpression: `format.length === 0` is redundant, the pattern requires one character.
+- src/serialization/formatEnvelope.ts:117,122, ConditionalExpression: the `typeof` guards are redundant, `isValidFormatId` and `isValidVersion` already return false for non-strings and non-numbers.
+- src/serialization/formatRegistry.ts:137, StringLiteral: every compiled format has the single readable version `[1]`, so the `", "` join separator cannot be observed.
+- src/serialization/versionedCodec.ts:138,152,162,173, ConditionalExpression: `limit !== undefined` forced to true leaves `bytes > undefined`, which is false, so formats without a default limit behave the same.
+- src/serialization/canonicalJson.ts:26, EqualityOperator: `i <= s.length` reads `charCodeAt(length)`, which is NaN and matches no surrogate range.
+- src/serialization/canonicalJson.ts:41, EqualityOperator/ConditionalExpression: `compareByte` is only called for distinct keys and `Array.prototype.sort` only needs the sign test `< 0`, so `<=`/`>=` and a comparator that returns 0 instead of 1 sort identically.
+- src/serialization/canonicalJson.ts:57, ConditionalExpression: an empty input falls through to the loop and returns `""` anyway.
+- src/serialization/canonicalJson.ts:86,102, ConditionalExpression: the empty string and an already padded input decode to the same bytes without the early return or the `=` padding.
+- src/serialization/canonicalJson.ts:105,106,123,124, UnaryOperator/EqualityOperator/ConditionalExpression/LogicalOperator/BlockStatement/StringLiteral: the character-set check on line 87 admits only alphabet characters, so the `-1` lookup entries (and the error for them) are never used.
+- src/serialization/canonicalJson.ts:127-129, ConditionalExpression/EqualityOperator: `out <= bytesLen` or an always-true guard only adds out-of-bounds typed-array writes, which are ignored.
+- src/serialization/canonicalJson.ts:135, ConditionalExpression: `typeof s !== "string"` is redundant, a non-string either fails the regular expression or fails the final `toISOString() === s` comparison.
+- src/serialization/canonicalJson.ts:136, ConditionalExpression/Regex: without the `^`/`$` anchors any input that is not exactly the canonical spelling is still rejected by `new Date(s)` or the final `toISOString() === s` comparison (extended years are covered by the 4 digit pattern and killed).
+- src/serialization/canonicalJson.ts:221, ArrayDeclaration: `new Array()` and `new Array(length)` give the same array because every index is assigned.
+- src/serialization/canonicalJson.ts:232, ConditionalExpression: after the checks above only objects reach this branch, so the `typeof val === "object"` test is always true and the trailing throw (line 282) is unreachable.
+- src/serialization/canonicalJson.ts:282, StringLiteral: unreachable, see line 232.
+- src/serialization/canonicalJson.ts:330, ConditionalExpression/StringLiteral: `JSON.stringify` of a canonicalised value is never undefined.
+- src/serialization/canonicalJson.ts:384,460,468,473,479,481,485,559,591, EqualityOperator/ConditionalExpression: `pos <= len` (or an always-true bound) reads `str[len]`, which is `undefined` and matches none of the compared characters, so scanning stops exactly as before.
+- src/serialization/canonicalJson.ts:392,555,585, ConditionalExpression/LogicalOperator/EqualityOperator/StringLiteral: `parseStringRaw`, `parseArray` and `parseObject` are only entered after the caller has checked the opening character, so their own guards are dead.
+- src/serialization/canonicalJson.ts:428, Regex: the slice is exactly four characters long (the `incomplete unicode escape` check guarantees it), so the `^`/`$` anchors are redundant.
+- src/serialization/canonicalJson.ts:449,470,482,597,620, ConditionalExpression/EqualityOperator: when the guard is removed, `str[pos]` is `undefined` and the next check throws the identical error message.
+- src/serialization/canonicalJson.ts:454,579,634, ConditionalExpression/EqualityOperator: `pos < len && ...` forced true or `<=` evaluates `str[len]`, `undefined`, which equals none of the characters tested.
+- src/serialization/canonicalJson.ts:596, CallExpression: `skipWs()` at the top of the object member loop is redundant, whitespace is skipped after `{` and after `,`.
