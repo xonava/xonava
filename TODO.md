@@ -121,7 +121,7 @@ when the wave closes.
   | core `events` | full except `auditRedaction.ts` | 92.0 % (done) |
   | core `entity` | full | 93.0 % (done) |
   | adapters `http` | full | 87.8 % (done) |
-  | adapters `drizzle-shared` | full | 75.5 % (done, no new tests needed; weakest `transactionOutcome` 54.8 %, `workflowFailureCodec` 58.8 %) |
+  | adapters `drizzle-shared` | full | 88.1 % (done) |
 
 - **Per module** (`domain`, `query`, `operation`, `execution`, `workflow`, `events`, `entity`, then
   adapters `http` and `drizzle-shared`): measure the whole module first, then for each surviving mutant
