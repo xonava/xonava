@@ -119,5 +119,5 @@ Line numbers refer to the source before instrumentation.
 - src/drizzle-mysql/mysqlUtils.ts:2, ConditionalExpression (`typeof value !== "object"` -> `false`): a non-object has no `affectedRows` or `rowsAffected`, so the result is 0 either way.
 - src/drizzle-mysql/mysqlUtils.ts:9, ConditionalExpression (`typeof timeoutMs !== "number"` -> `false`): `Number.isSafeInteger` already rejects every non-number.
 - src/drizzle-mysql/mysqlIdentifiers.ts:38, ConditionalExpression (`overrides === null` -> `false`): `options?.tables ?? {}` can never yield null.
-- src/drizzle-mysql/drizzleJobStore.ts:48, CallExpression: the one remaining survivor, in the `enqueue` catch block; not analysed further, left unkilled.
+- src/drizzle-mysql/drizzleJobStore.ts:48, CallExpression (`assertJobScopeCanEnqueue(scope,tenantId)` removed in `enqueue`): `encodeJobScope` always returns a consistent scope and tenant id, so the assertion can never fail here (same as drizzle-pg `drizzleJobStore.ts:253`).
 - src/drizzle-mysql/drizzleRepository.ts:50, StringLiteral / ConditionalExpression (`updateManyWhere` versioned-entity guard): unreachable, because the method is deleted from versioned repositories.
