@@ -20,6 +20,12 @@ Line numbers refer to the source before instrumentation.
 - src/http/createFrameworkWriteHandler.ts:616, LogicalOperator: `leaseDurationMs` is always the constant 30 000 set a few lines earlier, so `a ?? 30_000` and `a && 30_000` both evaluate to 30 000.
 - src/http/createFrameworkWriteHandler.ts:660, BlockStatement: the `else` branch (no idempotency reservation) can only run without invalidation tags, because tags require required idempotency at construction and a key at request time; `invalidateAfterCommit` is a no-op there.
 
+### src/http/scopeResolution.ts
+
+- src/http/scopeResolution.ts:75, ConditionalExpression (`if (!input.session)` -> `false` in the fixed-scope branch): unreachable, because `resolveIdentity` runs first and already throws the same missing-session error for every non-public route; a public fixed route throws on line 74 before this check.
+- src/http/scopeResolution.ts:117, OptionalChaining (`input.session?.source` -> `input.session.source`): the branch is reached only for a non-public route, and `resolveIdentity` has already rejected a missing session there, so `session` is always defined.
+- src/http/scopeResolution.ts:141, 148, 149, 150, ConditionalExpression -> `false` (`...(x === undefined ? {} : { x })` always spreading `{ x: undefined }` for causationId, deadline, locale, timezone): `freezeVerifiedRequestContext` snapshots the context and drops every undefined optional key, so the resulting context is identical.
+
 ## adapters drizzle-shared
 - src/drizzle-shared/transactionOutcome.ts:63, EqualityOperator (`timeoutMs < 1` -> `<= 1`): at exactly 1 the mutant returns 1 and the original falls through to `Math.min(Math.floor(1), MAX)` = 1, so the result is identical.
 - src/drizzle-shared/idempotency.ts:33, ConditionalExpression->true and three LogicalOperator mutants (8 mutants in total on the `typeof parsed === "object" && parsed !== null && "type" in parsed && "value" in parsed` guard): the guard is only a pre-filter. Whenever a mutant lets a non-object, null or object without type/value through, `"type" in parsed` throws a TypeError (caught by the surrounding try) or `record.type === "number" && isEntityVersion(record.value)` is false, and both paths end in the same corruption error.
