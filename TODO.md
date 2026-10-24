@@ -124,6 +124,7 @@ when the wave closes.
   | adapters `drizzle-shared` | full | 88.1 % (done) |
   | core `security` | full | 94.9 % (done; added after the plan) |
   | core `serialization` | full | 93.4 % (done; added after the plan) |
+  | adapters `drizzle-pg` | full | 97.3 % (done; added after the plan) |
 
 - **Per module** (`domain`, `query`, `operation`, `execution`, `workflow`, `events`, `entity`, then
   adapters `http` and `drizzle-shared`): measure the whole module first, then for each surviving mutant
