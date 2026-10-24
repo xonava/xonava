@@ -118,7 +118,7 @@ when the wave closes.
   | core `operation` | full | 81.3 % (done) |
   | core `execution` | full | 85.0 % (done; `types.ts` 68.0 % is the weakest file) |
   | core `workflow` | full | 92.4 % (done, no new tests needed) |
-  | core `events` | 10 of 15 | 75.7 % |
+  | core `events` | full except `auditRedaction.ts` | 92.0 % (done) |
   | core `entity` | full | 93.0 % (done) |
   | adapters `http` | full | ≥ 77.2 % (done; create/detail/list/idempotency/nodeAdapter counted at pre-test scores) |
   | adapters `drizzle-shared` | full | 75.5 % (done, no new tests needed; weakest `transactionOutcome` 54.8 %, `workflowFailureCodec` 58.8 %) |
