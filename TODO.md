@@ -120,7 +120,7 @@ when the wave closes.
   | core `workflow` | full | 92.4 % (done, no new tests needed) |
   | core `events` | full except `auditRedaction.ts` | 92.0 % (done) |
   | core `entity` | full | 93.0 % (done) |
-  | adapters `http` | full | 89.2 % (done; `scopeResolution.ts` 96.1 %) |
+  | adapters `http` | full | 89.7 % (done; `scopeResolution.ts` 96.1 %, `trustedClientIp.ts` 90.7 %) |
   | adapters `drizzle-shared` | full | 88.1 % (done) |
   | core `security` | full | 94.9 % (done; added after the plan) |
 

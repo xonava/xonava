@@ -26,6 +26,15 @@ Line numbers refer to the source before instrumentation.
 - src/http/scopeResolution.ts:117, OptionalChaining (`input.session?.source` -> `input.session.source`): the branch is reached only for a non-public route, and `resolveIdentity` has already rejected a missing session there, so `session` is always defined.
 - src/http/scopeResolution.ts:141, 148, 149, 150, ConditionalExpression -> `false` (`...(x === undefined ? {} : { x })` always spreading `{ x: undefined }` for causationId, deadline, locale, timezone): `freezeVerifiedRequestContext` snapshots the context and drops every undefined optional key, so the resulting context is identical.
 
+### src/http/trustedClientIp.ts
+
+- src/http/trustedClientIp.ts:26, EqualityOperator (`hops < 0` -> `hops <= 0`): at zero hops the mutant returns the peer here, and the original returns the same peer at line 37 (after the trust checks, which also return the peer), so the result is identical.
+- src/http/trustedClientIp.ts:26, ConditionalExpression (`trustedProxyIps.length === 0` -> `false`): with an empty allowlist no peer can be trusted, so line 31 returns the same peer.
+- src/http/trustedClientIp.ts:31, ConditionalExpression (`peerAddress === null` -> `false`): `peerIsTrusted` already requires a non-null peer, so `!peerIsTrusted` is true whenever the peer is null and the same early return happens.
+- src/http/trustedClientIp.ts:36, ArrayDeclaration (`?? []` -> `?? ["Stryker was here"]`): a missing header would give a one-entry chain, which only matches `hops + 1` for zero hops, and zero hops return at line 37 before the length check.
+- src/http/trustedClientIp.ts:42, all three mutators (`peerAddress !== null && !isTrustedProxy(...)`): unreachable, because line 31 has already returned for a null or untrusted peer, so the condition is always false.
+- src/http/trustedClientIp.ts:44, ConditionalExpression (`peerAddress !== null` -> `true`): the peer is always non-null after line 31, so the guard is always true.
+
 ## adapters drizzle-shared
 - src/drizzle-shared/transactionOutcome.ts:63, EqualityOperator (`timeoutMs < 1` -> `<= 1`): at exactly 1 the mutant returns 1 and the original falls through to `Math.min(Math.floor(1), MAX)` = 1, so the result is identical.
 - src/drizzle-shared/idempotency.ts:33, ConditionalExpression->true and three LogicalOperator mutants (8 mutants in total on the `typeof parsed === "object" && parsed !== null && "type" in parsed && "value" in parsed` guard): the guard is only a pre-filter. Whenever a mutant lets a non-object, null or object without type/value through, `"type" in parsed` throws a TypeError (caught by the surrounding try) or `record.type === "number" && isEntityVersion(record.value)` is false, and both paths end in the same corruption error.
