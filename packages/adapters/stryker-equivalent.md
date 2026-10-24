@@ -96,3 +96,28 @@ Line numbers refer to the source before instrumentation.
 ### src/drizzle-pg/pgUtils.ts
 
 - src/drizzle-pg/pgUtils.ts:19, ConditionalExpression (`typeof obj.meta === "object"` -> `true`): a truthy non-object `meta` has no `rowCount` or `changes`, so the lookups fall through to the same error.
+
+## adapters drizzle-mysql
+
+- src/drizzle-mysql/drizzlePersistenceProvider.ts:36 and :39, ConditionalExpression (`typeof client !== "object"` / `typeof promiseClient !== "object"` -> `false`): the other operand of each `||` (and the `getConnection` function check on line 39) rejects the same non-object values, so the result is unchanged.
+- src/drizzle-mysql/drizzlePersistenceProvider.ts:42, ArrayDeclaration (`[]` -> `["Stryker was here"]`): the single row is then a string with no `connectionId`, which fails with the same `connection_id` error as an empty result.
+- src/drizzle-mysql/drizzlePersistenceProvider.ts:43, ConditionalExpression (`typeof parsed !== "number"` -> `false`): `Number.isSafeInteger` is already false for every non-number.
+- src/drizzle-mysql/drizzlePersistenceProvider.ts:87, ConditionalExpression (`if (this.finished) return` in `arm` -> `false`): `arm` runs once, before anything can disarm, so `finished` is never true there.
+- src/drizzle-mysql/drizzlePersistenceProvider.ts:92, ConditionalExpression (`if (this.finished) return` in `fire` -> `false`): `disarm` clears the timer, so `fire` never runs after `finished`.
+- src/drizzle-mysql/drizzlePersistenceProvider.ts:102, ConditionalExpression (`targetId === undefined` -> `false`): the timer is only armed after `connectionId` is set.
+- src/drizzle-mysql/drizzlePersistenceProvider.ts:107, ArrowFunction (`() => false` -> `() => undefined`): the value is only tested for truthiness.
+- src/drizzle-mysql/drizzlePersistenceProvider.ts:114, ConditionalExpression (`this.timer !== undefined` -> `true`): `clearTimeout(undefined)` is a no-op.
+- src/drizzle-mysql/drizzlePersistenceProvider.ts:121, ConditionalExpression (`if (this.killInFlight)` -> `true`): awaiting `undefined` is a no-op.
+- src/drizzle-mysql/drizzlePersistenceProvider.ts:168, CallExpression (`guard.disarm()` removed): no await sits between it and `release`, which disarms first thing.
+- src/drizzle-mysql/drizzlePersistenceProvider.ts:170, StringLiteral / BooleanLiteral (`transactionTimeoutError("mysql", undefined, true)` arguments): this error is only thrown when `guard.fired` is true, and the outer catch then replaces it with a fresh `transactionTimeoutError`.
+- src/drizzle-mysql/drizzleIdempotencyStore.ts:12 and :13, ConditionalExpression (`typeof current === "object" && "cause" in current` -> `true`): reading `.cause` of a non-object or a cause-less object gives `undefined`, which ends the walk the same way.
+- src/drizzle-mysql/drizzleIdempotencyStore.ts:17, ConditionalExpression (`row.status === "completed"` -> `true`; `pendingInvalidations !== undefined` -> `true`): `result` is only read for completed rows, and a stringified `undefined` parses to the same empty list.
+- src/drizzle-mysql/drizzleIdempotencyStore.ts:23, ConditionalExpression (`row.status === "business-committed"` -> `true`): `resolveExistingIdempotency` only throws for business-committed rows.
+- src/drizzle-mysql/mysqlAtomicBackends.ts:8, ConditionalExpression (`value === null` -> `false` in `parsed`): null then falls through and is returned as null anyway.
+- src/drizzle-mysql/mysqlAtomicBackends.ts:27 and :28, ConditionalExpression (`database === undefined ? {} : { database }` -> `false`): `{ database: undefined }` qualifies the table exactly like `{}`.
+- src/drizzle-mysql/mysqlPredicate.ts:48, OptionalChaining (`row?.summer` -> `row.summer`): only evaluated when `row?.winter` already matched, so `row` is defined.
+- src/drizzle-mysql/mysqlUtils.ts:2, ConditionalExpression (`typeof value !== "object"` -> `false`): a non-object has no `affectedRows` or `rowsAffected`, so the result is 0 either way.
+- src/drizzle-mysql/mysqlUtils.ts:9, ConditionalExpression (`typeof timeoutMs !== "number"` -> `false`): `Number.isSafeInteger` already rejects every non-number.
+- src/drizzle-mysql/mysqlIdentifiers.ts:38, ConditionalExpression (`overrides === null` -> `false`): `options?.tables ?? {}` can never yield null.
+- src/drizzle-mysql/drizzleJobStore.ts:48, CallExpression: the one remaining survivor, in the `enqueue` catch block; not analysed further, left unkilled.
+- src/drizzle-mysql/drizzleRepository.ts:50, StringLiteral / ConditionalExpression (`updateManyWhere` versioned-entity guard): unreachable, because the method is deleted from versioned repositories.
