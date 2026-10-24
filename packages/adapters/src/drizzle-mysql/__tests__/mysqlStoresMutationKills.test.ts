@@ -12,6 +12,8 @@ import { createMySqlInboxStore, createMySqlLeaseStore, createMySqlOutboxStore, M
 import { assertMySqlBinaryCollation, assertMySqlUtcSession } from "../mysqlPredicate"
 import { mysqlIdentifier, mysqlQualifiedTable, resolveMySqlTableNames, resolveMySqlTables } from "../mysqlIdentifiers"
 import { getMySqlAffectedRows, validateMySqlConstraintMap, validateMySqlTransactionTimeout } from "../mysqlUtils"
+import { renderSql } from "../../__tests__/support/scriptedDb"
+import { fingerprintOutboxRecord } from "../../drizzle-shared/outbox"
 import { createScriptedDb } from "../../__tests__/support/scriptedDb"
 import { createScriptedMySqlPool, type PoolCall } from "../../__tests__/support/scriptedPool"
 
@@ -542,5 +544,36 @@ describe("MySQL outbox sink guards", () => {
       await expect(new DrizzleMySqlOutboxSink(scripted.db as never, full, () => ({ [field]: "forged" })).append(record)).rejects.toThrow(new ConfigurationError(`Outbox mapper cannot override the framework-owned ${field}`))
       expect(scripted.ops).toEqual([])
     }
+  })
+
+  it("upserts on duplicate key by touching the id and then verifies the stored fingerprint", async () => {
+    const fingerprint = await fingerprintOutboxRecord(record)
+    const scripted = createScriptedDb("mysql", (op) => (op.kind === "select" ? [{ eventFingerprint: fingerprint }] : []))
+    await new DrizzleMySqlOutboxSink(scripted.db as never, full, () => ({})).append(record)
+    const insert = scripted.ops[0]!
+    const config = insert.conflictUpdate as { set: { id: unknown } }
+    expect(Object.keys(config)).toEqual(["set"])
+    expect(renderSql("mysql", config.set.id)).toEqual({ sql: "`outbox`.`id`", params: [] })
+    expect(scripted.ops[1]).toMatchObject({ kind: "select", limit: 1 })
+  })
+})
+
+describe("MySQL atomic lease backend: empty and legacy cases", () => {
+  const resourceKey = { scopeId: SCOPE, namespace: "ns", resourceId: "r1" }
+  it("hands a null lease to the transition when the row query returns no rows", async () => {
+    const scripted = createScriptedMySqlPool((call) => {
+      if (call.sql.startsWith("SELECT lease FROM")) return []
+      if (call.sql.startsWith("SELECT CURRENT_TIMESTAMP")) return [{ now: "2026-01-01 00:00:00.000" }]
+      return { affectedRows: 1 }
+    })
+    let seen: unknown = "unset"
+    await new MySqlAtomicLeaseBackend(scripted.pool as never).transition(resourceKey as never, ((value: unknown) => { seen = value; return { lease: null, result: 1 } }) as never)
+    expect(seen).toBeNull()
+  })
+
+  it("accepts a legacy table name string for the lease store", async () => {
+    const scripted = createScriptedMySqlPool(() => [{ lease: null, now: "2026-01-01 00:00:00.000" }])
+    await createMySqlLeaseStore(scripted.pool as never, "legacy_leases").assertCurrent({ resource: resourceKey, owner: "a", fencingToken: 1 } as never).catch(() => undefined)
+    expect(scripted.calls[0]!.sql).toContain("`legacy_leases`")
   })
 })
