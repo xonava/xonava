@@ -86,6 +86,10 @@ describe("MySQL registry validation messages", () => {
     expect(() => fresh().register({ name: "e", fields: { id: {} } } as never, table, Object.create({ id: table.id }) as never)).toThrow(new ConfigurationError('Entity "e" column map is missing fields: id'))
   })
 
+  it("names a missing entity under its namespace too", () => {
+    expect(() => fresh().register(null as never, table, columns, "ns")).toThrow(new ConfigurationError('MySQL registry registration "ns:undefined" requires a non-empty entity name'))
+  })
+
   it("accepts an entity without a version field", () => {
     const registered = fresh().register({ name: "plain", fields: { id: { type: "string" } } } as never, table, { id: table.id })
     expect(registered.get("plain")?.table).toBe(table)
@@ -196,6 +200,7 @@ describe("MySQL session limit parsing", () => {
   it("rejects connection id 0", async () => {
     fixedClock()
     const failure = await settle(providerOf(fake({ session: { connectionId: 0 } }).db).runInTransaction(async () => 1, { timeoutMs: 5_000 }))
+    expect((failure as PersistenceError).message).toBe("Could not read MySQL session limits")
     expect((failure as PersistenceError).details).toEqual({ dialect: "mysql", variable: "connection_id" })
   })
 
@@ -374,6 +379,8 @@ describe("MySQL session restore", () => {
     const failure = await settle(providerOf(f.db).runInTransaction(async () => "ok", { timeoutMs: 5_000 }))
     expect(failure).toBeInstanceOf(FrameworkCoreError)
     expect(String((failure as Error).message)).not.toContain("secret")
+    expect((failure as FrameworkCoreError).details).toMatchObject({ dialect: "mysql" })
+    expect(f.statements.filter((s) => BASE_SET.test(s))).toHaveLength(2)
     expect(f.statements).not.toContain("commit")
     expect(f.statements.at(-1)).toBe("rollback")
   })
@@ -398,6 +405,7 @@ describe("MySQL session restore", () => {
     const ok = fake({ handler: twice() })
     const failure = await settle(providerOf(ok.db).runInTransaction(async () => "ok", { timeoutMs: 5_000 }))
     expect(failure).toBeInstanceOf(FrameworkCoreError)
+    expect((failure as FrameworkCoreError).details).toMatchObject({ dialect: "mysql" })
     expect(ok.statements.filter((s) => BASE_SET.test(s))).toHaveLength(3)
     expect(ok.statements).not.toContain("commit")
     const bad = fake({ handler: twice() })
@@ -439,6 +447,13 @@ describe("MySQL transaction failure classification", () => {
     expect((shortened as TimeoutError).details).toEqual({ dialect: "mysql", providerCode: "ER_LOCK_WAIT_TIMEOUT", transactionOutcome: "rolled_back" })
     const untouched = await settle(providerOf(fake({ session: { lockWaitTimeout: 1 } }).db).runInTransaction(async () => { throw driverError(undefined, 1205) }, { timeoutMs: 2_000 }))
     expect(untouched).not.toBeInstanceOf(TimeoutError)
+  })
+
+  it("keeps a lock wait timeout retryable when it strikes before the limits were lowered", async () => {
+    const f = fake({ handler: (text) => { if (text.startsWith("SELECT CONNECTION_ID()")) throw driverError("ER_LOCK_WAIT_TIMEOUT", 1205); return undefined } })
+    const failure = await settle(providerOf(f.db).runInTransaction(async () => 1, { timeoutMs: 2_000 }))
+    expect(failure).not.toBeInstanceOf(TimeoutError)
+    expect(failure).toMatchObject({ code: "RETRYABLE_PERSISTENCE_ERROR" })
   })
 
   it("rejects nested transactions with and without a deadline", async () => {
