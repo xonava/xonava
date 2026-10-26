@@ -182,6 +182,22 @@ back.
 - [ ] After 0.2.0: follow `CLEANUP.md` (remove work tracking, run evidence, ID-named certification gates,
       compatibility code and work-item references). That change also deletes this file and `CLEANUP.md`.
 
+- [ ] List row counts (breaking, `0.3.0` minor; do it before the clean-up deletes this file). Every `findMany`
+      runs `SELECT COUNT(*) … WHERE <filter>` and then the page query, one after the other.
+      - **Core** (`packages/core/src/query/queryPlan.ts`): `ListResult.rowCount` is required and `QueryOptions` has
+        no way to skip the total, so every adapter must count. Make the total optional (for example an
+        `includeTotal` option on offset pagination) and say that cursor pages carry `hasNextPage`/`hasPreviousPage`,
+        not a total.
+      - **Adapters** (`drizzle-pg/drizzleRepository.ts:271`, `drizzle-mysql/drizzleRepository.ts:41`,
+        `drizzle-d1/drizzleRepository.ts:239`): the count scans every matching row on every page, cursor pages
+        included; on cursor pages it counts only the rows past the cursor (the cursor predicate is in the count's
+        WHERE), so `rowCount` shrinks while paging; and the two queries run in separate statements, so they can
+        disagree under concurrent writes. Skip the count for cursor pages and when no total is asked for.
+      - **Adapters, HTTP** (`http/crudHandlers/list.ts:276`): the `maxCount` limit is checked only after both
+        queries ran. Use a bounded count (`SELECT 1 … LIMIT maxCount + 1`) before the page query.
+      - Tests: all three repositories plus the PostgreSQL, MySQL and D1 integration suites; the repository
+        contract in `@xonava/testing` gets cases for an absent total and for cursor pages.
+
 ## Release `1.0.0` (not planned yet)
 
 - [ ] Not before the clean-up. Freezing the public API manifest and durable formats and the major changeset are
