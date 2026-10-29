@@ -132,6 +132,7 @@ when the wave closes.
   | core `cache` | full | 95.6 % (done; added after the plan; 69.7 % baseline, no bug found) |
   | adapters `server` | full | 98.4 % (done; added after the plan; 56.8 % baseline, no bug found) |
   | core `spec` + `bootstrap` | full | 88.7 % (done; added after the plan; 65.8 % baseline; `spec` constants are static initialisers Stryker cannot attribute, now pinned by tests; no bug found) |
+  | core `resilience` | full | 96.8 % (done; added after the plan; 86.6 % baseline, no bug found) |
 
 - **Per module** (`domain`, `query`, `operation`, `execution`, `workflow`, `events`, `entity`, then
   adapters `http` and `drizzle-shared`): measure the whole module first, then for each surviving mutant
