@@ -76,3 +76,24 @@ describe("systemClock", () => {
     } finally { vi.useRealTimers() }
   })
 })
+
+describe("systemClock module initialisation", () => {
+  it("builds a working frozen clock each time the module is evaluated", async () => {
+    vi.resetModules()
+    const fresh = await import("../clock")
+    expect(Object.isFrozen(fresh.systemClock)).toBe(true)
+    expect(fresh.systemClock.now()).toBeInstanceOf(Date)
+    expect(Object.keys(fresh.systemClock).sort()).toEqual(["clearTimeout", "now", "setTimeout"])
+    vi.useFakeTimers()
+    try {
+      const fired = vi.fn()
+      const handle = fresh.systemClock.setTimeout(fired, 5)
+      expect(handle).toBeDefined()
+      const cancelled = vi.fn()
+      fresh.systemClock.clearTimeout(fresh.systemClock.setTimeout(cancelled, 5))
+      vi.advanceTimersByTime(10)
+      expect(fired).toHaveBeenCalledTimes(1)
+      expect(cancelled).not.toHaveBeenCalled()
+    } finally { vi.useRealTimers() }
+  })
+})

@@ -243,6 +243,12 @@ describe("rule evaluation", () => {
   })
   it("validates facts as ValidationError", () => {
     const c = compiledOf([rule()])
-    expect(() => evaluateRuleSet(c, { on: () => 1 } as never, at)).toThrow(ValidationError)
+    expect(() => evaluateRuleSet(c, { on: () => 1 } as never, at)).toThrow(new ValidationError("Rule facts must contain data only"))
+  })
+  it("keeps every match under all-matches even when rules share a conflict key", () => {
+    const c = compiledOf([rule({ key: "a", priority: 1, conflictKey: "g" }), rule({ key: "b", priority: 2, conflictKey: "g" })], { kind: "all-matches" })
+    const result = evaluateRuleSet(c, { on: true }, at)
+    expect(result.matches.map(m => m.key)).toEqual(["b", "a"])
+    expect(result.trace.map(t => t.disposition)).toEqual(["selected", "selected"])
   })
 })
