@@ -206,3 +206,82 @@ Module-load constants (static mutants): the vitest runner does not re-evaluate m
 - src/resilience/executor.ts:218, ConditionalExpression/StringLiteral: `backoff` selection for non-idempotent mutations; validation already rejects retries for them, so both branches yield no retry.
 - src/resilience/resilience.ts:22, OptionalChaining: `hasOwn` is checked first, so the descriptor is never undefined when `.value` is read.
 - src/resilience/resilience.ts:28, ConditionalExpression: `timeoutMs !== undefined &&` guard; `undefined > MAX` is false anyway.
+
+## core read-model
+
+- src/read-model/defineReadModel.ts:36, ConditionalExpression (`maximum < 0`): a negative bounded-staleness maximum is still rejected by the `sources.some(... > maximum)` conjunct, because every source staleness is a non-negative integer or undefined; the message is identical.
+- src/read-model/executeReadModel.ts:25-26, ConditionalExpression/StringLiteral (`case "boolean"`, `case "bigint"`): without the case a boolean or bigint falls through to the raw value (or to the bigint case) and still joins only an equal boolean or bigint; the `s:`/`n:` string and number keys cannot collide with a raw boolean or bigint.
+- src/read-model/executeReadModel.ts:29,40,51, ConditionalExpression (`value === undefined`, `key === undefined`, `leftKey === undefined`): `undefined` is returned for the value anyway, an `undefined` index key is never looked up because a left `undefined` key is skipped, and `index.get(undefined)` finds nothing because `undefined` keys are never indexed; each guard is redundant with the other two.
+- src/read-model/executeReadModel.ts:68,74,75,80,86, ArrayDeclaration/ConditionalExpression/StringLiteral/BlockStatement/BooleanLiteral: `values` is fully overwritten before `resolveAll`, the `fulfilled` status string is only ever compared with `"rejected"`, and the `active` flag and `release()` only stop writes into an already-consumed settlement.
+- src/read-model/executeReadModel.ts:106,116,121,122,152,155, OptionalChaining/ObjectLiteral/BooleanLiteral/ConditionalExpression/ArrowFunction/StringLiteral/CallExpression: `parent` is always defined where `onParentAbort` is attached, an AbortSignal fires `abort` once so `{ once: true }` is redundant, `clearTimeout(undefined)` is a no-op, `sourceSettlement` is always assigned before `finally`, and the internal controller is never aborted after the read ends, so the removal of the child abort listener is unobservable.
+- src/read-model/executeReadModel.ts:143, MethodExpression (`tokens.some` to `every`): a mix of valid and invalid tokens always has more than one distinct value, which the `new Set(tokens).size !== 1` conjunct rejects with the same message.
+
+## core kernel
+
+- src/kernel/isoInstant.ts:16, ConditionalExpression/LogicalOperator (month and `day < 1` terms, 7 mutants): `Date.parse` returns NaN for month 0, month 13 and day 0, so the final `Date.parse(text)` produces the same NaN; the day-above-month-length term, which `Date.parse` rolls over, is killed.
+- src/kernel/isoInstant.ts:17-18, ConditionalExpression/EqualityOperator/LogicalOperator (minute, second and offset terms, 11 mutants): `Date.parse` returns NaN for minutes or seconds above 59, offset hours above 23 and offset minutes above 59 (checked in Node 22); only the hour-24 `T24:00:00Z` form is accepted by `Date.parse`, and that term is killed. The `match[n] !== undefined` guards fall through to `Number(undefined) > n`, which is false.
+- src/kernel/definitionIntegrity.ts:13,23,32,36, ConditionalExpression/ArithmeticOperator/StringLiteral (depth checks, 5 mutants): the clone pass and the freeze pass enforce the same bound with the same message and the freeze pass never sees a deeper node than the clone pass accepted, so each check is redundant with the other.
+- src/kernel/definitionIntegrity.ts:36, ConditionalExpression/LogicalOperator (`descriptor && "value" in descriptor`, 2 mutants): `descriptor` is never undefined for an own key of an already cloned object and an accessor descriptor has `value === undefined`, which `freeze` returns on immediately.
+- src/kernel/snapshotData.ts:68,89,90, BooleanLiteral (`configurable`, `writable` true to false): `Object.freeze(target)` makes every property non-writable and non-configurable at the end of the copy.
+- src/kernel/snapshotData.ts:81,84,88, BooleanLiteral (`enumerable ?? false` to true): `descriptor.enumerable` is always a boolean, so the fallback is unreachable.
+
+## core rules
+
+- src/rules/snapshot.ts:13, ConditionalExpression: passing `maxNodes: undefined` to `snapshotData` equals omitting it (`options.maxNodes ?? DEFAULT_MAX_NODES`).
+- src/rules/ruleEngine.ts:64, ConditionalExpression/LogicalOperator (4 mutants): when only one bound is defined the comparison `from >= until` involves `undefined` and is false, so the `!== undefined` guards are redundant.
+- src/rules/ruleEngine.ts:66, ObjectLiteral (`{ maxNodes: MAX_RULE_NODES }` to `{}`): `MAX_RULE_NODES` equals the `snapshotData` default of 10 000.
+- src/rules/ruleEngine.ts:70, ConditionalExpression (`typeof definition !== "object"`): a primitive definition has no string `key`, so the next conjunct throws the same message.
+- src/rules/ruleEngine.ts:88, ConditionalExpression/LogicalOperator (4 mutants): `WeakSet#has` returns false for any non-object, so the `typeof`/null guard is redundant.
+- src/rules/ruleEngine.ts:96, ArithmeticOperator (nocov): the version tie-break is reached only for equal keys, and a single version per key survives supersession before any sort.
+- src/rules/ruleEngine.ts:118, EqualityOperator (`>` to `>=`): equal versions of one key are rejected at compile time as duplicates.
+- src/rules/ruleEngine.ts:139, MethodExpression/StringLiteral: an implicit conflict group contains exactly one rule, so a priority tie (the only user of this scope text) cannot occur there, and `endsWith` and `startsWith` agree for explicit keys.
+- src/rules/ruleEngine.ts:144, StringLiteral (`"Rule evaluation result"` label): the result snapshot stays within the node budget derived from the compiled set, so its error label is unreachable.
+
+## core telemetry
+
+- src/telemetry/telemetry.ts:12,118, ConditionalExpression (`typeof value === "string"`, `typeof value === "number"` to true): `TextEncoder#encode` of a number or boolean is a few bytes and `Number.isFinite` of a non-number is false, so the outcome is unchanged.
+- src/telemetry/telemetry.ts:17, ConditionalExpression/LogicalOperator (`!port`, the `result && typeof result.catch` guard, 5 mutants): the failure that the mutant introduces (a property access on `undefined`) is thrown inside the `try` that swallows it.
+- src/telemetry/telemetry.ts:65,71,76, EqualityOperator/ConditionalExpression/StringLiteral/ArithmeticOperator/Regex: reading `key[i]` past the end is `undefined`, an extra split before a capital that follows a separator yields the same segments after the `[\s_.-]+` split, and a non-collapsing separator regex only adds empty segments that match nothing.
+- src/telemetry/telemetry.ts:88, ConditionalExpression/EqualityOperator: the `length <= 256` shortcut is an optimisation, since 256 UTF-16 units never exceed 1 024 bytes.
+- src/telemetry/telemetry.ts:128, ArrowFunction (default `now`): an `undefined` clock result is replaced by `new Date()` a few lines later.
+
+## core aggregate
+
+- src/aggregate/aggregate.ts:49, ConditionalExpression (`typeof definition !== "object"`): a primitive definition has no valid string `key`, so the next conjunct throws the same message.
+- src/aggregate/aggregate.ts:68, ConditionalExpression/LogicalOperator (4 mutants): `WeakSet#has` returns false for any non-object.
+
+## core temporal
+
+- src/temporal/temporal.ts:34, ConditionalExpression (`max < 1`): `max < 1` also fails `pageSize >= 1 && pageSize <= max`, with the same message.
+- src/temporal/temporal.ts:48, ConditionalExpression/EqualityOperator (`cursor > 0`): at cursor 0 `currentState` is null, so the `currentState !== null` conjunct is already false.
+- src/temporal/temporal.ts:50, ConditionalExpression/StringLiteral: each page is capped at `min(pageSize, max - replayed)` items, so `replayed > max` cannot happen.
+
+## core sequence
+
+- src/sequence/sequence.ts:39, ConditionalExpression/EqualityOperator (`timeZone.length > 64`): no valid IANA zone has 64 or more characters and `Intl.DateTimeFormat` rejects the rest with the same message.
+- src/sequence/sequence.ts:58, MethodExpression/ConditionalExpression/StringLiteral (`part.type !== "literal"` filter): only `era`, `year`, `month` and `day` are read from the parts, so keeping the `literal` entry changes nothing.
+
+## core object-store
+
+- src/object-store/objectStore.ts:26, ConditionalExpression: with an undefined deadline `now >= undefined` is false.
+- src/object-store/objectStore.ts:41, ConditionalExpression/StringLiteral (`typeof ReadableStream !== "undefined"`): `ReadableStream` is a global on Node 22, so the guard is always true.
+
+## core rate-limit
+
+- src/rate-limit/rateLimit.ts:56, StringLiteral/ConditionalExpression/LogicalOperator (5 mutants): the capture groups of the validated pattern are always defined, so the guard is dead code.
+- src/rate-limit/rateLimit.ts:135, ConditionalExpression: fail-open with atomic consistency is rejected before the `try`, so fail-open implies best-effort here.
+- src/rate-limit/rateLimit.ts:165-168, ConditionalExpression (4 mutants): spreading `{ policy: undefined }`, `{ consistency: undefined }`, `{ failureMode: undefined }` or `{ nowMs: undefined }` is read exactly like an absent property by `checkRateLimit`.
+
+## core quota
+
+- src/quota/quota.ts:19,26,36, ConditionalExpression (`typeof ... !== "object"` and `typeof principal.kind !== "string"`, 4 mutants): a primitive has no `id`, `kind`, `quotaKey` or `allowed`, so the next conjunct throws the same message, and `principalKinds.has` rejects a non-string kind.
+- src/quota/quota.ts:38, ConditionalExpression (`decision.used <= request.limit` for an allowed decision): `used + remaining === limit` with `remaining >= 0` already implies `used <= limit`.
+
+## core business-calendar
+
+- src/business-calendar/businessCalendar.ts:9, ConditionalExpression (`typeof window !== "object"`, `window.start < from`): a primitive window has no Date `start`, and `window.start.getTime() < prior` (initialised to `from`) already rejects a start before the range.
+
+## core feature-flags, health
+
+- src/feature-flags/featureFlags.ts:13, ConditionalExpression (`typeof value === "number"` to true): `Number.isFinite` is false for every non-number.
+- src/health/health.ts:13, ConditionalExpression (`typeof component !== "object"`): a primitive component has no string `key`, so the next conjunct throws the same message.
