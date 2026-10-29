@@ -118,7 +118,7 @@ when the wave closes.
   | core `operation` | full | 81.3 % (done) |
   | core `execution` | full | 85.0 % (done; `types.ts` 68.0 % is the weakest file) |
   | core `workflow` | full | 92.4 % (done, no new tests needed) |
-  | core `events` | full except `auditRedaction.ts` | 92.0 % (done) |
+  | core `events` | full | 92.0 % (done); `auditRedaction.ts` 86.0 % raw, every survivor equivalent or static (its heavy tests shrink under `XONAVA_MUTATION_RUN`) |
   | core `entity` | full | 93.0 % (done) |
   | adapters `http` | full | 89.7 % (done; `scopeResolution.ts` 96.1 %, `trustedClientIp.ts` 90.7 %) |
   | adapters `drizzle-shared` | full | 88.1 % (done) |
@@ -140,8 +140,6 @@ when the wave closes.
   adapters `http` and `drizzle-shared`): measure the whole module first, then for each surviving mutant
   add a test that kills it, or mark it equivalent with a one-line reason in `stryker-equivalent.md` next
   to the config. Stop when the module meets the gate.
-- `events/durability/auditRedaction.ts` cannot be mutated yet: its 60 000-string and 200 kB linear-time
-  tests time out under instrumentation. Give those tests a lighter variant under mutation first.
 - **Acceptance:** `npm run test:mutation` exits 0 for core (≥ 80 %) and adapters (≥ 70 %).
 
 ## Wave 3: hardening and decisions
