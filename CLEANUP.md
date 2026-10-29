@@ -60,7 +60,8 @@ This file is part of that work and is deleted by the same change.
   `packages/testing/integration/upgrade/` setup that targets 0.1.0. Keep the upgrade test itself, pointed at
   0.2.0, or remove it.
 - Dead code found during the mutation work: `getCookieValue` and `resolveSessionRequired` in
-  `packages/adapters/src/http/createFrameworkWriteHandler.ts`.
+  `packages/adapters/src/http/createFrameworkWriteHandler.ts`, and the write-only `revisions` map in
+  `packages/adapters/src/cache/inMemoryCacheAdapter.ts` (nothing reads it).
 - `.changeset/*.md` entries are consumed by the 0.2.0 and 0.3.0 releases. None may be left over.
 
 ### References to how the work was done
