@@ -195,8 +195,8 @@ Module-load constants (static mutants): the vitest runner does not re-evaluate m
 ## core resilience
 
 - src/resilience/abortSignal.ts:21, ConditionalExpression: `typeof DOMException !== "undefined" &&` guard; on Node 22 DOMException always exists and an Error-instance check precedes it, so only a non-Error DOMException lookalike differs and both shapes give the same TimeoutError.
-- src/resilience/backoff.ts:36,39,41, ConditionalExpression: per-field guards re-checked by the following exact-message tests only through other conjuncts (`!Number.isSafeInteger` for integers already rejected by the range test); the thrown error is identical.
-- src/resilience/backoff.ts:65, ConditionalExpression: sample-normalisation guard; the fallback 0.5 and the in-range check give the same value for every sample that reaches it.
+- src/resilience/backoff.ts:41, ConditionalExpression (`typeof backoffMultiplier !== "number"` -> `false`): `Number.isFinite` is false for every non-number, so the next operand throws the same error.
+- src/resilience/backoff.ts:65, ConditionalExpression (`typeof sample !== "number"` -> `false`): `Number.isFinite` is false for every non-number, so a non-number sample still falls back to 0.5.
 - src/resilience/executor.ts:30, EqualityOperator: `generation >= 0` vs `> 0`; generation 0 yields 0 either way.
 - src/resilience/executor.ts:61, ConditionalExpression/StringLiteral: half-open failure branch produces the same open state as the threshold branch for the only status that reaches it.
 - src/resilience/executor.ts:142, ConditionalExpression: `index >= 0` always holds because the abort listener is removed on grant.

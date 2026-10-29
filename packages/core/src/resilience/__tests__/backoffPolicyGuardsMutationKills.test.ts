@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { ConfigurationError } from "../../domain/errors"
-import { validateBackoffPolicy, type BackoffPolicy } from "../backoff"
+import { MAX_BACKOFF_DELAY_MS, validateBackoffPolicy, type BackoffPolicy } from "../backoff"
 
 const valid = { maxAttempts: 3, initialDelayMs: 10, backoffMultiplier: 2, maxDelayMs: 100, jitter: "none" } as const
 
@@ -26,6 +26,11 @@ describe("validateBackoffPolicy guards", () => {
     const error = rejection({ ...valid, initialDelayMs: -1 })
     expect(error).toBeInstanceOf(ConfigurationError)
     expect((error as Error).message).toMatch(/^P initialDelayMs must be an integer from 0 to /)
+  })
+
+  it("reports initialDelayMs above the cap before checking maxDelayMs", () => {
+    const error = rejection({ ...valid, initialDelayMs: MAX_BACKOFF_DELAY_MS + 1, maxDelayMs: MAX_BACKOFF_DELAY_MS + 1 })
+    expect((error as Error).message).toBe(`P initialDelayMs must be an integer from 0 to ${MAX_BACKOFF_DELAY_MS}`)
   })
 
   it("rejects a backoffMultiplier outside 1 to 10", () => {
