@@ -159,3 +159,20 @@ Unreachable or redundant (the observable result is identical):
 - src/persistence/bulk.ts:58, LogicalOperator/ConditionalExpression: once the counts sum to the item count, applied and rejected differ from the declared counters together, so either operand alone is enough.
 - src/persistence/streaming.ts:39, ArrowFunction: the default `now` returning `undefined` makes `assertStreamingReadOptions` fall back to its own `new Date()` default.
 - src/persistence/tenantScopeBrand.ts:22, ConditionalExpression/LogicalOperator: `WeakSet.has` returns false for `null` and primitives, so the `typeof`/`null` guards are redundant.
+
+## core cache
+
+- src/cache/cache.ts:49-50, StringLiteral: the `?? ""` fallbacks in `compareSerialized` are unreachable; both sides are arrays or already canonicalised values, so `JSON.stringify` never returns `undefined`.
+- src/cache/cache.ts:51, EqualityOperator/ConditionalExpression: `compareSerialized` only orders canonical, pairwise-distinct serialisations (equal pairs sort to identical output), so the equal-case result and any consistent total order give the same final key.
+- src/cache/cache.ts:81 and 151, ConditionalExpression: `value.length > MAX` is only a shortcut for `utf8Bytes(value) > MAX`, because the byte length is never smaller than the UTF-16 length.
+- src/cache/cache.ts:85, ConditionalExpression: forcing `typeof value === "number"` true still needs `Number.isNaN(value)`, which is false for every non-number.
+- src/cache/cache.ts:87, EqualityOperator: `value >= 0` differs from `value > 0` only at zero, and this branch is reached only for the infinities.
+- src/cache/cache.ts:313, OptionalChaining: the first operand (`capabilities?.tagGenerationConsistency !== "linearizable"`) already short-circuits when `capabilities` is undefined, so the second `?.` never sees `undefined`.
+- src/cache/cache.ts:333, 339 and 354, ConditionalExpression/EqualityOperator: `getTagGeneration([])` returns `undefined` for empty tags (guard at line 522), identical to the skipped call.
+- src/cache/cache.ts:338, ConditionalExpression: the `localClearEpoch === clearEpoch` pre-check is repeated by the check at line 340 after the generation re-read.
+- src/cache/cache.ts:348, ObjectLiteral: `{}` instead of `{ invalidated: false }` leaves `fence.invalidated` falsy, exactly like `false`.
+- src/cache/cache.ts:472, AssignmentOperator: the clear epoch is only compared for equality and used as an opaque map-key prefix, so decrementing fences exactly like incrementing.
+- src/cache/cache.ts:522, ConditionalExpression: every caller already skips `getTagGeneration` for empty tags, so the guard is unreachable.
+- src/cache/cache.ts:560, ConditionalExpression: when the adapter lacks `advanceTagGeneration`, calling it throws a TypeError that the catch turns into the same local-epoch advance (best-effort); correctness-critical mode cannot reach it because `requireSharedGeneration` throws first.
+- src/cache/cache.ts:563, StringLiteral/ConditionalExpression: unreachable because a correctness-critical service without `advanceTagGeneration` is rejected by the constructor and by `requireSharedGeneration` before this line.
+- src/cache/cache.ts:600, OptionalChaining: dropping `?.` on `telemetry` or `onError` throws a TypeError that the surrounding try/catch swallows, exactly like the guarded call.
