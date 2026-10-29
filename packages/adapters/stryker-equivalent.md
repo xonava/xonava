@@ -217,3 +217,13 @@ Line numbers refer to the source before instrumentation.
 
 - src/cache/inMemoryRateLimitStore.ts:41, ConditionalExpression/EqualityOperator (`this.buckets.size > 0` -> `true` / `>= 0`): on an empty map the loop only hits `done` twice and returns.
 - src/cache/inMemoryRateLimitStore.ts:46, 47, ConditionalExpression/BooleanLiteral (`wrapped` early exit in `sweep`): the early exit only saves re-inspecting entries, which removes the same expired set.
+
+## adapters server
+
+- src/server/authorizedRepository.ts:52, ConditionalExpression (`field !== FIELD_READ_DEFAULT_KEY` -> `true`): for the `*` key both branches evaluate `plan["*"] === "allow"`.
+- src/server/authorizedRepository.ts:282, ConditionalExpression (`if (versionField)` -> `true`): `versionField` was already proven truthy at line 236, so the guard is always taken.
+- src/server/authorizedRepository.ts:288, StringLiteral (`"read"` in the no-versionField fallback filter): unreachable, `versionField` is always set here.
+- src/server/idempotencyFinalizer.ts:4, ConditionalExpression (`if (value)` -> `true`): `emitTelemetry` itself returns immediately for an undefined port.
+- src/server/idempotencyFinalizer.ts:12, ConditionalExpression (`if (timer) clearInterval(timer)` in `stop` -> `true`): `clearInterval(undefined)` is a no-op.
+- src/server/persistenceRouter.ts:12, ConditionalExpression (`if (!scope) return undefined` -> `false`): `encodeExecutionScopeId(undefined)` throws and the catch returns `undefined`, the same result.
+- src/server/persistenceRouter.ts:15, BlockStatement (empty `catch` body): falling out of the catch also returns `undefined`.

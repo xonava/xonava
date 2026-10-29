@@ -126,6 +126,11 @@ describe("findMany", () => {
     const call = handle.findMany.mock.calls[0]?.[0] as Record<string, unknown>
     expect(Object.keys(call)).toEqual(["filter"])
     expect(call.filter).toEqual(Predicate.and(structural))
+    // Without a scope on the first decision, the access filter asks the authorizer for the same action again.
+    const unscoped = createAuth({ scope: undefined })
+    await build(createRepo([[]]), unscoped).findMany()
+    await build(createRepo([[]]), unscoped).findById("1")
+    expect(unscoped.assertCollectionAction.mock.calls).toEqual([["read"], ["read"], ["read"], ["read"]])
     await build(handle, createAuth({ scope: undefined })).findMany({ sort: [] })
     expect(Object.keys(handle.findMany.mock.calls[1]?.[0] as object).sort()).toEqual(["filter", "sort"])
   })
