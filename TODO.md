@@ -127,6 +127,7 @@ when the wave closes.
   | adapters `drizzle-pg` | full | 97.3 % (done; added after the plan) |
   | adapters `drizzle-mysql` | full | 95.0 % (done; added after the plan; found and fixed the all-row guard bug) |
   | adapters `drizzle-d1` | full | 96.2 % (done; added after the plan; 76.3 % baseline, no bug found) |
+  | core `persistence` | full | 96.3 % (done; added after the plan; 74.2 % baseline, no bug found) |
 
 - **Per module** (`domain`, `query`, `operation`, `execution`, `workflow`, `events`, `entity`, then
   adapters `http` and `drizzle-shared`): measure the whole module first, then for each surviving mutant
