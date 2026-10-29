@@ -55,7 +55,7 @@ describe("defineReadModel validation", () => {
   })
   it("validates the source envelope", () => {
     rejects(one({ sources: [src("a", { datasourceKey: "  " })] }), "Invalid source envelope: a")
-    rejects(one({ sources: [src("a", { authority: { scope, scopeId: "other" } })] }), "Invalid source envelope: a")
+    rejects(one({ sources: [src("a", { authority: { scope, scopeId: "other" as never } })] }), "Invalid source envelope: a")
     expect(defineReadModel(one()).sources[0]!.datasourceKey).toBe("a")
   })
   it("rejects unknown policies and consistency kinds", () => {
@@ -75,7 +75,7 @@ describe("defineReadModel validation", () => {
     rejects(one({ sources: [src("a", { maxStalenessMs: 0.5 })] }), s)
     rejects(one({ sources: [src("a", { maxStalenessMs: Number.NaN })] }), s)
     expect(defineReadModel(one({ sources: [src("a", { maxStalenessMs: 0 })] })).sources[0]!.maxStalenessMs).toBe(0)
-    expect(defineReadModel(one({ sources: [src("a", { maxStalenessMs: undefined })] })).sources[0]!.maxStalenessMs).toBeUndefined()
+    expect(defineReadModel(one({ sources: [src("a", { maxStalenessMs: undefined } as never)] })).sources[0]!.maxStalenessMs).toBeUndefined()
   })
   it("validates join type, cardinality and connectivity", () => {
     const m = "Invalid join type or cardinality"
@@ -117,9 +117,9 @@ describe("defineReadModel validation", () => {
     rejects(one({ consistency: c(Number.NaN) }), m)
     rejects(one({ consistency: c(1.5) }), m)
     rejects(one({ consistency: c(99) }), m)
-    rejects(one({ consistency: c(100), sources: [src("a", { maxStalenessMs: undefined })] }), m)
+    rejects(one({ consistency: c(100), sources: [src("a", { maxStalenessMs: undefined } as never)] }), m)
     rejects(base({ consistency: c(100), sources: [src("a", { maxStalenessMs: 100 }), src("b", { maxStalenessMs: 101 })] }), m)
-    rejects(base({ consistency: c(100), sources: [src("a", { maxStalenessMs: 100 }), src("b", { maxStalenessMs: undefined })] }), m)
+    rejects(base({ consistency: c(100), sources: [src("a", { maxStalenessMs: 100 }), src("b", { maxStalenessMs: undefined } as never)] }), m)
     expect(defineReadModel(one({ consistency: c(100) })).consistency).toEqual(c(100))
     expect(defineReadModel(one({ consistency: c(0), sources: [src("a", { maxStalenessMs: 0 })] })).consistency).toEqual(c(0))
   })
