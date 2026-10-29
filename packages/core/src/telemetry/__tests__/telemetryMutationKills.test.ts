@@ -161,3 +161,16 @@ describe("createTelemetryLogger", () => {
     expect(() => createTelemetryLogger({ emit: () => undefined }, "evt", () => { throw new Error("clock") }).error("x")).not.toThrow()
   })
 })
+
+describe("telemetry module initialisation", () => {
+  it("builds the redaction marker and key lists each time the module is evaluated", async () => {
+    vi.resetModules()
+    const fresh = await import("../telemetry")
+    expect(fresh.TELEMETRY_REDACTED).toBe("[REDACTED]")
+    expect(fresh.SENSITIVE_TELEMETRY_KEY_PATTERNS).toEqual(["password", "passwd", "secret", "token", "authorization", "cookie", "apikey", "credential", "privatekey", "sessionid", "session", "jwt", "bearer", "signature"])
+    expect(fresh.SENSITIVE_TELEMETRY_KEY_SEGMENTS).toEqual(["auth", "otp"])
+    for (const word of fresh.SENSITIVE_TELEMETRY_KEY_PATTERNS) expect(fresh.isSensitiveTelemetryKey(`x_${word}_y`)).toBe(true)
+    for (const word of fresh.SENSITIVE_TELEMETRY_KEY_SEGMENTS) expect(fresh.isSensitiveTelemetryKey(`x_${word}_y`)).toBe(true)
+    expect(fresh.boundedTelemetryAttributes("m", { password: "p" }).password).toBe("[REDACTED]")
+  })
+})

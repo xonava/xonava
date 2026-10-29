@@ -24,7 +24,7 @@ describe("validateSequenceDefinition", () => {
   })
   it("validates the time zone", () => {
     const tz = "Sequence time zone is invalid"
-    for (const timeZone of [5, "Not/AZone", "a".repeat(65), ""]) bad({ name: "n", timeZone }, tz)
+    for (const timeZone of [5, "Not/AZone", "a".repeat(65), "", { toString: () => "UTC" }, new String("UTC")]) bad({ name: "n", timeZone }, tz)
     expect(validateSequenceDefinition({ name: "n", timeZone: "Asia/Kolkata" }).timeZone).toBe("Asia/Kolkata")
   })
   it("validates the period format and separator", () => {

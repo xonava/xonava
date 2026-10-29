@@ -123,7 +123,7 @@ describe("reconstructAsOf pages and streams", () => {
   const page = (items: unknown[], hasMore = false) => ({ items, hasMore })
   const invalidPage = new ConfigurationError("Temporal store returned an invalid revision page")
   it("rejects malformed pages", async () => {
-    for (const p of [undefined, null, { items: "x", hasMore: false }, { items: [], hasMore: "no" }, { items: [], hasMore: true }, { hasMore: false }]) await expect(replay(store({ pages: [p] }))).rejects.toThrow(invalidPage)
+    for (const p of [undefined, null, { items: "x", hasMore: false }, { items: [], hasMore: "no" }, { items: [], hasMore: undefined }, { items: [], hasMore: 0 }, { items: [rev(1, "created", { v: 1 })], hasMore: undefined }, { items: [rev(1, "created", { v: 1 })], hasMore: null }, { items: [], hasMore: true }, { hasMore: false }]) await expect(replay(store({ pages: [p] }))).rejects.toThrow(invalidPage)
     await expect(replay(store({ pages: [page([rev(1, "created", { v: 1 }), rev(2, "updated", { v: 2 })])] }), { maxRevisions: 5, pageSize: 1 })).rejects.toThrow(invalidPage)
     await expect(replay(store({ pages: [page([rev(1, "created", { v: 1 })])] }), { maxRevisions: 5, pageSize: 1 })).resolves.toMatchObject({ revision: 1 })
   })
@@ -161,5 +161,6 @@ describe("reconstructAsOf pages and streams", () => {
     expect(deleted).toMatchObject({ revision: 2, state: null, deleted: true, replayedRevisions: 2 })
     expect(deleted.asOf).not.toBe(asOf)
     expect(deleted.asOf.getTime()).toBe(10_000)
+    await expect(reconstructAsOf(store(), { ...target, extra: () => 1 } as never, asOf)).rejects.toThrow("Temporal reconstruction must contain data only")
   })
 })

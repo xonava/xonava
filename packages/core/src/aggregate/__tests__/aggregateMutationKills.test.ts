@@ -152,8 +152,11 @@ describe("aggregate invariants", () => {
     expect(t.before).toEqual({ x: 0, y: -5 })
     expect(t.after).toEqual({ x: -5, y: 0 })
     expect(Object.isFrozen(t)).toBe(true)
-    try { assertAggregateTransition(phased, { x: -1, y: 0 }, { x: 0, y: 0 }) } catch (e) { expect((e as AggregateInvariantError).phase).toBe("before") }
-    try { assertAggregateTransition(phased, { x: 0, y: 0 }, { x: 0, y: -1 }) } catch (e) { expect((e as AggregateInvariantError).phase).toBe("after"); return }
+    const phaseOf = (fn: () => unknown) => { try { fn() } catch (e) { return (e as AggregateInvariantError).phase } return undefined }
+    expect(phaseOf(() => assertAggregateTransition(phased, { x: -1, y: 0 }, { x: 0, y: 0 }))).toBe("before")
+    expect(phaseOf(() => assertAggregateTransition(phased, { x: 0, y: 0 }, { x: 0, y: -1 }))).toBe("after")
+    expect(phaseOf(() => assertAggregateTransition(phased, { x: 0, y: 0 }, { x: 0, y: 0 }))).toBeUndefined()
+    return
     throw new Error("expected failure")
   })
 })

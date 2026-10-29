@@ -104,6 +104,8 @@ describe("enforceRateLimit", () => {
   const cfg = { max: 5, timeWindow: "1s" }
   it("validates the configured maximum", async () => {
     for (const max of [0, -1, 1.5]) await rejects(enforceRateLimit({ store: atomicStore(), key: "k", config: { ...cfg, max } }), ConfigurationError, "Rate-limit max must be a positive safe integer.")
+    // the maximum is checked before the window is parsed
+    for (const max of [0, 1.5]) await rejects(enforceRateLimit({ store: atomicStore(), key: "k", config: { max, timeWindow: "bogus" } }), ConfigurationError, "Rate-limit max must be a positive safe integer.")
   })
   it("rejects configuration that conflicts with explicit options", async () => {
     const run = (config: object, extra: object) => enforceRateLimit({ store: plainStore(), key: "k", config: { ...cfg, ...config } as never, ...extra })
