@@ -9,8 +9,8 @@ function claimed(key: string, result: unknown): ClaimedPendingInvalidation {
 
 function createPort(entries: ClaimedPendingInvalidation[]) {
   const claimPendingInvalidations = vi.fn(async () => entries)
-  const completeClaimedInvalidation = vi.fn(async () => undefined)
-  const ackClaimedInvalidation = vi.fn(async () => undefined)
+  const completeClaimedInvalidation = vi.fn(async (_entry: unknown) => undefined)
+  const ackClaimedInvalidation = vi.fn(async (_entry: unknown) => undefined)
   const port = { claimPendingInvalidations, completeClaimedInvalidation, ackClaimedInvalidation } as unknown as FinalizerPort
   return { port, claimPendingInvalidations, completeClaimedInvalidation, ackClaimedInvalidation }
 }
