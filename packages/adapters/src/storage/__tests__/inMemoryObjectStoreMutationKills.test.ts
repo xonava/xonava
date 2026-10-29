@@ -46,6 +46,13 @@ describe("InMemoryObjectStore identity and versions", () => {
     expect(await store.head({ key: "k" })).not.toBeNull()
   })
 
+  it("treats an empty bucket name on a read like no bucket", async () => {
+    const store = new InMemoryObjectStore()
+    await put(store)
+    expect(await store.head({ bucket: "", key: "k" })).not.toBeNull()
+    expect(await store.head({ bucket: "other", key: "k" })).toBeNull()
+  })
+
   it("answers versioned get, head and delete only for the current version", async () => {
     const store = new InMemoryObjectStore()
     const v1 = await put(store)

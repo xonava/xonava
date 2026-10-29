@@ -242,3 +242,19 @@ describe("R2ObjectStore provider errors", () => {
     }
   })
 })
+
+describe("R2ObjectStore put input validation", () => {
+  it("rejects malformed put input before touching R2", async () => {
+    const { bucket, calls } = recorder()
+    const store = new R2ObjectStore(bucket)
+    const bad: Array<Record<string, unknown>> = [
+      { body: new Uint8Array([1, 2]), contentLength: 3 },
+      { body: new Uint8Array([1]), contentLength: 1, contentType: "  " },
+      { body: new Uint8Array([1]), contentLength: 1, metadata: { "": "x" } },
+      { body: "text", contentLength: 4 },
+      { body: new Uint8Array([1]), contentLength: -1 },
+    ]
+    for (const input of bad) await expect(store.put({ key: "k", ...input } as never)).rejects.toBeInstanceOf(ValidationError)
+    expect(calls).toHaveLength(0)
+  })
+})
