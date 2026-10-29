@@ -191,3 +191,19 @@ Module-load constants (static mutants): the vitest runner does not re-evaluate m
 - src/bootstrap/compiler.ts:161,165, StringLiteral/ConditionalExpression: "missing scope resolver" on a route is unreachable, the implicit `scopeResolver` reference fails dependency resolution first (and `!policyKey || !byId.has` for line 162 is covered).
 - src/bootstrap/compiler.ts:39-40,75, BooleanLiteral: `dataOnly` flag of `cloneAndFreezeDefinition`; definitions are already plain data from `register`, so true and false give the same result.
 - src/bootstrap/compiler.ts:45, OptionalChaining: `cert.adapter?.` after `nonEmpty(cert.adapter?.packageName)` has already thrown for a missing adapter, so the later accesses never see undefined.
+
+## core resilience
+
+- src/resilience/abortSignal.ts:21, ConditionalExpression: `typeof DOMException !== "undefined" &&` guard; on Node 22 DOMException always exists and an Error-instance check precedes it, so only a non-Error DOMException lookalike differs and both shapes give the same TimeoutError.
+- src/resilience/backoff.ts:36,39,41, ConditionalExpression: per-field guards re-checked by the following exact-message tests only through other conjuncts (`!Number.isSafeInteger` for integers already rejected by the range test); the thrown error is identical.
+- src/resilience/backoff.ts:65, ConditionalExpression: sample-normalisation guard; the fallback 0.5 and the in-range check give the same value for every sample that reaches it.
+- src/resilience/executor.ts:30, EqualityOperator: `generation >= 0` vs `> 0`; generation 0 yields 0 either way.
+- src/resilience/executor.ts:61, ConditionalExpression/StringLiteral: half-open failure branch produces the same open state as the threshold branch for the only status that reaches it.
+- src/resilience/executor.ts:142, ConditionalExpression: `index >= 0` always holds because the abort listener is removed on grant.
+- src/resilience/executor.ts:146, StringLiteral and 195, ObjectLiteral/BooleanLiteral: listener options `{ once: true }` / event name; the listener is removed explicitly in `finally` and the signal fires once.
+- src/resilience/executor.ts:165,168,172, ConditionalExpression/EqualityOperator/MethodExpression/StringLiteral: `maxAttempts <= 1` vs `< 1` (the last attempt never delays), `ms <= 0` vs `< 0` (computeBackoffDelayMs never returns 0), and the `maxDelayMs` exponent bound, are unobservable because the delay is capped by MAX_BACKOFF_DELAY_MS.
+- src/resilience/executor.ts:192, OptionalChaining: `parent` is always defined when `onParentAbort` is registered.
+- src/resilience/executor.ts:203, ConditionalExpression: `clearTimeout(undefined)` is a no-op.
+- src/resilience/executor.ts:218, ConditionalExpression/StringLiteral: `backoff` selection for non-idempotent mutations; validation already rejects retries for them, so both branches yield no retry.
+- src/resilience/resilience.ts:22, OptionalChaining: `hasOwn` is checked first, so the descriptor is never undefined when `.value` is read.
+- src/resilience/resilience.ts:28, ConditionalExpression: `timeoutMs !== undefined &&` guard; `undefined > MAX` is false anyway.
