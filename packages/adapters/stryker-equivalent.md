@@ -121,3 +121,61 @@ Line numbers refer to the source before instrumentation.
 - src/drizzle-mysql/mysqlIdentifiers.ts:38, ConditionalExpression (`overrides === null` -> `false`): `options?.tables ?? {}` can never yield null.
 - src/drizzle-mysql/drizzleJobStore.ts:48, CallExpression (`assertJobScopeCanEnqueue(scope,tenantId)` removed in `enqueue`): `encodeJobScope` always returns a consistent scope and tenant id, so the assertion can never fail here (same as drizzle-pg `drizzleJobStore.ts:253`).
 - src/drizzle-mysql/drizzleRepository.ts:50, StringLiteral / ConditionalExpression (`updateManyWhere` versioned-entity guard): unreachable, because the method is deleted from versioned repositories.
+
+## adapters drizzle-d1
+
+### src/drizzle-d1/drizzleJobStore.ts
+
+- src/drizzle-d1/drizzleJobStore.ts:41, ConditionalExpression: `parseMetadata` is only called for a truthy `row.metadata`, so the `!raw` guard is never taken.
+- src/drizzle-d1/drizzleJobStore.ts:121, StringLiteral: only `executionHistory === "required"` is ever compared, so the `"best_effort"` default and `""` behave the same.
+- src/drizzle-d1/drizzleJobStore.ts:176, ConditionalExpression: `tenantFilter(null)` is unreachable, because `requesterFilters` only calls it for tenant requesters (tenant id not null).
+- src/drizzle-d1/drizzleJobStore.ts:198, CallExpression: `assertJobScopeCanEnqueue` is redundant after `encodeJobScope`, which always yields a consistent scope and tenant id.
+- src/drizzle-d1/drizzleJobStore.ts:306, ConditionalExpression/EqualityOperator: `requesterFilters` always returns the scope filter, so its length is never 0.
+- src/drizzle-d1/drizzleJobStore.ts:314, 327, 336, ArrayDeclaration: the `[]` branch of `scope ? [scope] : []` is unreachable (see line 306).
+- src/drizzle-d1/drizzleJobStore.ts:320, LogicalOperator: `nextAttemptAt` and `runAt` are both timestamp columns with the same driver encoding, so `a ?? b` and `a && b` encode `now` identically.
+- src/drizzle-d1/drizzleJobStore.ts:469, all mutators: `recordExecution` is only called from the best-effort branches, so the `required` branch of its catch is unreachable.
+
+### src/drizzle-d1/drizzleRepository.ts
+
+- src/drizzle-d1/drizzleRepository.ts:107, ConditionalExpression: `sql.join([single], ", ")` renders exactly like the single order-by clause.
+- src/drizzle-d1/drizzleRepository.ts:127, 129, 142, 144, ConditionalExpression/EqualityOperator: the empty-array shortcuts equal `[].every(...)` (true) and `[].some(...)` (false), so they never change the result.
+- src/drizzle-d1/drizzleRepository.ts:132, 147, ConditionalExpression (`default:` removed): the missing default returns `undefined` instead of `false`; every caller only tests truthiness.
+- src/drizzle-d1/drizzleRepository.ts:205, LogicalOperator: `constraintMap` is only handed to `rethrowConstraintError`, which discards it (`void constraintMap`).
+- src/drizzle-d1/drizzleRepository.ts:421, ConditionalExpression: `delete repository.updateManyWhere` removes a property that the repository literal never defines.
+- src/drizzle-d1/drizzleRepository.ts:455, ConditionalExpression/OptionalChaining: for a versioned entity `requireOptimisticConcurrencyVersion` has already required `optimisticConcurrency`, so the guard is always true and `options` is defined.
+- src/drizzle-d1/drizzleRepository.ts:471, ConditionalExpression: `rethrowNormalizedDrizzleError` passes a `FrameworkCoreError` through unchanged, so the explicit `OptimisticConcurrencyError` rethrow is redundant.
+
+### src/drizzle-d1/drizzlePersistenceProvider.ts
+
+- src/drizzle-d1/drizzlePersistenceProvider.ts:57, MethodExpression (`.trim()` removed): the trigger text is only searched with `includes`, so surrounding whitespace is irrelevant.
+- src/drizzle-d1/drizzlePersistenceProvider.ts:214, ConditionalExpression (`command.expectedVersion !== undefined` -> `true`): a versioned command without `expectedVersion` is rejected before encoding, so the operand is always true here.
+- src/drizzle-d1/drizzlePersistenceProvider.ts:218, ConditionalExpression (`typeof command === "object"` -> `true`): a non-object has no `kind === "statement"`, so the result is the same.
+- src/drizzle-d1/drizzlePersistenceProvider.ts:239, 240, ArrayDeclaration: the `[]` branches gain a placeholder field name that no command value ever carries.
+- src/drizzle-d1/drizzlePersistenceProvider.ts:243, ConditionalExpression: adding `undefined` to the protected-field set is harmless, because provided field names are always strings.
+- src/drizzle-d1/drizzlePersistenceProvider.ts:450, ConditionalExpression: `capabilities.maxPageSize` is always defined (it defaults to 100).
+- src/drizzle-d1/drizzlePersistenceProvider.ts:451, all mutators: the repository's `constraintMap` is discarded by `rethrowConstraintError` (see drizzleRepository.ts:205).
+- src/drizzle-d1/drizzlePersistenceProvider.ts:470-474, all mutators: `verifyIdempotencyFence` only runs for an idempotency item, and the check at line 624 has already required both tables.
+- src/drizzle-d1/drizzlePersistenceProvider.ts:481, ConditionalExpression: the identity check in the failure handler is always true; a newer verification cannot start before the failed one is cleared.
+- src/drizzle-d1/drizzlePersistenceProvider.ts:497, CallExpression: the `validateD1AtomicOutboxColumns` call is repeated on the next statement, which throws the same errors.
+- src/drizzle-d1/drizzlePersistenceProvider.ts:508, CallExpression: `assertOutboxScope` is repeated inside `fingerprintOutboxRecord`, which runs on the next statement.
+- src/drizzle-d1/drizzlePersistenceProvider.ts:671-672, 676, all mutators: the second outbox table/mapper check and the missing-fingerprint check are unreachable, because the first check at line 495 and the fingerprint pass already guarantee both.
+- src/drizzle-d1/drizzlePersistenceProvider.ts:709, 713, ConditionalExpression/EqualityOperator: either empty-plan guard alone returns `[]`, and `[first, ...rest]` equals `[first]` when `rest` is empty.
+- src/drizzle-d1/drizzlePersistenceProvider.ts:727, 759, ArrayDeclaration: the placeholder message or column name never appears in a provider message, and classification only uses `some`.
+- src/drizzle-d1/drizzlePersistenceProvider.ts:740, ConditionalExpression: `receiptResult === undefined` is redundant, because `getAffectedRows(undefined)` is 0 and fails the next comparison.
+- src/drizzle-d1/drizzlePersistenceProvider.ts:761, ConditionalExpression (`typeof current === "object"` -> `true`): a primitive cause has neither `message` nor `cause`, so the walk ends the same way.
+- src/drizzle-d1/drizzlePersistenceProvider.ts:771, MethodExpression/OptionalChaining: `createMutationAssertion` already rejects a table without both columns, so the name filter and `?.` are never exercised.
+- src/drizzle-d1/drizzlePersistenceProvider.ts:785, ConditionalExpression: `normalizeDrizzleError` returns a `FrameworkCoreError` unchanged, so the early return is redundant.
+- src/drizzle-d1/drizzlePersistenceProvider.ts:787, ConditionalExpression/EqualityOperator: `some` over an empty column list is false, so the length guard is redundant.
+
+### Other files
+
+- src/drizzle-d1/d1OutboxSchema.ts:14, ConditionalExpression/LogicalOperator (7 mutants): for column objects the `typeof`, `!== null` and `"name" in` operands are always true and identical objects share a name, so every variant of `sameColumn` gives the same answer; a differing column name is covered by tests.
+- src/drizzle-d1/d1BatchLimits.ts:17, CallExpression: `Object.setPrototypeOf` is redundant for a native `class extends Error` (ES2022 target).
+- src/drizzle-d1/d1BatchLimits.ts:44, BlockStatement: with the catch body emptied, `query` stays undefined and the next check throws the identical "could not inspect" error.
+- src/drizzle-d1/d1Session.ts:59, ConditionalExpression/EqualityOperator: `db.select(undefined)` selects all columns exactly like `db.select()`.
+- src/drizzle-d1/d1Utils.ts:23, ConditionalExpression: a truthy primitive passes the guard and falls through every `typeof` check to 0.
+- src/drizzle-d1/d1Utils.ts:32, ConditionalExpression: a non-object `meta` has no numeric `changes`, so the result is 0 either way.
+- src/drizzle-d1/d1Utils.ts:54, BlockStatement: an emptied catch returns `undefined` instead of `false`; the caller negates it, so both mean "not self-mapping".
+- src/drizzle-d1/d1AtomicLeaseBackend.ts:51, OptionalChaining: a missing row throws a TypeError on `row!.now_ms` in the next expression either way.
+- src/drizzle-d1/drizzleOutboxSink.ts:35, CallExpression: `assertOutboxScope` is repeated inside `fingerprintOutboxRecord` two statements later.
+- src/drizzle-d1/drizzleWorkflowStore.ts:13, ConditionalExpression/BlockStatement: a null row throws inside the `try` and is caught, and an emptied catch leaves `payload` undefined, which the next guard turns into `null` as well.
