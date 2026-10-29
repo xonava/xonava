@@ -250,11 +250,11 @@ describe("InMemoryRateLimitStore mutation kills", () => {
 
     it("moves a renewed bucket to the end of the sweep order", async () => {
       const now = { value: 0 }
-      const { store, setup } = fill(now, 41, [40])
+      const { store, setup } = fill(now, 41, [35])
       await setup()
       now.value = 10
-      await store.increment("k40", 10)
-      expect(Array.from(internals(store).buckets.keys()).at(-1)).toBe("k40")
+      await store.increment("k35", 10)
+      expect(Array.from(internals(store).buckets.keys()).at(-1)).toBe("k35")
       expect(internals(store).buckets.size).toBe(41)
     })
 

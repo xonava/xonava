@@ -21,8 +21,10 @@ class FakeKv {
     if (this.failOn === op && (this.failKey === undefined || this.failKey === key)) throw this.boom
   }
 
-  get(key: string, _options?: { type: "json" }): Promise<unknown> {
+  get(key: string, options?: { type: "json" }): Promise<unknown> {
     try {
+      // The adapter always reads JSON; a call without that option would return text on the real namespace.
+      if (options?.type !== "json") throw new Error("kv.get without { type: 'json' }")
       this.maybeFail("get", key)
     } catch (error) {
       return Promise.reject(error as Error)
