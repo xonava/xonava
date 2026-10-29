@@ -285,3 +285,27 @@ Module-load constants (static mutants): the vitest runner does not re-evaluate m
 
 - src/feature-flags/featureFlags.ts:13, ConditionalExpression (`typeof value === "number"` to true): `Number.isFinite` is false for every non-number.
 - src/health/health.ts:13, ConditionalExpression (`typeof component !== "object"`): a primitive component has no string `key`, so the next conjunct throws the same message.
+
+## core events auditRedaction
+
+All lines are in src/events/durability/auditRedaction.ts and were checked per mutant against the source.
+
+Module-load initialisers (static mutants; the vitest runner does not re-evaluate them per mutant, so they report Survived although the tests assert the values and behaviour exactly):
+- :14, StringLiteral: `AUDIT_REDACTION_PLACEHOLDER` (asserted in auditRedactionMutationKills.test.ts).
+- :16, :17, :19, :21, :23, :25, :26, ArrowFunction: the `isDigit`, `isLetter`, `isWord`, `isLocal`, `isDomain`, `isSeparator` and `isPhoneChar` definitions.
+
+Performance shortcut (output identical either way, text without '@' or digits yields no match and is returned unchanged):
+- :32 BooleanLiteral, :33 EqualityOperator (`i <= n`: charCodeAt(n) is NaN), :35 ConditionalExpression/EqualityOperator, :37 ConditionalExpression.
+
+Sentinel `codes[n] === 0` (non-word, non-digit, non-letter, non-domain, non-local; out-of-range reads are `undefined`, which fails every comparison):
+- :40 `i <= n` (writes the sentinel's own value 0), :41 all five wordAt mutants (`i >= 0`, `i < n` and their negations read a non-word either way), :49 `i = n + 1` start, :62 `i < n` (digit test of the sentinel is false), :75 `stop < n` (isDomain of the sentinel is false), :83 `k + 1 < stop` (codes[stop] is never a letter), :96 `end < n` (codes[n] is not '@'), :126 `i < n` (the extra iteration matches nothing).
+
+Unobservable by construction:
+- :55 `new Int32Array(n - 1)`: digitsBefore is only read at a digit index <= n - 10 for a real phone number; a read beyond yields NaN which falls through to -1 as well.
+- :58 `last = +1`: a word boundary exists at or before every `run` that phoneAt reads (the candidate start), so the initial value is overwritten.
+- :80 `k = stop + 1`: the extra iterations see `k + 1 < stop` false, so lettersAfter stays 0 and nothing matches.
+- :105 `tenth >= length` (false / `>`): `digitPositions[tenth]` is undefined, `undefined >= run` is false and `end > undefined` is false, giving -1.
+- :108 `tenthAt >= run` (false / `>`): lastBoundary[run] <= run <= tenthAt so `end > tenthAt` is false; tenthAt === run is impossible (a digit is a phone char, so it lies inside the run).
+- :115 `i + 10 > n` (false / `i - 10 > n`): the loop then reads codes at or past n (0 or undefined), neither a digit nor '-', and returns -1.
+- :128, :129, :130 `end <= 0`: no matcher returns 0 as an end offset (a match consumes at least one character).
+- :135 `copied === 0`: with no match `out` is "" and `"" + text.slice(0)` equals `text`.
