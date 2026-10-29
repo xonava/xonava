@@ -129,6 +129,7 @@ when the wave closes.
   | adapters `drizzle-d1` | full | 96.2 % (done; added after the plan; 76.3 % baseline, no bug found) |
   | core `persistence` | full | 96.3 % (done; added after the plan; 74.2 % baseline, no bug found) |
   | adapters `cache` | full | 94.6 % (done; added after the plan; 70.8 % baseline, no bug found) |
+  | core `cache` | full | 95.6 % (done; added after the plan; 69.7 % baseline, no bug found) |
 
 - **Per module** (`domain`, `query`, `operation`, `execution`, `workflow`, `events`, `entity`, then
   adapters `http` and `drizzle-shared`): measure the whole module first, then for each surviving mutant
