@@ -48,6 +48,11 @@ describe("executeReadModel join key semantics", () => {
     expect(await joined("x", "x")).toBe(1)
     expect(await joined("x", "y")).toBe(0)
     expect(await joined("1", 1)).toBe(0)
+    expect(await joined("n:1", 1)).toBe(0)
+    expect(await joined(1, "n:1")).toBe(0)
+    expect(await joined("b:true", true)).toBe(0)
+    expect(await joined("i:1", 1n)).toBe(0)
+    expect(await joined("d:5", new Date(5))).toBe(0)
   })
   it("joins equal numbers only and never NaN", async () => {
     expect(await joined(1, 1)).toBe(1)
