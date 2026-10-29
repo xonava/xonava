@@ -198,7 +198,6 @@ Module-load constants (static mutants): the vitest runner does not re-evaluate m
 - src/resilience/backoff.ts:41, ConditionalExpression (`typeof backoffMultiplier !== "number"` -> `false`): `Number.isFinite` is false for every non-number, so the next operand throws the same error.
 - src/resilience/backoff.ts:65, ConditionalExpression (`typeof sample !== "number"` -> `false`): `Number.isFinite` is false for every non-number, so a non-number sample still falls back to 0.5.
 - src/resilience/executor.ts:30, EqualityOperator: `generation >= 0` vs `> 0`; generation 0 yields 0 either way.
-- src/resilience/executor.ts:61, ConditionalExpression/StringLiteral: half-open failure branch produces the same open state as the threshold branch for the only status that reaches it.
 - src/resilience/executor.ts:142, ConditionalExpression: `index >= 0` always holds because the abort listener is removed on grant.
 - src/resilience/executor.ts:146, StringLiteral and 195, ObjectLiteral/BooleanLiteral: listener options `{ once: true }` / event name; the listener is removed explicitly in `finally` and the signal fires once.
 - src/resilience/executor.ts:165,168,172, ConditionalExpression/EqualityOperator/MethodExpression/StringLiteral: `maxAttempts <= 1` vs `< 1` (the last attempt never delays), `ms <= 0` vs `< 0` (computeBackoffDelayMs never returns 0), and the `maxDelayMs` exponent bound, are unobservable because the delay is capped by MAX_BACKOFF_DELAY_MS.
