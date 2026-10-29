@@ -383,6 +383,11 @@ describe("scoped idempotency and cache tag attenuation", () => {
     expect(error).toBeInstanceOf(TenantScopeViolationError)
   })
 
+  it("rejects a boxed string tag that would otherwise decode as the tenant's", () => {
+    const boxed = new String(encodeTenantCacheTag("a", "x"))
+    expect(caughtSync(() => assertTenantCacheTag(boxed as never, "a"))).toBeInstanceOf(TenantScopeViolationError)
+  })
+
   it("attenuates every base operation by scope and forwards valid calls", async () => {
     const base = {
       acquire: vi.fn(async () => "acquired"),
@@ -506,6 +511,7 @@ describe("scoped atomic batch normalisation", () => {
     expect(await message(outbox(a, { scope: "tenant-a" as never }))).toBe(outside)
     expect(await message(outbox(a, { scope: { kind: "platform", platformKey: "ops" } as never }))).toBe(outside)
     expect(await message(outbox(b))).toBe(outside)
+    expect(await message(outbox({ scope: { kind: "platform", tenantId: "tenant-a" } as never, scopeId: a.scopeId }))).toBe(outside)
     expect(await message(outbox({ scope: a.scope, scopeId: b.scopeId }))).toBe("Outbox record scope identity does not match tenant \"tenant-a\".")
 
     expect(await message(outbox(a, { provenance: null as never }))).toBe(provenanceMessage)

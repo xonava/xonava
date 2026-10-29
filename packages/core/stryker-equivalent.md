@@ -143,3 +143,19 @@ Unreachable or redundant (the observable result is identical):
 - src/serialization/canonicalJson.ts:449,470,482,597,620, ConditionalExpression/EqualityOperator: when the guard is removed, `str[pos]` is `undefined` and the next check throws the identical error message.
 - src/serialization/canonicalJson.ts:454,579,634, ConditionalExpression/EqualityOperator: `pos < len && ...` forced true or `<=` evaluates `str[len]`, `undefined`, which equals none of the characters tested.
 - src/serialization/canonicalJson.ts:596, CallExpression: `skipWs()` at the top of the object member loop is redundant, whitespace is skipped after `{` and after `,`.
+
+## core persistence
+
+- src/persistence/scoped.ts:111, ConditionalExpression: `assertUpdateDataValid` is private and only reached from tenant-scoped repositories, where `tenantField` is always set, so the guard cannot be false.
+- src/persistence/scoped.ts:141, ConditionalExpression/LogicalOperator: a non-object or falsy record also fails the following `record[tenantField] !== tenantId` comparison with the identical error, so each operand is redundant.
+- src/persistence/scoped.ts:167, ConditionalExpression: `typeof scope !== "object"` forced false still fails `scope.kind !== "tenant"` for a primitive and throws the same error.
+- src/persistence/scoped.ts:176, ConditionalExpression/LogicalOperator: for a truthy non-object `target`, `target.scope` is `undefined`, the same result as the guarded branch.
+- src/persistence/scoped.ts:180, BlockStatement: `targetScopeId` is already `undefined` when `encodeExecutionScopeId` throws, so the empty catch block behaves the same.
+- src/persistence/scoped.ts:212, ConditionalExpression: an unsafe length makes `tenantEnd` huge or `Infinity`, `scope[tenantEnd]` is `undefined` and the next check returns `null` anyway.
+- src/persistence/scoped.ts:240, ConditionalExpression: for a primitive non-string tag the regex coerces it, and `scope.length`/`scope[tenantEnd]` checks then reject it with the same error (only boxed strings differ, and those are tested).
+- src/persistence/scoped.ts:426-432, ConditionalExpression/BlockStatement/StringLiteral/CallExpression: the versioned branch of `updateManyWhere` is unreachable because versioned entities have `updateManyWhere` removed from the repository, and the version assertion is a no-op for unversioned entities.
+- src/persistence/bulk.ts:50, ConditionalExpression: `appliedCount < 0` / `rejectedCount < 0` removed still fails the final counter comparison with the identical message.
+- src/persistence/bulk.ts:57, OptionalChaining: the length check above guarantees `requested[index]` exists.
+- src/persistence/bulk.ts:58, LogicalOperator/ConditionalExpression: once the counts sum to the item count, applied and rejected differ from the declared counters together, so either operand alone is enough.
+- src/persistence/streaming.ts:39, ArrowFunction: the default `now` returning `undefined` makes `assertStreamingReadOptions` fall back to its own `new Date()` default.
+- src/persistence/tenantScopeBrand.ts:22, ConditionalExpression/LogicalOperator: `WeakSet.has` returns false for `null` and primitives, so the `typeof`/`null` guards are redundant.

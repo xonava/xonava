@@ -17,6 +17,7 @@ import {
 } from "../bulk"
 import {
   assertMatchingPersistenceScope,
+  isTenantScopedPersistenceProvider,
   assertVersionedWriteHasExpectedVersion,
   createReadOnlyPersistenceProvider,
   supportsAtomicBatch,
@@ -26,7 +27,7 @@ import {
 } from "../provider"
 import { assertStreamingReadOptions, enforceBoundedStream, type StreamingReadBatch, type StreamingReadOptions } from "../streaming"
 import { createTenantScopedPersistenceProvider } from "../scoped"
-import { isCoreTenantScopedProvider } from "../tenantScopeBrand"
+import { isCoreTenantScopedProvider, registerTenantScopedProvider } from "../tenantScopeBrand"
 import { testRepositoryForDescriptor, type TestRepository } from "./persistenceTestSupport"
 
 const baseCapabilities: PersistenceCapabilities = {
@@ -400,6 +401,18 @@ describe("persistence provider helpers", () => {
     expect((swap as Error).message).toBe('Cannot replace tenant-scoped persistence for "tenant-a" with persistence for "tenant-b".')
   })
 
+  it("requires a string tenant id on a branded provider to treat it as tenant scoped", () => {
+    const branded = plainProvider({ tenantId: 5 })
+    registerTenantScopedProvider(branded)
+    expect(isCoreTenantScopedProvider(branded)).toBe(true)
+    expect(isTenantScopedPersistenceProvider(branded)).toBe(false)
+
+    const valid = plainProvider({ tenantId: "t" })
+    expect(isTenantScopedPersistenceProvider(valid)).toBe(false)
+    registerTenantScopedProvider(valid)
+    expect(isTenantScopedPersistenceProvider(valid)).toBe(true)
+  })
+
   it("detects atomic batch support from capabilities and the executor contract", () => {
     const execute = vi.fn()
     const encoder = { encode: vi.fn() }
@@ -411,7 +424,9 @@ describe("persistence provider helpers", () => {
     expect(supportsAtomicBatch(unscoped({}))).toBe(false)
     expect(supportsAtomicBatch(unscoped({ executeAtomicBatch: execute }, { atomicBatch: false }))).toBe(false)
     expect(supportsAtomicBatch(unscoped({ executeAtomicBatch: execute }, { atomicBatchScope: "other" as never }))).toBe(false)
-    expect(supportsAtomicBatch(unscoped({ executeAtomicBatch: execute }, { atomicBatchScope: "other" as never }))).toBe(false)
+    expect(
+      supportsAtomicBatch(unscoped({ executeAtomicBatch: execute, tenantId: "t", commandEncoder: encoder }, { atomicBatchScope: "other" as never })),
+    ).toBe(false)
 
     const tenantScoped = { atomicBatchScope: "tenant-scoped" as const }
     const contract = { executeAtomicBatch: execute, tenantId: "t", commandEncoder: encoder }
