@@ -176,3 +176,18 @@ Unreachable or redundant (the observable result is identical):
 - src/cache/cache.ts:560, ConditionalExpression: when the adapter lacks `advanceTagGeneration`, calling it throws a TypeError that the catch turns into the same local-epoch advance (best-effort); correctness-critical mode cannot reach it because `requireSharedGeneration` throws first.
 - src/cache/cache.ts:563, StringLiteral/ConditionalExpression: unreachable because a correctness-critical service without `advanceTagGeneration` is rejected by the constructor and by `requireSharedGeneration` before this line.
 - src/cache/cache.ts:600, OptionalChaining: dropping `?.` on `telemetry` or `onError` throws a TypeError that the surrounding try/catch swallows, exactly like the guarded call.
+
+## core spec
+
+Module-load constants (static mutants): the vitest runner does not re-evaluate module initialisers per mutant, so these report Survived although the values are asserted exactly by `specConstantsMutationKills.test.ts` and `frozenSpecConstants.test.ts`.
+
+- src/spec/authority.ts:38-47, ArrayDeclaration/ObjectLiteral/StringLiteral: `AUTHORITY_LATTICE_TRANSITIONS` and `EXECUTION_SCOPE_ID_PREFIX` are module-load initialisers (static mutants).
+- src/spec/formatVersions.ts:15-37, StringLiteral/ArrayDeclaration/ObjectLiteral: `SERIALIZATION_LIMIT_EXCEEDED_ERROR` and `DURABLE_FORMAT_REGISTRY_V1` are module-load initialisers (static mutants).
+- src/spec/versions.ts:17-23, StringLiteral: the version literals are module-load initialisers (static mutants).
+
+## core bootstrap
+
+- src/bootstrap/compiler.ts:128, StringLiteral/ConditionalExpression: "missing datasource" is unreachable, the implicit `datasource` reference fails dependency resolution first.
+- src/bootstrap/compiler.ts:161,165, StringLiteral/ConditionalExpression: "missing scope resolver" on a route is unreachable, the implicit `scopeResolver` reference fails dependency resolution first (and `!policyKey || !byId.has` for line 162 is covered).
+- src/bootstrap/compiler.ts:39-40,75, BooleanLiteral: `dataOnly` flag of `cloneAndFreezeDefinition`; definitions are already plain data from `register`, so true and false give the same result.
+- src/bootstrap/compiler.ts:45, OptionalChaining: `cert.adapter?.` after `nonEmpty(cert.adapter?.packageName)` has already thrown for a missing adapter, so the later accesses never see undefined.
