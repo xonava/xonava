@@ -227,3 +227,16 @@ Line numbers refer to the source before instrumentation.
 - src/server/idempotencyFinalizer.ts:12, ConditionalExpression (`if (timer) clearInterval(timer)` in `stop` -> `true`): `clearInterval(undefined)` is a no-op.
 - src/server/persistenceRouter.ts:12, ConditionalExpression (`if (!scope) return undefined` -> `false`): `encodeExecutionScopeId(undefined)` throws and the catch returns `undefined`, the same result.
 - src/server/persistenceRouter.ts:15, BlockStatement (empty `catch` body): falling out of the catch also returns `undefined`.
+
+## adapters storage
+
+- src/storage/inMemoryObjectStore.ts:16, ConditionalExpression (`bytes.byteLength !== input.contentLength` -> `false`) and StringLiteral (its message): unreachable. `validatePutObjectInput` already rejects a byte body whose length differs from `contentLength`, and `readObjectBytes` rejects a stream whose total differs, so the check never fires.
+
+## adapters fastify
+
+- src/fastify/index.ts:47, CallExpression (`app.removeAllContentTypeParsers()` removed): the `onRequest` hook below rewrites every defined content type to `application/octet-stream`, which no default parser (JSON, text) matches, and a missing content type matches no default parser either, so the `*` catch-all always handles the body. Checked by removing the call: the whole `src/fastify` and `src/http` suites (including the new tests) still pass.
+- src/fastify/index.ts:53, ConditionalExpression (`headers['content-type'] !== undefined` -> `true`): only changes `request.raw.headers`, never `rawHeaders`, which the Fetch request is built from; a request without a content type reaches the same `*` parser. Checked by forcing the condition to `true`: the same suites still pass.
+
+## adapters express
+
+- src/express/index.ts:40, CallExpression (`validateNodeOptions(options)` removed): `crudHttpRoutes` always returns five routes and `createExpressHandler` validates the same options with the same error on the first loop iteration, before anything is registered or returned.
