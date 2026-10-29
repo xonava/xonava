@@ -10,6 +10,8 @@
 // Mutation runs execute tests in parallel workers on a busy machine; loosen the wall-clock budgets of timing-sensitive
 // tests (see vitest.config.ts) so that a slow dry run is not mistaken for a failing suite.
 process.env.XONAVA_TIMING_SCALE ??= "4"
+// Marks a mutation run: Stryker worker processes inherit it, so heavy tests (e.g. 60 000-iteration loops, 200 kB timing checks) can shrink under instrumentation.
+process.env.XONAVA_MUTATION_RUN = "1"
 
 // Gate from the quality table; XONAVA_MUTATION_BREAK overrides it for baseline measurements.
 const gate = Number(process.env.XONAVA_MUTATION_BREAK ?? "80")
