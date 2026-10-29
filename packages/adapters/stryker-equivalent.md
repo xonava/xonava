@@ -179,3 +179,41 @@ Line numbers refer to the source before instrumentation.
 - src/drizzle-d1/d1AtomicLeaseBackend.ts:51, OptionalChaining: a missing row throws a TypeError on `row!.now_ms` in the next expression either way.
 - src/drizzle-d1/drizzleOutboxSink.ts:35, CallExpression: `assertOutboxScope` is repeated inside `fingerprintOutboxRecord` two statements later.
 - src/drizzle-d1/drizzleWorkflowStore.ts:13, ConditionalExpression/BlockStatement: a null row throws inside the `try` and is caught, and an emptied catch leaves `payload` undefined, which the next guard turns into `null` as well.
+
+## adapters cache
+
+### src/cache/kvCacheAdapter.ts
+
+- src/cache/kvCacheAdapter.ts:53, ConditionalExpression (`current !== undefined` -> `true`): `current === undefined` with a defined `legacy` can never satisfy `current === legacy`, and both undefined returns earlier.
+- src/cache/kvCacheAdapter.ts:57, Regex (`/=+$/` -> `/=+/` or `/=$/`): a base64 SHA-256 digest has exactly one `=`, always at the end.
+- src/cache/kvCacheAdapter.ts:77, ConditionalExpression/LogicalOperator in `isEnvelope`: the final `=== 1` marker check already rejects strings, numbers, booleans, arrays and `null` (which never reaches it), so each earlier clause is redundant.
+- src/cache/kvCacheAdapter.ts:141, ConditionalExpression (`stored.e !== undefined` -> `true`): `undefined <= Date.now()` is `false`, so the result is identical.
+- src/cache/kvCacheAdapter.ts:282, ConditionalExpression: adopting a legacy counter when `current` is already set or `legacy` is undefined re-reads the current key and returns the same value.
+- src/cache/kvCacheAdapter.ts:307, BlockStatement (`catch { return undefined }` -> `catch {}`): a function that falls off the end of the catch also returns `undefined`.
+
+### src/cache/cacheValueCodec.ts
+
+- src/cache/cacheValueCodec.ts:28, ConditionalExpression (`case "undefined"` removed): the `undefined` value is then returned as is, and every caller already maps it with `?? null` or drops it.
+- src/cache/cacheValueCodec.ts:53, 56, 59, BooleanLiteral (`inArray` `true` -> `false`): array, Map and Set callers coalesce an `undefined` result with `?? null`, so the flag changes nothing.
+- src/cache/cacheValueCodec.ts:82, ConditionalExpression (`Object.hasOwn(record, TAG)` -> `true`): an untagged record has no matching switch case and falls through to `decodePlain` anyway.
+- src/cache/cacheValueCodec.ts:115, ConditionalExpression (`typeof ttlMs !== "number"` -> `false`): `Number.isSafeInteger` already rejects every non-number.
+
+### src/cache/inMemoryCacheAdapter.ts
+
+- src/cache/inMemoryCacheAdapter.ts:55, ConditionalExpression/OptionalChaining in `isExpired`: a record without `expiresAt` compares `undefined <= now`, which is `false`, and `isExpired` is never called with `undefined`.
+- src/cache/inMemoryCacheAdapter.ts:66, ConditionalExpression (`if (!members) continue`): every tag membership is pruned from `keyTags` and `tags` together, so the tag set always exists.
+- src/cache/inMemoryCacheAdapter.ts:77, ConditionalExpression/BlockStatement (empty-store early return in `sweep`): on an empty map the loop hits `done` twice and resets the cursor itself.
+- src/cache/inMemoryCacheAdapter.ts:88, 89, ConditionalExpression/BooleanLiteral (`wrapped` early exit in `sweep`): the early exit only saves re-inspecting entries, which removes the same expired set.
+- src/cache/inMemoryCacheAdapter.ts:98, ConditionalExpression (`if (!record) return undefined`): the following `isExpired(undefined)` is `false`, so `undefined` is returned either way.
+- src/cache/inMemoryCacheAdapter.ts:125, UpdateOperator (`++this.nextRevision` -> `--`): revisions are only compared for equality, and decrementing still yields unique values.
+- src/cache/inMemoryCacheAdapter.ts:126, ConditionalExpression (`ttlMs !== undefined` -> `true`): without a ttl `expiresAt` becomes `NaN`, and `NaN <= now` is `false`, so the entry never expires.
+- src/cache/inMemoryCacheAdapter.ts:131, ConditionalExpression (`if (oldest.done) break`): the loop only runs while `size >= maxEntries > 0`, so the map is never empty there.
+- src/cache/inMemoryCacheAdapter.ts:137, 158, CallExpression (`revisions.set` / `revisions.clear`): the `revisions` map is write-only; no code reads it.
+- src/cache/inMemoryCacheAdapter.ts:183, ArrayDeclaration (`?? []` -> `["Stryker was here"]`): the placeholder key is not live, so the trailing `filter` removes it.
+- src/cache/inMemoryCacheAdapter.ts:193, 194, OptionalChaining in `deleteTag`: every tagged key is present in `keyTags` and `values`, because `removeKey` prunes tag membership together with the value.
+- src/cache/inMemoryCacheAdapter.ts:207, StringLiteral (`?? "0"` -> `?? ""`): `Number("")` is `0`, the same as `Number("0")`.
+
+### src/cache/inMemoryRateLimitStore.ts
+
+- src/cache/inMemoryRateLimitStore.ts:41, ConditionalExpression/EqualityOperator (`this.buckets.size > 0` -> `true` / `>= 0`): on an empty map the loop only hits `done` twice and returns.
+- src/cache/inMemoryRateLimitStore.ts:46, 47, ConditionalExpression/BooleanLiteral (`wrapped` early exit in `sweep`): the early exit only saves re-inspecting entries, which removes the same expired set.
