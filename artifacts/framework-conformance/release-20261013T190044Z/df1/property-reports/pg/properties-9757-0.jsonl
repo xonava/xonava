@@ -1,6 +1,0 @@
-{"property":"job store lifecycle differential (postgres/best_effort)","seed":819824981,"scale":2,"baseRuns":60,"runs":120,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:34:11.071Z"}
-{"property":"job store lifecycle differential (postgres/required)","seed":819824981,"scale":2,"baseRuns":60,"runs":120,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:34:32.044Z"}
-{"property":"job store concurrent transitions are linearizable (postgres/best_effort)","seed":819824981,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:34:41.776Z"}
-{"property":"job store concurrent transitions are linearizable (postgres/required)","seed":819824981,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:34:51.917Z"}
-{"property":"job store concurrent claim and transition storm (postgres/best_effort)","seed":819824981,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:35:03.587Z"}
-{"property":"core job dispatcher against the real job store (postgres/best_effort)","seed":819824981,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:35:12.855Z"}

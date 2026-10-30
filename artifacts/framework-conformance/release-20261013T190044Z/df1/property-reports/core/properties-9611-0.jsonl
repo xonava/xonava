@@ -1,3 +1,0 @@
-{"property":"job registry: decode follows the upcast chain exactly","seed":819824981,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:33:40.126Z"}
-{"property":"job registry: register/get/has/list match a map model","seed":819824981,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:33:42.431Z"}
-{"property":"job registry: definition validation","seed":819824981,"scale":5,"baseRuns":150,"runs":750,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:33:42.475Z"}

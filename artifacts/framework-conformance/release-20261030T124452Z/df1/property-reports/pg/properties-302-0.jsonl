@@ -1,0 +1,4 @@
+{"property":"temporal store lifecycle differential (postgres)","seed":771647169,"scale":2,"baseRuns":60,"runs":120,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:16:35.985Z"}
+{"property":"temporal store snapshot equivalence (postgres)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:16:45.099Z"}
+{"property":"temporal store concurrent appends (postgres)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:16:48.582Z"}
+{"property":"temporal store concurrent lifecycle (postgres)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:16:50.416Z"}

@@ -1,7 +1,7 @@
 {
   "schema": "framework.release-evidence",
   "schemaVersion": 2,
-  "generatedAt": "2026-10-30T12:42:21.980Z",
+  "generatedAt": "2026-10-30T12:44:53.408Z",
   "frameworkVersion": "0.2.0",
   "versionPolicy": {
     "schema": "framework.version-policy",
@@ -16,7 +16,7 @@
   "applicationPackageVersionsConsidered": false,
   "sourceRevision": {
     "kind": "git",
-    "value": "1a3c21f10d46c87b092c839d0942e45977a25e49"
+    "value": "2c4bc911fdc1183ddbfe44f55d07c90b0b760245"
   },
   "lockfile": {
     "path": "package-lock.json",

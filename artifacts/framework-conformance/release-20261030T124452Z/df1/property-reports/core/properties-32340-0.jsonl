@@ -1,0 +1,5 @@
+{"property":"workflow signal buffering model equivalence","seed":771647169,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:28.466Z"}
+{"property":"workflow signal delivery contract","seed":771647169,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:29.109Z"}
+{"property":"workflow signal buffering FIFO across waits","seed":771647169,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:29.650Z"}
+{"property":"workflow signal delivery versus wait commit interleavings","seed":771647169,"scale":5,"baseRuns":250,"runs":1250,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:30.211Z"}
+{"property":"workflow signal lease loss between delivery and commit","seed":771647169,"scale":5,"baseRuns":150,"runs":750,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:30.481Z"}

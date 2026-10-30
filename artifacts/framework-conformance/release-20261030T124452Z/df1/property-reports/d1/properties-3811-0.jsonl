@@ -1,0 +1,5 @@
+{"property":"job store lifecycle differential (d1/best_effort)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:26:27.263Z"}
+{"property":"job store lifecycle differential (d1/required)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:26:38.098Z"}
+{"property":"job store concurrent transitions are linearizable (d1/best_effort)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:26:48.459Z"}
+{"property":"job store concurrent claim and transition storm (d1/best_effort)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:27:15.558Z"}
+{"property":"core job dispatcher against the real job store (d1/best_effort)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:27:33.801Z"}

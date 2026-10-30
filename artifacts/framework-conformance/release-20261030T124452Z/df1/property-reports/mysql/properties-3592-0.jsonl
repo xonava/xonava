@@ -1,0 +1,2 @@
+{"property":"real-database schedule store lifecycle differential (mysql)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:23:33.767Z"}
+{"property":"real-database schedule store concurrent claims (mysql)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:23:39.157Z"}

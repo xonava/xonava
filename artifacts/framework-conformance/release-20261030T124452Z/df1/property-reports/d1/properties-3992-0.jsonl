@@ -1,0 +1,3 @@
+{"property":"job progress store lifecycle differential (d1)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:31:23.816Z"}
+{"property":"job progress store concurrent reporters (d1)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:31:46.348Z"}
+{"property":"job progress store sequence race (d1)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:31:51.397Z"}

@@ -1,0 +1,4 @@
+{"property":"lease store differential (d1)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:25:09.790Z"}
+{"property":"lease acquire race (d1)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:25:24.473Z"}
+{"property":"lease fence sequence (d1)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:26:03.520Z"}
+{"property":"lease holder race (d1)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:26:10.786Z"}

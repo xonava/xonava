@@ -1,0 +1,127 @@
+{
+  "schema": "framework.aggregate-release-certification",
+  "schemaVersion": 2,
+  "status": "certified",
+  "runId": "release-20261030T124452Z",
+  "phase": "release",
+  "frameworkVersion": "0.2.0",
+  "generatedAt": "2026-10-30T13:40:35.761Z",
+  "startedAt": "2026-10-30T12:44:52.944Z",
+  "packages": [
+    {
+      "name": "@xonava/core",
+      "version": "0.2.0"
+    },
+    {
+      "name": "@xonava/adapters",
+      "version": "0.2.0"
+    },
+    {
+      "name": "@xonava/testing",
+      "version": "0.2.0"
+    }
+  ],
+  "source": {
+    "sha256": "6eddf5a290ffe919e9382f6f7ad14b7826648dc056acd4339c94affcdc3a35d3",
+    "fileCount": 1197
+  },
+  "lockfile": {
+    "path": "package-lock.json",
+    "sha256": "44fdf8dfbca6d272520ded73e4616dda76ee701d88263c52959b6091343cadc6"
+  },
+  "evidence": [
+    {
+      "adapter": "core",
+      "kind": "rl1",
+      "path": "artifacts/framework-conformance/release-20261030T124452Z/rl1/business-rules-conformance.json",
+      "sha256": "03b8a547b88955f981891e0ae2465fcfb4e32d04041b1f938bbb9f32dca0916b"
+    },
+    {
+      "adapter": "core",
+      "kind": "ag1",
+      "path": "artifacts/framework-conformance/release-20261030T124452Z/ag1/aggregate-consistency-conformance.json",
+      "sha256": "c3dfebc83a31ca110ac219effa0e7f6279c9e022e37c1d8f4849db4d92246c3d"
+    },
+    {
+      "adapter": "core",
+      "kind": "th1",
+      "path": "artifacts/framework-conformance/release-20261030T124452Z/th1/temporal-history-conformance.json",
+      "sha256": "5585247cc047140f982d120a690a17b0d3f95ee86cdf95b7caa45a15f66144d6"
+    },
+    {
+      "adapter": "core",
+      "kind": "n1",
+      "path": "artifacts/framework-conformance/release-20261030T124452Z/n1/sequence-numbering-conformance.json",
+      "sha256": "ad2bc94743aa9bfe79e88f9f621ae8058b9c67c0ffc64fb79a9b6ae88d48a410"
+    },
+    {
+      "adapter": "core",
+      "kind": "ht1",
+      "path": "artifacts/framework-conformance/release-20261030T124452Z/ht1/http-adapters-conformance.json",
+      "sha256": "c4fe9efa8140aa2ffbe5725dd6dec674b7d434d137703e98fb57b20b9455ae22"
+    },
+    {
+      "adapter": "core",
+      "kind": "df1",
+      "path": "artifacts/framework-conformance/release-20261030T124452Z/df1/differential-conformance.json",
+      "sha256": "569af9644e24e574ff72980408d536d40e9d2b1bc940d64475d535cd5eb62193"
+    },
+    {
+      "adapter": "pg",
+      "kind": "guarantees",
+      "path": "artifacts/framework-conformance/release-20261030T124452Z/release/pg-guarantees.json",
+      "sha256": "d449115b6c10143276d580a30243abb2acb4941d6228f6bd423296b4e76489c0"
+    },
+    {
+      "adapter": "pg",
+      "kind": "crash-replay",
+      "path": "artifacts/framework-conformance/release-20261030T124452Z/release/pg-crash-replay.json",
+      "sha256": "9ee77dd0a4e8eb284c00fdb469b8818ba09ad58983f8725e5a5773887ef0fc64"
+    },
+    {
+      "adapter": "mysql",
+      "kind": "guarantees",
+      "path": "artifacts/framework-conformance/release-20261030T124452Z/release/mysql-guarantees.json",
+      "sha256": "6740e90f2a852e3722de5926d47edb582f5ec42dfba7b31862652f641135b369"
+    },
+    {
+      "adapter": "mysql",
+      "kind": "crash-replay",
+      "path": "artifacts/framework-conformance/release-20261030T124452Z/release/mysql-crash-replay.json",
+      "sha256": "5fe0c5b2b3484f7b9fb151f1144bcc74f1908d1656726f6bec87cf1f769a8bde"
+    },
+    {
+      "adapter": "d1",
+      "kind": "guarantees",
+      "path": "artifacts/framework-conformance/release-20261030T124452Z/release/d1-guarantees.json",
+      "sha256": "e7d6589e175d9091136a48527e96a25559a296c60a901317df1c94a90da6eb98"
+    },
+    {
+      "adapter": "d1",
+      "kind": "crash-replay",
+      "path": "artifacts/framework-conformance/release-20261030T124452Z/release/d1-crash-replay.json",
+      "sha256": "8cb23136cc4d330a1dc3d4393af9bf59d0cf39d5ae3ac15665d7c304dcbeff59"
+    }
+  ],
+  "differential": {
+    "seed": 771647169,
+    "seedSource": "run-id",
+    "scales": {
+      "core": 5,
+      "database": 2
+    },
+    "properties": 363,
+    "cases": 676160
+  },
+  "certificationScope": {
+    "level": "local-multi-backend",
+    "providers": [
+      "PostgreSQL",
+      "MySQL",
+      "D1 Miniflare"
+    ],
+    "productionTopologyCertified": false,
+    "customAdaptersCertified": false,
+    "externalAdvisories": "not-assessed-offline"
+  }
+}

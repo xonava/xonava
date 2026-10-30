@@ -1,0 +1,125 @@
+{
+  "phase": "RL1",
+  "status": "proven",
+  "runId": "release-20261030T124452Z",
+  "scenarios": [
+    {
+      "id": "predicate-evaluation",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/rules/__tests__/ruleEngine.test.ts",
+        "testName": "evaluates matching predicates and returns declarative actions"
+      }
+    },
+    {
+      "id": "effective-window",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/rules/__tests__/ruleEngine.test.ts",
+        "testName": "uses inclusive starts and exclusive ends"
+      }
+    },
+    {
+      "id": "rule-version-selection",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/rules/__tests__/ruleEngine.test.ts",
+        "testName": "selects the highest active version of each rule key"
+      }
+    },
+    {
+      "id": "deterministic-order",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/rules/__tests__/ruleEngine.test.ts",
+        "testName": "orders all matches deterministically by priority then key"
+      }
+    },
+    {
+      "id": "global-conflict",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/rules/__tests__/ruleEngine.test.ts",
+        "testName": "selects one global highest-priority match"
+      }
+    },
+    {
+      "id": "grouped-conflict",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/rules/__tests__/ruleEngine.test.ts",
+        "testName": "resolves independently per conflict key and leaves ungrouped rules independent"
+      }
+    },
+    {
+      "id": "ambiguous-tie",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/rules/__tests__/ruleEngine.test.ts",
+        "testName": "fails closed on an ambiguous configured priority tie"
+      }
+    },
+    {
+      "id": "defensive-snapshot",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/rules/__tests__/ruleEngine.test.ts",
+        "testName": "defensively snapshots definitions, actions, facts, dates, and results"
+      }
+    },
+    {
+      "id": "data-only-boundary",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/rules/__tests__/ruleEngine.test.ts",
+        "testName": "rejects executable/accessor-backed or oversized data"
+      }
+    },
+    {
+      "id": "determinism",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/certification/__tests__/rl1Contracts.test.ts",
+        "testName": "is deterministic for the same compiled definition, facts, and trusted time"
+      }
+    },
+    {
+      "id": "effect-separation",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/core/src/certification/__tests__/rl1Contracts.test.ts",
+        "testName": "separates decisions from effect execution"
+      }
+    }
+  ],
+  "sourceManifest": [
+    {
+      "path": "packages/core/src/rules/types.ts",
+      "sha256": "5679338685b663da350c6926f173129e58679bb85aa5e9957938f8b11d3d726d"
+    },
+    {
+      "path": "packages/core/src/rules/snapshot.ts",
+      "sha256": "3511de6604e4616a85255433f0e1059f1861e67560a66bbd918b72b28c1d838b"
+    },
+    {
+      "path": "packages/core/src/rules/ruleEngine.ts",
+      "sha256": "028f17e620b054cc70b6685c977ef62a623b92dc1072c352d41cd2da532d3cfb"
+    },
+    {
+      "path": "packages/core/src/rules/index.ts",
+      "sha256": "7ba0e49ef5a9204147e1c64c1e83bc5b2f0fd857d21257ec1a510c46f0da7b9e"
+    },
+    {
+      "path": "packages/core/src/rules/__tests__/ruleEngine.test.ts",
+      "sha256": "d6e46c02b4c6bbecc998e13106190d1d81e351b8e8c3a968b006aab56c4716e1"
+    },
+    {
+      "path": "packages/core/src/certification/__tests__/rl1Contracts.test.ts",
+      "sha256": "8801a737cad4779a70249c048f2c9d3d79d11d3b116af66e200bbeece81a131d"
+    },
+    {
+      "path": "docs/spec/rules.md",
+      "sha256": "bdb01ce98bb3205224c0fb884c6fceeeed6849b365ccfbf357d556cf4ece08a6"
+    }
+  ]
+}
