@@ -6,15 +6,15 @@ const stat = (medianMs, extra = {}) => ({ medianMs, meanMs: medianMs * 1.1, rmeP
 
 describe("flattenBenchReport", () => {
   const report = {
-    files: [{
-      filepath: "/repo/packages/core/src/__tests__/bench/a.bench.ts",
-      groups: [{
-        fullName: "src/__tests__/bench/a.bench.ts > suite > nested",
-        benchmarks: [
-          { name: "fast", median: 0.002, mean: 0.0025, rme: 3, sampleCount: 500 },
-          { name: "threw", rank: 1, samples: [], median: undefined, sampleCount: undefined },
-        ],
-      }],
+    testResults: [{
+      name: "/repo/packages/core/src/__tests__/bench/a.bench.ts",
+      assertionResults: [
+        {
+          status: "passed", title: "fast", ancestorTitles: ["suite", "nested"], fullName: "suite nested fast",
+          benchmarks: [{ name: "suite > nested > fast", tasks: [{ name: "fast", latency: { p50: 0.002, mean: 0.0025, rme: 3, samplesCount: 500 } }] }],
+        },
+        { status: "failed", title: "threw", ancestorTitles: ["suite", "nested"], fullName: "suite nested threw", benchmarks: [] },
+      ],
     }],
   }
 

@@ -1,4 +1,4 @@
-// Hot-path benchmark gate (Quality gates, "Performance"): runs the vitest bench suites of every package and compares the median
+// Hot-path benchmark gate (Quality gates, "Performance"): runs the vitest 5 bench suites (benchmarks are tests using the `bench` fixture; results come from the json reporter) of every package and compares the median
 // time of each benchmark with benchmarks/baseline.json. A benchmark more than 25 % slower than its baseline fails the gate.
 //
 //   npm run bench                         run all suites and compare
@@ -39,7 +39,7 @@ function runSuite(suite, files = []) {
   invocation += 1
   const output = path.join(scratch, `bench-${invocation}.json`)
   const command = process.platform === "win32" ? "npm.cmd" : "npm"
-  const result = spawnSync(command, ["run", "bench", "-w", suite.name, "--", "--outputJson", output, ...files], { cwd: root, stdio: "inherit", shell: process.platform === "win32" })
+  const result = spawnSync(command, ["run", "bench", "-w", suite.name, "--", "--reporter=default", "--reporter=json", `--outputFile.json=${output}`, ...files], { cwd: root, stdio: "inherit", shell: process.platform === "win32" })
   if (result.status !== 0 || !existsSync(output)) { console.error(`benchmark run failed for ${suite.name} (exit ${result.status})`); process.exit(1) }
   return flattenBenchReport(JSON.parse(readFileSync(output, "utf8")), suite.name, path.join(root, suite.dir))
 }

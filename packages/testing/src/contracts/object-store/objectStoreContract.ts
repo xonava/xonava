@@ -59,7 +59,7 @@ const uniqueKey = (label: string) => `contract/${label}/${Date.now().toString(36
 
 /** Runs round-trip, absence, metadata, checksum, length, cancellation, deadline, hostile-key, and failure-redaction checks for an ObjectStore. */
 export function runObjectStoreContractTests(label: string, options: ObjectStoreContractOptions): void {
-  describe.sequential(`Object store contract: ${label}`, () => {
+  describe(`Object store contract: ${label}`, { concurrent: false }, () => {
     it("round-trips bytes", async () => {
       const store = await options.createStore()
       const key = uniqueKey("bytes")

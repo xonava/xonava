@@ -10,7 +10,7 @@ export interface JobStoreConcurrencyContractOptions {
 }
 
 export function runJobStoreConcurrencyContractTests(label: string, options: JobStoreConcurrencyContractOptions): void {
-  describe.sequential(`Job-store concurrency contract: ${label}`, () => {
+  describe(`Job-store concurrency contract: ${label}`, { concurrent: false }, () => {
     it("fences stale claims from renewal and completion", async () => {
       const store = options.createStore()
       const now = options.now ?? new Date("2026-08-10T12:00:00.000Z")
@@ -37,7 +37,7 @@ export interface ScheduleConcurrencyContractOptions {
 }
 
 export function runScheduleConcurrencyContractTests(label: string, options: ScheduleConcurrencyContractOptions): void {
-  describe.sequential(`Schedule-store concurrency contract: ${label}`, () => {
+  describe(`Schedule-store concurrency contract: ${label}`, { concurrent: false }, () => {
     it("fences stale claim tokens from renewal and mutation", async () => {
       const store = options.createStore()
       const now = options.now ?? new Date("2026-08-10T12:00:00.000Z")
@@ -62,7 +62,7 @@ export interface OutboxConcurrencyContractOptions {
 }
 
 export function runOutboxConcurrencyContractTests(label: string, options: OutboxConcurrencyContractOptions): void {
-  describe.sequential(`Outbox concurrency contract: ${label}`, () => {
+  describe(`Outbox concurrency contract: ${label}`, { concurrent: false }, () => {
     it("accepts same-key replays but rejects fingerprint conflicts", async () => {
       const sink = options.createSink()
       await sink.append(options.record)

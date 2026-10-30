@@ -10,7 +10,7 @@ export function runCacheAdapterContractTests(
   label: string,
   options: CacheAdapterContractOptions,
 ): void {
-  describe.sequential(`Cache adapter contract: ${label}`, () => {
+  describe(`Cache adapter contract: ${label}`, { concurrent: false }, () => {
     it("stores, reads, detects, replaces, and deletes values", async () => {
       const cache = options.createAdapter()
       await cache.set("contract:key", { value: 1 })

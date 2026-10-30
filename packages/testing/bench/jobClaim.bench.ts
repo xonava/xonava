@@ -1,4 +1,4 @@
-import { afterAll, bench, describe } from "vitest"
+import { afterAll, describe, test } from "vitest"
 import { drizzle } from "drizzle-orm/d1"
 import { getTableColumns } from "drizzle-orm"
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
@@ -54,13 +54,9 @@ describe("D1 job claim", async () => {
 
   afterAll(async () => { await fixture.close(); await fixture.cleanup() })
 
-  bench("claim 1 due job", async () => {
-    await store.claimDue({ workerId: "bench-worker", limit: 1, leaseDurationMs: 60_000, requester })
-  }, { ...BENCH_OPTIONS, setup: reseed })
-  bench("claim 5 due jobs", async () => {
-    await store.claimDue({ workerId: "bench-worker", limit: 5, leaseDurationMs: 60_000, requester })
-  }, { ...BENCH_OPTIONS, iterations: 40, setup: reseed })
-  bench("claim 25 due jobs", async () => {
-    await store.claimDue({ workerId: "bench-worker", limit: 25, leaseDurationMs: 60_000, requester })
-  }, { ...BENCH_OPTIONS, iterations: 20, setup: reseed })
+  const claim = (limit: number) => async () => { await store.claimDue({ workerId: "bench-worker", limit, leaseDurationMs: 60_000, requester }) }
+  // Vitest 5 benchmarks run inside a test through the `bench` fixture; `beforeAll` reseeds the queue once before each benchmark.
+  test("claim 1 due job", { timeout: 120_000 }, async ({ bench }) => { await bench("claim 1 due job", { beforeAll: reseed }, claim(1)).run(BENCH_OPTIONS) })
+  test("claim 5 due jobs", { timeout: 120_000 }, async ({ bench }) => { await bench("claim 5 due jobs", { beforeAll: reseed }, claim(5)).run({ ...BENCH_OPTIONS, iterations: 40 }) })
+  test("claim 25 due jobs", { timeout: 120_000 }, async ({ bench }) => { await bench("claim 25 due jobs", { beforeAll: reseed }, claim(25)).run({ ...BENCH_OPTIONS, iterations: 20 }) })
 })

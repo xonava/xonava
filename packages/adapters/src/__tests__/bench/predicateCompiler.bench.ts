@@ -1,4 +1,4 @@
-import { bench, describe } from "vitest"
+import { describe } from "vitest"
 import { getTableColumns } from "drizzle-orm"
 import { PgDialect } from "drizzle-orm/pg-core/dialect"
 import { MySqlDialect } from "drizzle-orm/mysql-core/dialect"
@@ -8,7 +8,7 @@ import { datetime, double, mysqlTable, tinyint, varchar } from "drizzle-orm/mysq
 import { integer, real, sqliteTable, text as sqliteText } from "drizzle-orm/sqlite-core"
 import { Predicate, type PredicateNode } from "@xonava/core/domain"
 import { DrizzlePredicateCompiler, compileDrizzlePredicate, type DrizzleColumnMap, type PredicateDialect } from "../../drizzle-shared/predicateCompiler"
-import { BENCH_OPTIONS } from "./benchOptions"
+import { bench, BENCH_OPTIONS } from "./benchOptions"
 
 const pgRows = pgTable("orders", {
   id: uuid("id"), status: text("status"), region: text("region"), ownerId: text("owner_id"), name: text("name"),

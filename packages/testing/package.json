@@ -102,17 +102,17 @@
     "prepack": "npm run build"
   },
   "peerDependencies": {
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.7 || ^5.0.0"
   },
   "devDependencies": {
     "@types/pg": "8.23.1",
-    "@vitest/coverage-v8": "^4.1.12",
+    "@vitest/coverage-v8": "^5.0.5",
     "@xonava/adapters": "0.1.0",
     "drizzle-orm": "0.45.4",
     "miniflare": "3.20250718.3",
     "mysql2": "^3.24.6",
     "pg": "8.23.1",
-    "vitest": "^4.1.12",
+    "vitest": "^5.0.5",
     "xonava-adapters-prev": "npm:@xonava/adapters@0.1.0",
     "xonava-core-prev": "npm:@xonava/core@0.1.0"
   },

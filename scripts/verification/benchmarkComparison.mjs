@@ -1,4 +1,4 @@
-// Pure helpers for verifyBenchmarks.mjs: flatten vitest bench JSON, pick a stable statistic, and compare with a baseline.
+// Pure helpers for verifyBenchmarks.mjs: flatten vitest 5 bench JSON reporter output, pick a stable statistic, and compare with a baseline.
 //
 // The statistic is the MEDIAN time per operation (milliseconds) of the samples one benchmark collected. The median ignores the
 // long tail of samples that landed on a descheduled or garbage-collecting thread, which is what makes a loaded shared machine
@@ -9,27 +9,35 @@ export const DEFAULT_REGRESSION_THRESHOLD = 0.25
 /** @typedef {{ medianMs: number, meanMs: number, rmePercent: number, samples: number }} BenchmarkStat */
 
 /**
- * Flattens `vitest bench --outputJson` output into `{ [key]: BenchmarkStat | { error } }`.
- * @param {{ files?: Array<{ filepath: string, groups?: Array<{ fullName: string, benchmarks?: any[] }> }> }} report
+ * Flattens vitest 5 `vitest bench --reporter=json` output into `{ [key]: BenchmarkStat | { error } }`. Every benchmark runs inside
+ * a test; the test result carries its `benchmarks` (named "<describe names> > <test name>") whose tasks hold the latency statistics
+ * in milliseconds (`p50` is the median).
+ * @param {{ testResults?: Array<{ name: string, assertionResults?: Array<{ status: string, fullName: string, benchmarks?: Array<{ name: string, tasks?: any[] }> }> }> }} report
  * @param {string} packageName
  * @param {string} packageDir absolute directory the vitest process ran in
  */
 export function flattenBenchReport(report, packageName, packageDir) {
   const result = {}
   const dir = packageDir.replaceAll("\\", "/").replace(/\/$/, "") + "/"
-  for (const file of report.files ?? []) {
-    const filepath = file.filepath.replaceAll("\\", "/")
+  for (const file of report.testResults ?? []) {
+    const filepath = file.name.replaceAll("\\", "/")
     const relativePath = filepath.startsWith(dir) ? filepath.slice(dir.length) : filepath
-    for (const group of file.groups ?? []) {
-      // `fullName` is "<file relative to the package> > <describe names>"; replace its file part with the stable relative path.
-      const describePath = group.fullName.split(" > ").slice(1).join(" > ")
-      for (const benchmark of group.benchmarks ?? []) {
-        const key = [packageName, relativePath, describePath, benchmark.name].filter((part) => part !== "").join(" > ")
-        const median = benchmark.median
-        if (typeof median !== "number" || !Number.isFinite(median) || median <= 0 || !(benchmark.sampleCount > 0)) {
-          result[key] = { error: "the benchmark produced no samples (it threw, or never ran)", file: relativePath }
-        } else {
-          result[key] = { medianMs: median, meanMs: benchmark.mean, rmePercent: benchmark.rme, samples: benchmark.sampleCount, file: relativePath }
+    for (const test of file.assertionResults ?? []) {
+      const key = (name) => [packageName, relativePath, name].join(" > ")
+      if (test.status !== "passed" || !test.benchmarks?.length) {
+        // A benchmark that threw (or was skipped) never records a benchmark: keep it in the report as an error.
+        result[key(test.ancestorTitles ? [...test.ancestorTitles, test.title].join(" > ") : test.fullName)] = { error: "the benchmark produced no samples (it threw, or never ran)", file: relativePath }
+        continue
+      }
+      for (const benchmark of test.benchmarks) {
+        for (const task of benchmark.tasks ?? []) {
+          const median = task.latency?.p50
+          const name = benchmark.tasks.length === 1 ? benchmark.name : `${benchmark.name} > ${task.name}`
+          if (typeof median !== "number" || !Number.isFinite(median) || median <= 0 || !(task.latency.samplesCount > 0)) {
+            result[key(name)] = { error: "the benchmark produced no samples (it threw, or never ran)", file: relativePath }
+          } else {
+            result[key(name)] = { medianMs: median, meanMs: task.latency.mean, rmePercent: task.latency.rme, samples: task.latency.samplesCount, file: relativePath }
+          }
         }
       }
     }
