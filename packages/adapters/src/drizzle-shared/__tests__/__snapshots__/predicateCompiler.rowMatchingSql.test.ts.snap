@@ -6799,26 +6799,26 @@ exports[`predicate compiler row-matching SQL, mysql (binary collation) #5 > emit
     "params": [
       "a",
     ],
-    "sql": "COALESCE(\`t\`.\`s\` = ?, FALSE)",
+    "sql": "COALESCE(\`t\`.\`s\` = (CONVERT(? USING utf8mb4) COLLATE utf8mb4_0900_bin), FALSE)",
   },
   "{"kind":"condition","field":"s","op":"in","value":["a","b"]}": {
     "params": [
       "a",
       "b",
     ],
-    "sql": "COALESCE(\`t\`.\`s\` in (?, ?), FALSE)",
+    "sql": "COALESCE(\`t\`.\`s\` in ((CONVERT(? USING utf8mb4) COLLATE utf8mb4_0900_bin), (CONVERT(? USING utf8mb4) COLLATE utf8mb4_0900_bin)), FALSE)",
   },
   "{"kind":"condition","field":"s","op":"isEmpty"}": {
     "params": [
       "",
     ],
-    "sql": "COALESCE((\`t\`.\`s\` is null or \`t\`.\`s\` = ?), FALSE)",
+    "sql": "COALESCE((\`t\`.\`s\` is null or \`t\`.\`s\` = (CONVERT(? USING utf8mb4) COLLATE utf8mb4_0900_bin)), FALSE)",
   },
   "{"kind":"condition","field":"s","op":"isNotEmpty"}": {
     "params": [
       "",
     ],
-    "sql": "COALESCE((\`t\`.\`s\` is not null and \`t\`.\`s\` <> ?), FALSE)",
+    "sql": "COALESCE((\`t\`.\`s\` is not null and \`t\`.\`s\` <> (CONVERT(? USING utf8mb4) COLLATE utf8mb4_0900_bin)), FALSE)",
   },
   "{"kind":"condition","field":"s","op":"lt","value":"a"}": {
     "params": [

@@ -3316,3 +3316,28 @@ describe("predicate compiler row-matching SQL, mysql (binary collation) #5", () 
     ], { mysqlBinaryCollation: true })).toMatchSnapshot()
   })
 })
+
+describe("predicate compiler, mysql direct binary-collation text literals", () => {
+  const collated = "(CONVERT(? USING utf8mb4) COLLATE utf8mb4_0900_bin)"
+  const not = (filter: PredicateNode): PredicateNode => ({ kind: "not", filter })
+
+  // MySQL's equality propagation compares the constants of `s = 'U1' AND s <> 'u1'` under the connection collation
+  // (case-insensitive) unless the literals carry the column's collation, so every text literal is collated explicitly.
+  it("collates literals of the shrunk negated-equality scope and keeps the column bare", () => {
+    const scope: PredicateNode = Predicate.or(not(Predicate.eq("s", "U1")), Predicate.and(not(not(Predicate.eq("s", "U1"))), not(Predicate.neq("s", "u1"))))
+    const { sql, params } = render("mysql", scope, { mysqlBinaryCollation: true })
+    expect(sql).toBe(`COALESCE((not \`t\`.\`s\` = ${collated} or (not not \`t\`.\`s\` = ${collated} and not \`t\`.\`s\` <> ${collated})), FALSE)`)
+    expect(params).toEqual(["U1", "U1", "u1"])
+  })
+
+  it("collates IN members and the empty-string tests, not LIKE patterns or ordered comparisons", () => {
+    expect(render("mysql", Predicate.in("s", ["a", "b"]), { mysqlBinaryCollation: true }).sql).toContain(`\`t\`.\`s\` in (${collated}, ${collated})`)
+    expect(render("mysql", Predicate.isEmpty("s"), { mysqlBinaryCollation: true }).sql).toContain(`\`t\`.\`s\` = ${collated}`)
+    expect(render("mysql", Predicate.isNotEmpty("s"), { mysqlBinaryCollation: true }).sql).toContain(`\`t\`.\`s\` <> ${collated}`)
+    expect(render("mysql", Predicate.lt("s", "a"), { mysqlBinaryCollation: true }).sql).toBe("COALESCE(`t`.`s` < ?, FALSE)")
+  })
+
+  it("leaves literals bare when columns are converted instead", () => {
+    expect(render("mysql", Predicate.eq("s", "a")).sql).toBe("COALESCE((CONVERT(`t`.`s` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)")
+  })
+})

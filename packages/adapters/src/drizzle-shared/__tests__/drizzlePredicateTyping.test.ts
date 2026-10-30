@@ -88,7 +88,7 @@ describe("predicate compiler text semantics apply only to character columns", ()
   })
 
   it("MySQL: compares text through NO PAD utf8mb4_0900_bin (unless verified binary) and DECIMAL numerically", () => {
-    expect(my.sqlToQuery(compileMySql(Predicate.eq("name", "a "), myMap, { mysqlBinaryCollation: true })).sql).toBe("COALESCE(`rows`.`name` = ?, FALSE)")
+    expect(my.sqlToQuery(compileMySql(Predicate.eq("name", "a "), myMap, { mysqlBinaryCollation: true })).sql).toBe("COALESCE(`rows`.`name` = (CONVERT(? USING utf8mb4) COLLATE utf8mb4_0900_bin), FALSE)")
     // utf8mb4_bin is PAD SPACE: 'a' = 'a ' and 'a' > 'a\t' there, unlike code-point order.
     expect(my.sqlToQuery(compileMySql(Predicate.eq("name", "a "), myMap)).sql).toBe("COALESCE((CONVERT(`rows`.`name` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)")
     // Before: CONVERT(decimal) compared '10.000…' < '9' as strings.

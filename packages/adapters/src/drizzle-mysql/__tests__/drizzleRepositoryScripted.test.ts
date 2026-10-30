@@ -101,7 +101,7 @@ describe("MySQL repository reads", () => {
     const binary = build(() => [row()], { mysqlBinaryCollation: true })
     await binary.repo.findOneWhere!(Predicate.eq("name", "alpha"))
     expect(plain.ops[0]!.where!.sql).toContain("COLLATE utf8mb4_0900_bin")
-    expect(binary.ops[0]!.where!.sql).toBe("(`widgets`.`name` = ?)")
+    expect(binary.ops[0]!.where!.sql).toBe("(`widgets`.`name` = (CONVERT(? USING utf8mb4) COLLATE utf8mb4_0900_bin))")
     const explicitOff = build(() => [row()], { mysqlBinaryCollation: false })
     await explicitOff.repo.findOneWhere!(Predicate.eq("name", "alpha"))
     expect(explicitOff.ops[0]!.where!.sql).toBe(plain.ops[0]!.where!.sql)

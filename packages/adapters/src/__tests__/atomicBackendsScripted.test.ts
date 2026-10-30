@@ -219,7 +219,9 @@ describe("MySQL collation and session assertions", () => {
     const defaulted = compileMySqlPredicate(Predicate.eq("name", "x"), columns)
     const binary = compileMySqlPredicate(Predicate.eq("name", "x"), columns, { mysqlBinaryCollation: true })
     expect(renderSql("mysql", defaulted)!.sql).toContain("utf8mb4_0900_bin")
-    expect(renderSql("mysql", binary)!.sql).not.toContain("utf8mb4_0900_bin")
+    // The column is compared bare; only the literal carries the collation.
+    expect(renderSql("mysql", binary)!.sql).toContain("`name` = (CONVERT(? USING utf8mb4) COLLATE utf8mb4_0900_bin)")
+    expect(renderSql("mysql", binary)!.sql).not.toContain("CONVERT(`")
   })
 })
 

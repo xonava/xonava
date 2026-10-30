@@ -273,6 +273,18 @@ class Comparison {
     return this.column
   }
 
+  /**
+   * A text literal compared with {@link textExact}. When the bare column is compared (`mysqlBinaryCollation`),
+   * the literal carries the column's collation explicitly: MySQL's equality propagation substitutes the
+   * constant of `col = 'U1'` into the other conditions of the same AND (`col <> 'u1'`, `NOT NOT col = 'U1'`
+   * included) and then compares the two constants under the connection's collation, case-insensitively, so
+   * the rows differ from the bare column's NO PAD binary comparison. An explicitly collated constant keeps the
+   * column index usable (equality, IN, ranges).
+   */
+  textLiteral(value: string): string | SQL<unknown> {
+    return this.dialect === "mysql" && this.options.mysqlBinaryCollation === true ? sql`(CONVERT(${value} USING utf8mb4) COLLATE utf8mb4_0900_bin)` : value
+  }
+
   /** Expression for ordering comparisons and sort keys on character columns. */
   private textOrdered(): AnyColumn | SQL<unknown> {
     if (this.dialect !== "postgres") return this.textExact()
@@ -314,7 +326,7 @@ class Comparison {
       case "boolean": return typeof value === "boolean" ? { left: column, right: value } : INCOMPARABLE
       case "text":
         if (typeof value === "number" || typeof value === "boolean") return INCOMPARABLE
-        return { left: purpose === "exact" ? this.textExact() : this.textOrdered(), right: value }
+        return purpose === "exact" ? { left: this.textExact(), right: typeof value === "string" ? this.textLiteral(value) : value } : { left: this.textOrdered(), right: value }
       case "textual": return typeof value === "string" ? { left: this.textForm(), right: value } : INCOMPARABLE
       case "uuid":
         if (typeof value !== "string") return INCOMPARABLE
@@ -491,11 +503,11 @@ function compileCondition(columnMap: DrizzleColumnMap, condition: PredicateCondi
     case "isEmpty": {
       // Only strings can be empty; for any other kind isEmpty is exactly IS NULL.
       const subject = comparison.stringForm()
-      return subject === undefined ? isNull(column) : or(isNull(column), eq(subject as AnyColumn, "")) ?? sql`1 = 0`
+      return subject === undefined ? isNull(column) : or(isNull(column), eq(subject as AnyColumn, cls === "text" ? comparison.textLiteral("") : "")) ?? sql`1 = 0`
     }
     case "isNotEmpty": {
       const subject = comparison.stringForm()
-      return subject === undefined ? isNotNull(column) : and(isNotNull(column), ne(subject as AnyColumn, "")) ?? sql`1 = 0`
+      return subject === undefined ? isNotNull(column) : and(isNotNull(column), ne(subject as AnyColumn, cls === "text" ? comparison.textLiteral("") : "")) ?? sql`1 = 0`
     }
     case "gt":
       return compare(gt, requireScalarValue(condition), "ordered")
