@@ -1,4 +1,4 @@
-import { bench, describe } from "vitest"
+import { describe } from "vitest"
 import { PgDialect } from "drizzle-orm/pg-core/dialect"
 import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core/dialect"
 import { doublePrecision, pgTable, text, timestamp } from "drizzle-orm/pg-core"
@@ -6,7 +6,7 @@ import { integer, real, sqliteTable, text as sqliteText } from "drizzle-orm/sqli
 import type { SortSpec } from "@xonava/core/query"
 import { compileCursorPredicate, executionSort } from "../../drizzle-shared/cursorPagination"
 import { compileDrizzlePredicate, type DrizzleColumnMap } from "../../drizzle-shared/predicateCompiler"
-import { BENCH_OPTIONS } from "./benchOptions"
+import { bench, BENCH_OPTIONS } from "./benchOptions"
 
 const pgRows = pgTable("orders", { id: text("id"), status: text("status"), amount: doublePrecision("amount"), createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }) })
 const liteRows = sqliteTable("orders", { id: sqliteText("id"), status: sqliteText("status"), amount: real("amount"), createdAt: integer("created_at", { mode: "timestamp_ms" }) })

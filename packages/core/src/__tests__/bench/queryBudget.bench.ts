@@ -1,9 +1,9 @@
-import { bench, describe } from "vitest"
+import { describe } from "vitest"
 import { compileQueryBudget, validateQueryPlan, DEFAULT_QUERY_BUDGET } from "../../query/queryBudget"
 import { Predicate } from "../../domain/predicate"
 import { markTrustedPredicate } from "../../domain/trustedPredicate"
 import type { QueryPlan } from "../../query/queryPlan"
-import { BENCH_OPTIONS } from "./benchOptions"
+import { bench, BENCH_OPTIONS } from "./benchOptions"
 
 const limits = { maxPredicateDepth: 6, maxPredicateNodes: 80, maxInValues: 200, pageSizeLimit: 100, maxCount: 10_000 }
 

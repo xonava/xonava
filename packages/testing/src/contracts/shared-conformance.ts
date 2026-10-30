@@ -12,7 +12,7 @@ export function runIdempotencyTransitionContractTests<TResult = unknown>(
   label: string,
   options: IdempotencyTransitionContractOptions<TResult>,
 ): void {
-  describe.sequential(`Idempotency transition contract: ${label}`, () => {
+  describe(`Idempotency transition contract: ${label}`, { concurrent: false }, () => {
     it("transitions acquisition to replay and rejects a fingerprint conflict", async () => {
       const store = options.createStore()
       const request = options.request ?? { scope: "contract", key: "transition", fingerprint: "one" }
@@ -50,7 +50,7 @@ export interface OutboxReplayContractOptions {
 }
 
 export function runOutboxReplayContractTests(label: string, options: OutboxReplayContractOptions): void {
-  describe.sequential(`Outbox replay contract: ${label}`, () => {
+  describe(`Outbox replay contract: ${label}`, { concurrent: false }, () => {
     it("is idempotent for identical records and rejects conflicting replays", async () => {
       const sink = options.createSink()
       await sink.append(options.record)
@@ -67,7 +67,7 @@ export interface AuditGuaranteeContractOptions {
 }
 
 export function runAuditGuaranteeContractTests(label: string, options: AuditGuaranteeContractOptions): void {
-  describe.sequential(`Audit guarantee contract: ${label}`, () => {
+  describe(`Audit guarantee contract: ${label}`, { concurrent: false }, () => {
     it("persists the complete audit record and does not silently lose a write", async () => {
       await options.createSink().write(options.record)
       await expect(options.readById(options.record.id)).resolves.toMatchObject({
@@ -87,7 +87,7 @@ export interface CacheGenerationItemContractOptions<TCommand> {
 }
 
 export function runCacheGenerationItemContractTests<TCommand>(label: string, options: CacheGenerationItemContractOptions<TCommand>): void {
-  describe.sequential(`Cache-generation item contract: ${label}`, () => {
+  describe(`Cache-generation item contract: ${label}`, { concurrent: false }, () => {
     it("commits the generation item through the adapter's atomic path", async () => {
       const plan = options.createPlan()
       const item = plan.items.find((candidate) => candidate.kind === "cache-generation")
@@ -106,7 +106,7 @@ export interface AtomicRollbackContractOptions<TCommand> {
 }
 
 export function runAtomicRollbackContractTests<TCommand>(label: string, options: AtomicRollbackContractOptions<TCommand>): void {
-  describe.sequential(`Atomic rollback contract: ${label}`, () => {
+  describe(`Atomic rollback contract: ${label}`, { concurrent: false }, () => {
     it("rolls back every item when a later item fails", async () => {
       await expect(options.createProvider().executeAtomicBatch(options.createPlan())).rejects.toThrow()
       await options.assertRolledBack()
@@ -125,7 +125,7 @@ export interface TenantOccContractOptions<T> {
 }
 
 export function runTenantOccContractTests<T>(label: string, options: TenantOccContractOptions<T>): void {
-  describe.sequential(`Tenant/OCC contract: ${label}`, () => {
+  describe(`Tenant/OCC contract: ${label}`, { concurrent: false }, () => {
     it("fences cross-tenant reads and one stale writer across real provider instances", async () => {
       const providerA = options.createProvider()
       const providerB = options.createSecondProvider()

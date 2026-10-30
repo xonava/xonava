@@ -1,7 +1,7 @@
-import { bench, describe } from "vitest"
+import { describe } from "vitest"
 import { evaluatePredicate } from "../../domain/evaluatePredicate"
 import { Predicate, type PredicateNode } from "../../domain/predicate"
-import { BENCH_OPTIONS } from "./benchOptions"
+import { bench, BENCH_OPTIONS } from "./benchOptions"
 
 const record: Record<string, unknown> = {
   id: "ord_000123",

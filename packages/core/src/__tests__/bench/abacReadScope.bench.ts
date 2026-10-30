@@ -1,9 +1,9 @@
-import { bench, describe } from "vitest"
+import { describe } from "vitest"
 import { buildActionScope } from "../../domain/abacReadScope"
 import { bindAbacSecurityDigest } from "../../domain/abacBundleIntegrity"
 import { Predicate, type PredicateNode } from "../../domain/predicate"
 import type { AbacPolicyBundle, NormalizedAbacPolicy } from "../../domain/abacTypes"
-import { BENCH_OPTIONS } from "./benchOptions"
+import { bench, BENCH_OPTIONS } from "./benchOptions"
 
 let sequence = 0
 function policy(effect: "allow" | "deny", priority: number, compiledConditions: PredicateNode, actions: string[] = ["read"]): NormalizedAbacPolicy {
