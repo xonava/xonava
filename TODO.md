@@ -152,9 +152,29 @@ when the wave closes.
 ## Deferred
 
 Work the maintainer has postponed. It is not part of the current waves or the `1.0.0` gate until moved
-back.
+back. Nothing is deferred at the moment (Q1 moved into the release plan).
 
-### Q1 Continuous integration (deferred)
+## Repository settings (maintainer)
+
+- [ ] Enable private vulnerability reporting.
+- [ ] Fill the About description and topics.
+- [ ] Decide whether `dev` becomes the default branch.
+
+## Release plan
+
+`dev` collects 0.2.0, CI, 0.2.1 and 0.3.0. Only after 0.3.0 does `dev` merge into `main` and get published, so
+0.2.0 and 0.2.1 are never published and npm goes from 0.1.0 to 0.3.0.
+
+1. **0.2.0:** done. Versioned and certified on `dev` (run `release-20261030T124452Z`).
+2. **CI:** Q1 below, on `dev`, no version bump.
+3. **0.2.1, repository-only clean-up (patch):** `CLEANUP.md`, "0.2.1: what goes".
+4. **0.3.0, breaking (minor):** `CLEANUP.md`, "0.3.0: what goes", and the list row-count change below. The 0.3.0
+   upgrade notes cover everything since 0.1.0, including the 0.2.0 breaking changes and migrations
+   `0005_job_scope_key` and MySQL `0006_byte_exact_identifiers`. Release check with soak enabled, then merge
+   `dev` into `main`, verify that the packages install and import in a clean project, and publish. The last
+   0.3.0 change deletes this file and `CLEANUP.md`.
+
+### Q1 Continuous integration (before 0.2.1, no version bump)
 
 - [ ] Sonnet. Branch `chore/ci-workflows`.
 - **Steps:** add these workflows:
@@ -174,25 +194,7 @@ back.
 - **Acceptance:** CI green on the pull request. Then the maintainer makes `ci` a required check on
   `dev` and `main`.
 
-
-## Repository settings (maintainer)
-
-- [ ] Enable private vulnerability reporting.
-- [ ] Fill the About description and topics.
-- [ ] Decide whether `dev` becomes the default branch.
-
-## Release `0.2.0`
-
-- [ ] Maintainer decides when. Waves 0 and 1 and most of wave 2 are on `dev`. Promote `dev` to `main`,
-  run `npm run release:version` on `release/0.2.0`, verify that the published packages install and
-  import in a clean project (with vitest installed for the testing package) and that the README
-  examples type-check, then publish. The release notes must call out the breaking changes listed in the
-  changesets and the two required migrations (`0005_job_scope_key`, MySQL `0006_byte_exact_identifiers`).
-
-## Release `0.3.0`: repository clean-up
-
-- [ ] After 0.2.0: follow `CLEANUP.md` (remove work tracking, run evidence, ID-named certification gates,
-      compatibility code and work-item references). That change also deletes this file and `CLEANUP.md`.
+### List row counts (0.3.0)
 
 - [ ] List row counts (breaking, `0.3.0` minor; do it before the clean-up deletes this file). Every `findMany`
       runs `SELECT COUNT(*) … WHERE <filter>` and then the page query, one after the other.
