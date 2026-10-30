@@ -1,0 +1,353 @@
+name: Databases
+
+on:
+  pull_request:
+    branches: [dev, main]
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: databases-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  integration-pg:
+    name: integration (pg)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: framework
+          POSTGRES_PASSWORD: framework
+          POSTGRES_DB: framework_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U framework -d framework_test_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: framework
+          MYSQL_DATABASE: framework_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -pframework"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      FRAMEWORK_TEST_PG_URL: postgres://framework:framework@localhost:5432/framework_test_db
+      FRAMEWORK_TEST_MYSQL_URL: mysql://root:framework@127.0.0.1:3306/framework_test
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:integration:pg -w @xonava/testing
+  conformance-pg:
+    name: conformance (pg)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: framework
+          POSTGRES_PASSWORD: framework
+          POSTGRES_DB: framework_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U framework -d framework_test_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: framework
+          MYSQL_DATABASE: framework_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -pframework"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      FRAMEWORK_TEST_PG_URL: postgres://framework:framework@localhost:5432/framework_test_db
+      FRAMEWORK_TEST_MYSQL_URL: mysql://root:framework@127.0.0.1:3306/framework_test
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:conformance:pg -w @xonava/testing
+  race-pg:
+    name: race (pg)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: framework
+          POSTGRES_PASSWORD: framework
+          POSTGRES_DB: framework_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U framework -d framework_test_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: framework
+          MYSQL_DATABASE: framework_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -pframework"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      FRAMEWORK_TEST_PG_URL: postgres://framework:framework@localhost:5432/framework_test_db
+      FRAMEWORK_TEST_MYSQL_URL: mysql://root:framework@127.0.0.1:3306/framework_test
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:race:pg -w @xonava/testing
+  crash-pg:
+    name: crash (pg)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: framework
+          POSTGRES_PASSWORD: framework
+          POSTGRES_DB: framework_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U framework -d framework_test_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: framework
+          MYSQL_DATABASE: framework_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -pframework"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      FRAMEWORK_TEST_PG_URL: postgres://framework:framework@localhost:5432/framework_test_db
+      FRAMEWORK_TEST_MYSQL_URL: mysql://root:framework@127.0.0.1:3306/framework_test
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:crash:pg -w @xonava/testing
+  integration-mysql:
+    name: integration (mysql)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: framework
+          POSTGRES_PASSWORD: framework
+          POSTGRES_DB: framework_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U framework -d framework_test_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: framework
+          MYSQL_DATABASE: framework_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -pframework"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      FRAMEWORK_TEST_PG_URL: postgres://framework:framework@localhost:5432/framework_test_db
+      FRAMEWORK_TEST_MYSQL_URL: mysql://root:framework@127.0.0.1:3306/framework_test
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:integration:mysql -w @xonava/testing
+  conformance-mysql:
+    name: conformance (mysql)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: framework
+          POSTGRES_PASSWORD: framework
+          POSTGRES_DB: framework_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U framework -d framework_test_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: framework
+          MYSQL_DATABASE: framework_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -pframework"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      FRAMEWORK_TEST_PG_URL: postgres://framework:framework@localhost:5432/framework_test_db
+      FRAMEWORK_TEST_MYSQL_URL: mysql://root:framework@127.0.0.1:3306/framework_test
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:conformance:mysql -w @xonava/testing
+  race-mysql:
+    name: race (mysql)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: framework
+          POSTGRES_PASSWORD: framework
+          POSTGRES_DB: framework_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U framework -d framework_test_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: framework
+          MYSQL_DATABASE: framework_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -pframework"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      FRAMEWORK_TEST_PG_URL: postgres://framework:framework@localhost:5432/framework_test_db
+      FRAMEWORK_TEST_MYSQL_URL: mysql://root:framework@127.0.0.1:3306/framework_test
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:race:mysql -w @xonava/testing
+  crash-mysql:
+    name: crash (mysql)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: framework
+          POSTGRES_PASSWORD: framework
+          POSTGRES_DB: framework_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U framework -d framework_test_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: framework
+          MYSQL_DATABASE: framework_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -pframework"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      FRAMEWORK_TEST_PG_URL: postgres://framework:framework@localhost:5432/framework_test_db
+      FRAMEWORK_TEST_MYSQL_URL: mysql://root:framework@127.0.0.1:3306/framework_test
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:crash:mysql -w @xonava/testing
