@@ -39,7 +39,7 @@ function repo(mandatoryResourcePredicate: PredicateNode) {
   return { repository, constrained }
 }
 
-describe("S2: conditional updates cannot move a row out of the mandatory predicate", () => {
+describe("conditional updates cannot move a row out of the mandatory predicate", () => {
   const required = Predicate.and(Predicate.eq("tenantId", "tenant-1"), Predicate.eq("branchId", "A"), Predicate.or(Predicate.eq("region", "eu"), Predicate.eq("tenantId", "x")))
 
   it.each(["updateOneWhere", "updateOneWhereReturning", "updateManyWhere"] as const)("%s rejects data violating a fully-covered conjunct", async (method) => {
@@ -91,7 +91,7 @@ describe("S2: conditional updates cannot move a row out of the mandatory predica
   })
 })
 
-describe("S5a: result projection does not leak through nesting or envelopes", () => {
+describe("result projection does not leak through nesting or envelopes", () => {
   const readPlan = () => plan({ operationKind: "read", action: "records.read" })
 
   it("projects nested arrays recursively", () => {

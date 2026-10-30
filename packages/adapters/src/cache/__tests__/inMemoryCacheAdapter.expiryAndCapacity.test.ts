@@ -6,7 +6,6 @@ interface Internals {
   values: Map<string, unknown>
   tags: Map<string, Map<string, number>>
   keyTags: Map<string, Set<string>>
-  revisions: Map<string, number>
   sweepCursor: Iterator<string> | undefined
 }
 

@@ -47,7 +47,7 @@ const bundleInput = (policies: AbacPolicy[]) => ({
   catalog,
 })
 
-describe("S1: policy effect and priority validation", () => {
+describe("policy effect and priority validation", () => {
   it.each([["permit"], ["ALLOW"], [undefined], [null]])("rejects effect %s", async (effect) => {
     await expect(createAbacBundle(bundleInput([policy({ effect: effect as never })]))).rejects.toThrow(InvalidPolicyConfigurationError)
     const result = normalizeAbacPolicy({ policy: policy({ effect: effect as never }), catalog, context: {} })
@@ -70,7 +70,7 @@ describe("S1: policy effect and priority validation", () => {
   })
 })
 
-describe("S4: missing user attributes never coerce", () => {
+describe("missing user attributes never coerce", () => {
   const clause: PolicyFilterClause = { field: "branchId", operator: "equals", userAttr: "user.branchId" }
   const compile = (c: PolicyFilterClause, effect?: "allow" | "deny") =>
     policyClauseToPredicate({ clause: c, context: { userId: "u1" }, fieldCatalog: catalog.fields, ...(effect ? { effect } : {}) })
@@ -132,7 +132,7 @@ function normalized(overrides: Partial<NormalizedAbacPolicy>): NormalizedAbacPol
   }
 }
 
-describe("S5b: read allowlists default unlisted fields to omit", () => {
+describe("read allowlists default unlisted fields to omit", () => {
   it("omits a declared field absent from the trusted record", () => {
     const allow = normalized({ payload: { ...normalized({}).payload, fieldAccess: { read: { name: "allow" } } } })
     const overrides = resolveFieldReadOverrides({ policies: [allow], moduleKey: "m", record: { id: "1", name: "n" } })
@@ -149,7 +149,7 @@ describe("S5b: read allowlists default unlisted fields to omit", () => {
   })
 })
 
-describe("S5c: query grants never re-open deny-omitted fields", () => {
+describe("query grants never re-open deny-omitted fields", () => {
   const payload = normalized({}).payload
   it("ignores grants on deny policies", () => {
     const deny = normalized({ effect: "deny", payload: { ...payload, fieldAccess: { read: { ssn: "omit" }, query: { filter: ["ssn"], sort: ["ssn"], search: ["ssn"] } } } })
@@ -168,7 +168,7 @@ describe("S5c: query grants never re-open deny-omitted fields", () => {
   })
 })
 
-describe("P3: reserved read-map keys", () => {
+describe("reserved read-map keys", () => {
   it.each([["__proto__"], ["constructor"], ["prototype"]])("rejects %s", (key) => {
     const result = parseFieldAccessStrict(JSON.parse(`{"read":{"${key}":"allow","name":"allow"}}`), "fieldAccess")
     expect(result.success).toBe(false)

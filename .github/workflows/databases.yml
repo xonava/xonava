@@ -49,8 +49,8 @@ jobs:
       FRAMEWORK_TEST_PG_URL: postgres://framework:framework@localhost:5432/framework_test_db
       FRAMEWORK_TEST_MYSQL_URL: mysql://root:framework@127.0.0.1:3306/framework_test
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
           cache: npm
@@ -91,8 +91,8 @@ jobs:
       FRAMEWORK_TEST_PG_URL: postgres://framework:framework@localhost:5432/framework_test_db
       FRAMEWORK_TEST_MYSQL_URL: mysql://root:framework@127.0.0.1:3306/framework_test
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
           cache: npm
@@ -133,8 +133,8 @@ jobs:
       FRAMEWORK_TEST_PG_URL: postgres://framework:framework@localhost:5432/framework_test_db
       FRAMEWORK_TEST_MYSQL_URL: mysql://root:framework@127.0.0.1:3306/framework_test
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
           cache: npm
@@ -175,8 +175,8 @@ jobs:
       FRAMEWORK_TEST_PG_URL: postgres://framework:framework@localhost:5432/framework_test_db
       FRAMEWORK_TEST_MYSQL_URL: mysql://root:framework@127.0.0.1:3306/framework_test
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
           cache: npm
@@ -217,8 +217,8 @@ jobs:
       FRAMEWORK_TEST_PG_URL: postgres://framework:framework@localhost:5432/framework_test_db
       FRAMEWORK_TEST_MYSQL_URL: mysql://root:framework@127.0.0.1:3306/framework_test
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
           cache: npm
@@ -259,8 +259,8 @@ jobs:
       FRAMEWORK_TEST_PG_URL: postgres://framework:framework@localhost:5432/framework_test_db
       FRAMEWORK_TEST_MYSQL_URL: mysql://root:framework@127.0.0.1:3306/framework_test
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
           cache: npm
@@ -301,8 +301,8 @@ jobs:
       FRAMEWORK_TEST_PG_URL: postgres://framework:framework@localhost:5432/framework_test_db
       FRAMEWORK_TEST_MYSQL_URL: mysql://root:framework@127.0.0.1:3306/framework_test
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
           cache: npm
@@ -343,8 +343,8 @@ jobs:
       FRAMEWORK_TEST_PG_URL: postgres://framework:framework@localhost:5432/framework_test_db
       FRAMEWORK_TEST_MYSQL_URL: mysql://root:framework@127.0.0.1:3306/framework_test
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
           cache: npm
