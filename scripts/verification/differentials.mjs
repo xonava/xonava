@@ -1,57 +1,56 @@
 /**
- * DF1 gate: runs every differential/property suite (core and the PostgreSQL,
+ * differential runner: runs every differential/property suite (core and the PostgreSQL,
  * MySQL, and D1 real-database parity suites) at elevated volume with a fresh
- * but recorded seed, then refuses certification unless every required
+ * but recorded seed, then refuses unless every required
  * property reported success with that seed and scale.
  *
  * Environment:
- * - FRAMEWORK_CONFORMANCE_RUN_ID       run ID (default local-df1); names the run directory
- * - FRAMEWORK_DF1_OUTPUT_DIR           output directory of a non-release run (default:
- *                                      <os tmpdir>/framework-df1-<run ID, or a random id>);
- *                                      ignored by release runs, which use artifacts/framework-conformance/<run ID>/df1
+ * - FRAMEWORK_CONFORMANCE_RUN_ID       run ID (default local-differential); names the run directory
+ * - FRAMEWORK_DIFFERENTIAL_OUTPUT_DIR           output directory of a non-release run (default:
+ *                                      <os tmpdir>/framework-differential-<run ID, or a random id>);
+ *                                      ignored by release runs, which use .release-check/<run ID>/differentials
  * - DIFFERENTIAL_SEED                  explicit base seed; default derives from the run ID
  * - FRAMEWORK_DIFFERENTIAL_SCALE       core case multiplier (default 5)
  * - FRAMEWORK_DIFFERENTIAL_DB_SCALE    real-database case multiplier (default 2)
  * - FRAMEWORK_TEST_PG_URL / FRAMEWORK_TEST_MYSQL_URL  real databases (required)
  *
  * `--update-baseline` runs every suite, then rewrites differentialBaseline.json
- * from the observed per-site property counts instead of certifying. Use it
+ * from the observed per-site property counts instead of checking. Use it
  * only for a reviewed addition or removal of properties.
  */
 import { spawn, execFileSync } from "node:child_process"
 import { randomBytes } from "node:crypto"
-import { rm, writeFile } from "node:fs/promises"
+import { mkdir, rm, writeFile } from "node:fs/promises"
 import { dirname, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { certificationContext, writeCertificationArtifact } from "./certificationSupport.mjs"
 import {
-  DF1_ARTIFACT,
-  DF1_BASELINE,
-  DF1_DEFAULT_SCALES,
-  DF1_MINIMUM_SCALES,
-  DF1_PHASE,
-  Df1Refusal,
+  DIFFERENTIAL_ARTIFACT,
+  DIFFERENTIAL_BASELINE,
+  DIFFERENTIAL_DEFAULT_SCALES,
+  DIFFERENTIAL_MINIMUM_SCALES,
+  DIFFERENTIAL_PHASE,
+  DifferentialRefusal,
   aggregateSuiteReports,
-  composeDf1Artifact,
-  composeDf1Baseline,
-  createDf1SourceManifest,
-  deriveDf1Seed,
-  df1OutputDirectory,
-  df1Suites,
+  composeDifferentialArtifact,
+  composeDifferentialBaseline,
+  createDifferentialSourceManifest,
+  deriveDifferentialSeed,
+  differentialOutputDirectory,
+  differentialSuites,
   parseScale,
-  readDf1Baseline,
+  readDifferentialBaseline,
   readPropertyReports,
   requiredCallSites,
   suiteScale,
   suiteVitestArgs,
-  validateDf1Artifact,
-} from "./differentialCertification.mjs"
+  validateDifferentialArtifact,
+} from "./differentialSupport.mjs"
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..")
 const startedAt = Date.now()
 
 function refuse(message) {
-  throw new Df1Refusal(message)
+  throw new DifferentialRefusal(message)
 }
 
 /** Runs npm, streaming output while keeping it for replay extraction. */
@@ -88,42 +87,43 @@ function failingFiles(output, suite) {
 }
 
 async function main() {
-  const { runId, directory: releaseDirectory } = certificationContext("local-df1", DF1_PHASE)
+  const runId = process.env.FRAMEWORK_CONFORMANCE_RUN_ID ?? "local-differential"
+  const releaseDirectory = resolve(repositoryRoot, ".release-check", runId, DIFFERENTIAL_PHASE)
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(runId)) refuse("FRAMEWORK_CONFORMANCE_RUN_ID contains unsafe path characters")
-  if (process.env.DIFFERENTIAL_RUN?.trim()) refuse("DIFFERENTIAL_RUN is set; single-case replay mode cannot certify")
+  if (process.env.DIFFERENTIAL_RUN?.trim()) refuse("DIFFERENTIAL_RUN is set; single-case replay mode cannot run in a release check")
   if (!process.env.FRAMEWORK_TEST_PG_URL?.trim() && !process.env.DATABASE_URL?.trim()) refuse("FRAMEWORK_TEST_PG_URL (or DATABASE_URL) is required for the PostgreSQL parity suite")
   if (!process.env.FRAMEWORK_TEST_MYSQL_URL?.trim()) refuse("FRAMEWORK_TEST_MYSQL_URL is required for the MySQL parity suite")
   const updateBaseline = process.argv.includes("--update-baseline")
-  const certificationStartedAtText = process.env.FRAMEWORK_CERTIFICATION_STARTED_AT?.trim()
-  const certificationStartedAt = certificationStartedAtText ? Date.parse(certificationStartedAtText) : undefined
-  if (certificationStartedAt !== undefined && !Number.isFinite(certificationStartedAt)) refuse("FRAMEWORK_CERTIFICATION_STARTED_AT is not a valid timestamp")
+  const releaseStartedAtText = process.env.FRAMEWORK_RELEASE_STARTED_AT?.trim()
+  const releaseStartedAt = releaseStartedAtText ? Date.parse(releaseStartedAtText) : undefined
+  if (releaseStartedAt !== undefined && !Number.isFinite(releaseStartedAt)) refuse("FRAMEWORK_RELEASE_STARTED_AT is not a valid timestamp")
   // A release run (started by the release runner) must explore new cases: no fixed seed, no baseline rewrite.
-  const releaseRun = certificationStartedAt !== undefined || process.env.FRAMEWORK_CONFORMANCE_PHASE?.trim() === "release"
-  if (releaseRun && updateBaseline) refuse("--update-baseline cannot run inside a release certification")
+  const releaseRun = releaseStartedAt !== undefined || process.env.FRAMEWORK_CONFORMANCE_PHASE?.trim() === "release"
+  if (releaseRun && updateBaseline) refuse("--update-baseline cannot run inside a release check")
   // Ad-hoc runs (including --update-baseline) write outside the repository.
-  const directory = df1OutputDirectory({
+  const directory = differentialOutputDirectory({
     release: releaseRun,
     releaseDirectory,
-    explicitDirectory: process.env.FRAMEWORK_DF1_OUTPUT_DIR,
+    explicitDirectory: process.env.FRAMEWORK_DIFFERENTIAL_OUTPUT_DIR,
     id: process.env.FRAMEWORK_CONFORMANCE_RUN_ID?.trim() || randomBytes(4).toString("hex"),
   })
-  const { seed, seedSource } = deriveDf1Seed(runId, process.env.DIFFERENTIAL_SEED, { release: releaseRun })
+  const { seed, seedSource } = deriveDifferentialSeed(runId, process.env.DIFFERENTIAL_SEED, { release: releaseRun })
   const scales = {
-    core: parseScale("FRAMEWORK_DIFFERENTIAL_SCALE", process.env.FRAMEWORK_DIFFERENTIAL_SCALE, DF1_DEFAULT_SCALES.core),
-    database: parseScale("FRAMEWORK_DIFFERENTIAL_DB_SCALE", process.env.FRAMEWORK_DIFFERENTIAL_DB_SCALE, DF1_DEFAULT_SCALES.database),
+    core: parseScale("FRAMEWORK_DIFFERENTIAL_SCALE", process.env.FRAMEWORK_DIFFERENTIAL_SCALE, DIFFERENTIAL_DEFAULT_SCALES.core),
+    database: parseScale("FRAMEWORK_DIFFERENTIAL_DB_SCALE", process.env.FRAMEWORK_DIFFERENTIAL_DB_SCALE, DIFFERENTIAL_DEFAULT_SCALES.database),
   }
 
-  // The validator's own refusal cases run first: a broken validator must not certify.
+  // The validator's own refusal cases run first: a broken validator must not pass.
   // (Skipped when rewriting the baseline: its fixtures are derived from the baseline being replaced.)
-  if (!updateBaseline) execFileSync(process.execPath, ["--test", "--test-reporter=dot", fileURLToPath(new URL("./differentialCertification.test.mjs", import.meta.url))], { cwd: repositoryRoot, stdio: "inherit" })
+  if (!updateBaseline) execFileSync(process.execPath, ["--test", "--test-reporter=dot", fileURLToPath(new URL("./differentialSupport.test.mjs", import.meta.url))], { cwd: repositoryRoot, stdio: "inherit" })
 
-  const suites = await df1Suites(repositoryRoot)
+  const suites = await differentialSuites(repositoryRoot)
   const sites = await requiredCallSites(repositoryRoot, suites)
-  const baseline = await readDf1Baseline(repositoryRoot)
-  const sourceManifestBefore = await createDf1SourceManifest(repositoryRoot)
+  const baseline = await readDifferentialBaseline(repositoryRoot)
+  const sourceManifestBefore = await createDifferentialSourceManifest(repositoryRoot)
   const reportRoot = join(directory, "property-reports")
   await rm(reportRoot, { recursive: true, force: true })
-  console.log(`DF1 run ${runId}: seed ${seed} (${seedSource}), scale core ${scales.core} / database ${scales.database}`)
+  console.log(`differential run ${runId}: seed ${seed} (${seedSource}), scale core ${scales.core} / database ${scales.database}`)
 
   const suiteResults = []
   const properties = []
@@ -135,13 +135,13 @@ async function main() {
     delete env.DIFFERENTIAL_RUN
     const args = ["run", "test", "-w", suite.workspace, "--", ...suiteVitestArgs(suite)]
     const replayCommand = `DIFFERENTIAL_SEED=${seed} DIFFERENTIAL_SCALE=${scale} npm ${args.join(" ")}`
-    console.log(`\nDF1 suite ${suite.id}: ${suite.testFiles.length} file(s), ${sites[suite.id].length} property call site(s)`)
+    console.log(`\ndifferential suite ${suite.id}: ${suite.testFiles.length} file(s), ${sites[suite.id].length} property call site(s)`)
     const began = Date.now()
     const { code, output } = await npmStreaming(args, env)
     const durationMs = Date.now() - began
     if (code !== 0) {
       const failures = failureReplays(output)
-      console.error(`\nDF1 suite ${suite.id} failed after ${(durationMs / 1000).toFixed(1)} s.`)
+      console.error(`\ndifferential suite ${suite.id} failed after ${(durationMs / 1000).toFixed(1)} s.`)
       const files = failingFiles(output, suite)
       const suiteFiles = new Set(suite.testFiles.map(path => relative(suite.workspaceDirectory, path).replaceAll("\\", "/")))
       const replayArgs = files.length === 0 ? args : ["run", "test", "-w", suite.workspace, "--", ...suiteVitestArgs(suite).filter(arg => !suiteFiles.has(arg)), ...files]
@@ -155,35 +155,36 @@ async function main() {
     const suiteProperties = aggregated.properties
     siteCounts[suite.id] = aggregated.siteCounts
     for (const [key, count] of Object.entries(aggregated.siteCounts)) {
-      if (!updateBaseline && !(key in (baseline.suites[suite.id] ?? {}))) console.log(`DF1 note: ${suite.id} "${key}" (${count} properties) is not in ${DF1_BASELINE} yet; it is required now, and --update-baseline records it`)
+      if (!updateBaseline && !(key in (baseline.suites[suite.id] ?? {}))) console.log(`differential note: ${suite.id} "${key}" (${count} properties) is not in ${DIFFERENTIAL_BASELINE} yet; it is required now, and --update-baseline records it`)
     }
     properties.push(...suiteProperties)
     const cases = suiteProperties.reduce((sum, property) => sum + property.runs, 0)
     suiteResults.push({ id: suite.id, kind: suite.kind, scale, testFiles: suite.testFiles, command: `npm ${args.join(" ")}`, callSites: sites[suite.id].length, properties: suiteProperties.length, cases, durationMs })
-    console.log(`DF1 suite ${suite.id}: ${suiteProperties.length} properties, ${cases} cases, ${(durationMs / 1000).toFixed(1)} s`)
+    console.log(`differential suite ${suite.id}: ${suiteProperties.length} properties, ${cases} cases, ${(durationMs / 1000).toFixed(1)} s`)
   }
 
-  const sourceManifest = await createDf1SourceManifest(repositoryRoot)
+  const sourceManifest = await createDifferentialSourceManifest(repositoryRoot)
   if (JSON.stringify(sourceManifest) !== JSON.stringify(sourceManifestBefore)) refuse("differential sources changed while the gate was running")
   if (updateBaseline) {
-    await writeFile(resolve(repositoryRoot, DF1_BASELINE), `${JSON.stringify(composeDf1Baseline(siteCounts), null, 2)}\n`)
-    console.log(`\nDF1 baseline rewritten: ${DF1_BASELINE}. Review the diff (every lowered or removed entry is a removed property), then rerun the gate to certify.`)
+    await writeFile(resolve(repositoryRoot, DIFFERENTIAL_BASELINE), `${JSON.stringify(composeDifferentialBaseline(siteCounts), null, 2)}\n`)
+    console.log(`\ndifferential baseline rewritten: ${DIFFERENTIAL_BASELINE}. Review the diff (every lowered or removed entry is a removed property), then rerun the runner.`)
     return
   }
-  const artifact = composeDf1Artifact({ runId, seed, seedSource, scales, suites: suiteResults, properties, sourceManifest, gateStartedAt: startedAt, baseline })
+  const artifact = composeDifferentialArtifact({ runId, seed, seedSource, scales, suites: suiteResults, properties, sourceManifest, gateStartedAt: startedAt, baseline })
   // Under the release runner the release volume floors apply; a standalone
-  // run may use a lower volume but its artifact will not satisfy final certification.
-  if (!releaseRun && (scales.core < DF1_MINIMUM_SCALES.core || scales.database < DF1_MINIMUM_SCALES.database)) {
-    console.warn(`DF1 warning: scale below the release minimum (core ${DF1_MINIMUM_SCALES.core}, database ${DF1_MINIMUM_SCALES.database}); final certification will refuse this evidence.`)
+  // run may use a lower volume but its artifact will not satisfy the release check.
+  if (!releaseRun && (scales.core < DIFFERENTIAL_MINIMUM_SCALES.core || scales.database < DIFFERENTIAL_MINIMUM_SCALES.database)) {
+    console.warn(`differential warning: scale below the release minimum (core ${DIFFERENTIAL_MINIMUM_SCALES.core}, database ${DIFFERENTIAL_MINIMUM_SCALES.database}); the release check will refuse this evidence.`)
   }
-  await validateDf1Artifact(artifact, { repositoryRoot, runId, startedAt: certificationStartedAt, minimumScales: releaseRun ? DF1_MINIMUM_SCALES : scales, requireRunIdSeed: releaseRun })
-  await writeCertificationArtifact(directory, DF1_ARTIFACT, artifact)
-  console.log(`\nDF1 certification verified: ${directory} (${artifact.totals.properties} properties, ${artifact.totals.cases} cases, seed ${seed}, ${(artifact.totals.durationMs / 1000).toFixed(1)} s)`)
+  await validateDifferentialArtifact(artifact, { repositoryRoot, runId, startedAt: releaseStartedAt, minimumScales: releaseRun ? DIFFERENTIAL_MINIMUM_SCALES : scales, requireRunIdSeed: releaseRun })
+  await mkdir(directory, { recursive: true })
+  await writeFile(join(directory, DIFFERENTIAL_ARTIFACT), `${JSON.stringify(artifact, null, 2)}\n`)
+  console.log(`\ndifferential run verified: ${directory} (${artifact.totals.properties} properties, ${artifact.totals.cases} cases, seed ${seed}, ${(artifact.totals.durationMs / 1000).toFixed(1)} s)`)
 }
 
 try {
   await main()
 } catch (error) {
-  console.error(error instanceof Df1Refusal ? error.message : error)
+  console.error(error instanceof DifferentialRefusal ? error.message : error)
   process.exitCode = 1
 }

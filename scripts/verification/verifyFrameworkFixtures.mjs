@@ -73,10 +73,14 @@ for (const database of ["postgres", "mysql", "d1"]) {
   }
 }
 const rootPackage = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8"))
-const commands = ["test:framework:integration:pg", "test:framework:integration:d1", "test:framework:integration:mysql", "test:framework:upgrade:pg", "test:framework:upgrade:d1", "test:framework:upgrade:mysql", "test:framework:conformance:pg", "test:framework:conformance:d1", "test:framework:conformance:mysql", "test:framework:race:pg", "test:framework:race:d1", "test:framework:race:mysql", "test:framework:crash:pg", "test:framework:crash:d1", "test:framework:crash:mysql"]
+const commands = ["test:integration:pg", "test:integration:d1", "test:integration:mysql", "test:upgrade:pg", "test:upgrade:d1", "test:upgrade:mysql", "test:conformance:pg", "test:conformance:d1", "test:conformance:mysql", "test:race:pg", "test:race:d1", "test:race:mysql", "test:crash:pg", "test:crash:d1", "test:crash:mysql"]
 for (const command of commands) {
   const script = rootPackage.scripts?.[command]
   if (typeof script !== "string" || !script.includes("testing")) throw new Error(`missing independent framework command: ${command}`)
   if (/clinic|apps\//i.test(script)) throw new Error(`consumer dependency in command: ${command}`)
 }
+// Conformance vectors: the manifest declares the canonicalization and digest versions, and every listed vector file exists.
+const vectorManifest = JSON.parse(await readFile(new URL("../../spec/conformance-vectors/manifest.json", import.meta.url), "utf8"))
+if (vectorManifest.schema !== "framework.conformance-vector-manifest" || vectorManifest.canonicalizationVersion !== "jcs-rfc8785-v1" || vectorManifest.digestAlgorithmVersion !== "sha256-v1") throw new Error("Invalid conformance vector manifest")
+for (const name of vectorManifest.vectors) await access(new URL(`../../spec/conformance-vectors/${vectorManifest.baseDirectory}/${name}`, import.meta.url))
 console.log("Framework-owned PostgreSQL, D1 and MySQL fixtures verified")

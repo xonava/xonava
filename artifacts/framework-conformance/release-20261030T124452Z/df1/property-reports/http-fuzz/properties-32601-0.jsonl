@@ -1,7 +1,0 @@
-{"property":"http fuzz CRUD hostile bodies","seed":771647169,"scale":5,"baseRuns":60,"runs":300,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:50.737Z"}
-{"property":"http fuzz CRUD hostile headers","seed":771647169,"scale":5,"baseRuns":60,"runs":300,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:52.770Z"}
-{"property":"http fuzz CRUD hostile query strings","seed":771647169,"scale":5,"baseRuns":60,"runs":300,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:55.069Z"}
-{"property":"http fuzz CRUD hostile path identifiers","seed":771647169,"scale":5,"baseRuns":60,"runs":300,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:57.472Z"}
-{"property":"http fuzz CRUD scope inputs","seed":771647169,"scale":5,"baseRuns":60,"runs":300,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:59.514Z"}
-{"property":"http fuzz CRUD mixed requests","seed":771647169,"scale":5,"baseRuns":60,"runs":300,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:14:01.087Z"}
-{"property":"http fuzz CRUD injected faults","seed":771647169,"scale":5,"baseRuns":60,"runs":300,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:14:02.777Z"}

@@ -1,6 +1,0 @@
-{"property":"idempotency store lifecycle differential (d1)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:30:46.047Z"}
-{"property":"idempotency concurrent fresh acquire (d1)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:30:50.702Z"}
-{"property":"idempotency concurrent takeover (d1)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:30:57.494Z"}
-{"property":"idempotency commit/abandon race (d1)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:30:59.792Z"}
-{"property":"idempotency concurrent complete (d1)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:31:03.811Z"}
-{"property":"idempotency concurrent claims (d1)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:31:14.350Z"}

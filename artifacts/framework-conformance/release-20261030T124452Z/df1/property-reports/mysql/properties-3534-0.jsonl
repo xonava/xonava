@@ -1,4 +1,0 @@
-{"property":"lease store differential (mysql)","seed":771647169,"scale":2,"baseRuns":60,"runs":120,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:22:24.758Z"}
-{"property":"lease acquire race (mysql)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:22:27.880Z"}
-{"property":"lease fence sequence (mysql)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:22:34.971Z"}
-{"property":"lease holder race (mysql)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:22:36.579Z"}

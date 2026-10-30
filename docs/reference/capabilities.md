@@ -1,6 +1,6 @@
 # Capability catalog and traceability
 
-The codes in the table name certification suites, each run by `npm run verify:framework:<code in lowercase>` (for example `verify:framework:tx1`; Q1/Q2 is `verify:framework:q1-q2`), except V1, which has no standalone script; see the [certification guide](../guides/certification.md).
+The codes in the table are capability identifiers. The conformance suites that cover them run with `npm run test:conformance:<pg|mysql|d1>`; see [how releases are checked](../guides/release-checks.md).
 
 | Capability | Normative specification | TypeScript implementation | Conformance/certification | Status |
 |---|---|---|---|---|

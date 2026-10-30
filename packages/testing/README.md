@@ -68,13 +68,13 @@ Only the paths in the package `exports` map are public. Do not deep-import `src`
 
 The published package contains the compiled `dist` output and this README. The database integration, race, and crash suites and the database fixtures are not included. They run from a repository checkout against real databases. See [CONTRIBUTING.md](https://github.com/xonava/xonava/blob/main/CONTRIBUTING.md).
 
-Passing a contract suite does not prove that a provider meets every guarantee. Real-provider guarantees require configured real runtimes. A skipped mandatory provider suite is not certification.
+Passing a contract suite does not prove that a provider meets every guarantee. Real-provider guarantees require configured real runtimes. A skipped mandatory provider suite does not count as a passed check.
 
 ## Documentation
 
 - [Writing and testing adapters](https://github.com/xonava/xonava/blob/main/docs/guides/writing-and-testing-adapters.md)
 - [Testing profile](https://github.com/xonava/xonava/blob/main/docs/typescript/testing.md)
-- [Certification guide](https://github.com/xonava/xonava/blob/main/docs/guides/certification.md)
+- [How releases are checked](https://github.com/xonava/xonava/blob/main/docs/guides/release-checks.md)
 - [Known limitations](https://github.com/xonava/xonava/blob/main/docs/KNOWN-LIMITATIONS.md)
 
 ## License

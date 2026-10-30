@@ -1,4 +1,0 @@
-{"property":"delivery store differential (postgres)","seed":771647169,"scale":2,"baseRuns":60,"runs":120,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:17:36.882Z"}
-{"property":"delivery claim race (postgres)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:17:39.325Z"}
-{"property":"delivery finish race (postgres)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:17:40.943Z"}
-{"property":"delivery creation race (postgres)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:17:42.732Z"}

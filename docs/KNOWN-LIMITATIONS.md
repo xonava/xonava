@@ -17,7 +17,7 @@ SQLite). It does not certify:
 - external advisories that were not assessed offline.
 
 A green unit or interface suite is not evidence of provider behaviour. See the
-[certification guide](guides/certification.md).
+[release checks guide](guides/release-checks.md).
 
 ## Deployment requirements
 
@@ -25,7 +25,7 @@ A green unit or interface suite is not evidence of provider behaviour. See the
 
 The reference schema ships in the package as `@xonava/adapters/migrations/<postgres|mysql|d1>/` (files in
 `node_modules/@xonava/adapters/migrations/`), copies of the fixture migrations (MySQL `0001` without the fixture's `DROP TABLE` resets) under
-`packages/testing/fixtures/<database>/migrations/` (`npm run verify:framework:fixtures` enforces this). The table, schema and
+`packages/testing/fixtures/<database>/migrations/` (`npm run verify:fixtures` enforces this). The table, schema and
 column names in them are fixture defaults that the store factories let you change; rename them in the files you apply, or
 port the migrations to your own schema. Apply them before you deploy the new adapters. Apply the files in order; the
 adapters README lists which files are safe to re-run (the published MySQL `0001` omits the fixture's table resets and is safe to re-run).

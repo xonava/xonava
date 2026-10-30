@@ -1,6 +1,6 @@
 /**
- * Self-test for the DF1 validator (run by `npm run test:verification` and at
- * the start of every DF1 gate). It proves the refusals final certification
+ * Self-test for the differential validator (run by `npm run test:verification` and at
+ * the start of every differential runner). It proves the refusals the release check
  * relies on: missing, stale, foreign-run, under-volume, incomplete, and
  * source-drifted differential evidence is never accepted.
  */
@@ -13,32 +13,32 @@ import { after, before, describe, it } from "node:test"
 import { fileURLToPath } from "node:url"
 import {
   DATABASE_SPECIFIC_PROPERTIES,
-  DF1_ARTIFACT,
-  DF1_MINIMUM_SCALES,
-  DF1_PHASE,
-  Df1Refusal,
+  DIFFERENTIAL_ARTIFACT,
+  DIFFERENTIAL_MINIMUM_SCALES,
+  DIFFERENTIAL_PHASE,
+  DifferentialRefusal,
   STORE_DIFFERENTIAL_AREAS,
   aggregateSuiteReports,
   appliesToDatabase,
-  composeDf1Artifact,
-  createDf1SourceManifest,
-  deriveDf1Seed,
-  df1OutputDirectory,
-  df1SourcePaths,
-  df1StoreDifferential,
-  df1Suites,
-  loadAndValidateDf1Evidence,
-  readDf1Baseline,
+  composeDifferentialArtifact,
+  createDifferentialSourceManifest,
+  deriveDifferentialSeed,
+  differentialOutputDirectory,
+  differentialSourcePaths,
+  differentialStoreDifferential,
+  differentialSuites,
+  loadAndValidateDifferentialEvidence,
+  readDifferentialBaseline,
   readPropertyReports,
   requiredCallSites,
   scanPropertyCallSites,
   siteKey,
   suiteScale,
-} from "./differentialCertification.mjs"
+} from "./differentialSupport.mjs"
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..")
-const scales = { ...DF1_MINIMUM_SCALES }
-const refused = pattern => error => error instanceof Df1Refusal && pattern.test(error.message)
+const scales = { ...DIFFERENTIAL_MINIMUM_SCALES }
+const refused = pattern => error => error instanceof DifferentialRefusal && pattern.test(error.message)
 
 /** Synthetic passing reports for every call site, each template expanded as often as the baseline expects. */
 function syntheticReports(sites, seed, scale, expected = {}) {
@@ -51,7 +51,7 @@ function syntheticReports(sites, seed, scale, expected = {}) {
   return reports
 }
 
-describe("DF1 property call-site scanning", () => {
+describe("differential property call-site scanning", () => {
   const file = "packages/core/src/__tests__/differential/example.test.ts"
   const header = "import { forAll, forAllAsync, type Rng } from \"./harness\"\n"
 
@@ -101,7 +101,7 @@ describe("DF1 property call-site scanning", () => {
   })
 })
 
-describe("DF1 real-database store differential suites", () => {
+describe("differential real-database store differential suites", () => {
   it("refuses a store area that declares properties but runs on no database, and requires them once one runner exists", async t => {
     // The probe plants files for an area that has none yet, so it can never overwrite (and then delete) a real suite.
     const area = STORE_DIFFERENTIAL_AREAS.find(candidate => !existsSync(join(repositoryRoot, `packages/testing/integration/shared/${candidate}StoreDifferential.ts`)) && !existsSync(join(repositoryRoot, `packages/testing/integration/d1/${candidate}StoreDifferential.integration.test.ts`)))
@@ -110,9 +110,9 @@ describe("DF1 real-database store differential suites", () => {
     const runner = join(repositoryRoot, `packages/testing/integration/d1/${area}StoreDifferential.integration.test.ts`)
     await writeFile(shared, `import { forAllAsync } from "../../../core/src/__tests__/differential/harness.js"\nforAllAsync("${area} probe", { runs: 50 }, async () => {})\n`)
     try {
-      await assert.rejects(requiredCallSites(repositoryRoot, await df1Suites(repositoryRoot)), /has no per-database test file/)
+      await assert.rejects(requiredCallSites(repositoryRoot, await differentialSuites(repositoryRoot)), /has no per-database test file/)
       await writeFile(runner, "")
-      const sites = await requiredCallSites(repositoryRoot, await df1Suites(repositoryRoot))
+      const sites = await requiredCallSites(repositoryRoot, await differentialSuites(repositoryRoot))
       assert.ok(sites.d1.some(site => site.display.includes(`${area} probe`)))
       assert.ok(!sites.pg.some(site => site.display.includes(`${area} probe`)))
     } finally {
@@ -122,9 +122,9 @@ describe("DF1 real-database store differential suites", () => {
   })
 
   it("runs every store area and the signal-buffering suite that exist on every database, and requires their properties", async () => {
-    const suites = await df1Suites(repositoryRoot)
+    const suites = await differentialSuites(repositoryRoot)
     const sites = await requiredCallSites(repositoryRoot, suites)
-    const { databases } = await df1StoreDifferential(repositoryRoot)
+    const { databases } = await differentialStoreDifferential(repositoryRoot)
     for (const suite of suites.filter(candidate => candidate.kind === "database")) {
       for (const unit of ["job", "schedule", "workflow", "workflowSignalBuffering"]) assert.ok(databases[suite.id].includes(unit), `${suite.id} runs ${unit}`)
       for (const unit of [...STORE_DIFFERENTIAL_AREAS, "workflowSignalBuffering"]) {
@@ -139,7 +139,7 @@ describe("DF1 real-database store differential suites", () => {
   })
 
   it("requires a database-specific property only on its databases, and every other property everywhere", async () => {
-    const sites = await requiredCallSites(repositoryRoot, await df1Suites(repositoryRoot))
+    const sites = await requiredCallSites(repositoryRoot, await differentialSuites(repositoryRoot))
     const sequenceTransactions = "sequence store concurrent transactions"
     for (const database of ["pg", "mysql"]) assert.ok(sites[database].some(site => site.display.startsWith(sequenceTransactions)), `${database} requires it`)
     assert.ok(!sites.d1.some(site => site.display.startsWith(sequenceTransactions)), "d1 does not")
@@ -152,14 +152,14 @@ describe("DF1 real-database store differential suites", () => {
     const key = "packages/testing/integration/shared/sequenceStoreDifferential.ts::no such property"
     DATABASE_SPECIFIC_PROPERTIES[key] = { databases: ["pg"], reason: "probe" }
     try {
-      await assert.rejects(requiredCallSites(repositoryRoot, await df1Suites(repositoryRoot)), refused(/matches no differential call site/))
+      await assert.rejects(requiredCallSites(repositoryRoot, await differentialSuites(repositoryRoot)), refused(/matches no differential call site/))
     } finally {
       delete DATABASE_SPECIFIC_PROPERTIES[key]
     }
   })
 
   it("covers the adapter store sources and every fixture migration", async () => {
-    const paths = await df1SourcePaths(repositoryRoot)
+    const paths = await differentialSourcePaths(repositoryRoot)
     for (const adapter of ["pg", "mysql", "d1"]) {
       for (const store of ["Job", "Schedule", "Workflow"]) assert.ok(paths.includes(`packages/adapters/src/drizzle-${adapter}/drizzle${store}Store.ts`), `${adapter} ${store} store`)
     }
@@ -169,44 +169,44 @@ describe("DF1 real-database store differential suites", () => {
   })
 })
 
-describe("DF1 output directory", () => {
-  const releaseDirectory = resolve("artifacts/framework-conformance/release-a/df1")
+describe("differential output directory", () => {
+  const releaseDirectory = resolve(".release-check/release-a/differentials")
 
   it("keeps the governed artifacts path for release runs, whatever else is set", () => {
-    assert.equal(df1OutputDirectory({ release: true, releaseDirectory, explicitDirectory: "/elsewhere", id: "x" }), releaseDirectory)
+    assert.equal(differentialOutputDirectory({ release: true, releaseDirectory, explicitDirectory: "/elsewhere", id: "x" }), releaseDirectory)
   })
 
   it("defaults non-release runs to an OS temp directory outside the repository", () => {
-    const directory = df1OutputDirectory({ release: false, releaseDirectory: resolve("artifacts/framework-conformance/local-df1/df1"), id: "ab12cd34" })
-    assert.equal(directory, join(tmpdir(), "framework-df1-ab12cd34"))
+    const directory = differentialOutputDirectory({ release: false, releaseDirectory: resolve(".release-check/local-differential/differentials"), id: "ab12cd34" })
+    assert.equal(directory, join(tmpdir(), "framework-differential-ab12cd34"))
     assert.ok(!resolve(directory).startsWith(resolve("artifacts")))
-    assert.equal(df1OutputDirectory({ release: false, releaseDirectory, id: "r1", tempRoot: "/tmp/t" }), join("/tmp/t", "framework-df1-r1"))
+    assert.equal(differentialOutputDirectory({ release: false, releaseDirectory, id: "r1", tempRoot: "/tmp/t" }), join("/tmp/t", "framework-differential-r1"))
   })
 
   it("honours an explicit output path and rejects unsafe ad-hoc ids", () => {
-    assert.equal(df1OutputDirectory({ release: false, releaseDirectory, explicitDirectory: "out/df1", id: "r1" }), resolve("out/df1"))
-    assert.throws(() => df1OutputDirectory({ release: false, releaseDirectory, id: "../escape" }), refused(/unsafe path characters/))
+    assert.equal(differentialOutputDirectory({ release: false, releaseDirectory, explicitDirectory: "out/differential", id: "r1" }), resolve("out/differential"))
+    assert.throws(() => differentialOutputDirectory({ release: false, releaseDirectory, id: "../escape" }), refused(/unsafe path characters/))
   })
 })
 
-describe("DF1 seed policy", () => {
+describe("differential seed policy", () => {
   it("derives a stable, run-specific seed unless DIFFERENTIAL_SEED is set", () => {
-    const first = deriveDf1Seed("release-a")
+    const first = deriveDifferentialSeed("release-a")
     assert.equal(first.seedSource, "run-id")
-    assert.deepEqual(deriveDf1Seed("release-a"), first)
-    assert.notEqual(deriveDf1Seed("release-b").seed, first.seed)
-    assert.deepEqual(deriveDf1Seed("release-a", "42"), { seed: 42, seedSource: "DIFFERENTIAL_SEED" })
-    assert.throws(() => deriveDf1Seed("release-a", "-1"), refused(/unsigned 32-bit/))
-    assert.throws(() => deriveDf1Seed("release-a", "4294967296"), refused(/unsigned 32-bit/))
+    assert.deepEqual(deriveDifferentialSeed("release-a"), first)
+    assert.notEqual(deriveDifferentialSeed("release-b").seed, first.seed)
+    assert.deepEqual(deriveDifferentialSeed("release-a", "42"), { seed: 42, seedSource: "DIFFERENTIAL_SEED" })
+    assert.throws(() => deriveDifferentialSeed("release-a", "-1"), refused(/unsigned 32-bit/))
+    assert.throws(() => deriveDifferentialSeed("release-a", "4294967296"), refused(/unsigned 32-bit/))
   })
 
   it("refuses an explicit seed in a release run", () => {
-    assert.throws(() => deriveDf1Seed("release-a", "42", { release: true }), refused(/release run must use the seed derived from its run ID/))
-    assert.equal(deriveDf1Seed("release-a", undefined, { release: true }).seedSource, "run-id")
+    assert.throws(() => deriveDifferentialSeed("release-a", "42", { release: true }), refused(/release run must use the seed derived from its run ID/))
+    assert.equal(deriveDifferentialSeed("release-a", undefined, { release: true }).seedSource, "run-id")
   })
 })
 
-describe("DF1 report aggregation", () => {
+describe("differential report aggregation", () => {
   const site = (line, display) => {
     const template = display.includes("${…}")
     const pattern = `^${display.split("${…}").map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".+")}$`
@@ -270,7 +270,7 @@ describe("DF1 report aggregation", () => {
   })
 
   it("reads per-worker report files and refuses corrupt lines", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "df1-reports-"))
+    const directory = await mkdtemp(join(tmpdir(), "differential-reports-"))
     try {
       assert.deepEqual(await readPropertyReports(join(directory, "absent")), [])
       await writeFile(join(directory, "properties-1-0.jsonl"), `${JSON.stringify(base)}\n`)
@@ -284,19 +284,19 @@ describe("DF1 report aggregation", () => {
   })
 })
 
-describe("final certification DF1 evidence", () => {
-  const runId = "df1-self-test"
+describe("the release check differential evidence", () => {
+  const runId = "differential-self-test"
   let artifactRoot
   let validArtifact
   let baseline
   const startedAt = Date.now() - 60_000
 
   before(async () => {
-    artifactRoot = await mkdtemp(join(tmpdir(), "df1-artifacts-"))
-    const suites = await df1Suites(repositoryRoot)
+    artifactRoot = await mkdtemp(join(tmpdir(), "differential-artifacts-"))
+    const suites = await differentialSuites(repositoryRoot)
     const sites = await requiredCallSites(repositoryRoot, suites)
-    baseline = await readDf1Baseline(repositoryRoot)
-    const { seed, seedSource } = deriveDf1Seed(runId)
+    baseline = await readDifferentialBaseline(repositoryRoot)
+    const { seed, seedSource } = deriveDifferentialSeed(runId)
     const properties = []
     const suiteResults = []
     for (const suite of suites) {
@@ -306,7 +306,7 @@ describe("final certification DF1 evidence", () => {
       properties.push(...suiteProperties)
       suiteResults.push({ id: suite.id, kind: suite.kind, scale, testFiles: suite.testFiles, callSites: sites[suite.id].length, properties: suiteProperties.length, cases: suiteProperties.reduce((sum, property) => sum + property.runs, 0), durationMs: 1 })
     }
-    validArtifact = composeDf1Artifact({ runId, seed, seedSource, scales, suites: suiteResults, properties, sourceManifest: await createDf1SourceManifest(repositoryRoot), gateStartedAt: startedAt, baseline })
+    validArtifact = composeDifferentialArtifact({ runId, seed, seedSource, scales, suites: suiteResults, properties, sourceManifest: await createDifferentialSourceManifest(repositoryRoot), gateStartedAt: startedAt, baseline })
   })
 
   after(async () => {
@@ -316,60 +316,60 @@ describe("final certification DF1 evidence", () => {
   /** Writes one artifact into its own artifact root (always under this run ID's directory). */
   async function write(artifact, name) {
     const root = join(artifactRoot, name)
-    const directory = join(root, runId, DF1_PHASE)
+    const directory = join(root, runId, DIFFERENTIAL_PHASE)
     await mkdir(directory, { recursive: true })
-    await writeFile(join(directory, DF1_ARTIFACT), `${JSON.stringify(artifact, null, 2)}\n`)
-    return { root, path: join(directory, DF1_ARTIFACT) }
+    await writeFile(join(directory, DIFFERENTIAL_ARTIFACT), `${JSON.stringify(artifact, null, 2)}\n`)
+    return { root, path: join(directory, DIFFERENTIAL_ARTIFACT) }
   }
 
-  const load = ({ root }) => loadAndValidateDf1Evidence({ repositoryRoot, artifactRoot: root, runId, startedAt })
+  const load = ({ root }) => loadAndValidateDifferentialEvidence({ repositoryRoot, artifactRoot: root, runId, startedAt })
 
   it("accepts fresh, proven, complete evidence for this run", async () => {
     const { artifact } = await load(await write(validArtifact, "valid"))
     assert.equal(artifact.status, "proven")
   })
 
-  it("refuses when the DF1 artifact is missing", async () => {
+  it("refuses when the differential artifact is missing", async () => {
     await assert.rejects(load({ root: join(artifactRoot, "absent") }), refused(/no differential evidence/))
   })
 
   it("refuses evidence recorded for another run ID", async () => {
-    await assert.rejects(load(await write({ ...validArtifact, runId: "some-other-run" }, "df1-self-test-foreign")), refused(/belongs to run some-other-run/))
+    await assert.rejects(load(await write({ ...validArtifact, runId: "some-other-run" }, "differential-self-test-foreign")), refused(/belongs to run some-other-run/))
   })
 
   it("refuses stale evidence", async () => {
-    await assert.rejects(load(await write({ ...validArtifact, recordedAt: new Date(startedAt - 3_600_000).toISOString() }, "df1-self-test-stale")), refused(/predates this certification run/))
+    await assert.rejects(load(await write({ ...validArtifact, recordedAt: new Date(startedAt - 3_600_000).toISOString() }, "differential-self-test-stale")), refused(/predates this release run/))
     const oldFile = await write(validArtifact, "old-file")
     const old = new Date(startedAt - 3_600_000)
     await utimes(oldFile.path, old, old)
-    await assert.rejects(load(oldFile), refused(/predates this certification run/))
+    await assert.rejects(load(oldFile), refused(/predates this release run/))
   })
 
   it("refuses evidence missing a property", async () => {
     const dropped = validArtifact.properties.find(property => property.suite === "core" && !property.name.includes("variant"))
-    await assert.rejects(load(await write({ ...validArtifact, properties: validArtifact.properties.filter(property => property !== dropped) }, "df1-self-test-missing")), refused(/no passing evidence/))
-    await assert.rejects(load(await write({ ...validArtifact, properties: validArtifact.properties.filter(property => property.suite !== "mysql") }, "df1-self-test-no-mysql")), refused(/mysql has no passing evidence/))
+    await assert.rejects(load(await write({ ...validArtifact, properties: validArtifact.properties.filter(property => property !== dropped) }, "differential-self-test-missing")), refused(/no passing evidence/))
+    await assert.rejects(load(await write({ ...validArtifact, properties: validArtifact.properties.filter(property => property.suite !== "mysql") }, "differential-self-test-no-mysql")), refused(/mysql has no passing evidence/))
   })
 
   it("refuses unproven, under-volume, or reseeded evidence", async () => {
-    await assert.rejects(load(await write({ ...validArtifact, status: "failed" }, "df1-self-test-unproven")), refused(/not proven/))
-    await assert.rejects(load(await write({ ...validArtifact, scales: { ...scales, core: 1 } }, "df1-self-test-volume")), refused(/below the release minimum/))
-    await assert.rejects(load(await write({ ...validArtifact, seed: (validArtifact.seed + 1) >>> 0 }, "df1-self-test-seed")), refused(/derived from the run ID/))
+    await assert.rejects(load(await write({ ...validArtifact, status: "failed" }, "differential-self-test-unproven")), refused(/not proven/))
+    await assert.rejects(load(await write({ ...validArtifact, scales: { ...scales, core: 1 } }, "differential-self-test-volume")), refused(/below the release minimum/))
+    await assert.rejects(load(await write({ ...validArtifact, seed: (validArtifact.seed + 1) >>> 0 }, "differential-self-test-seed")), refused(/derived from the run ID/))
   })
 
   it("refuses a fixed DIFFERENTIAL_SEED in release evidence", async () => {
-    await assert.rejects(load(await write({ ...validArtifact, seed: 42, seedSource: "DIFFERENTIAL_SEED" }, "df1-self-test-fixed-seed")), refused(/must use the seed derived from its run ID/))
+    await assert.rejects(load(await write({ ...validArtifact, seed: 42, seedSource: "DIFFERENTIAL_SEED" }, "differential-self-test-fixed-seed")), refused(/must use the seed derived from its run ID/))
   })
 
   it("refuses a scenario loop that lost an iteration", async () => {
     const template = validArtifact.properties.find(property => property.name.endsWith("variant 2"))
     assert.ok(template, "the baseline lists at least one template site expanding to two or more properties")
-    await assert.rejects(load(await write({ ...validArtifact, properties: validArtifact.properties.filter(property => property !== template) }, "df1-self-test-lost-scenario")), refused(/fewer properties than the baseline/))
+    await assert.rejects(load(await write({ ...validArtifact, properties: validArtifact.properties.filter(property => property !== template) }, "differential-self-test-lost-scenario")), refused(/fewer properties than the baseline/))
   })
 
   it("refuses a source manifest that is incomplete or no longer matches the sources", async () => {
-    await assert.rejects(load(await write({ ...validArtifact, sourceManifest: validArtifact.sourceManifest.slice(1) }, "df1-self-test-partial")), refused(/does not cover exactly/))
+    await assert.rejects(load(await write({ ...validArtifact, sourceManifest: validArtifact.sourceManifest.slice(1) }, "differential-self-test-partial")), refused(/does not cover exactly/))
     const tampered = validArtifact.sourceManifest.map((entry, index) => index === 0 ? { ...entry, sha256: "0".repeat(64) } : entry)
-    await assert.rejects(load(await write({ ...validArtifact, sourceManifest: tampered }, "df1-self-test-drift")), refused(/changed after the differential evidence was recorded/))
+    await assert.rejects(load(await write({ ...validArtifact, sourceManifest: tampered }, "differential-self-test-drift")), refused(/changed after the differential evidence was recorded/))
   })
 })

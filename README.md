@@ -194,7 +194,7 @@ export const announcements = defineEntity<Announcement, z.infer<typeof body>, z.
 
 ## Capabilities
 
-Every row is an import path of `@xonava/core`. The [export reference](docs/reference/package-exports.md) lists the full surface, and the [capability catalog](docs/reference/capabilities.md) maps each one to its specification and certification suite.
+Every row is an import path of `@xonava/core`. The [export reference](docs/reference/package-exports.md) lists the full surface, and the [capability catalog](docs/reference/capabilities.md) maps each one to its specification and conformance suite.
 
 | Area | Subpaths |
 | --- | --- |
@@ -227,12 +227,12 @@ Typechecking an adapter does not show that it meets the contract. Behavior is ch
 - [Architecture overview](docs/architecture.md) and [principles](docs/architecture.md#principles)
 - [Specification](docs/spec/README.md) and [TypeScript profile](docs/typescript/README.md)
 - Guides: [persistence setup](docs/guides/persistence-setup.md), [events, jobs and workflows](docs/guides/events-and-workflows.md), [create an operation](docs/guides/create-an-operation.md), [transactions and OCC](docs/guides/transactions-and-occ.md), [understanding errors](docs/guides/understanding-errors.md), [ownership for non-staff users](docs/guides/ownership.md), [standalone applications](docs/guides/standalone-application.md), [durable uploads](docs/guides/durable-uploads.md), [supporting reads](docs/guides/supporting-reads.md)
-- Reference: [public exports](docs/reference/package-exports.md), [capability catalog](docs/reference/capabilities.md), [certification matrix](docs/reference/certification-matrix.md)
+- Reference: [public exports](docs/reference/package-exports.md), [capability catalog](docs/reference/capabilities.md), [how releases are checked](docs/guides/release-checks.md)
 - [Compatibility and versioning policy](docs/governance.md#compatibility-and-versioning)
 
 ## Project status
 
-Xonava is experimental. The current release has passed its core, API and architecture gates and the PostgreSQL, MySQL and D1 integration, conformance, race and crash/replay suites. That evidence comes from local multi-backend runs and does not cover your production topology, custom adapters or your own policies; see the [certification matrix](docs/reference/certification-matrix.md).
+Xonava is experimental. The current release has passed its core, API and architecture gates and the PostgreSQL, MySQL and D1 integration, conformance, race and crash/replay suites. That evidence comes from local multi-backend runs and does not cover your production topology, custom adapters or your own policies; see [how releases are checked](docs/guides/release-checks.md).
 
 Before deploying, read [Known limitations](docs/KNOWN-LIMITATIONS.md). It lists required database migrations, the MySQL UTC session requirement, and accepted differences between databases. Notable changes are in the [changelog](CHANGELOG.md), and all remaining work is tracked in one place, the [plan](TODO.md). Until `1.0.0`, pin exact versions: a `0.x` minor release may contain breaking changes.
 

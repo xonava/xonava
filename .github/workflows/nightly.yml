@@ -55,8 +55,8 @@ jobs:
       - run: npm run build
       - run: npm run bench
 
-  df1:
-    name: DF1 differential suites (release volume)
+  differentials:
+    name: Differential suites (release volume)
     runs-on: ubuntu-latest
     timeout-minutes: 120
     services:
@@ -97,4 +97,4 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: npm run verify:framework:df1
+      - run: npm run verify:differentials

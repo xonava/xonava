@@ -1,4 +1,0 @@
-{"property":"tag generation store lifecycle differential (mysql)","seed":771647169,"scale":2,"baseRuns":60,"runs":120,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:24:05.440Z"}
-{"property":"tag generation store concurrent invalidation (mysql)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:24:08.527Z"}
-{"property":"kv tag generation dual layout differential (mysql)","seed":771647169,"scale":2,"baseRuns":60,"runs":120,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:24:08.611Z"}
-{"property":"kv tag generation concurrent invalidation (mysql)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:24:08.656Z"}

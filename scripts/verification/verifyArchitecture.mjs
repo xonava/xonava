@@ -10,7 +10,7 @@ const failures = []
 async function files(directory, predicate) {
   const result = []
   for (const entry of await readdir(directory, { withFileTypes: true })) {
-    if (["node_modules", "dist", "artifacts", "ci-artifacts", ".npm-cache", "release"].includes(entry.name)) continue
+    if (["node_modules", "dist", "artifacts", ".release-check", ".npm-cache", "release"].includes(entry.name)) continue
     const path = join(directory, entry.name)
     if (entry.isDirectory()) result.push(...await files(path, predicate))
     else if (predicate(path)) result.push(path)
@@ -27,7 +27,11 @@ if (Object.hasOwn(coreManifest.exports, "./" + "ports")) failures.push("obsolete
 if (JSON.stringify(workspaceManifest.workspaces) !== JSON.stringify(["packages/core", "packages/adapters", "packages/testing"])) failures.push("workspace list is not canonical")
 if (coreManifest.name !== "@xonava/core" || adapterManifest.name !== "@xonava/adapters" || testingManifest.name !== "@xonava/testing") failures.push("package identities are not canonical")
 if (Object.keys(coreManifest.dependencies ?? {}).length !== 0) failures.push("core must have zero runtime dependencies")
-if (adapterManifest.dependencies?.core !== "*" || testingManifest.dependencies?.core !== "*" || testingManifest.dependencies?.adapters !== "*") failures.push("package dependency direction is not canonical")
+// Dependency direction: testing -> adapters -> core. Versions are pinned by verify:version.
+const runtimeDependencies = manifest => Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies })
+if (!adapterManifest.dependencies?.["@xonava/core"] || runtimeDependencies(adapterManifest).includes("@xonava/testing")) failures.push("adapters must depend on core and never on testing")
+if (!testingManifest.dependencies?.["@xonava/core"] || !testingManifest.devDependencies?.["@xonava/adapters"]) failures.push("testing must depend on core and use adapters")
+if (runtimeDependencies(coreManifest).some(name => name.startsWith("@xonava/"))) failures.push("core must not depend on another framework package")
 try { await access("packages/core/src/ports"); failures.push("obsolete physical packages/core/src/ports directory exists") } catch {}
 for (const directory of ["core", "adapters", "testing"].map(name => `packages/framework-${name}`)) {
   try { await access(directory); failures.push(`obsolete package directory exists: ${directory}`) } catch {}
@@ -204,8 +208,8 @@ if (canonicalJsonImplementations.length !== 1 || relative(coreRoot, canonicalJso
 }
 
 if (failures.length) {
-  console.error(`fresh-core architecture verification failed:\n${[...new Set(failures)].sort().map((item) => `- ${item}`).join("\n")}`)
+  console.error(`architecture verification failed:\n${[...new Set(failures)].sort().map((item) => `- ${item}`).join("\n")}`)
   process.exitCode = 1
 } else {
-  console.log(`fresh-core architecture verified: ${sourceFiles.length} core modules, ${fixtures.length} standalone bundles, zero cycles or obsolete package identities`)
+  console.log(`architecture verified: ${sourceFiles.length} core modules, ${fixtures.length} standalone bundles, zero cycles or obsolete package identities`)
 }

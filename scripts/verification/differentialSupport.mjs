@@ -1,14 +1,14 @@
 /**
- * DF1: differential/property certification.
+ * Differential/property suites: runner support.
  *
- * Shared by the DF1 gate (verifyDF1Certification.mjs), the final release
- * verifier (verifyFinalCertification.mjs), and the DF1 self-test. The gate runs
+ * Shared by the differential runner (differentials.mjs), the release
+ * check (runReleaseCheck.mjs), and the differential self-test. The gate runs
  * every differential suite at elevated volume with a fresh, recorded seed and
  * collects the per-property success lines the harness writes when
  * `DIFFERENTIAL_REPORT_DIR` is set; this module derives what MUST have been
  * reported by scanning the suites' `forAll`/`forAllAsync` call sites, builds
  * the `differential-conformance.json` artifact, and validates it again at
- * final certification against the current sources.
+ * the release check against the current sources.
  */
 import { createHash } from "node:crypto"
 import { readFile, readdir, stat } from "node:fs/promises"
@@ -16,27 +16,27 @@ import { tmpdir } from "node:os"
 import { join, posix, relative, resolve } from "node:path"
 import ts from "typescript"
 
-export const DF1_PHASE = "df1"
-export const DF1_ARTIFACT = "differential-conformance.json"
-export const DF1_SCHEMA_VERSION = 1
+export const DIFFERENTIAL_PHASE = "differentials"
+export const DIFFERENTIAL_ARTIFACT = "differential-conformance.json"
+export const DIFFERENTIAL_SCHEMA_VERSION = 1
 
 /** Default (and release-minimum) case-count multipliers. */
-export const DF1_DEFAULT_SCALES = Object.freeze({ core: 5, database: 2 })
-export const DF1_MINIMUM_SCALES = Object.freeze({ core: 5, database: 2 })
+export const DIFFERENTIAL_DEFAULT_SCALES = Object.freeze({ core: 5, database: 2 })
+export const DIFFERENTIAL_MINIMUM_SCALES = Object.freeze({ core: 5, database: 2 })
 /** No property may be declared with fewer base cases than this. */
-export const DF1_MIN_BASE_RUNS = 50
+export const DIFFERENTIAL_MIN_BASE_RUNS = 50
 /**
  * The checked-in property baseline: every known call site per suite with the
  * number of distinct properties it expanded to. Scanning makes every current
  * call site mandatory; the baseline makes a deleted call site, or a template
  * site that expands to fewer properties (a scenario loop losing iterations),
  * a refusal until the baseline is lowered deliberately
- * (`npm run verify:framework:df1 -- --update-baseline`).
+ * (`node scripts/verification/differentials.mjs --update-baseline`).
  */
-export const DF1_BASELINE = "scripts/verification/differentialBaseline.json"
+export const DIFFERENTIAL_BASELINE = "scripts/verification/differentialBaseline.json"
 const CORE_DIFFERENTIAL_DIR = "packages/core/src/__tests__/differential"
 const HARNESS = `${CORE_DIFFERENTIAL_DIR}/harness.ts`
-/** Harness self-tests plant failing properties on purpose; they are not certification properties. */
+/** Harness self-tests plant failing properties on purpose; they are not release properties. */
 const HARNESS_SELF_TEST = `${CORE_DIFFERENTIAL_DIR}/harness.test.ts`
 /** HTTP fuzz suites: hostile-input properties over the CRUD and write handlers through the Express, Fastify and Hono adapters. */
 const HTTP_FUZZ_DIRECTORY = "packages/adapters/src/http/__tests__/fuzz"
@@ -67,9 +67,9 @@ export const DATABASE_SPECIFIC_PROPERTIES = {
 }
 /** Fixture migration directory per database adapter. */
 const FIXTURE_MIGRATIONS = { pg: "postgres", mysql: "mysql", d1: "d1" }
-/** Roots scanned for harness call sites that are not part of any DF1 suite. */
+/** Roots scanned for harness call sites that are not part of any differential suite. */
 const CALL_SITE_SCAN_ROOTS = ["packages/core/src", "packages/adapters/src", "packages/testing"]
-const EXCLUDED_DIRECTORIES = new Set(["node_modules", "dist", "coverage", "artifacts", "ci-artifacts", ".git"])
+const EXCLUDED_DIRECTORIES = new Set(["node_modules", "dist", "coverage", "artifacts", ".git"])
 
 /** Core sources the differential suites exercise, as [directory, file filter] or exact files. */
 const COVERED_SOURCES = [
@@ -110,10 +110,8 @@ const COVERED_SOURCES = [
   "docs/spec/quota.md",
   "docs/spec/business-calendar.md",
   "docs/spec/domain.md",
-  "docs/spec/certification.md",
-  "docs/guides/certification.md",
-  "scripts/verification/differentialCertification.mjs",
-  "scripts/verification/verifyDF1Certification.mjs",
+  "scripts/verification/differentialSupport.mjs",
+  "scripts/verification/differentials.mjs",
 ]
 
 function isProductionTs(name) {
@@ -124,15 +122,15 @@ function toPosix(path) {
   return path.replaceAll("\\", "/")
 }
 
-export class Df1Refusal extends Error {
+export class DifferentialRefusal extends Error {
   constructor(message) {
-    super(`DF1 certification refused: ${message}`)
-    this.name = "Df1Refusal"
+    super(`Differential run refused: ${message}`)
+    this.name = "DifferentialRefusal"
   }
 }
 
 function refuse(message) {
-  throw new Df1Refusal(message)
+  throw new DifferentialRefusal(message)
 }
 
 async function listDirectory(repositoryRoot, directory, filter) {
@@ -140,8 +138,8 @@ async function listDirectory(repositoryRoot, directory, filter) {
   return entries.filter(entry => entry.isFile() && filter(entry.name)).map(entry => `${directory}/${entry.name}`).sort()
 }
 
-/** The DF1 suites: what runs, how, and which files declare its required properties. */
-export async function df1Suites(repositoryRoot) {
+/** The differential suites: what runs, how, and which files declare its required properties. */
+export async function differentialSuites(repositoryRoot) {
   const differentialFiles = await listDirectory(repositoryRoot, CORE_DIFFERENTIAL_DIR, name => name.endsWith(".ts"))
   const coreTests = differentialFiles.filter(path => path.endsWith(".test.ts") && path !== HARNESS_SELF_TEST)
   const suites = [{
@@ -165,7 +163,7 @@ export async function df1Suites(repositoryRoot) {
     testFiles: httpFuzzTests,
     propertySources: httpFuzzTests,
   })
-  const { shared: storeDifferentialShared, databases } = await df1StoreDifferential(repositoryRoot)
+  const { shared: storeDifferentialShared, databases } = await differentialStoreDifferential(repositoryRoot)
   for (const adapter of DATABASE_ADAPTERS) {
     const units = databases[adapter]
     const testFiles = [
@@ -208,7 +206,7 @@ async function fileExists(repositoryRoot, path) {
 }
 
 /** The store-differential shared files, and per database the units that run (a unit needs both its files). */
-export async function df1StoreDifferential(repositoryRoot) {
+export async function differentialStoreDifferential(repositoryRoot) {
   const shared = await listDirectory(repositoryRoot, SHARED_DIRECTORY, STORE_DIFFERENTIAL_SHARED)
   const databases = {}
   for (const adapter of DATABASE_ADAPTERS) {
@@ -250,7 +248,7 @@ function isHarnessSpecifier(specifier, path) {
  * `forAll` / `forAllAsync` of the harness may declare properties, and they may
  * only be called directly: aliased, namespace, default, dynamic, or re-exported
  * harness imports, and indirect uses of the functions, are refused because they
- * would hide properties from DF1. A literal name is required exactly; a
+ * would hide properties from differential. A literal name is required exactly; a
  * template name becomes a pattern whose substitutions match any non-empty text.
  */
 export function scanPropertyCallSites(source, path) {
@@ -307,10 +305,10 @@ export function scanPropertyCallSites(source, path) {
           }
           sites.push({ file: path, location, display, template: true, pattern: `^${pattern}$`, literalLength })
         } else {
-          violations.push(`${location} names a differential property with a non-literal expression; use a string or template literal so DF1 can require it`)
+          violations.push(`${location} names a differential property with a non-literal expression; use a string or template literal so differential can require it`)
         }
       } else if (!ts.isImportSpecifier(parent) && !(ts.isPropertyAccessExpression(parent) && parent.name === node) && !(ts.isPropertyAssignment(parent) && parent.name === node)) {
-        violations.push(`${where(node)} uses harness ${node.text} other than as a direct call; DF1 cannot require properties declared that way`)
+        violations.push(`${where(node)} uses harness ${node.text} other than as a direct call; differential cannot require properties declared that way`)
       }
     }
     ts.forEachChild(node, visit)
@@ -343,7 +341,7 @@ async function filesUnder(repositoryRoot, directory) {
   return result
 }
 
-/** Required call sites per suite; refuses when a harness consumer lives outside every DF1 suite. */
+/** Required call sites per suite; refuses when a harness consumer lives outside every differential suite. */
 export async function requiredCallSites(repositoryRoot, suites) {
   const bySuite = {}
   const covered = new Set([HARNESS, HARNESS_SELF_TEST])
@@ -362,7 +360,7 @@ export async function requiredCallSites(repositoryRoot, suites) {
     if (!scanned.has(key)) refuse(`database-specific property ${key} matches no differential call site`)
   }
   // A shared store file of an area that runs on no database yet still follows the harness rules, but it may not
-  // declare properties: they would never run. An area that runs on at least one database is a DF1 suite there.
+  // declare properties: they would never run. An area that runs on at least one database is a differential suite there.
   for (const path of await listDirectory(repositoryRoot, SHARED_DIRECTORY, STORE_DIFFERENTIAL_SHARED)) {
     if (covered.has(path)) continue
     covered.add(path)
@@ -374,7 +372,7 @@ export async function requiredCallSites(repositoryRoot, suites) {
       if (covered.has(path)) continue
       const source = await readFile(resolve(repositoryRoot, path), "utf8")
       if (!source.includes("harness")) continue
-      if (scanPropertyCallSites(source, path).length > 0) refuse(`${path} declares differential properties but is not part of any DF1 suite`)
+      if (scanPropertyCallSites(source, path).length > 0) refuse(`${path} declares differential properties but is not part of any differential suite`)
     }
   }
   return bySuite
@@ -386,10 +384,10 @@ export function appliesToDatabase(site, database) {
   return entry === undefined || entry.databases.includes(database)
 }
 
-/** The DF1 source manifest paths, recomputed from the current tree. */
-export async function df1SourcePaths(repositoryRoot) {
-  const suites = await df1Suites(repositoryRoot)
-  const paths = new Set([HARNESS, HARNESS_SELF_TEST, DF1_BASELINE])
+/** The differential source manifest paths, recomputed from the current tree. */
+export async function differentialSourcePaths(repositoryRoot) {
+  const suites = await differentialSuites(repositoryRoot)
+  const paths = new Set([HARNESS, HARNESS_SELF_TEST, DIFFERENTIAL_BASELINE])
   for (const suite of suites) for (const path of [...suite.propertySources, ...suite.testFiles]) paths.add(path)
   for (const entry of COVERED_SOURCES) {
     if (typeof entry === "string") paths.add(entry)
@@ -398,66 +396,66 @@ export async function df1SourcePaths(repositoryRoot) {
   return [...paths].sort()
 }
 
-export async function createDf1SourceManifest(repositoryRoot) {
-  return Promise.all((await df1SourcePaths(repositoryRoot)).map(async path => ({
+export async function createDifferentialSourceManifest(repositoryRoot) {
+  return Promise.all((await differentialSourcePaths(repositoryRoot)).map(async path => ({
     path,
     sha256: createHash("sha256").update(await readFile(resolve(repositoryRoot, path))).digest("hex"),
   })))
 }
 
-export async function readDf1Baseline(repositoryRoot) {
+export async function readDifferentialBaseline(repositoryRoot) {
   let baseline
   try {
-    baseline = JSON.parse(await readFile(resolve(repositoryRoot, DF1_BASELINE), "utf8"))
+    baseline = JSON.parse(await readFile(resolve(repositoryRoot, DIFFERENTIAL_BASELINE), "utf8"))
   } catch (error) {
-    refuse(`cannot read the property baseline ${DF1_BASELINE} (${error.message})`)
+    refuse(`cannot read the property baseline ${DIFFERENTIAL_BASELINE} (${error.message})`)
   }
-  if (baseline?.schemaVersion !== 1 || typeof baseline.suites !== "object" || baseline.suites === null) refuse(`${DF1_BASELINE} has the wrong schema`)
+  if (baseline?.schemaVersion !== 1 || typeof baseline.suites !== "object" || baseline.suites === null) refuse(`${DIFFERENTIAL_BASELINE} has the wrong schema`)
   for (const [suite, entries] of Object.entries(baseline.suites)) {
     for (const [key, count] of Object.entries(entries ?? {})) {
-      if (!Number.isInteger(count) || count < 1) refuse(`${DF1_BASELINE} ${suite} "${key}" must expect a positive integer number of properties`)
+      if (!Number.isInteger(count) || count < 1) refuse(`${DIFFERENTIAL_BASELINE} ${suite} "${key}" must expect a positive integer number of properties`)
     }
   }
   return baseline
 }
 
 /** A baseline document from per-suite site expansion counts. */
-export function composeDf1Baseline(siteCounts) {
+export function composeDifferentialBaseline(siteCounts) {
   const suites = {}
   for (const [suite, counts] of Object.entries(siteCounts)) {
     suites[suite] = Object.fromEntries(Object.entries(counts).sort(([a], [b]) => a.localeCompare(b)))
   }
   return {
     schemaVersion: 1,
-    description: "DF1 property baseline: distinct passing properties per differential call site (file::name). Lower or remove an entry only with a reviewed removal; regenerate with npm run verify:framework:df1 -- --update-baseline.",
+    description: "Differential property baseline: distinct passing properties per differential call site (file::name). Lower or remove an entry only with a reviewed removal; regenerate with node scripts/verification/differentials.mjs --update-baseline.",
     suites,
   }
 }
 
 /**
- * Where a DF1 run writes its reports and artifact. Release runs keep the
+ * Where a differential run writes its reports and artifact. Release runs keep the
  * governed `releaseDirectory`. Any other run is ad hoc and must not write into
  * the repository (see .gitignore), so it defaults to
- * `<os tmpdir>/framework-df1-<id>` unless `explicitDirectory`
- * (FRAMEWORK_DF1_OUTPUT_DIR) is given.
+ * `<os tmpdir>/framework-differential-<id>` unless `explicitDirectory`
+ * (FRAMEWORK_DIFFERENTIAL_OUTPUT_DIR) is given.
  */
-export function df1OutputDirectory({ release, releaseDirectory, explicitDirectory, id, tempRoot = tmpdir() }) {
+export function differentialOutputDirectory({ release, releaseDirectory, explicitDirectory, id, tempRoot = tmpdir() }) {
   if (release) return releaseDirectory
   const explicit = explicitDirectory?.trim()
   if (explicit) return resolve(explicit)
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(id ?? "")) refuse("DF1 ad-hoc output id contains unsafe path characters")
-  return join(tempRoot, `framework-df1-${id}`)
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(id ?? "")) refuse("differential ad-hoc output id contains unsafe path characters")
+  return join(tempRoot, `framework-differential-${id}`)
 }
 
 /** Seed policy: an explicit `DIFFERENTIAL_SEED`, else a deterministic function of the run ID. */
-export function deriveDf1Seed(runId, explicitSeed, { release = false } = {}) {
+export function deriveDifferentialSeed(runId, explicitSeed, { release = false } = {}) {
   if (explicitSeed !== undefined && explicitSeed.trim() !== "") {
     if (release) refuse("DIFFERENTIAL_SEED is set; a release run must use the seed derived from its run ID so each release explores new cases")
     const text = explicitSeed.trim()
     if (!/^\d{1,10}$/.test(text) || Number(text) > 0xffffffff) refuse("DIFFERENTIAL_SEED must be an unsigned 32-bit integer")
     return { seed: Number(text), seedSource: "DIFFERENTIAL_SEED" }
   }
-  const digest = createHash("sha256").update(`framework-df1:${runId}`).digest("hex")
+  const digest = createHash("sha256").update(`framework-differential:${runId}`).digest("hex")
   return { seed: Number.parseInt(digest.slice(0, 8), 16), seedSource: "run-id" }
 }
 
@@ -529,7 +527,7 @@ export function aggregateSuiteReports({ suite, sites, reports, seed, scale, star
     if (report.seed !== seed) refuse(`${suite} property "${name}" ran with seed ${String(report.seed)}, not the recorded seed ${seed}`)
     if (report.scale !== scale) refuse(`${suite} property "${name}" ran at scale ${String(report.scale)}, not the recorded scale ${scale}`)
     if (report.replayRun !== null) refuse(`${suite} property "${name}" ran in single-case replay mode (DIFFERENTIAL_RUN)`)
-    if (!Number.isInteger(report.baseRuns) || report.baseRuns < DF1_MIN_BASE_RUNS) refuse(`${suite} property "${name}" declares ${String(report.baseRuns)} base cases; the minimum is ${DF1_MIN_BASE_RUNS}`)
+    if (!Number.isInteger(report.baseRuns) || report.baseRuns < DIFFERENTIAL_MIN_BASE_RUNS) refuse(`${suite} property "${name}" declares ${String(report.baseRuns)} base cases; the minimum is ${DIFFERENTIAL_MIN_BASE_RUNS}`)
     if (!Number.isInteger(report.runs) || report.runs < expectedRuns(report.baseRuns, scale)) refuse(`${suite} property "${name}" ran ${String(report.runs)} cases; the scaled minimum is ${expectedRuns(report.baseRuns, scale)}`)
     if (startedAt !== undefined) {
       const recordedAt = Date.parse(report.recordedAt)
@@ -554,9 +552,9 @@ export function aggregateSuiteReports({ suite, sites, reports, seed, scale, star
   if (baseline !== undefined) {
     const expected = baseline ?? {}
     const deleted = Object.keys(expected).filter(key => !(key in siteCounts))
-    if (deleted.length > 0) refuse(`${suite} baselined call site(s) no longer exist: ${deleted.map(key => `"${key}"`).join(", ")}; remove them from ${DF1_BASELINE} only with a reviewed removal`)
+    if (deleted.length > 0) refuse(`${suite} baselined call site(s) no longer exist: ${deleted.map(key => `"${key}"`).join(", ")}; remove them from ${DIFFERENTIAL_BASELINE} only with a reviewed removal`)
     const dropped = Object.entries(expected).filter(([key, count]) => siteCounts[key] < count)
-    if (dropped.length > 0) refuse(`${suite} call site(s) expanded to fewer properties than the baseline: ${dropped.map(([key, count]) => `"${key}" ${siteCounts[key]} < ${count}`).join(", ")}; lower ${DF1_BASELINE} only with a reviewed removal`)
+    if (dropped.length > 0) refuse(`${suite} call site(s) expanded to fewer properties than the baseline: ${dropped.map(([key, count]) => `"${key}" ${siteCounts[key]} < ${count}`).join(", ")}; lower ${DIFFERENTIAL_BASELINE} only with a reviewed removal`)
   }
   return { properties: [...properties.values()].sort((a, b) => a.name.localeCompare(b.name)), siteCounts }
 }
@@ -572,10 +570,10 @@ export function replayInstructions(seed, scales) {
 }
 
 /** The `differential-conformance.json` document. */
-export function composeDf1Artifact({ runId, seed, seedSource, scales, suites, properties, sourceManifest, gateStartedAt, baseline, recordedAt = new Date() }) {
+export function composeDifferentialArtifact({ runId, seed, seedSource, scales, suites, properties, sourceManifest, gateStartedAt, baseline, recordedAt = new Date() }) {
   return {
-    schemaVersion: DF1_SCHEMA_VERSION,
-    phase: "DF1",
+    schemaVersion: DIFFERENTIAL_SCHEMA_VERSION,
+    phase: "differential",
     status: "proven",
     runId,
     recordedAt: recordedAt.toISOString(),
@@ -583,7 +581,7 @@ export function composeDf1Artifact({ runId, seed, seedSource, scales, suites, pr
     seed,
     seedSource,
     scales,
-    minimums: { baseRuns: DF1_MIN_BASE_RUNS, releaseScales: DF1_MINIMUM_SCALES, baseline: { path: DF1_BASELINE, sites: Object.values(baseline.suites).reduce((sum, entries) => sum + Object.keys(entries).length, 0) } },
+    minimums: { baseRuns: DIFFERENTIAL_MIN_BASE_RUNS, releaseScales: DIFFERENTIAL_MINIMUM_SCALES, baseline: { path: DIFFERENTIAL_BASELINE, sites: Object.values(baseline.suites).reduce((sum, entries) => sum + Object.keys(entries).length, 0) } },
     suites,
     properties,
     totals: {
@@ -598,25 +596,25 @@ export function composeDf1Artifact({ runId, seed, seedSource, scales, suites, pr
   }
 }
 
-/** Validates a DF1 artifact against the current tree (used by final certification). */
-export async function validateDf1Artifact(artifact, { repositoryRoot, runId, startedAt, minimumScales = DF1_MINIMUM_SCALES, requireRunIdSeed = false }) {
-  if (artifact?.schemaVersion !== DF1_SCHEMA_VERSION || artifact.phase !== "DF1") refuse("evidence has the wrong schema or phase")
+/** Validates a differential artifact against the current tree (used by the release check). */
+export async function validateDifferentialArtifact(artifact, { repositoryRoot, runId, startedAt, minimumScales = DIFFERENTIAL_MINIMUM_SCALES, requireRunIdSeed = false }) {
+  if (artifact?.schemaVersion !== DIFFERENTIAL_SCHEMA_VERSION || artifact.phase !== "differential") refuse("evidence has the wrong schema or phase")
   if (artifact.runId !== runId) refuse(`evidence belongs to run ${String(artifact.runId)}, not ${runId}`)
   if (artifact.status !== "proven") refuse("evidence is not proven")
   const recordedAt = Date.parse(artifact.recordedAt)
   if (!Number.isFinite(recordedAt)) refuse("evidence has no valid timestamp")
-  if (startedAt !== undefined && recordedAt + 1000 < startedAt) refuse("evidence predates this certification run")
+  if (startedAt !== undefined && recordedAt + 1000 < startedAt) refuse("evidence predates this release run")
   if (!Number.isInteger(artifact.seed) || artifact.seed < 0 || artifact.seed > 0xffffffff) refuse("evidence has no valid recorded seed")
-  if (artifact.seedSource === "run-id" && deriveDf1Seed(runId).seed !== artifact.seed) refuse("recorded seed does not match the seed derived from the run ID")
+  if (artifact.seedSource === "run-id" && deriveDifferentialSeed(runId).seed !== artifact.seed) refuse("recorded seed does not match the seed derived from the run ID")
   if (artifact.seedSource !== "run-id" && artifact.seedSource !== "DIFFERENTIAL_SEED") refuse("evidence does not record its seed source")
   if (requireRunIdSeed && artifact.seedSource !== "run-id") refuse(`release evidence must use the seed derived from its run ID, not ${String(artifact.seedSource)}`)
   const scales = artifact.scales ?? {}
   if (!(scales.core >= minimumScales.core) || !(scales.database >= minimumScales.database)) {
     refuse(`differential volume below the release minimum (core ${String(scales.core)} < ${minimumScales.core} or database ${String(scales.database)} < ${minimumScales.database})`)
   }
-  const suites = await df1Suites(repositoryRoot)
+  const suites = await differentialSuites(repositoryRoot)
   const sites = await requiredCallSites(repositoryRoot, suites)
-  const baseline = await readDf1Baseline(repositoryRoot)
+  const baseline = await readDifferentialBaseline(repositoryRoot)
   if (!Array.isArray(artifact.properties)) refuse("evidence lists no properties")
   for (const suite of suites) {
     const recorded = artifact.properties.filter(property => property?.suite === suite.id)
@@ -634,8 +632,8 @@ export async function validateDf1Artifact(artifact, { repositoryRoot, runId, sta
   const unknownSuites = artifact.properties.filter(property => !suites.some(suite => suite.id === property?.suite))
   if (unknownSuites.length > 0) refuse("evidence contains properties of unknown suites")
   const unknownBaselineSuites = Object.keys(baseline.suites).filter(id => !suites.some(suite => suite.id === id))
-  if (unknownBaselineSuites.length > 0) refuse(`${DF1_BASELINE} names unknown suites ${unknownBaselineSuites.join(", ")}`)
-  const expectedPaths = await df1SourcePaths(repositoryRoot)
+  if (unknownBaselineSuites.length > 0) refuse(`${DIFFERENTIAL_BASELINE} names unknown suites ${unknownBaselineSuites.join(", ")}`)
+  const expectedPaths = await differentialSourcePaths(repositoryRoot)
   const manifest = Array.isArray(artifact.sourceManifest) ? artifact.sourceManifest : []
   const recordedPaths = manifest.map(entry => entry?.path).sort()
   if (JSON.stringify(recordedPaths) !== JSON.stringify(expectedPaths)) refuse("source manifest does not cover exactly the current differential suites and covered sources")
@@ -651,24 +649,24 @@ export async function validateDf1Artifact(artifact, { repositoryRoot, runId, sta
 }
 
 /**
- * Reads, freshness-checks, and validates `<artifactRoot>/<runId>/df1/differential-conformance.json`.
+ * Reads, freshness-checks, and validates `<artifactRoot>/<runId>/differentials/differential-conformance.json`.
  * This is the release check, so the seed must be the run-derived one unless a caller opts out.
  */
-export async function loadAndValidateDf1Evidence({ repositoryRoot, artifactRoot, runId, startedAt, minimumScales, requireRunIdSeed = true }) {
-  const path = resolve(artifactRoot, runId, DF1_PHASE, DF1_ARTIFACT)
+export async function loadAndValidateDifferentialEvidence({ repositoryRoot, artifactRoot, runId, startedAt, minimumScales, requireRunIdSeed = true }) {
+  const path = resolve(artifactRoot, runId, DIFFERENTIAL_PHASE, DIFFERENTIAL_ARTIFACT)
   let text
   try {
     text = await readFile(path, "utf8")
   } catch (error) {
-    refuse(`no differential evidence at ${toPosix(relative(repositoryRoot, path))} (${error.code ?? error.message}); run npm run verify:framework:df1 in this certification run`)
+    refuse(`no differential evidence at ${toPosix(relative(repositoryRoot, path))} (${error.code ?? error.message}); run node scripts/verification/differentials.mjs in this release run`)
   }
-  if (startedAt !== undefined && (await stat(path)).mtimeMs + 1000 < startedAt) refuse("differential evidence predates this certification run")
+  if (startedAt !== undefined && (await stat(path)).mtimeMs + 1000 < startedAt) refuse("differential evidence predates this release run")
   let artifact
   try {
     artifact = JSON.parse(text)
   } catch (error) {
     refuse(`differential evidence is not valid JSON (${error.message})`)
   }
-  await validateDf1Artifact(artifact, { repositoryRoot, runId, startedAt, minimumScales, requireRunIdSeed })
+  await validateDifferentialArtifact(artifact, { repositoryRoot, runId, startedAt, minimumScales, requireRunIdSeed })
   return { path, artifact, sha256: createHash("sha256").update(text).digest("hex") }
 }
