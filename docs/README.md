@@ -2,7 +2,7 @@
 
 This directory is the single active documentation set.
 
-| Area | Status | Responsibility |
+| Area | Type | Responsibility |
 |---|---|---|
 | [`spec/`](spec/README.md) | Normative | Language-neutral observable semantics and conformance requirements |
 | [`architecture.md`](architecture.md) | Non-normative authority | Current package/dependency/execution architecture |
@@ -15,8 +15,7 @@ When prose disagrees with executable behavior, treat it as a defect to reconcile
 
 ## Project documents
 
-- [Known limitations](KNOWN-LIMITATIONS.md): gaps in the current release candidate
-- [Plan](../TODO.md): all remaining work, tracked in one place
+- [Known limitations](KNOWN-LIMITATIONS.md): current limits of the framework
 - [Changelog](../CHANGELOG.md): notable changes by release
 - [Contributing](../CONTRIBUTING.md): setup, build, test, and verification commands
 - [Contributor architecture rules](architecture.md#contributor-rules): where code belongs and what it must not import

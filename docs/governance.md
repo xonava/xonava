@@ -19,7 +19,7 @@ The three packages follow [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 lockstep: `@xonava/core`, `@xonava/adapters` and `@xonava/testing` always release together at the same
 version, and each pins the others at that exact version. Users match one number across the three.
 
-- **`0.x` (now).** A minor release (`0.2.0`) may contain breaking changes; a patch release (`0.1.1`)
+- **`0.x`.** A minor release (for example `0.2.0`) may contain breaking changes; a patch release (`0.1.1`)
   contains only fixes and backward-compatible additions. Applications should pin exact versions.
 - **`1.0.0` and later.** Breaking changes require a major release, new features a minor release, and fixes
   a patch release.

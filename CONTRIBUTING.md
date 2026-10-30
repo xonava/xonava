@@ -22,7 +22,7 @@ npm install
 | `npm run lint` | Lints every workspace with zero warnings allowed |
 | `npm test` | Runs the unit suites of every workspace. It needs no database. |
 | `npm run test:coverage -w @xonava/core` | Runs core unit tests with coverage thresholds |
-| `npm run test:mutation` | Stryker mutation testing of core and adapters. Enforcing: exits non-zero below the gate (core 80 %, adapters 70 %). Expected to fail until the per-module mutation work lands, so it is not part of `npm test` or any verify script |
+| `npm run test:mutation` | Stryker mutation testing of core and adapters. Enforcing: exits non-zero below the gate (core 80 %, adapters 70 %). It is not part of `npm test` or any verify script |
 | `npm run verify:docs` | Checks documentation links, public import paths, and canonical references |
 | `npm run bench` | Runs the hot-path benchmarks and fails when one is more than 25 % slower than `benchmarks/baseline.json`. Not part of `npm test`. |
 
@@ -102,9 +102,9 @@ Any violation fails the run. Evidence is written to `artifacts/framework-conform
 | `SOAK_JOB_INTERVAL_MIN_MS`, `SOAK_JOB_INTERVAL_MAX_MS` | `300`, `1300` | Gap between enqueued jobs (about 1.2 jobs/s). |
 | `SOAK_DRAIN_TIMEOUT_MS` | `180000` | How long the drain may take before the run fails. |
 
-The defaults are chosen so the workers keep up with the producer on a shared four-core machine (the not-terminal backlog stays in the single digits to low tens); a drain that times out with pending jobs means the load was too high for the machine, so the run fails and the evidence records the backlog samples and the stuck jobs' lease rows. The heavier settings (`SOAK_SLOW_FACTOR=2.5`, a 100-700 ms job interval, about 2.5 jobs/s, with many jobs dead-lettered by timeout) were also run on D1 for 3 and for 30 minutes and drained in under two seconds with no violation, so the defaults are a choice of load and not a workaround for a stall. Unit tests in `packages/testing/tests/soakInvariants.test.ts` prove that every invariant checker reports a synthetic violation.
+The defaults are chosen so the workers keep up with the producer on a shared four-core machine (the not-terminal backlog stays in the single digits to low tens); a drain that times out with pending jobs means the load was too high for the machine, so the run fails and the evidence records the backlog samples and the stuck jobs' lease rows. Unit tests in `packages/testing/tests/soakInvariants.test.ts` prove that every invariant checker reports a synthetic violation.
 
-The soak is a `1.0.0` quality gate (see TODO.md). It is an optional step of `npm run verify:release`: set `FRAMEWORK_RELEASE_SOAK=1` to run the full 30-minute soak on all three databases (about 1.5 hours) before the release summary is written; without it the release prints that the soak was skipped.
+The soak is a quality gate for `1.0.0`. It is an optional step of `npm run verify:release`: set `FRAMEWORK_RELEASE_SOAK=1` to run the full 30-minute soak on all three databases (about 1.5 hours) before the release summary is written; without it the release prints that the soak was skipped.
 
 ## Release gate
 
@@ -135,7 +135,6 @@ Branch protection:
 
 ## Pull requests
 
-- Planned work is tracked only in [TODO.md](TODO.md). Remove an item in the pull request that completes it, and add new work there rather than in other documents.
 - Target `dev`, not `main`. Only `dev` merges into `main`.
 - Public behavior changes need tests and applicable conformance coverage.
 - Normative behavior belongs in [`docs/spec`](docs/spec/README.md), not only in code comments.
