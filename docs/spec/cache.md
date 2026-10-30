@@ -30,4 +30,4 @@ Invalid keys produce canonicalization/validation failure. Missing correctness-cr
 
 Tags/generations are OPTIONAL unless required by a plan. Implementations MUST declare consistency/coherence accurately. New tagged key types require a format-version decision. Conformance MUST cover deterministic bytes, every accepted tagged value, all limits, cycles/reserved tags, TTL, absence/failure, tags, generation races, and multi-instance invalidation.
 
-Traceability: `packages/core/src/cache`; adapter cache tests; G1/C1/V1 evidence.
+Traceability: `packages/core/src/cache`; adapter cache tests.

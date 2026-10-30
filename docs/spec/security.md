@@ -29,8 +29,7 @@ Traceability: `@xonava/core/domain`, `@xonava/core/security`, scoped persistence
 ## Threat model
 
 This section names what the framework protects, from whom, and through which inputs, and maps every threat to the
-requirement that addresses it and the test that proves it. A threat without a test is tracked as a work package in
-[TODO.md](../../TODO.md); a residual risk is a threat the framework does not address and leaves to the application or
+requirement that addresses it and the test that proves it. A threat without a test is a gap; a residual risk is a threat the framework does not address and leaves to the application or
 the platform.
 
 ### Assets
@@ -71,7 +70,7 @@ the platform.
 
 The *Requirement* column names the normative sentence (in this file or another spec file) that addresses the threat; the
 *Test* column names the suite and test that prove it. A test is named by file and title, so a
-threat without one would show `none` in this column and be tracked as a work package in [TODO.md](../../TODO.md). `residual` means the framework does
+threat without one would show `none` in this column. `residual` means the framework does
 not address the threat, so there is nothing to prove; see [Residual risks](#residual-risks). A row split into `a` and `b`
 covers two mechanisms.
 

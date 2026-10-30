@@ -18,7 +18,7 @@ function atomicBase() {
   return { scoped, executeAtomicBatch }
 }
 
-describe("tenant atomic batch cache-generation isolation (C12)", () => {
+describe("tenant atomic batch cache-generation isolation", () => {
   it("encodes tenant cache tags in the length-prefixed tenant namespace", () => {
     expect(encodeTenantCacheTag("tenant-a", "rows")).toBe("tenant:8:tenant-a:rows")
     expect(encodeTenantCacheTag("a:b", "rows")).toBe("tenant:3:a:b:rows")

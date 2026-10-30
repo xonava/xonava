@@ -8,7 +8,7 @@ function request(xff?: string): Request {
 const trusted: HttpRequestMetadata = { peerAddress: "10.0.0.1", trustedProxy: true }
 const config = { trustedProxyIps: ["10.0.0.1", "10.0.0.2"], trustedProxyHops: 1 }
 
-describe("resolveTrustedClientIp mutation kills", () => {
+describe("resolveTrustedClientIp", () => {
   describe("peer address handling", () => {
     it("trims the transport peer and treats blank or missing peers as null", () => {
       expect(resolveTrustedClientIp(request(), { ...config, trustedProxyIps: [] }, { peerAddress: "  203.0.113.5  " })).toBe("203.0.113.5")

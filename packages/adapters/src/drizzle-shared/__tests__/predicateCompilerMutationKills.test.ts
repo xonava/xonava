@@ -12,7 +12,7 @@ import type { PredicateNode } from "@xonava/core/domain"
 import { DrizzlePredicateCompiler, sortExpression, type PredicateCompilerOptions, type PredicateDialect } from "../predicateCompiler"
 
 /**
- * Mutation kills for predicateCompiler.ts, security-relevant survivors only: which rows a compiled predicate
+ * Exact SQL and parameters for predicateCompiler.ts, security-relevant cases only: which rows a compiled predicate
  * matches (null handling, negation, empty IN lists, LIKE escaping, bound parameters vs inlined values,
  * dialect branches, per-column-class literal typing). Each row freezes the exact SQL text and bound
  * parameters the compiler emits for a dialect.

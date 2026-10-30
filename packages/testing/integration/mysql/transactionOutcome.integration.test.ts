@@ -9,7 +9,7 @@ import { openMySqlFixture } from "./database.js"
 interface RecordRow { id: string; tenantId: string; name: string; version: number; value: unknown }
 const entity: VersionedEntityDescriptor<RecordRow> = { name: "records", primaryKey: "id", versionField: "version", tenantField: "tenantId", fields: { id: { type: "string" }, tenantId: { type: "string" }, name: { type: "string" }, version: { type: "number" }, value: { type: "json" } } }
 
-describe("MYSQL1 transaction outcome classification", () => {
+describe("transaction outcome classification", () => {
   it("runs read operations in read-only transactions (previously rejected by the adapter)", async () => {
     const fixture = await openMySqlFixture()
     try {

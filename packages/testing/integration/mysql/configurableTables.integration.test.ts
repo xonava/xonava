@@ -10,7 +10,7 @@ const system={scope:"system" as const}
 const systemJob=(overrides:Record<string,unknown>={})=>({jobType:"probe",jobVersion:1,payload:{},executionScope:{kind:"system" as const,systemKey:"probe"},...overrides})
 const count=async(pool:Pool,sqlText:string,params:unknown[]=[])=>{const [rows]=await pool.query(sqlText,params);return Number((rows as {n:number}[])[0]!.n)}
 
-describe("MYSQL1 configurable database and table names",()=>{
+describe("configurable database and table names",()=>{
   let pool:Pool
   let database:string
   let drop:()=>Promise<void>

@@ -15,7 +15,7 @@ function createPort(entries: ClaimedPendingInvalidation[]) {
   return { port, claimPendingInvalidations, completeClaimedInvalidation, ackClaimedInvalidation }
 }
 
-describe("drainPendingInvalidations mutation kills", () => {
+describe("drainPendingInvalidations", () => {
   it("claims with the exact limit, owner and lease and caps the limit at 100", async () => {
     const { port, claimPendingInvalidations } = createPort([])
     const invalidate = vi.fn(async () => undefined)
@@ -104,7 +104,7 @@ describe("drainPendingInvalidations mutation kills", () => {
   })
 })
 
-describe("createIdempotencyFinalizerService mutation kills", () => {
+describe("createIdempotencyFinalizerService", () => {
   afterEach(() => { vi.useRealTimers() })
 
   it("drains on every interval tick, starts only once and stops cleanly", async () => {

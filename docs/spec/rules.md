@@ -28,4 +28,4 @@ The immutable result identifies the rule-set key/version and evaluation time and
 
 A rule set contains at most 10,000 rules. A rule contains between 1 and 100 actions. Predicate trees contain at most 1,000 nodes and depth 32. Rule data snapshots contain at most 10,000 nodes and depth 64. Keys contain at most 200 restricted identifier characters; descriptions contain at most 500 characters.
 
-RL1 certifies version/effective-window selection, deterministic ordering, all conflict modes and tie behavior, predicate reuse, decision/effect separation, immutable defensive snapshots, malformed-input rejection, and complete traces. Traceability: `@xonava/core/rules`; RL1.
+The rule-engine suite covers version/effective-window selection, deterministic ordering, all conflict modes and tie behavior, predicate reuse, decision/effect separation, immutable defensive snapshots, malformed-input rejection, and complete traces. Traceability: `@xonava/core/rules`.

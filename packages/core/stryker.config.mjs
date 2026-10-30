@@ -1,4 +1,4 @@
-// Mutation testing for @xonava/core (Q5). Gate: core >= 80 % (TODO quality table).
+// Mutation testing for @xonava/core . Gate: core >= 80 %.
 //
 // `npm run test:mutation -w @xonava/core` mutates the whole package and is the enforcing command: it exits
 // non-zero when the score falls below thresholds.break. Until the per-module work packages land the

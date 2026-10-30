@@ -34,4 +34,4 @@ Empty keys, invalid limits/windows/algorithms/costs, and malformed store results
 
 Provider timestamps and enforcement clocks MUST share epoch-millisecond basis. Keys SHOULD derive from trusted normalized scope. Conformance MUST cover defaults, equality/exceedance, weighted cost, every declared algorithm, concurrent atomic consumption, invalid store results, capability rejection, fail-closed, and restricted fail-open.
 
-Traceability: `packages/core/src/rate-limit`; rate-limit tests; G1 certification.
+Traceability: `packages/core/src/rate-limit`; rate-limit tests.

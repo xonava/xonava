@@ -15,7 +15,7 @@ function message(value: unknown): string {
   return "NO_THROW"
 }
 
-describe("assertFrameworkAdapterDeps mutation kills", () => {
+describe("assertFrameworkAdapterDeps", () => {
   it("rejects null and non-object values with the exact message", () => {
     const expected = "Framework adapter dependencies must be an object"
     expect(message(null)).toBe(expected)

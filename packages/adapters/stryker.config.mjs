@@ -1,4 +1,4 @@
-// Mutation testing for @xonava/adapters (Q5). Gate: adapters http/ and drizzle-shared/ >= 70 % (TODO quality table).
+// Mutation testing for @xonava/adapters . Gate: adapters http/ and drizzle-shared/ >= 70 %.
 //
 // `npm run test:mutation -w @xonava/adapters` mutates the whole package and is the enforcing command: it exits
 // non-zero when the score falls below thresholds.break. Until the per-module work packages land the

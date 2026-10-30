@@ -28,7 +28,7 @@ function base(resolver: ScopeResolver) {
   return { requestId: "request-1", correlationId: "correlation-1", route: route(), resolverBindings: bindings(resolver), admit: async () => admission, signal, now: NOW }
 }
 
-describe("A2 trusted scope normalization", () => {
+describe("trusted scope normalization", () => {
   it("resolves an authoritative public tenant, preserves anonymity, and passes the route ref", async () => {
     const resolve = vi.fn(async (_input, routeRef) => {
       expect(routeRef).toEqual({ routeKey: "catalog.list", definitionVersion: 1, operationKey: "catalog.list" })

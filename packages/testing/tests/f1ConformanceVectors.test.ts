@@ -8,7 +8,7 @@ import { loadConformanceVectors } from "../src/spec/conformanceVectors"
 
 const vectorsDir = join(import.meta.dirname, "..", "conformance", "vectors")
 
-describe("F1 conformance vectors", () => {
+describe("conformance vectors", () => {
   it("loads all vector suites", () => {
     const suites = loadConformanceVectors(vectorsDir)
     expect(suites.length).toBeGreaterThanOrEqual(5)

@@ -5,7 +5,7 @@ import { openMySqlFixture } from "./database.js"
 
 const requester = { scope: "tenant" as const, tenantId: "t1", actorId: "user-1" }
 
-describe("MYSQL1 job release", () => {
+describe("job release", () => {
   it("hands an unknown job type back without consuming an attempt (rolling deploys)", async () => {
     const fixture = await openMySqlFixture()
     try {

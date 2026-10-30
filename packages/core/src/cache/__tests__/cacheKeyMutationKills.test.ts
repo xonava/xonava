@@ -54,7 +54,7 @@ function nestObjects(levels: number): unknown {
   return value
 }
 
-describe("cache key serialization mutation kills", () => {
+describe("cache key serialization", () => {
   it("serializes every value kind to its exact canonical form", () => {
     expect(ser(undefined)).toBe('{"$type":"undefined"}')
     expect(ser(Number.NaN)).toBe('{"$type":"NaN"}')
@@ -200,7 +200,7 @@ describe("cache key serialization mutation kills", () => {
   })
 })
 
-describe("buildKey mutation kills", () => {
+describe("buildKey", () => {
   it("joins encoded parts and enforces the byte limit exactly", () => {
     expect(buildKey("a b", "c:d", "e/f")).toBe("a%20b:c%3Ad:e%2Ff")
     expect(buildKey("a".repeat(2046), "", "")).toHaveLength(2048)
@@ -213,7 +213,7 @@ describe("buildKey mutation kills", () => {
   })
 })
 
-describe("cache error classes mutation kills", () => {
+describe("cache error classes", () => {
   it("names and describes adapter and overload failures", () => {
     const cause = new Error("boom")
     const adapterError = new CacheAdapterError("get", { cause })
@@ -228,7 +228,7 @@ describe("cache error classes mutation kills", () => {
   })
 })
 
-describe("compileCacheInvalidationStrategy mutation kills", () => {
+describe("compileCacheInvalidationStrategy", () => {
   const base = { correctnessCritical: false, atomicAvailable: false, durableEventualAvailable: false }
 
   it("returns a frozen strategy for every available guarantee", () => {

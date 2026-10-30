@@ -87,7 +87,7 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 const KEY_MESSAGE = "Cache key must not exceed 2048 UTF-8 bytes"
 const TAG_MESSAGE = "Cache tag must be non-empty and not exceed 256 UTF-8 bytes"
 
-describe("cache input validation mutation kills", () => {
+describe("cache input validation", () => {
   it("validates keys on every keyed operation", async () => {
     const adapter = createAdapter()
     const cache = cacheOf(adapter)
@@ -170,7 +170,7 @@ describe("cache input validation mutation kills", () => {
   })
 })
 
-describe("correctness-critical construction mutation kills", () => {
+describe("correctness-critical construction", () => {
   it("requires linearizable, shared capabilities and both generation primitives", () => {
     const message = "Cache operation failed: shared tag generation unavailable"
     const full = createGenerationAdapter(true).adapter
@@ -189,7 +189,7 @@ describe("correctness-critical construction mutation kills", () => {
   })
 })
 
-describe("getOrSet cache hits and misses mutation kills", () => {
+describe("getOrSet cache hits and misses", () => {
   it("treats falsy cached values as hits and never consults generations without tags", async () => {
     const { adapter } = createGenerationAdapter()
     const cache = cacheOf(adapter)
@@ -294,7 +294,7 @@ describe("getOrSet cache hits and misses mutation kills", () => {
   })
 })
 
-describe("single-flight bookkeeping mutation kills", () => {
+describe("single-flight bookkeeping", () => {
   it("removes settled lookups so later misses run their own resolver", async () => {
     const adapter = createAdapter()
     const cache = cacheOf(adapter)
@@ -367,7 +367,7 @@ describe("single-flight bookkeeping mutation kills", () => {
   })
 })
 
-describe("adapter failure handling mutation kills", () => {
+describe("adapter failure handling", () => {
   const boom = new Error("adapter down")
 
   it("swallows failures in best-effort mode and reports each operation", async () => {
@@ -430,7 +430,7 @@ describe("adapter failure handling mutation kills", () => {
   })
 })
 
-describe("telemetry mutation kills", () => {
+describe("telemetry", () => {
   it("emits a safe, keyless-aware failure event through a unified telemetry port", async () => {
     const adapter = createAdapter()
     const emit = vi.fn()
@@ -461,7 +461,7 @@ describe("telemetry mutation kills", () => {
   })
 })
 
-describe("tag generation fallback epochs mutation kills", () => {
+describe("tag generation fallback epochs", () => {
   it("uses the fallback epoch when the adapter has no generation primitives", async () => {
     const adapter = createAdapter()
     const cache = cacheOf(adapter)
@@ -550,7 +550,7 @@ describe("tag generation fallback epochs mutation kills", () => {
   })
 })
 
-describe("invalidateTag mutation kills", () => {
+describe("invalidateTag", () => {
   it("falls back to the local epoch when the adapter cannot advance", async () => {
     const harness = createGenerationAdapter()
     delete (harness.adapter as { advanceTagGeneration?: unknown }).advanceTagGeneration

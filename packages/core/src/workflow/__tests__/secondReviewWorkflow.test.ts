@@ -10,7 +10,7 @@ function instance(overrides: Partial<WorkflowInstance> = {}): WorkflowInstance {
   return { id: "wf", workflowType: "order", workflowVersion: 1, executionScope: { kind: "tenant", tenantId: "t1" }, status: "pending", currentStep: "charge", variables: {}, stepAttempt: 1, compensationStack: [], waitingSignal: null, wakeAt: null, outcome: null, revision: 1, failure: null, leaseOwner: null, claimToken: null, leaseExpiresAt: null, createdAt: t0, updatedAt: t0, ...overrides }
 }
 
-describe("cancelWorkflow on a compensating instance (C7)", () => {
+describe("cancelWorkflow on a compensating instance", () => {
   it("is idempotent: keeps the original failure, attempt budget, and failed outcome", () => {
     const running = instance({ compensationStack: ["reserve"] })
     const compensating = applyWorkflowStep(running, { kind: "fail", error: "card declined" }, at(1))

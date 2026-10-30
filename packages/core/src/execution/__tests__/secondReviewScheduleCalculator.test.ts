@@ -13,7 +13,7 @@ function occurrences(expression: string, from: string, count: number): string[] 
   return out
 }
 
-describe("cron stepped wildcard day semantics (C2)", () => {
+describe("cron stepped wildcard day semantics", () => {
   it("fires `0 0 */2 * *` only on odd days of the month", () => {
     expect(occurrences("0 0 */2 * *", "2026-06-30T12:00:00Z", 5)).toEqual(["2026-07-01", "2026-07-03", "2026-07-05", "2026-07-07", "2026-07-09"])
     expect(occurrences("0 0 */2 * *", "2026-07-30T12:00:00Z", 2)).toEqual(["2026-07-31", "2026-08-01"])

@@ -4,7 +4,7 @@ import { validateQuotaDecision, validateQuotaRequest } from "../quota"
 
 const request = validateQuotaRequest({ quotaKey: "exports", subject: { scope: { kind: "tenant", tenantId: "tenant-a" } }, amount: 3, limit: 10, windowMs: 60_000 })
 
-describe("quota decision consistency (C1)", () => {
+describe("quota decision consistency", () => {
   it("accepts allowed decisions whose usage fits within the limit", () => {
     expect(validateQuotaDecision(request, { allowed: true, used: 3, remaining: 7, resetAt: 1 })).toEqual({ allowed: true, used: 3, remaining: 7, resetAt: 1 })
     expect(validateQuotaDecision(request, { allowed: true, used: 10, remaining: 0, resetAt: 1 }).allowed).toBe(true)

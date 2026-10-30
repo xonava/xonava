@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { AUDIT_REDACTION_PLACEHOLDER, redactSensitiveText } from "../auditRedaction"
 
-describe("auditRedaction mutation kills", () => {
+describe("auditRedaction", () => {
   it("exports the exact placeholder", () => {
     expect(AUDIT_REDACTION_PLACEHOLDER).toBe("[redacted]")
   })

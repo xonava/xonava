@@ -31,7 +31,7 @@ function insertDb(rows: unknown[]): AnyDrizzleDatabase {
   } as unknown as AnyDrizzleDatabase
 }
 
-describe("DbTagGenerationStore mutation kills", () => {
+describe("DbTagGenerationStore", () => {
   it("filters on the requested tag with a bound parameter and a limit of one", async () => {
     const capture: { where?: SQL } = {}
     const store = createDbTagGenerationStore({ db: selectDb([{ generation: 3 }], capture), table: generationTable })
@@ -76,7 +76,7 @@ describe("DbTagGenerationStore mutation kills", () => {
   )
 })
 
-describe("CacheBackedRateLimitStore mutation kills", () => {
+describe("CacheBackedRateLimitStore", () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(1_000)
@@ -132,7 +132,7 @@ describe("CacheBackedRateLimitStore mutation kills", () => {
   })
 })
 
-describe("AtomicCacheBackedRateLimitStore mutation kills", () => {
+describe("AtomicCacheBackedRateLimitStore", () => {
   it("delegates increment and incrementAtomically to the backend with the namespaced key", async () => {
     const incrementRateLimitAtomically = vi.fn((_key: string, _windowMs: number) =>
       Promise.resolve({ count: 3, resetAt: 99 }),
@@ -154,7 +154,7 @@ function internals(store: InMemoryRateLimitStore): StoreInternals {
   return store as unknown as StoreInternals
 }
 
-describe("InMemoryRateLimitStore mutation kills", () => {
+describe("InMemoryRateLimitStore", () => {
   it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])("rejects maxBuckets %s with an exact message", (maxBuckets) => {
     const build = () => new InMemoryRateLimitStore(() => 0, { maxBuckets })
     expect(build).toThrow(ConfigurationError)

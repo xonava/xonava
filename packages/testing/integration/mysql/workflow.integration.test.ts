@@ -3,7 +3,7 @@ import {applyWorkflowStep} from "@xonava/core/workflow"
 import {DrizzleMySqlWorkflowStore} from "@xonava/adapters/drizzle-mysql"
 import {openMySqlFixture} from "./database.js"
 
-describe("MYSQL1 workflow store",()=>{
+describe("workflow store",()=>{
   it("fences transitions and deduplicates signals",async()=>{
     const {pool}=await openMySqlFixture()
     try{

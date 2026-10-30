@@ -6,7 +6,7 @@ import { ConfigurationError, UnavailableError } from "../../domain/errors"
 
 const policy = { failureThreshold: 1, resetAfterMs: 1_000 }
 
-describe("circuit breaker admission generations (C9)", () => {
+describe("circuit breaker admission generations", () => {
   it("ignores a stale closed-state failure that completes while half-open (no second probe)", () => {
     let now = 0
     const breaker = createCircuitBreaker(policy, () => now)

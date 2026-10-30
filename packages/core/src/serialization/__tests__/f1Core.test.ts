@@ -41,7 +41,7 @@ import {
   fingerprintCursorQuery,
 } from "../fingerprint"
 
-describe("F1 canonical serialization frozen contract", () => {
+describe("canonical serialization frozen contract", () => {
   it("freezes canonicalization and digest versions", () => {
     expect(CANONICALIZATION_VERSION).toBe("jcs-rfc8785-v1")
     expect(DIGEST_ALGORITHM_VERSION).toBe("sha256-v1")
@@ -157,7 +157,7 @@ describe("F1 canonical serialization frozen contract", () => {
   })
 })
 
-describe("F1 hard resource limits", () => {
+describe("hard resource limits", () => {
   it("accepts maxDepth 64 and rejects 65", () => {
     let val: unknown = 0
     for (let i = 0; i < 64; i++) val = { a: val }
@@ -264,7 +264,7 @@ describe("F1 hard resource limits", () => {
   })
 })
 
-describe("F1 envelopes and codecs mixed-version", () => {
+describe("envelopes and codecs mixed-version", () => {
   it("creates and parses envelopes", () => {
     const env = createEnvelope("framework.event-envelope", 1, { id: 1 })
     expect(parseEnvelope(env)).toEqual({ format: "framework.event-envelope", version: 1, payload: { id: 1 } })
@@ -358,7 +358,7 @@ describe("F1 envelopes and codecs mixed-version", () => {
   })
 })
 
-describe("F1 fingerprints and scope ids", () => {
+describe("fingerprints and scope ids", () => {
   it("fingerprints are deterministic and domain-separated", () => {
     const a = fingerprintIdempotency({ a: 1, b: 2 })
     const b = fingerprintIdempotency({ b: 2, a: 1 })

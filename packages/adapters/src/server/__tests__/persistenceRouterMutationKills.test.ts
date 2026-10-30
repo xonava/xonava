@@ -6,7 +6,7 @@ const tenantA = { kind: "tenant" as const, tenantId: "tenant-a" }
 const tenantB = { kind: "tenant" as const, tenantId: "tenant-b" }
 const capabilities = { readConsistency: ["strong"], writable: true, localTransactions: true } as never
 
-describe("TrustedPersistenceRouter mutation kills", () => {
+describe("TrustedPersistenceRouter", () => {
   it("rejects an empty binding registry with a ConfigurationError", () => {
     expect(() => new TrustedPersistenceRouter({})).toThrow(ConfigurationError)
     expect(() => new TrustedPersistenceRouter({})).toThrow("Persistence router requires at least one trusted datasource binding.")

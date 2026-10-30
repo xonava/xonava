@@ -44,7 +44,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe("timer delay bounds (C3)", () => {
+describe("timer delay bounds", () => {
   it("exports the platform timer ceiling", () => {
     expect(MAX_TIMER_DELAY_MS).toBe(2_147_483_647)
   })
@@ -67,7 +67,7 @@ describe("timer delay bounds (C3)", () => {
   })
 })
 
-describe("retry backoff bounds (C4)", () => {
+describe("retry backoff bounds", () => {
   const policy = { maxAttempts: 100, delayMs: 1_000, backoffMultiplier: 2 }
 
   it("caps uncapped exponential backoff at 24 hours by default", () => {
@@ -118,7 +118,7 @@ describe("heartbeat timer cleanup", () => {
   })
 })
 
-describe("queue_all backlog draining (C6)", () => {
+describe("queue_all backlog draining", () => {
   function scheduleHarness(initialNextRunAt: Date) {
     let nextRunAt = initialNextRunAt
     const claim = (): FencedScheduleClaim => ({

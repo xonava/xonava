@@ -17,7 +17,7 @@ function caught(fn: () => unknown): unknown {
 const utf8 = (value: string): Uint8Array => new TextEncoder().encode(value)
 const bytes = (length: number, fill: number): Uint8Array => new Uint8Array(length).fill(fill)
 
-describe("entity version mutation kills", () => {
+describe("entity version", () => {
   it("accepts exactly the non-negative safe integers", () => {
     expect(isEntityVersion(0)).toBe(true)
     expect(isEntityVersion(1)).toBe(true)
@@ -57,7 +57,7 @@ describe("entity version mutation kills", () => {
   })
 })
 
-describe("hmac mutation kills", () => {
+describe("hmac", () => {
   it("rejects a non Uint8Array key or message with the exact TypeError", () => {
     for (const [key, message] of [
       ["key", utf8("m")],
@@ -118,7 +118,7 @@ describe("hmac mutation kills", () => {
   })
 })
 
-describe("sha256 mutation kills", () => {
+describe("sha256", () => {
   it("hashes fixed vectors exactly, including padding boundaries", () => {
     expect(sha256Hex(new Uint8Array(0))).toBe("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
     expect(sha256Hex(utf8("abc"))).toBe("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")

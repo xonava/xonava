@@ -15,7 +15,7 @@ const envelope = { format: "framework.event", formatVersion: 1, messageId: "m1",
 const outbox = (): OutboxDeliveryRecord => ({ envelope, scopeId, idempotencyKey: "k1", state: "pending", attempt: 0, claim: null })
 const consumer = defineConsumer({ key: "ledger", definitionVersion: 1, eventType: "order.placed", acceptedPayloadVersions: [1], authority: "event-provenance", retry: { maxAttempts: 2, delayMs: () => 100 }, transaction: { mode: "required" } })
 
-describe("delivery claims enforce maxAttempts (C5)", () => {
+describe("delivery claims enforce maxAttempts", () => {
   it("dead-letters an expired outbox claim whose attempts are exhausted instead of re-claiming it", () => {
     let record = claimOutboxDelivery(outbox(), { owner: "r", token: "a", leaseMs: 100, now: t0, maxAttempts: 2 })!
     record = claimOutboxDelivery(record, { owner: "r", token: "b", leaseMs: 100, now: at(100), maxAttempts: 2 })!
