@@ -96,7 +96,7 @@ describe("MySQL registry validation messages", () => {
   })
 })
 
-describe("MySQL kill pool resolution", () => {
+describe("MySQL cancellation pool resolution", () => {
   it("treats a null client, a null promise wrapper and a plain object as having no pool", () => {
     expect(providerOf(fake({ client: null }).db).capabilities.transactionTimeouts).toBe(false)
     expect(providerOf(fake({ client: { promise: () => null } }).db).capabilities.transactionTimeouts).toBe(false)

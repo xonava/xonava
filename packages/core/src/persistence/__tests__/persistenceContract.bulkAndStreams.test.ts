@@ -58,7 +58,7 @@ async function rejected(promise: Promise<unknown>): Promise<unknown> {
   throw new Error("expected rejection")
 }
 
-describe("bulk mutation input validation", () => {
+describe("bulk write input validation", () => {
   const item = (id: string, expectedVersion = 1): { id: string; expectedVersion: number } => ({ id, expectedVersion })
 
   it("rejects a non-positive or non-integer maxItems with the exact message", () => {
@@ -91,7 +91,7 @@ describe("bulk mutation input validation", () => {
   })
 })
 
-describe("bulk mutation result validation", () => {
+describe("bulk write result validation", () => {
   const applied = (id: string): BulkMutationItemResult<string> => ({ id, status: "applied", value: `v-${id}` })
   const rejectedItem = (id: string, code: "not-found" | "stale-version" = "not-found"): BulkMutationItemResult<string> => ({ id, status: "rejected", code })
   const result = (mode: "atomic" | "partial", items: BulkMutationItemResult<string>[], appliedCount: number, rejectedCount: number): BulkMutationResult<string> => ({

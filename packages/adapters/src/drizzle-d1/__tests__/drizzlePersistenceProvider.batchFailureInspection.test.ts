@@ -60,7 +60,7 @@ describe("d1 batch failure inspection edge cases", () => {
   })
 })
 
-describe("d1 mutation assertion rows", () => {
+describe("d1 write assertion rows", () => {
   it("require a table that exposes both row-count columns", async () => {
     const expected = new ConfigurationError("mutationAssertionTable must expose expectedAffectedRows and actualAffectedRows columns")
     const noActual = sqliteTable("dx_assertions", { scope: text("scope"), key: text("key"), expectedAffectedRows: integer("expected_affected_rows") })
