@@ -80,7 +80,7 @@ describe("PostgreSQL temporal and enum predicates (native, index-usable)", () =>
     // Declaration order is locked < draft < Active; code-point order is Active < draft < locked.
     const all = await db.select({ id: rows.id, st: rows.st }).from(rows)
     expect(await ids(Predicate.lt("st", "draft"))).toEqual(all.filter((row) => row.st === "Active").map((row) => row.id).sort((a, b) => a - b))
-    // Second review: a deny `st lessThan <literal>` must deny exactly what the record decision denies,
+    // A deny `st lessThan <literal>` must deny exactly what the record decision denies,
     // for a member ("draft": natively only "locked" is below it) and a non-member ("e": only "locked"
     // is not below it by code point).
     for (const literal of ["draft", "e"]) {

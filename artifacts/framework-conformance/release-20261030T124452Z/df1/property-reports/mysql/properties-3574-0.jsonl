@@ -1,3 +1,0 @@
-{"property":"job progress store lifecycle differential (mysql)","seed":771647169,"scale":2,"baseRuns":60,"runs":120,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:23:10.635Z"}
-{"property":"job progress store concurrent reporters (mysql)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:23:24.041Z"}
-{"property":"job progress store sequence race (mysql)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:23:25.695Z"}

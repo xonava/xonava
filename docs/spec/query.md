@@ -18,4 +18,4 @@ Cursor (keyset) pagination sort keys MUST order values exactly as predicates com
 
 Unknown/forbidden fields, operators, sort/projection entries, over-budget plans, invalid consistency, and malformed cursors are validation or authorization failures as appropriate. Unsupported search/consistency is capability failure. Conformance covers normalization, budgets, hostile predicates, field disclosure, stable ties, page gaps/duplicates, both directions, tampering, expiry, and provider equivalence.
 
-Traceability: `packages/core/src/query`; shared/provider pagination and cursor tests; Q1/Q2 certification.
+Traceability: `packages/core/src/query`; shared/provider pagination and cursor tests.

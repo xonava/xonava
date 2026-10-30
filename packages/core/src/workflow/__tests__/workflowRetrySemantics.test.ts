@@ -282,7 +282,7 @@ describe("workflow state machine records", () => {
   })
 })
 
-describe("stalled timed-out steps (C8)", () => {
+describe("stalled timed-out steps", () => {
   const ignoreCancellation = () => new Promise<WorkflowStepResult>(() => undefined)
 
   async function stall(clock: ManualClock, run: Promise<unknown>): Promise<void> {

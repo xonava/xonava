@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "description": "DF1 property baseline: distinct passing properties per differential call site (file::name). Lower or remove an entry only with a reviewed removal; regenerate with npm run verify:framework:df1 -- --update-baseline.",
+  "description": "Differential property baseline: distinct passing properties per differential call site (file::name). Lower or remove an entry only with a reviewed removal; regenerate with node scripts/verification/differentials.mjs --update-baseline.",
   "suites": {
     "core": {
       "packages/core/src/__tests__/differential/abacAuthorization.differential.test.ts::abac capability≡scope ${…}": 4,

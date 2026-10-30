@@ -22,4 +22,4 @@ that these checks do not catch.
 
 Definition/dependency/format/guarantee contradictions are configuration failures before readiness. Runtime capability loss is readiness/dependency failure. Conformance covers duplicates, missing dependencies, cycles, deterministic plans, mutation resistance, capability mismatch, format/guarantee checks, binding, and readiness transitions.
 
-Traceability: `packages/core/src/bootstrap`; compiler lifecycle/readiness tests; F3/A-series and API evidence.
+Traceability: `packages/core/src/bootstrap`; compiler lifecycle/readiness tests and API tests.

@@ -12,7 +12,7 @@
  * - `DIFFERENTIAL_RUN`    runs only that run index (replay one failure).
  * - `DIFFERENTIAL_REPORT_DIR` when set, every property that passes appends one
  *   JSON line (name, base seed, scale, runs) to a per-worker file in that
- *   directory. Release certification (DF1) uses it as evidence; unset, the
+ *   directory. The release check uses it as evidence; unset, the
  *   harness writes nothing.
  */
 

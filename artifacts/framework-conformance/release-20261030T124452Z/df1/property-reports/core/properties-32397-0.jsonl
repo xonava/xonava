@@ -1,7 +1,0 @@
-{"property":"workflow zombie takeover","seed":771647169,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:39.811Z"}
-{"property":"workflow shutdown","seed":771647169,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:40.354Z"}
-{"property":"workflow dispatcher option validation","seed":771647169,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:40.538Z"}
-{"property":"workflow dispatcher claim batch violation","seed":771647169,"scale":5,"baseRuns":60,"runs":300,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:40.582Z"}
-{"property":"workflow dispatcher store faults","seed":771647169,"scale":5,"baseRuns":120,"runs":600,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:40.768Z"}
-{"property":"workflow dispatcher crash recovery","seed":771647169,"scale":5,"baseRuns":80,"runs":400,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:40.980Z"}
-{"property":"workflow lease lifecycle","seed":771647169,"scale":5,"baseRuns":150,"runs":750,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:41.273Z"}

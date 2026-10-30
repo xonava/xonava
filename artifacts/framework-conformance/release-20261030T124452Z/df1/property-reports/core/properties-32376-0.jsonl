@@ -1,2 +1,0 @@
-{"property":"job dispatcher: random interleavings keep fencing, attempt and liveness invariants","seed":771647169,"scale":5,"baseRuns":250,"runs":1250,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:36.965Z"}
-{"property":"job dispatcher: calm single-worker runs match the transition model","seed":771647169,"scale":5,"baseRuns":250,"runs":1250,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:39.416Z"}

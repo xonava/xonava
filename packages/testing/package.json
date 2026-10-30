@@ -1,6 +1,6 @@
 {
   "name": "@xonava/testing",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Conformance contracts and test kit for verifying server framework adapters against persistence, cache, concurrency, and access-policy guarantees.",
   "keywords": [
     "server",
@@ -107,7 +107,7 @@
   "devDependencies": {
     "@types/pg": "8.23.1",
     "@vitest/coverage-v8": "^5.0.5",
-    "@xonava/adapters": "0.2.0",
+    "@xonava/adapters": "0.2.1",
     "drizzle-orm": "0.45.4",
     "miniflare": "4.20260730.0",
     "mysql2": "^3.24.6",
@@ -117,6 +117,6 @@
     "xonava-core-prev": "npm:@xonava/core@0.1.0"
   },
   "dependencies": {
-    "@xonava/core": "0.2.0"
+    "@xonava/core": "0.2.1"
   }
 }

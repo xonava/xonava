@@ -52,7 +52,7 @@ function hasDuplicates(values: readonly string[]): boolean {
   return new Set(values).size !== values.length
 }
 
-describe("F0 foundation spec: execution scope", () => {
+describe("foundation spec: execution scope", () => {
   it("defines exactly the four canonical execution scope kinds", () => {
     expect([...EXECUTION_SCOPE_KINDS]).toEqual(["application", "tenant", "platform", "system"])
   })
@@ -76,7 +76,7 @@ describe("F0 foundation spec: execution scope", () => {
   })
 })
 
-describe("F0 foundation spec: authority lattice", () => {
+describe("foundation spec: authority lattice", () => {
   it("derives tenant authority from platform or system only by explicit delegation", () => {
     const delegated = AUTHORITY_LATTICE_TRANSITIONS.filter(
       (transition) => transition.to === "delegated-tenant",
@@ -121,7 +121,7 @@ describe("F0 foundation spec: authority lattice", () => {
   })
 })
 
-describe("F0 foundation spec: delegation lifecycle", () => {
+describe("foundation spec: delegation lifecycle", () => {
   it("freezes default maximum delegation depth at one", () => {
     expect(DEFAULT_MAX_DELEGATION_DEPTH).toBe(1)
   })
@@ -143,7 +143,7 @@ describe("F0 foundation spec: delegation lifecycle", () => {
   })
 })
 
-describe("F0 foundation spec: guarantee registry", () => {
+describe("foundation spec: guarantee registry", () => {
   it("uses exactly the three certification statuses", () => {
     expect([...GUARANTEE_STATUSES]).toEqual(["proven", "unsupported", "experimental"])
   })
@@ -195,7 +195,7 @@ describe("F0 foundation spec: guarantee registry", () => {
   })
 })
 
-describe("F0 foundation spec: durable formats", () => {
+describe("foundation spec: durable formats", () => {
   it("matches the frozen canonical serialization ceilings exactly", () => {
     expect(CANONICAL_JSON_LIMITS_V1).toEqual({
       maxUtf8Bytes: 16 * 1024 * 1024,
@@ -247,7 +247,7 @@ describe("F0 foundation spec: durable formats", () => {
   })
 })
 
-describe("F0 foundation spec: routes and terminology", () => {
+describe("foundation spec: routes and terminology", () => {
   it("defines exactly authenticated and public route exposures", () => {
     expect([...ROUTE_EXPOSURES]).toEqual(["authenticated", "public"])
   })
@@ -300,7 +300,7 @@ describe("F0 foundation spec: routes and terminology", () => {
   })
 })
 
-describe("F0 foundation spec: sequencing and export policy", () => {
+describe("foundation spec: sequencing and export policy", () => {
   it("freezes authorization before attenuated preparation and execution", () => {
     expect([...AUTHORIZATION_SEQUENCE]).toEqual([
       "normalize-principal",

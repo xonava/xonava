@@ -1,6 +1,0 @@
-{"property":"idempotency store lifecycle differential (postgres)","seed":771647169,"scale":2,"baseRuns":60,"runs":120,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:16:58.768Z"}
-{"property":"idempotency concurrent fresh acquire (postgres)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:17:01.076Z"}
-{"property":"idempotency concurrent takeover (postgres)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:17:04.155Z"}
-{"property":"idempotency commit/abandon race (postgres)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:17:04.796Z"}
-{"property":"idempotency concurrent complete (postgres)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:17:06.340Z"}
-{"property":"idempotency concurrent claims (postgres)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:17:09.143Z"}

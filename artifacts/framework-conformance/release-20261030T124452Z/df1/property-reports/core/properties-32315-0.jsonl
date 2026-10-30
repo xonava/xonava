@@ -1,2 +1,0 @@
-{"property":"abac digest determinism","seed":771647169,"scale":5,"baseRuns":150,"runs":750,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:15.544Z"}
-{"property":"abac digest tamper","seed":771647169,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:20.830Z"}

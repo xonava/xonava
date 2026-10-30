@@ -79,17 +79,6 @@ export type CrudScopeConfig = {
   idempotency?: { required?: boolean }
 }
 
-function getCookieValue(name: string, request: Request): string | null {
-  const header = request.headers.get("cookie")
-  if (!header) return null
-  for (const part of header.split("; ")) {
-    const eqIdx = part.indexOf("=")
-    if (eqIdx === -1) continue
-    if (part.slice(0, eqIdx).trim() === name) return part.slice(eqIdx + 1)
-  }
-  return null
-}
-
 /**
  * The client-sent material behind a validated request. Idempotency identity is
  * derived from this JSON-shaped input, never from schema output, which may hold
@@ -141,10 +130,6 @@ async function fingerprintClientMutation(value: unknown, fingerprint: (value: un
     if (error instanceof CanonicalJsonError || error instanceof IdempotencyPayloadTooLargeError) throw new ValidationError("Request cannot be used with an Idempotency-Key")
     throw error
   }
-}
-
-function resolveSessionRequired(scope: CrudScopeConfig): boolean {
-  return scope.sessionRequired ?? scope.scope !== "public"
 }
 
 function resolveCsrfRequired(scope: CrudScopeConfig): boolean {

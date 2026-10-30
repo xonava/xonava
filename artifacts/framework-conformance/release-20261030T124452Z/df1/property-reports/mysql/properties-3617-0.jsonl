@@ -1,6 +1,0 @@
-{"property":"idempotency store lifecycle differential (mysql)","seed":771647169,"scale":2,"baseRuns":60,"runs":120,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:23:48.789Z"}
-{"property":"idempotency concurrent fresh acquire (mysql)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:23:49.689Z"}
-{"property":"idempotency concurrent takeover (mysql)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:23:51.117Z"}
-{"property":"idempotency commit/abandon race (mysql)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:23:51.606Z"}
-{"property":"idempotency concurrent complete (mysql)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:23:52.717Z"}
-{"property":"idempotency concurrent claims (mysql)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:23:56.782Z"}

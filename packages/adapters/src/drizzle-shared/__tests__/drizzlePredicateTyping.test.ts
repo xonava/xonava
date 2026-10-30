@@ -88,7 +88,7 @@ describe("predicate compiler text semantics apply only to character columns", ()
   })
 
   it("MySQL: compares text through NO PAD utf8mb4_0900_bin (unless verified binary) and DECIMAL numerically", () => {
-    expect(my.sqlToQuery(compileMySql(Predicate.eq("name", "a "), myMap, { mysqlBinaryCollation: true })).sql).toBe("COALESCE(`rows`.`name` = ?, FALSE)")
+    expect(my.sqlToQuery(compileMySql(Predicate.eq("name", "a "), myMap, { mysqlBinaryCollation: true })).sql).toBe("COALESCE(`rows`.`name` = (CONVERT(? USING utf8mb4) COLLATE utf8mb4_0900_bin), FALSE)")
     // utf8mb4_bin is PAD SPACE: 'a' = 'a ' and 'a' > 'a\t' there, unlike code-point order.
     expect(my.sqlToQuery(compileMySql(Predicate.eq("name", "a "), myMap)).sql).toBe("COALESCE((CONVERT(`rows`.`name` USING utf8mb4) COLLATE utf8mb4_0900_bin) = ?, FALSE)")
     // Before: CONVERT(decimal) compared '10.000…' < '9' as strings.
@@ -169,7 +169,7 @@ describe("one comparison model for predicates and sort keys", () => {
   // Regression (review H2): enums sorted natively (declaration order) while keyset predicates
   // compared their text, so cursor pages skipped rows; `st::text = 'x'` also defeated the index.
   it("PostgreSQL enum: native equality (index-usable); ordering and sort keys by code point like core", () => {
-    // Regression (second review, MEDIUM): ordering in declaration order disagreed with core, so an ABAC
+    // Regression: ordering in declaration order disagreed with core, so an ABAC
     // deny `status lessThan "pending"` (enum pending, approved) let SQL return rows core denies.
     const textForm = '(CASE WHEN "temporal_rows"."status" IS NULL THEN NULL ELSE format(\'%s\', "temporal_rows"."status") END COLLATE "C")'
     expect(temporalSql(Predicate.eq("status", "draft"))).toMatchObject({ sql: 'COALESCE("temporal_rows"."status" = $1, FALSE)', params: ["draft"] })
@@ -209,7 +209,7 @@ describe("WHERE clauses stay index-usable", () => {
 })
 
 describe("temporal literals outside the engine's input range never reach the server", () => {
-  // Regression (second review, LOW-MED): valid RFC 3339 literals made PostgreSQL throw
+  // Regression: valid RFC 3339 literals made PostgreSQL throw
   // ("0000-01-01" is out of range in ISO form; offsets beyond ±15:59; "+010000" years).
   it("PostgreSQL: binds instants in its own input form, with BC and five-digit years", () => {
     expect(temporalSql(Predicate.eq("day", "0000-01-01")).params).toEqual(["0001-01-01 BC"])
@@ -284,7 +284,7 @@ describe("temporal literals outside the engine's input range never reach the ser
 })
 
 describe("custom compilers", () => {
-  // Regression (second review, LOW): compileWhere bypassed a subclass's compile().
+  // Regression: compileWhere bypassed a subclass's compile().
   it("compileWhere delegates to an overridden compile", () => {
     class Audited extends DrizzlePredicateCompiler {
       override compile(): ReturnType<DrizzlePredicateCompiler["compile"]> { return sql`audited` }

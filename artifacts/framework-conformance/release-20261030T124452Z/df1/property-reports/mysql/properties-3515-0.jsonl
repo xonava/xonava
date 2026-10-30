@@ -1,4 +1,0 @@
-{"property":"temporal store lifecycle differential (mysql)","seed":771647169,"scale":2,"baseRuns":60,"runs":120,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:21:40.167Z"}
-{"property":"temporal store snapshot equivalence (mysql)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:21:57.041Z"}
-{"property":"temporal store concurrent appends (mysql)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:22:03.609Z"}
-{"property":"temporal store concurrent lifecycle (mysql)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:22:06.052Z"}

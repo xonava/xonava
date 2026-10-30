@@ -7,7 +7,7 @@ const system={scope:"system" as const}
 const systemJob=(overrides:Record<string,unknown>={})=>({jobType:"probe",jobVersion:1,payload:{},executionScope:{kind:"system" as const,systemKey:"probe"},...overrides})
 const pause=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms))
 
-describe("MYSQL1 job store executionHistory modes",()=>{
+describe("job store executionHistory modes",()=>{
   let pool:Pool
   let database:string
   let drop:()=>Promise<void>

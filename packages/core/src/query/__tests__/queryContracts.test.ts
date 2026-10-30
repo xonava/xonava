@@ -24,7 +24,7 @@ const integrity: CursorIntegrityPort = {
 const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 const payload: CursorPayloadV1 = { format: "framework.cursor", version: 1, direction: "after", values: ["2026-01-01", "id-1"], routeHash: hash("route"), queryHash: hash("query"), scopeHash: hash("tenant-a"), sortHash: hash("createdAt:asc,id:asc") }
 
-describe("Q1 query contracts", () => {
+describe("query contracts", () => {
   it("enforces semantic budgets independent of transport", () => {
     expect(() => validateQueryPlan({ filter: Predicate.or(Predicate.eq("a", 1), Predicate.eq("a", 2)) }, { maxPredicateDepth: 2, maxPredicateNodes: 5, maxOrBranches: 1, maxInValues: 2, maxSortFields: 1, maxProjectionFields: 1, maxSearchBytes: 2 })).toThrow(/OR branches/)
     expect(() => validateQueryPlan({ filter: Predicate.in("id", [1, 2, 3]) }, { maxPredicateDepth: 2, maxPredicateNodes: 5, maxOrBranches: 2, maxInValues: 2, maxSortFields: 1, maxProjectionFields: 1, maxSearchBytes: 2 })).toThrow(/IN values/)
@@ -39,7 +39,7 @@ describe("Q1 query contracts", () => {
   })
 })
 
-describe("Q2 cursor contracts", () => {
+describe("cursor contracts", () => {
   it("round trips an integrity-protected canonical cursor", async () => {
     const encoded = await encodeCursor(payload, integrity)
     expect(await decodeCursor(encoded, integrity)).toEqual(payload)

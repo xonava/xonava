@@ -3,7 +3,7 @@ import {checkRateLimit,type AtomicRateLimitStore} from "../../rate-limit"
 import {encodeQuotaSubject,validateQuotaRequest} from "../../quota"
 import {validateResiliencePolicy} from "../../resilience"
 
-describe("G1 contracts",()=>{
+describe("rate-limit and resilience contracts",()=>{
   it("uses declared algorithms and weighted costs",async()=>{
     const consumeAtomically=vi.fn(async()=>({count:3,resetAt:1000}))
     const store:AtomicRateLimitStore={capabilities:{algorithms:["fixed-window","token-bucket"],weightedCost:true},increment:async()=>({count:1,resetAt:1000}),incrementAtomically:async()=>({count:1,resetAt:1000}),consumeAtomically}

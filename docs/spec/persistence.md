@@ -18,4 +18,4 @@ Invalid plans/inputs are validation failures; stale versions are conflicts; unav
 
 Providers MUST pass contract, integration, scope isolation, transaction rollback, OCC/race, and crash/replay suites applicable to every claimed capability.
 
-Traceability: `packages/core/src/persistence`; `packages/adapters/src/drizzle-*`; TX1/D1/B1/V1/MYSQL1.
+Traceability: `packages/core/src/persistence`; `packages/adapters/src/drizzle-*`.

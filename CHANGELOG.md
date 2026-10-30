@@ -7,6 +7,13 @@ All notable changes to this project are documented in this file. The format foll
 The project is experimental. See [docs/KNOWN-LIMITATIONS.md](docs/KNOWN-LIMITATIONS.md) for known
 limitations and deployment requirements.
 
+## [0.2.1] — 2026-10-30
+
+### Patch changes
+
+- Fix MySQL scope parity for negated equality. With `mysqlBinaryCollation: true`, MySQL could return rows an ABAC read scope should exclude, for scopes combining negations and case-differing equality (for example `NOT owner = 'U1' OR (owner = 'U1' AND NOT owner <> 'u1')`), because its equality propagation compared the literals case-insensitively under the connection collation; text literals now carry `utf8mb4_0900_bin` explicitly.
+- Removes unused internal code from `@xonava/adapters` (two helpers in the HTTP write handler and a write-only map in the in-memory cache adapter). No behaviour change.
+
 ## [0.2.0] — 2026-10-30
 
 ### Minor changes

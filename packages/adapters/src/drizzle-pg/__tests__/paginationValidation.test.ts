@@ -100,7 +100,7 @@ describe("PostgreSQL pagination boundaries", () => {
   })
 
   it("accepts a plain predicate compiler that only implements compile", async () => {
-    // Regression (second review, LOW): repositories required compileWhere.
+    // Regression: repositories required compileWhere.
     const compile = vi.fn(() => sql`1 = 1`)
     const repository = createDrizzleRepository({ db: session(), table, entity, columnMap, predicateCompiler: { compile } })
     await repository.findMany({ filter: Predicate.eq("name", "x") })

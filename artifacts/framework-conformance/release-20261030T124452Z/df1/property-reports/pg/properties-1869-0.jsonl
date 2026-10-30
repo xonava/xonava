@@ -1,3 +1,0 @@
-{"property":"sequence store lifecycle differential (postgres)","seed":771647169,"scale":2,"baseRuns":60,"runs":120,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:18:12.940Z"}
-{"property":"sequence store concurrent allocation (postgres)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:18:14.520Z"}
-{"property":"sequence store concurrent transactions (postgres)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:18:15.852Z"}

@@ -22,7 +22,7 @@ npm install
 | `npm run lint` | Lints every workspace with zero warnings allowed |
 | `npm test` | Runs the unit suites of every workspace. It needs no database. |
 | `npm run test:coverage -w @xonava/core` | Runs core unit tests with coverage thresholds |
-| `npm run test:mutation` | Stryker mutation testing of core and adapters. Enforcing: exits non-zero below the gate (core 80 %, adapters 70 %). Expected to fail until the per-module mutation work lands, so it is not part of `npm test` or any verify script |
+| `npm run test:mutation` | Stryker mutation testing of core and adapters. Enforcing: exits non-zero below the gate (core 80 %, adapters 70 %). It is not part of `npm test` or any verify script |
 | `npm run verify:docs` | Checks documentation links, public import paths, and canonical references |
 | `npm run bench` | Runs the hot-path benchmarks and fails when one is more than 25 % slower than `benchmarks/baseline.json`. Not part of `npm test`. |
 
@@ -48,32 +48,32 @@ PostgreSQL reads `FRAMEWORK_TEST_PG_URL`, falling back to `DATABASE_URL`:
 
 ```sh
 export FRAMEWORK_TEST_PG_URL=postgres://user:password@localhost:5432/framework_test
-npm run test:framework:integration:pg
-npm run test:framework:upgrade:pg
-npm run test:framework:conformance:pg
-npm run test:framework:race:pg
-npm run test:framework:crash:pg
+npm run test:integration:pg
+npm run test:upgrade:pg
+npm run test:conformance:pg
+npm run test:race:pg
+npm run test:crash:pg
 ```
 
 MySQL reads `FRAMEWORK_TEST_MYSQL_URL`. The fixture creates the database named in the URL if it does not exist:
 
 ```sh
 export FRAMEWORK_TEST_MYSQL_URL=mysql://user:password@localhost:3306/framework_test
-npm run test:framework:integration:mysql
-npm run test:framework:upgrade:mysql
-npm run test:framework:conformance:mysql
-npm run test:framework:race:mysql
-npm run test:framework:crash:mysql
+npm run test:integration:mysql
+npm run test:upgrade:mysql
+npm run test:conformance:mysql
+npm run test:race:mysql
+npm run test:crash:mysql
 ```
 
 Cloudflare D1 runs locally with Miniflare and needs no URL:
 
 ```sh
-npm run test:framework:integration:d1
-npm run test:framework:upgrade:d1
-npm run test:framework:conformance:d1
-npm run test:framework:race:d1
-npm run test:framework:crash:d1
+npm run test:integration:d1
+npm run test:upgrade:d1
+npm run test:conformance:d1
+npm run test:race:d1
+npm run test:crash:d1
 ```
 
 ## Soak testing
@@ -102,15 +102,15 @@ Any violation fails the run. Evidence is written to `artifacts/framework-conform
 | `SOAK_JOB_INTERVAL_MIN_MS`, `SOAK_JOB_INTERVAL_MAX_MS` | `300`, `1300` | Gap between enqueued jobs (about 1.2 jobs/s). |
 | `SOAK_DRAIN_TIMEOUT_MS` | `180000` | How long the drain may take before the run fails. |
 
-The defaults are chosen so the workers keep up with the producer on a shared four-core machine (the not-terminal backlog stays in the single digits to low tens); a drain that times out with pending jobs means the load was too high for the machine, so the run fails and the evidence records the backlog samples and the stuck jobs' lease rows. The heavier settings (`SOAK_SLOW_FACTOR=2.5`, a 100-700 ms job interval, about 2.5 jobs/s, with many jobs dead-lettered by timeout) were also run on D1 for 3 and for 30 minutes and drained in under two seconds with no violation, so the defaults are a choice of load and not a workaround for a stall. Unit tests in `packages/testing/tests/soakInvariants.test.ts` prove that every invariant checker reports a synthetic violation.
+The defaults are chosen so the workers keep up with the producer on a shared four-core machine (the not-terminal backlog stays in the single digits to low tens); a drain that times out with pending jobs means the load was too high for the machine, so the run fails and the evidence records the backlog samples and the stuck jobs' lease rows. Unit tests in `packages/testing/tests/soakInvariants.test.ts` prove that every invariant checker reports a synthetic violation.
 
-The soak is a `1.0.0` quality gate (see TODO.md). It is an optional step of `npm run verify:framework-release`: set `FRAMEWORK_RELEASE_SOAK=1` to run the full 30-minute soak on all three databases (about 1.5 hours) before the certification manifest is built; without it the release prints that the soak was skipped.
+The soak is a quality gate for `1.0.0`. It is an optional step of `npm run verify:release`: set `FRAMEWORK_RELEASE_SOAK=1` to run the full 30-minute soak on all three databases (about 1.5 hours) before the release summary is written; without it the release prints that the soak was skipped.
 
 ## Release gate
 
-`npm run verify:framework-release` is the full release gate. Maintainers run it before a release. It requires both `FRAMEWORK_TEST_PG_URL` and `FRAMEWORK_TEST_MYSQL_URL`. It runs the baseline checks, the suites for all three database providers (including the N-1 upgrade compatibility suite), the differential suites at release volume, and the crash suites with 20 repetitions. It takes a long time and should run against dedicated databases.
+`npm run verify:release` is the full release check. Maintainers run it before a release. It requires both `FRAMEWORK_TEST_PG_URL` and `FRAMEWORK_TEST_MYSQL_URL`. It runs the fast checks (`npm run verify`), the suites for all three database providers (including the N-1 upgrade compatibility suite), the differential suites at release volume, and the crash suites with 20 repetitions. It takes a long time and should run against dedicated databases.
 
-It writes evidence under `artifacts/framework-conformance/`. That directory is tracked governance output; see [artifact retention](docs/governance.md#certification-artifact-retention).
+It writes a summary to `.release-check/<run-id>/` and the suites' raw records to `artifacts/framework-conformance/<run-id>/`. Both are git-ignored; keep them with the release (see [release evidence](docs/governance.md#release-evidence)).
 
 ## Branches
 
@@ -135,7 +135,6 @@ Branch protection:
 
 ## Pull requests
 
-- Planned work is tracked only in [TODO.md](TODO.md). Remove an item in the pull request that completes it, and add new work there rather than in other documents.
 - Target `dev`, not `main`. Only `dev` merges into `main`.
 - Public behavior changes need tests and applicable conformance coverage.
 - Normative behavior belongs in [`docs/spec`](docs/spec/README.md), not only in code comments.
@@ -176,7 +175,7 @@ users run today:
 1. After `npm run release:version`, set both aliases in `packages/testing/package.json` to the previous version
    (`npm:@xonava/core@<previous>` and `npm:@xonava/adapters@<previous>`).
 2. Run `npm install` to update `package-lock.json`, and check that `npm ci` still works.
-3. Run the upgrade suites (`npm run test:framework:upgrade:d1`, `:pg`, `:mysql`). Where a format changed on purpose
+3. Run the upgrade suites (`npm run test:upgrade:d1`, `:pg`, `:mysql`). Where a format changed on purpose
    since that release, the suite asserts the documented behaviour (see
    [known limitations](docs/KNOWN-LIMITATIONS.md#rolling-deployment-order)); update those assertions together with the changeset that
    introduced the change, never by loosening a test.

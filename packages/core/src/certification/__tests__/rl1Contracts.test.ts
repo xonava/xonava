@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { Predicate } from "../../domain"
 import { compileRuleSet, evaluateRuleSet } from "../../rules"
 
-describe("RL1 rule-engine contracts", () => {
+describe("rule-engine contracts", () => {
   it("is deterministic for the same compiled definition, facts, and trusted time", () => {
     const compiled = compileRuleSet({ key: "eligibility", version: 2, conflictResolution: { kind: "all-matches" }, rules: [
       { key: "adult", version: 1, priority: 1, when: Predicate.gte("age", 18), actions: [{ type: "eligible" }] },

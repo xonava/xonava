@@ -368,15 +368,14 @@ describe("defect 2: KV short TTLs", () => {
 })
 
 describe("defect 3: bounded growth", () => {
-  it("in-memory: delete prunes revisions and tag memberships", async () => {
+  it("in-memory: delete prunes tag memberships", async () => {
     const cache = new InMemoryCacheAdapter()
     for (let i = 0; i < 100; i++) {
       await cache.set(`k${i}`, i)
       await cache.addToTag("t", `k${i}`)
     }
     for (let i = 0; i < 100; i++) await cache.delete(`k${i}`)
-    const internals = cache as unknown as { revisions: Map<string, number>; tags: Map<string, Map<string, number>> }
-    expect(internals.revisions.size).toBe(0)
+    const internals = cache as unknown as { tags: Map<string, Map<string, number>> }
     expect(await cache.getTagKeys("t")).toEqual([])
     expect(internals.tags.size).toBe(0)
   })
@@ -390,9 +389,8 @@ describe("defect 3: bounded growth", () => {
     }
     vi.setSystemTime(2_000)
     for (let i = 0; i < 200; i++) await cache.get("other")
-    const internals = cache as unknown as { values: Map<string, unknown>; revisions: Map<string, number> }
+    const internals = cache as unknown as { values: Map<string, unknown> }
     expect(internals.values.size).toBe(0)
-    expect(internals.revisions.size).toBe(0)
     expect(await cache.getTagKeys("t")).toEqual([])
   })
 

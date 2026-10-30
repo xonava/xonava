@@ -8,9 +8,9 @@ Attempt counting, delay calculation, jitter source, eligible error categories, a
 
 ## Errors and conformance
 
-Invalid core policy values fail validation. G1 core conformance covers bounds, idempotency guards, and defensive immutable policy snapshots. Execution semantics—including eligible errors, exhaustion, deadline/cancellation, circuit races, fallback restrictions, and telemetry safety—MUST be certified by each provider that claims to execute those policies; G1 alone does not make that provider-level claim.
+Invalid core policy values fail validation. Core conformance covers bounds, idempotency guards, and defensive immutable policy snapshots. Execution semantics—including eligible errors, exhaustion, deadline/cancellation, circuit races, fallback restrictions, and telemetry safety—MUST be certified by each provider that claims to execute those policies; core conformance alone does not make that provider-level claim.
 
-Traceability: `packages/core/src/resilience`; G1 resilience certification coverage.
+Traceability: `packages/core/src/resilience`.
 
 ## Executable primitives (normative behaviour)
 

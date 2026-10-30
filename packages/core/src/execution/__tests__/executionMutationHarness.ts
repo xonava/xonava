@@ -4,7 +4,7 @@ import { createJobRegistry, type JobPayloadUpcaster, type JobRegistry } from "..
 import type { TelemetryEvent, TelemetryPort } from "../../telemetry/telemetry"
 import type { ExecutionClock, JobDefinition, JobStore, JobTransitionResult, StoredJob } from "../types"
 
-/** Shared fixtures for the execution mutation-kill suites (not a test file). */
+/** Shared fixtures for the execution test suites (not a test file). */
 
 export const NOW = new Date("2026-03-10T12:00:00.000Z")
 

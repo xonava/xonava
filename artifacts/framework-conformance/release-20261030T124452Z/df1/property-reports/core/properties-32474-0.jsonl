@@ -1,4 +1,0 @@
-{"property":"workflow defineWorkflow validity","seed":771647169,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:44.311Z"}
-{"property":"workflow definition isolation","seed":771647169,"scale":5,"baseRuns":60,"runs":300,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:44.336Z"}
-{"property":"workflow registry decode","seed":771647169,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:44.518Z"}
-{"property":"workflow registry duplicates","seed":771647169,"scale":5,"baseRuns":60,"runs":300,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:44.537Z"}

@@ -1,6 +1,0 @@
-{"property":"abac deny monotone random deny","seed":771647169,"scale":5,"baseRuns":250,"runs":1250,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:12:28.007Z"}
-{"property":"abac deny monotone conditional deny into tied tiers","seed":771647169,"scale":5,"baseRuns":250,"runs":1250,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:12:33.217Z"}
-{"property":"abac deny monotone deny with field access","seed":771647169,"scale":5,"baseRuns":250,"runs":1250,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:12:37.669Z"}
-{"property":"abac deny monotone deny at the top tier","seed":771647169,"scale":5,"baseRuns":250,"runs":1250,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:12:42.015Z"}
-{"property":"abac lowest allow monotone","seed":771647169,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:12:46.841Z"}
-{"property":"abac lowest allow with field access monotone","seed":771647169,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:12:50.863Z"}

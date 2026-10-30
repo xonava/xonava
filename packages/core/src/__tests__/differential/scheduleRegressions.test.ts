@@ -235,7 +235,7 @@ describe("schedule regressions", () => {
     })
   })
 
-  describe("overlap skip uses the live status of an occurrence's existing job (DF1 seed 2304085779 run 107)", () => {
+  describe("overlap skip uses the live status of an occurrence's existing job (seed 2304085779 run 107)", () => {
     // A committed-but-thrown enqueue leaves occurrence 0's job behind; the schedule keeps its nextRunAt. When that job later
     // fails (a terminal, non-busy status) the retry must count it as occurrence 0's run and go on to enqueue the rest of the
     // backlog. The idempotency lookup of the harness' job store used to keep reporting the stale "pending" status, which made
@@ -278,7 +278,7 @@ describe("schedule regressions", () => {
     )
   })
 
-  describe("repeated failures back off for up to the default maximum before the schedule is claimable again (DF1 seed 202 run 59)", () => {
+  describe("repeated failures back off for up to the default maximum before the schedule is claimable again (seed 202 run 59)", () => {
     it("holds a schedule that failed twice, 12 h apart, for 15 minutes, then materializes its whole backlog", async () => {
       const MINUTE = 60_000
       const start = Date.UTC(2026, 7, 1, 10, 20)

@@ -8,7 +8,7 @@ const provenance={format:"framework.authority-provenance",formatVersion:1} as ne
 const inboxKey:InboxKey={consumerKey:"ledger",messageId:"mysql-inbox",scopeId}
 const inboxRecord:InboxRecord={...inboxKey,consumerDefinitionVersion:1,state:"pending",attempt:0,replayGeneration:0,claim:null,firstObservedAt:"",lastObservedAt:"",eventFormatVersion:1,eventPayloadVersion:1,originalProvenance:provenance,replay:{kind:"original-delivery"},history:[]}
 
-describe("MYSQL1 durable delivery and lease state machines",()=>{
+describe("durable delivery and lease state machines",()=>{
   it("serializes inbox claims, fences expired owners, and persists acknowledgement",async()=>{
     const {pool}=await openMySqlFixture()
     try{

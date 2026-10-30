@@ -1,6 +1,6 @@
 # Known limitations
 
-> **Project status: experimental.** Xonava is in its `0.x` series. Public APIs, persistence schemas,
+> **Experimental.** Xonava is in its `0.x` series. Public APIs, persistence schemas,
 > and wire formats may change in any minor release before `1.0.0`. Read this page before adopting the release or planning an upgrade. Behaviour changes
 > are listed in the [changelog](../CHANGELOG.md).
 
@@ -17,7 +17,7 @@ SQLite). It does not certify:
 - external advisories that were not assessed offline.
 
 A green unit or interface suite is not evidence of provider behaviour. See the
-[certification guide](guides/certification.md).
+[release checks guide](guides/release-checks.md).
 
 ## Deployment requirements
 
@@ -25,7 +25,7 @@ A green unit or interface suite is not evidence of provider behaviour. See the
 
 The reference schema ships in the package as `@xonava/adapters/migrations/<postgres|mysql|d1>/` (files in
 `node_modules/@xonava/adapters/migrations/`), copies of the fixture migrations (MySQL `0001` without the fixture's `DROP TABLE` resets) under
-`packages/testing/fixtures/<database>/migrations/` (`npm run verify:framework:fixtures` enforces this). The table, schema and
+`packages/testing/fixtures/<database>/migrations/` (`npm run verify:fixtures` enforces this). The table, schema and
 column names in them are fixture defaults that the store factories let you change; rename them in the files you apply, or
 port the migrations to your own schema. Apply them before you deploy the new adapters. Apply the files in order; the
 adapters README lists which files are safe to re-run (the published MySQL `0001` omits the fixture's table resets and is safe to re-run).
@@ -89,12 +89,12 @@ migration receive a `seq` and stay pending, so a later `wait` for the same name 
 rows written by old nodes have a `NULL` `seq`.
 
 Instances that resumed before the migration have no `resume_signal_id`. They fall back to the latest
-receipt by name, which is the previous behaviour.
+receipt by name.
 
 During a rolling deploy, expect these transitional effects:
 
 - **Platform and system keys.** Apply `0005_job_scope_key.sql` before deploying; old code ignores the
-  nullable column, so migrating first is safe. Rows written before the fix, and default-key rows written by
+  nullable column, so migrating first is safe. Rows written before `0005` was applied, and default-key rows written by
   new workers, have `scope_key = NULL` and decode to `default` / `framework` on every version. A job with a
   non-default key written by a new worker is read by an old worker as the default key, so its
   `executionScope` is wrong there (claims, leases and fencing are unaffected, because they never read the
@@ -191,8 +191,7 @@ These differences are intentional. The differential suites accept exactly these 
 
 ## Entities, queries, and idempotency
 
-- **Custom fields with durable codecs** are rejected until persistence applies the codecs on write and
-  read.
+- **Custom fields with durable codecs** are rejected. Persistence does not apply the codecs on write or read.
 - **List cursors** do not expire unless the list handler sets the opt-in `cursorTtlMs`.
 - **Tenant idempotency scopes** have two encodings, `fscope:v1:` and `tenant:N:`. Both are recognised.
 - **Legacy fingerprints.** Stored job fingerprints of versions 4 and 3 are still recognised through
@@ -210,8 +209,8 @@ These differences are intentional. The differential suites accept exactly these 
   failure count.
 - **Job checkpoints and U+0000.** A job checkpoint whose strings or keys contain U+0000 is refused with a
   `ConfigurationError` on every database, because PostgreSQL `jsonb` cannot store it. Unlike failure text, a
-  checkpoint is not replaced, so the resumed state is never silently altered. Checkpoints MySQL or D1 stored
-  before this rule still read back, so their jobs resume; only new writes are refused.
+  checkpoint is not replaced, so the resumed state is never silently altered. Checkpoints that MySQL or D1 stored
+  with U+0000 still read back, so their jobs resume; only new writes are refused.
 - **Unknown job definitions** are held for at most `unknownDefinitionMaxDeferralMs` (24 hours by default)
   from their first deferral, then dead-lettered.
 
@@ -232,8 +231,3 @@ These differences are intentional. The differential suites accept exactly these 
 ## Tooling
 
 - **npm 10 crash on the Vitest peer.** npm 10.9 can crash with `Cannot read properties of null (reading 'edgesOut')` while it resolves the `vitest` 4 peer of `@xonava/testing`. `--legacy-peer-deps` avoids the crash, but it also skips the peer, so install `vitest` explicitly.
-
-## Not implemented
-
-Planned work, including features that are not implemented yet, is tracked only in the
-[plan](../TODO.md).
