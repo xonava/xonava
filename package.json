@@ -94,14 +94,14 @@
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.1",
-    "@stryker-mutator/core": "^10.0.0",
-    "@stryker-mutator/vitest-runner": "^10.0.0",
-    "@types/node": "^24.3.1",
-    "@typescript-eslint/eslint-plugin": "^8.43.0",
-    "@typescript-eslint/parser": "^8.43.0",
+    "@stryker-mutator/core": "^10.1.1",
+    "@stryker-mutator/vitest-runner": "^10.1.1",
+    "@types/node": "^24.19.2",
+    "@typescript-eslint/eslint-plugin": "^8.72.1",
+    "@typescript-eslint/parser": "^8.72.1",
     "esbuild": "0.28.2",
     "eslint": "^9.35.0",
     "typescript": "^5.9.2",
-    "vitest": "^4.0.0"
+    "vitest": "^4.1.12"
   }
 }
