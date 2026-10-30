@@ -7,6 +7,12 @@ All notable changes to this project are documented in this file. The format foll
 The project is experimental. See [docs/KNOWN-LIMITATIONS.md](docs/KNOWN-LIMITATIONS.md) for known
 limitations and deployment requirements.
 
+## [0.2.1] — 2026-10-30
+
+### Patch changes
+
+- Removes unused internal code from `@xonava/adapters` (two helpers in the HTTP write handler and a write-only map in the in-memory cache adapter). No behaviour change.
+
 ## [0.2.0] — 2026-10-30
 
 ### Minor changes
