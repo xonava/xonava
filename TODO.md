@@ -144,6 +144,11 @@ when the wave closes.
 
 ## Wave 3: hardening and decisions
 
+### TypeScript 7 (blocked upstream)
+
+- [ ] Move `typescript` from `~6.0.3` to 7 once `@typescript-eslint/*` supports it (8.72.1 declares
+  `typescript >=4.8.4 <6.1.0`). `@types/node` stays on the 24 line while `engines` is `node >=22`.
+
 ## Deferred
 
 Work the maintainer has postponed. It is not part of the current waves or the `1.0.0` gate until moved
