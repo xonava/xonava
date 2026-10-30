@@ -1,0 +1,6 @@
+{"property":"real-database predicate parity (MySQL utf8mb4_0900_ai_ci)","seed":771647169,"scale":2,"baseRuns":3000,"runs":6000,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:20:49.249Z"}
+{"property":"real-database ABAC scope parity (MySQL utf8mb4_0900_ai_ci)","seed":771647169,"scale":2,"baseRuns":600,"runs":1200,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:20:57.984Z"}
+{"property":"real-database predicate parity (MySQL utf8mb4_0900_bin (direct))","seed":771647169,"scale":2,"baseRuns":3000,"runs":6000,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:21:03.734Z"}
+{"property":"real-database ABAC scope parity (MySQL utf8mb4_0900_bin (direct))","seed":771647169,"scale":2,"baseRuns":600,"runs":1200,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:21:11.988Z"}
+{"property":"real-database predicate parity (MySQL utf8mb4_bin)","seed":771647169,"scale":2,"baseRuns":3000,"runs":6000,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:21:18.097Z"}
+{"property":"real-database ABAC scope parity (MySQL utf8mb4_bin)","seed":771647169,"scale":2,"baseRuns":600,"runs":1200,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:21:26.223Z"}

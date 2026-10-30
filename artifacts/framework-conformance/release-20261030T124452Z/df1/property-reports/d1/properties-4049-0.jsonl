@@ -1,0 +1,2 @@
+{"property":"real-database predicate parity (SQLite/D1)","seed":771647169,"scale":2,"baseRuns":700,"runs":1400,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:32:31.496Z"}
+{"property":"real-database ABAC scope parity (SQLite/D1)","seed":771647169,"scale":2,"baseRuns":300,"runs":600,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:32:46.985Z"}

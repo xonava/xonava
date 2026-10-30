@@ -1,0 +1,2 @@
+{"property":"workflow store differential lifecycle (postgres)","seed":771647169,"scale":2,"baseRuns":60,"runs":120,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:16:08.720Z"}
+{"property":"workflow store differential concurrent dispatch (postgres)","seed":771647169,"scale":2,"baseRuns":100,"runs":200,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:16:25.844Z"}

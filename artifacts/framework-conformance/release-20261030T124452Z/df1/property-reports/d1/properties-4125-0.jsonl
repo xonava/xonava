@@ -1,0 +1,2 @@
+{"property":"sequence store lifecycle differential (d1)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:33:22.001Z"}
+{"property":"sequence store concurrent allocation (d1)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:33:28.869Z"}

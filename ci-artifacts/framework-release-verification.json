@@ -1,8 +1,8 @@
 {
   "schema": "framework.release-evidence",
   "schemaVersion": 2,
-  "generatedAt": "2026-10-16T08:44:15.929Z",
-  "frameworkVersion": "0.1.0",
+  "generatedAt": "2026-10-30T12:44:53.408Z",
+  "frameworkVersion": "0.2.0",
   "versionPolicy": {
     "schema": "framework.version-policy",
     "schemaVersion": 2,
@@ -16,19 +16,19 @@
   "applicationPackageVersionsConsidered": false,
   "sourceRevision": {
     "kind": "git",
-    "value": "5702246b7a1b06305748d9e015973192573bb35c"
+    "value": "2c4bc911fdc1183ddbfe44f55d07c90b0b760245"
   },
   "lockfile": {
     "path": "package-lock.json",
-    "sha256": "c82f98cf1657efec1dfa1accd73e03612222fdd79ccfd3e917e1e8154f55e86d"
+    "sha256": "44fdf8dfbca6d272520ded73e4616dda76ee701d88263c52959b6091343cadc6"
   },
   "publicApi": {
-    "manifest": "docs\\governance\\public-api-manifest.json",
-    "sha256": "6e3b1c9f8d1ef78f81a9708bc83f1c2b497f1630c92fc51402d01ad7041caf48",
+    "manifest": "docs/governance/public-api-manifest.json",
+    "sha256": "6e4f3b81658335494654ff8704715c2efc31f8a12ebc6af4667bbfbd170e990b",
     "packages": [
       {
         "name": "@xonava/core",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "exports": [
           ".",
           "./aggregate",
@@ -63,7 +63,7 @@
       },
       {
         "name": "@xonava/adapters",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "exports": [
           ".",
           "./cache",
@@ -80,12 +80,13 @@
       },
       {
         "name": "@xonava/testing",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "exports": [
           ".",
           "./abac",
           "./contracts/atomic-batch",
           "./contracts/cache-adapter",
+          "./contracts/object-store",
           "./contracts/persistence-provider",
           "./contracts/shared-conformance",
           "./predicates",

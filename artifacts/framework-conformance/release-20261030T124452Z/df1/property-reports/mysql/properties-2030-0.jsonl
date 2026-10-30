@@ -1,0 +1,2 @@
+{"property":"workflow store differential lifecycle (mysql)","seed":771647169,"scale":2,"baseRuns":60,"runs":120,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:20:17.397Z"}
+{"property":"workflow store differential concurrent dispatch (mysql)","seed":771647169,"scale":2,"baseRuns":100,"runs":200,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:20:42.272Z"}

@@ -1,6 +1,6 @@
 {
   "name": "@xonava/core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Zero-dependency core of the server framework: runtime-neutral semantics and contracts for entities, operations, persistence, events, workflows, and access policy.",
   "keywords": [
     "server",

@@ -1,0 +1,4 @@
+{"property":"delivery store differential (mysql)","seed":771647169,"scale":2,"baseRuns":60,"runs":120,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:22:58.749Z"}
+{"property":"delivery claim race (mysql)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:23:01.729Z"}
+{"property":"delivery finish race (mysql)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:23:03.844Z"}
+{"property":"delivery creation race (mysql)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:23:05.433Z"}

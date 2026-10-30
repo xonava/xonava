@@ -1,0 +1,81 @@
+{
+  "phase": "HT1",
+  "status": "proven",
+  "runId": "release-20261030T124452Z",
+  "scenarios": [
+    {
+      "id": "idempotent-replay",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/adapters/src/http/__tests__/frameworkAdapters.test.ts",
+        "testName": "replays an actual idempotent framework write without executing it"
+      }
+    },
+    {
+      "id": "crud-occ",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/adapters/src/http/__tests__/frameworkAdapters.test.ts",
+        "testName": "executes compiled CRUD create/list/detail/update/delete with tenant scope and OCC"
+      }
+    },
+    {
+      "id": "disconnect-abort",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/adapters/src/http/__tests__/nodeTransport.test.ts",
+        "testName": "aborts the Fetch signal when the client disconnects during a handler"
+      }
+    },
+    {
+      "id": "stream-cancel",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/adapters/src/http/__tests__/nodeTransport.test.ts",
+        "testName": "cancels the Fetch response stream after the client disconnects"
+      }
+    },
+    {
+      "id": "chunked-limit",
+      "status": "passed",
+      "evidence": {
+        "testFile": "packages/adapters/src/http/__tests__/nodeTransport.test.ts",
+        "testName": "enforces body limits for chunked requests without Content-Length"
+      }
+    }
+  ],
+  "sourceManifest": [
+    {
+      "path": "packages/adapters/src/http/frameworkAdapter.ts",
+      "sha256": "1899aa77d5e0863ba7b24950bb000639bcca07b5d0b397cea6b63fdc4acc6334"
+    },
+    {
+      "path": "packages/adapters/src/http/nodeAdapter.ts",
+      "sha256": "03d032c5c0cfcd64c2e5e391711469dd8d819e1cebe77de6002e9484e5cd26c3"
+    },
+    {
+      "path": "packages/adapters/src/fastify/index.ts",
+      "sha256": "b5524cb2dcec86a70d33f325d1af35f37304f75b04ecdf56e15c4f0d92d8404d"
+    },
+    {
+      "path": "packages/adapters/src/hono/index.ts",
+      "sha256": "08a890500dae0343469b85c563e0f89fa30f004d16afc6d69a07caeb29aab826"
+    },
+    {
+      "path": "packages/adapters/src/express/index.ts",
+      "sha256": "07c7009082773878b8150067953d7ae53cd09c2851bf54bc3dd8a365f679c6d0"
+    },
+    {
+      "path": "packages/adapters/src/http/__tests__/frameworkAdapters.test.ts",
+      "sha256": "7db110f87ee50c10377aa5c09cf11c08e2ee83954f8930cd0b7c373c7a835b5f"
+    },
+    {
+      "path": "packages/adapters/src/http/__tests__/nodeTransport.test.ts",
+      "sha256": "1695aff94b081578086a441238a82e9aa6a0d7573f815550d96be1004da57d3f"
+    },
+    {
+      "path": "docs/typescript/http-adapters.md",
+      "sha256": "199b4add878dbbc9a0be624f28b409d736d888ad31bd27473b0877edc7480cd7"
+    }
+  ]
+}

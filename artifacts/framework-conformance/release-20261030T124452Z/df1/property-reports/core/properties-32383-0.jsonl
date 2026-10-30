@@ -1,0 +1,27 @@
+{"property":"root collapse portable predicates, typed records","seed":771647169,"scale":5,"baseRuns":1500,"runs":7500,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:36.078Z"}
+{"property":"root collapse full operator set, typed records","seed":771647169,"scale":5,"baseRuns":1500,"runs":7500,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:36.171Z"}
+{"property":"root collapse full operator set, wild records","seed":771647169,"scale":5,"baseRuns":1500,"runs":7500,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:36.269Z"}
+{"property":"kleene truth tables","seed":771647169,"scale":5,"baseRuns":1500,"runs":7500,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:36.395Z"}
+{"property":"de morgan","seed":771647169,"scale":5,"baseRuns":1500,"runs":7500,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:36.483Z"}
+{"property":"commutative associative idempotent","seed":771647169,"scale":5,"baseRuns":1500,"runs":7500,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:36.602Z"}
+{"property":"absorption distributivity","seed":771647169,"scale":5,"baseRuns":1500,"runs":7500,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:36.711Z"}
+{"property":"simplifier few literals","seed":771647169,"scale":5,"baseRuns":800,"runs":4000,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:36.948Z"}
+{"property":"simplifier literal-heavy","seed":771647169,"scale":5,"baseRuns":800,"runs":4000,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:37.100Z"}
+{"property":"simplifier folds constant trees","seed":771647169,"scale":5,"baseRuns":800,"runs":4000,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:37.138Z"}
+{"property":"missing is null typed records, portable","seed":771647169,"scale":5,"baseRuns":800,"runs":4000,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:37.235Z"}
+{"property":"missing is null typed records, full operator set","seed":771647169,"scale":5,"baseRuns":800,"runs":4000,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:37.313Z"}
+{"property":"missing is null wild records, full operator set","seed":771647169,"scale":5,"baseRuns":800,"runs":4000,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:37.418Z"}
+{"property":"missing is null per operator","seed":771647169,"scale":5,"baseRuns":2000,"runs":10000,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:37.460Z"}
+{"property":"own fields only","seed":771647169,"scale":5,"baseRuns":800,"runs":4000,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:37.507Z"}
+{"property":"between law","seed":771647169,"scale":5,"baseRuns":2500,"runs":12500,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:37.607Z"}
+{"property":"neq law","seed":771647169,"scale":5,"baseRuns":2500,"runs":12500,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:38.060Z"}
+{"property":"in law","seed":771647169,"scale":5,"baseRuns":2500,"runs":12500,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:38.105Z"}
+{"property":"in empty list","seed":771647169,"scale":5,"baseRuns":400,"runs":2000,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:38.108Z"}
+{"property":"order laws","seed":771647169,"scale":5,"baseRuns":2500,"runs":12500,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:38.343Z"}
+{"property":"boolean tests","seed":771647169,"scale":5,"baseRuns":2500,"runs":12500,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:38.386Z"}
+{"property":"incomparable","seed":771647169,"scale":5,"baseRuns":1500,"runs":7500,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:38.397Z"}
+{"property":"text matching","seed":771647169,"scale":5,"baseRuns":2500,"runs":12500,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:38.474Z"}
+{"property":"list order","seed":771647169,"scale":5,"baseRuns":1500,"runs":7500,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:38.511Z"}
+{"property":"includes decomposition","seed":771647169,"scale":5,"baseRuns":1500,"runs":7500,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:38.527Z"}
+{"property":"depth limit is data independent","seed":771647169,"scale":5,"baseRuns":300,"runs":1500,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:38.954Z"}
+{"property":"depth limit admits legal depth","seed":771647169,"scale":5,"baseRuns":100,"runs":500,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:13:38.970Z"}

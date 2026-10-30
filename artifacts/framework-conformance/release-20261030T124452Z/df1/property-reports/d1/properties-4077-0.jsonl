@@ -1,0 +1,4 @@
+{"property":"tag generation store lifecycle differential (d1)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:32:58.709Z"}
+{"property":"tag generation store concurrent invalidation (d1)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:33:05.386Z"}
+{"property":"kv tag generation dual layout differential (d1)","seed":771647169,"scale":2,"baseRuns":60,"runs":120,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:33:05.482Z"}
+{"property":"kv tag generation concurrent invalidation (d1)","seed":771647169,"scale":2,"baseRuns":50,"runs":100,"replayRun":null,"passed":true,"recordedAt":"2026-10-30T13:33:05.525Z"}
