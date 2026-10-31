@@ -1,0 +1,171 @@
+name: Release check
+
+# The parallel form of `npm run verify:release`: one job per database runs that database's share
+# (RELEASE_CHECK_DATABASE), then `summary` runs the release check's final validation over all three shares
+# (RELEASE_CHECK_SUMMARIZE_ONLY). See docs/guides/release-checks.md. Manual only.
+on:
+  workflow_dispatch:
+    inputs:
+      soak:
+        description: Also run the 30-minute soak on every database (adds about 30 minutes to each job)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-check-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # Every share and the summary must use one run ID: the differential seed is derived from it.
+  FRAMEWORK_CONFORMANCE_RUN_ID: release-${{ github.run_id }}-${{ github.run_attempt }}
+
+jobs:
+  d1:
+    name: d1 share (also lint, build, verify, unit tests, core and HTTP differentials)
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      RELEASE_CHECK_DATABASE: d1
+      FRAMEWORK_RELEASE_SOAK: ${{ inputs.soak && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Run the d1 share of the release check
+        run: node scripts/verification/runReleaseCheck.mjs
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-evidence-d1
+          path: |
+            .release-check/${{ env.FRAMEWORK_CONFORMANCE_RUN_ID }}
+            artifacts/framework-conformance/${{ env.FRAMEWORK_CONFORMANCE_RUN_ID }}
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 90
+
+  pg:
+    name: pg share
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: framework
+          POSTGRES_PASSWORD: framework
+          POSTGRES_DB: framework_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U framework -d framework_test_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      RELEASE_CHECK_DATABASE: pg
+      FRAMEWORK_RELEASE_SOAK: ${{ inputs.soak && '1' || '0' }}
+      FRAMEWORK_TEST_PG_URL: postgres://framework:framework@localhost:5432/framework_test_db
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Run the pg share of the release check
+        run: node scripts/verification/runReleaseCheck.mjs
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-evidence-pg
+          path: |
+            .release-check/${{ env.FRAMEWORK_CONFORMANCE_RUN_ID }}
+            artifacts/framework-conformance/${{ env.FRAMEWORK_CONFORMANCE_RUN_ID }}
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 90
+
+  mysql:
+    name: mysql share
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: framework
+          MYSQL_DATABASE: framework_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -pframework"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      RELEASE_CHECK_DATABASE: mysql
+      FRAMEWORK_RELEASE_SOAK: ${{ inputs.soak && '1' || '0' }}
+      FRAMEWORK_TEST_MYSQL_URL: mysql://root:framework@127.0.0.1:3306/framework_test
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Run the mysql share of the release check
+        run: node scripts/verification/runReleaseCheck.mjs
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-evidence-mysql
+          path: |
+            .release-check/${{ env.FRAMEWORK_CONFORMANCE_RUN_ID }}
+            artifacts/framework-conformance/${{ env.FRAMEWORK_CONFORMANCE_RUN_ID }}
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 90
+
+  summary:
+    name: summary
+    needs: [d1, pg, mysql]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Download the evidence of the three shares
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: release-evidence-*
+          merge-multiple: true
+          path: release-evidence
+      - name: Validate the evidence of all three databases
+        env:
+          RELEASE_CHECK_SUMMARIZE_ONLY: release-evidence
+        run: node scripts/verification/runReleaseCheck.mjs
+      - name: Upload the combined summary
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-check-summary
+          path: release-evidence
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 90

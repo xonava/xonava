@@ -13,6 +13,10 @@
  * - FRAMEWORK_DIFFERENTIAL_SCALE       core case multiplier (default 5)
  * - FRAMEWORK_DIFFERENTIAL_DB_SCALE    real-database case multiplier (default 2)
  * - FRAMEWORK_TEST_PG_URL / FRAMEWORK_TEST_MYSQL_URL  real databases (required)
+ * - DIFFERENTIAL_SUITES                comma-separated suite IDs (core, http-fuzz, pg, mysql, d1) to run as one share of a
+ *                                      parallel release check; default all. A share writes
+ *                                      differential-conformance.partial-<ids>.json (not a complete artifact), needs only the
+ *                                      URLs of the databases it runs, and the release check's summary step merges the shares.
  *
  * `--update-baseline` runs every suite, then rewrites differentialBaseline.json
  * from the observed per-site property counts instead of checking. Use it
@@ -26,6 +30,7 @@ import { fileURLToPath } from "node:url"
 import {
   DIFFERENTIAL_ARTIFACT,
   DIFFERENTIAL_BASELINE,
+  DIFFERENTIAL_PARTIAL_PREFIX,
   DIFFERENTIAL_DEFAULT_SCALES,
   DIFFERENTIAL_MINIMUM_SCALES,
   DIFFERENTIAL_PHASE,
@@ -91,8 +96,11 @@ async function main() {
   const releaseDirectory = resolve(repositoryRoot, ".release-check", runId, DIFFERENTIAL_PHASE)
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(runId)) refuse("FRAMEWORK_CONFORMANCE_RUN_ID contains unsafe path characters")
   if (process.env.DIFFERENTIAL_RUN?.trim()) refuse("DIFFERENTIAL_RUN is set; single-case replay mode cannot run in a release check")
-  if (!process.env.FRAMEWORK_TEST_PG_URL?.trim() && !process.env.DATABASE_URL?.trim()) refuse("FRAMEWORK_TEST_PG_URL (or DATABASE_URL) is required for the PostgreSQL parity suite")
-  if (!process.env.FRAMEWORK_TEST_MYSQL_URL?.trim()) refuse("FRAMEWORK_TEST_MYSQL_URL is required for the MySQL parity suite")
+  const selected = process.env.DIFFERENTIAL_SUITES?.trim() ? process.env.DIFFERENTIAL_SUITES.split(",").map(id => id.trim()).filter(Boolean) : undefined
+  if (selected && selected.length === 0) refuse("DIFFERENTIAL_SUITES names no suite")
+  if (selected && process.argv.includes("--update-baseline")) refuse("--update-baseline needs every suite; do not set DIFFERENTIAL_SUITES")
+  if ((!selected || selected.includes("pg")) && !process.env.FRAMEWORK_TEST_PG_URL?.trim() && !process.env.DATABASE_URL?.trim()) refuse("FRAMEWORK_TEST_PG_URL (or DATABASE_URL) is required for the PostgreSQL parity suite")
+  if ((!selected || selected.includes("mysql")) && !process.env.FRAMEWORK_TEST_MYSQL_URL?.trim()) refuse("FRAMEWORK_TEST_MYSQL_URL is required for the MySQL parity suite")
   const updateBaseline = process.argv.includes("--update-baseline")
   const releaseStartedAtText = process.env.FRAMEWORK_RELEASE_STARTED_AT?.trim()
   const releaseStartedAt = releaseStartedAtText ? Date.parse(releaseStartedAtText) : undefined
@@ -117,7 +125,12 @@ async function main() {
   // (Skipped when rewriting the baseline: its fixtures are derived from the baseline being replaced.)
   if (!updateBaseline) execFileSync(process.execPath, ["--test", "--test-reporter=dot", fileURLToPath(new URL("./differentialSupport.test.mjs", import.meta.url))], { cwd: repositoryRoot, stdio: "inherit" })
 
-  const suites = await differentialSuites(repositoryRoot)
+  const allSuites = await differentialSuites(repositoryRoot)
+  if (selected) {
+    const unknown = selected.filter(id => !allSuites.some(suite => suite.id === id))
+    if (unknown.length > 0) refuse(`DIFFERENTIAL_SUITES names unknown suites ${unknown.join(", ")} (known: ${allSuites.map(suite => suite.id).join(", ")})`)
+  }
+  const suites = selected ? allSuites.filter(suite => selected.includes(suite.id)) : allSuites
   const sites = await requiredCallSites(repositoryRoot, suites)
   const baseline = await readDifferentialBaseline(repositoryRoot)
   const sourceManifestBefore = await createDifferentialSourceManifest(repositoryRoot)
@@ -175,6 +188,15 @@ async function main() {
   // run may use a lower volume but its artifact will not satisfy the release check.
   if (!releaseRun && (scales.core < DIFFERENTIAL_MINIMUM_SCALES.core || scales.database < DIFFERENTIAL_MINIMUM_SCALES.database)) {
     console.warn(`differential warning: scale below the release minimum (core ${DIFFERENTIAL_MINIMUM_SCALES.core}, database ${DIFFERENTIAL_MINIMUM_SCALES.database}); the release check will refuse this evidence.`)
+  }
+  if (selected) {
+    // One share of a parallel release check: the complete artifact is merged and validated by the release check's summary step.
+    if (!releaseRun) refuse("DIFFERENTIAL_SUITES is only for a share of a release check")
+    await mkdir(directory, { recursive: true })
+    const partialPath = join(directory, `${DIFFERENTIAL_PARTIAL_PREFIX}${selected.join("+")}.json`)
+    await writeFile(partialPath, `${JSON.stringify(artifact, null, 2)}\n`)
+    console.log(`\ndifferential share verified: ${partialPath} (suites ${selected.join(", ")}; ${artifact.totals.properties} properties, ${artifact.totals.cases} cases, seed ${seed})`)
+    return
   }
   await validateDifferentialArtifact(artifact, { repositoryRoot, runId, startedAt: releaseStartedAt, minimumScales: releaseRun ? DIFFERENTIAL_MINIMUM_SCALES : scales, requireRunIdSeed: releaseRun })
   await mkdir(directory, { recursive: true })

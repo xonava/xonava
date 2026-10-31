@@ -26,9 +26,32 @@ jobs:
       - run: npm run build
       - run: npm run test:coverage --workspaces --if-present
 
-  mutation:
+  # The whole-package runs outgrow GitHub's 6-hour job limit, so each package is mutated in slices (modules grouped in
+  # .github/mutation-slices.json) that run in parallel. The plan job fails if a module of either package is in no slice,
+  # or in two. Slices only measure (XONAVA_MUTATION_BREAK=0); the enforcing gate stays `npm run test:mutation -w <package>`.
+  mutation-plan:
+    name: mutation plan
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+      - id: plan
+        run: node scripts/ci/mutationSlices.mjs --github-output
+
+  mutation:
+    name: mutation (${{ matrix.name }})
+    needs: mutation-plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.mutation-plan.outputs.matrix) }}
     env:
       XONAVA_MUTATION_BREAK: "0"
     steps:
@@ -39,7 +62,20 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: npm run test:mutation
+      - name: Mutate ${{ matrix.name }}
+        working-directory: packages/${{ matrix.package }}
+        env:
+          MUTATE: ${{ matrix.mutate }}
+        run: npx stryker run --mutate "$MUTATE"
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mutation-${{ matrix.name }}
+          path: packages/${{ matrix.package }}/.stryker-tmp/reports/mutation.json
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 30
 
   bench:
     runs-on: ubuntu-latest

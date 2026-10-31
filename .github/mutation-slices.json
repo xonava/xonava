@@ -1,0 +1,14 @@
+{
+  "core": [
+    { "name": "core-domain", "modules": ["domain"] },
+    { "name": "core-operation-execution", "modules": ["operation", "execution"] },
+    { "name": "core-query-serialization-security-entity-events-workflow", "modules": ["query", "serialization", "security", "entity", "events", "workflow"] },
+    { "name": "core-rest", "modules": ["aggregate", "bootstrap", "business-calendar", "cache", "certification", "feature-flags", "health", "index.ts", "kernel", "object-store", "persistence", "quota", "rate-limit", "read-model", "resilience", "rules", "secrets", "sequence", "spec", "storage", "telemetry", "temporal"] }
+  ],
+  "adapters": [
+    { "name": "adapters-http", "modules": ["http"] },
+    { "name": "adapters-drizzle-pg-shared", "modules": ["drizzle-pg", "drizzle-shared"] },
+    { "name": "adapters-drizzle-mysql-d1", "modules": ["drizzle-mysql", "drizzle-d1"] },
+    { "name": "adapters-rest", "modules": ["cache", "express", "fastify", "hono", "index.ts", "repository", "server", "storage"] }
+  ]
+}

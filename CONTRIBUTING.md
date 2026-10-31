@@ -30,6 +30,8 @@ There is no code formatter: ESLint enforces the rules that matter, and adopting 
 
 Mutation testing runs one package at a time (`npm run test:mutation -w @xonava/core`) and mutates in place, so do not run two mutation runs, or edit `src/`, in the same checkout at the same time. To measure one module without enforcing the gate, run `XONAVA_MUTATION_BREAK=0 npm run test:mutation -w @xonava/core -- --mutate "src/query/**/*.ts,!src/**/__tests__/**"`. Results are cached in the gitignored `.stryker-tmp/incremental.json` and the JSON report is `.stryker-tmp/reports/mutation.json`. If a run is killed, `git checkout -- src` removes any leftover mutation.
 
+The nightly workflow does not run the whole-package command (it would outgrow GitHub's 6-hour job limit). It mutates each package in slices, one parallel job per slice, defined in `.github/mutation-slices.json` (core: domain, operation and execution, query/serialization/security/entity/events/workflow, the rest; adapters: http, drizzle-pg, drizzle-mysql and drizzle-d1, the rest) and measures only (`XONAVA_MUTATION_BREAK=0`), uploading each slice's `mutation.json` as an artifact. `node scripts/ci/mutationSlices.mjs` fails if a module under `src/` of either package is in no slice or in two, so add a new module to a slice when you create it.
+
 Tests that depend on elapsed time scale their budgets and vitest timeouts by `XONAVA_TIMING_SCALE` (default 1, 4 under `--coverage`), so run tests on a loaded machine with `XONAVA_TIMING_SCALE=4`.
 
 ## Performance benchmarks
@@ -108,6 +110,8 @@ The soak is a quality gate for `1.0.0`. It is an optional step of `npm run verif
 `npm run verify:release` is the full release check. Maintainers run it before a release. It requires both `FRAMEWORK_TEST_PG_URL` and `FRAMEWORK_TEST_MYSQL_URL`. It runs the fast checks (`npm run verify`), the suites for all three database providers, the differential suites at release volume, and the crash suites with 20 repetitions. It takes a long time and should run against dedicated databases.
 
 It writes a summary to `.release-check/<run-id>/` and the suites' raw records to `artifacts/framework-conformance/<run-id>/`. Both are git-ignored; keep them with the release (see [release evidence](docs/governance.md#release-evidence)).
+
+The manual `Release check` workflow runs the same check as parallel jobs, one per database, followed by a `summary` job that validates all three databases' evidence; see [How releases are checked](docs/guides/release-checks.md#running-the-release-check-in-parallel).
 
 ## Branches
 
