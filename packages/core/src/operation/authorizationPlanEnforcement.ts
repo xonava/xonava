@@ -298,7 +298,10 @@ function constrainRepository<T, TId>(repository: ReturnType<PersistenceProvider[
         : { ...(options ?? {}), filter }
       const result = await (repository as { findMany(options?: QueryOptions): Promise<{ rows: T[]; rowCount?: number; page: number; pageSize: number; pageInfo?: unknown }> }).findMany(constrainedOptions)
       const rows = result.rows.filter((row) => permittedQueriedRecord(row, required, requiredFields))
-      return Object.freeze({ ...result, rows: Object.freeze(rows), ...(result.rowCount === undefined ? {} : { rowCount: rows.length }) })
+      // The required predicate is part of the query, so the repository's total already counts only permitted rows.
+      // If the re-check drops a row the database and core disagree, and the total can no longer be trusted.
+      const { rowCount, ...envelope } = result
+      return Object.freeze({ ...envelope, rows: Object.freeze(rows), ...(rowCount !== undefined && rows.length === result.rows.length ? { rowCount } : {}) })
     },
   }
   if (plan.operationKind === "read") return Object.freeze(read)

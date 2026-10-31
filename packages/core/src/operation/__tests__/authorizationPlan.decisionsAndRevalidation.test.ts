@@ -248,6 +248,15 @@ const mutationPlan = (overrides: Record<string, unknown> = {}) =>
   plan({ operationKind: "mutation", mandatoryResourcePredicate: mandatory, writableFields: new Set(["status", "tenantId"]), ...overrides })
 
 describe("constrained persistence reads", () => {
+  it("passes the repository total through when the re-check keeps every row", async () => {
+    const repository = {
+      findById: vi.fn(), insert: vi.fn(), update: vi.fn(), delete: vi.fn(),
+      findMany: vi.fn(async () => ({ rows: [{ id: "1", tenantId: "tenant-1" }], rowCount: 42, page: 1, pageSize: 1 })),
+    }
+    const result = await constrain(repository, plan({ mandatoryResourcePredicate: mandatory })).findMany({ page: 1 }) as { rowCount?: number }
+    expect(result.rowCount).toBe(42)
+  })
+
   it("omits predicate-bearing read methods the underlying repository does not provide", () => {
     const withoutOneWhere = { findById: vi.fn(), findMany: vi.fn(), insert: vi.fn(), update: vi.fn(), delete: vi.fn() }
     const constrained = constrain(withoutOneWhere, plan())
@@ -301,7 +310,9 @@ describe("constrained persistence reads", () => {
     }
     expect(repository.findMany).toHaveBeenCalledWith({ page: 3, filter: Predicate.and(Predicate.eq("status", "open"), mandatory) })
     expect(result.rows).toEqual([{ id: "1", tenantId: "tenant-1" }, { id: "3" }])
-    expect(result).toMatchObject({ rowCount: 2, page: 3, pageSize: 10 })
+    // The re-check dropped rows, so the repository's total (4) cannot be trusted and is withheld.
+    expect(result).toMatchObject({ page: 3, pageSize: 10 })
+    expect(result).not.toHaveProperty("rowCount")
     expect(Object.isFrozen(result)).toBe(true)
     expect(Object.isFrozen(result.rows)).toBe(true)
   })
