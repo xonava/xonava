@@ -1,13 +1,27 @@
 version: 2
 updates:
+  # Updates go through dev like every other change; main only receives dev.
   - package-ecosystem: npm
     directory: "/"
+    target-branch: dev
     schedule:
       interval: weekly
     groups:
       npm-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      # typescript-eslint supports TypeScript below 6.1 only; move to 7 once it does.
+      - dependency-name: typescript
+        versions: [">=6.1.0"]
+      # The packages support Node >=22, so the Node type definitions stay on a major Node 22 also has.
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
   - package-ecosystem: github-actions
     directory: "/"
+    target-branch: dev
     schedule:
       interval: weekly
+    groups:
+      # One pull request for all actions, so paired actions (CodeQL init/analyze, upload/download-artifact) move together.
+      github-actions:
+        patterns: ["*"]
