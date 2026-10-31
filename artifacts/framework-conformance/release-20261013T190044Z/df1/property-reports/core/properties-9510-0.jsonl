@@ -1,5 +1,0 @@
-{"property":"job fingerprint: digest matches an independent canonical serializer","seed":819824981,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:33:09.398Z"}
-{"property":"job fingerprint: deterministic and key-order independent","seed":819824981,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:33:10.714Z"}
-{"property":"job fingerprint: distinct payloads and fields give distinct fingerprints","seed":819824981,"scale":5,"baseRuns":150,"runs":750,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:33:12.611Z"}
-{"property":"job fingerprint: current and legacy version-4 and version-3 digests match only the same job","seed":819824981,"scale":5,"baseRuns":200,"runs":1000,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:33:22.177Z"}
-{"property":"job fingerprint: omitted maxAttempts is distinct from every explicit number","seed":819824981,"scale":5,"baseRuns":100,"runs":500,"replayRun":null,"passed":true,"recordedAt":"2026-10-13T19:33:23.893Z"}

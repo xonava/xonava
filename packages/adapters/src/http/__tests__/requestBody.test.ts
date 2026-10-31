@@ -2,10 +2,11 @@ import { describe, expect, it, vi } from "vitest"
 import { z } from "zod"
 import { createFrameworkWriteHandler } from "../createFrameworkWriteHandler"
 import { canonicalRequestNormalization } from "./canonicalRequest"
-import { parseJsonBodySafely, parseUniqueQueryParameters, resolveRequestMetadata } from "../requestBody"
+import { RequestBodyNotAcceptedError, UnsupportedMediaTypeError, parseJsonBodySafely, parseUniqueQueryParameters, resolveRequestMetadata } from "../requestBody"
 import type { FrameworkAdapterDeps } from "../../server"
 import type { PersistenceProvider } from "@xonava/core/persistence"
 import { resolveTrustedClientIp } from "../trustedClientIp"
+import { createFrameworkErrorHandler } from "../handleFrameworkCoreError"
 
 const persistence = {} as PersistenceProvider
 
@@ -40,9 +41,44 @@ describe("HTTP request boundary helpers", () => {
       headers: { "content-type": "application/json" },
     })
 
+    await expect(parseJsonBodySafely(request)).rejects.toBeInstanceOf(RequestBodyNotAcceptedError)
     await expect(parseJsonBodySafely(request)).rejects.toMatchObject({
-      code: "UNSUPPORTED_MEDIA_TYPE",
+      code: "BODY_NOT_ACCEPTED",
     })
+    const error: unknown = await parseJsonBodySafely(request).catch((caught: unknown) => caught)
+    const response = createFrameworkErrorHandler()(error)
+    expect(response.status).toBe(415)
+    expect(await response.json()).toEqual({ error: "This operation does not accept a request body", code: "BODY_NOT_ACCEPTED" })
+  })
+
+  it("rejects non-empty text bodies with no body contract as not accepted, not as unsupported media type", async () => {
+    const request = new Request("https://example.test", {
+      method: "DELETE",
+      body: "hello",
+      headers: { "content-type": "text/plain" },
+    })
+
+    await expect(parseJsonBodySafely(request)).rejects.toMatchObject({
+      code: "BODY_NOT_ACCEPTED",
+    })
+  })
+
+  it("returns undefined for an empty body with no body contract", async () => {
+    const request = new Request("https://example.test", { method: "DELETE", headers: { "content-type": "text/plain" } })
+
+    await expect(parseJsonBodySafely(request)).resolves.toBeUndefined()
+  })
+
+  it("keeps the unsupported media type refusal for a schema-backed text body", async () => {
+    const request = new Request("https://example.test", {
+      method: "POST",
+      body: JSON.stringify({ value: "ok" }),
+      headers: { "content-type": "text/plain" },
+    })
+
+    const error = await parseJsonBodySafely(request, z.object({ value: z.string() })).catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(UnsupportedMediaTypeError)
+    expect(error).toMatchObject({ code: "UNSUPPORTED_MEDIA_TYPE" })
   })
 
   it("rejects malformed UTF-8 as invalid JSON", async () => {
@@ -77,6 +113,69 @@ describe("HTTP request boundary helpers", () => {
 
     await expect(parseJsonBodySafely(request, undefined, 4)).rejects.toMatchObject({
       code: "REQUEST_BODY_TOO_LARGE",
+    })
+  })
+
+  it("answers a non-empty body with no body contract as not accepted before parsing it as JSON", async () => {
+    const request = new Request("https://example.test", {
+      method: "DELETE",
+      body: "{",
+      headers: { "content-type": "application/json" },
+    })
+
+    await expect(parseJsonBodySafely(request)).rejects.toMatchObject({
+      code: "BODY_NOT_ACCEPTED",
+    })
+  })
+
+  it("rejects malformed JSON with a supported content type as invalid JSON", async () => {
+    const request = new Request("https://example.test", {
+      method: "POST",
+      body: '{"value":',
+      headers: { "content-type": "application/json" },
+    })
+
+    await expect(parseJsonBodySafely(request, z.object({ value: z.string() }))).rejects.toMatchObject({
+      code: "INVALID_JSON",
+    })
+  })
+
+  it("checks the content type before parsing a malformed body against a body contract", async () => {
+    const request = new Request("https://example.test", {
+      method: "POST",
+      body: '{"value":',
+      headers: { "content-type": "text/plain" },
+    })
+
+    await expect(parseJsonBodySafely(request, z.object({ value: z.string() }))).rejects.toMatchObject({
+      code: "UNSUPPORTED_MEDIA_TYPE",
+    })
+  })
+
+  it("treats an empty body as invalid JSON when a body contract is declared, whatever the content type", async () => {
+    const schema = z.object({ value: z.string() })
+    const jsonRequest = new Request("https://example.test", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    })
+    const textRequest = new Request("https://example.test", {
+      method: "POST",
+      headers: { "content-type": "text/plain" },
+    })
+
+    await expect(parseJsonBodySafely(jsonRequest, schema)).rejects.toMatchObject({ code: "INVALID_JSON" })
+    await expect(parseJsonBodySafely(textRequest, schema)).rejects.toMatchObject({ code: "INVALID_JSON" })
+  })
+
+  it("rejects malformed UTF-8 as invalid JSON even when no body contract is declared", async () => {
+    const request = new Request("https://example.test", {
+      method: "DELETE",
+      body: new Uint8Array([0xc3, 0x28]),
+      headers: { "content-type": "application/json" },
+    })
+
+    await expect(parseJsonBodySafely(request)).rejects.toMatchObject({
+      code: "INVALID_JSON",
     })
   })
 
@@ -188,6 +287,67 @@ describe("HTTP request boundary helpers", () => {
     }))
 
     expect(response.status).toBe(413)
+    expect(execute).not.toHaveBeenCalled()
+  })
+
+  it("answers a DELETE with a body with BODY_NOT_ACCEPTED before the CSRF and authorization checks", async () => {
+    const execute = vi.fn()
+    const assertValidCsrf = vi.fn()
+    const deps: FrameworkAdapterDeps = {
+      assertValidCsrf,
+      resolveAbacBundle: vi.fn(async () => null),
+    }
+    const handler = createFrameworkWriteHandler({
+      adapterDeps: deps,
+      requestNormalization: canonicalRequestNormalization(undefined, "test.module"),
+      scope: { scope: "platform" },
+      moduleKey: "test.module",
+      action: "delete",
+      validation: { params: z.object({ id: z.string() }) },
+      skipCapabilityCheck: true,
+      createPersistence: () => persistence,
+      definition: { key: "test.module.delete", execute } as never,
+      resolveInput: vi.fn(async () => ({})),
+    })
+
+    const response = await handler(new Request("https://example.test", {
+      method: "DELETE",
+      body: "{}",
+      headers: { "content-type": "application/json" },
+    }), { params: Promise.resolve({ id: "1" }) })
+
+    expect(response.status).toBe(415)
+    expect(await response.json()).toEqual({ error: "This operation does not accept a request body", code: "BODY_NOT_ACCEPTED" })
+    expect(assertValidCsrf).not.toHaveBeenCalled()
+    expect(execute).not.toHaveBeenCalled()
+  })
+
+  it("answers a create with a declared body contract and no body with INVALID_JSON", async () => {
+    const execute = vi.fn()
+    const deps: FrameworkAdapterDeps = {
+      assertValidCsrf: vi.fn(),
+      resolveAbacBundle: vi.fn(async () => null),
+    }
+    const handler = createFrameworkWriteHandler({
+      adapterDeps: deps,
+      requestNormalization: canonicalRequestNormalization(undefined, "test.module"),
+      scope: { scope: "platform" },
+      moduleKey: "test.module",
+      action: "create",
+      validation: { body: z.object({ value: z.string() }) },
+      skipCapabilityCheck: true,
+      createPersistence: () => persistence,
+      definition: { key: "test.module.create", execute } as never,
+      resolveInput: vi.fn(async () => ({})),
+    })
+
+    const response = await handler(new Request("https://example.test", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    }))
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: "Invalid JSON body", code: "INVALID_JSON" })
     expect(execute).not.toHaveBeenCalled()
   })
 })

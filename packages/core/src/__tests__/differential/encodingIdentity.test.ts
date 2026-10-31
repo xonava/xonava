@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { forAll, forAllAsync, type Rng } from "./harness"
+import { createRng, forAll, forAllAsync, type Rng } from "./harness"
 import {
   ALL_ATOMS, E_ACUTE_NFC, E_ACUTE_NFD, LONE_HIGH, SCOPE_KINDS, adversarialString, cacheReference, cacheValue, collidingStringPair, executionScope,
   jsonValue, mutateJson, nonBlankString, permuteCacheValue, permuteKeys, flipZeroSigns, scopeKey, shrinkScope, shrinkStrings, withScopeKey,
@@ -510,6 +510,18 @@ describe("job fingerprint (execution/jobFingerprint.ts)", () => {
       if (canonical(input) === canonical(changed)) return
       expect(await fingerprintJob(changed)).not.toBe(await fingerprintJob(input))
     }, { runs: 400 })
+  })
+
+  it("mutates numbers at the safe-integer edge without leaving the range canonical JSON accepts", () => {
+    // Regression: release seed 260115737 turned 2^53 - 1 into 2^53, which canonical JSON refuses by design.
+    for (let seed = 0; seed < 200; seed++) {
+      const rng = createRng(seed)
+      for (const edge of [Number.MAX_SAFE_INTEGER, Number.MIN_SAFE_INTEGER]) {
+        const mutated = mutateJson(rng, { a: [edge] })
+        expect(() => canonicalJsonString(mutated), JSON.stringify(mutated)).not.toThrow()
+        expect(canonicalJsonString(mutated)).not.toBe(canonicalJsonString({ a: [edge] }))
+      }
+    }
   })
 })
 

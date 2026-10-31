@@ -15,8 +15,6 @@ export const FORBIDDEN_COMPATIBILITY_EXPORT_PATTERN =
 
 export const VERSION_POLICY_SCHEMA = "framework.version-policy"
 export const VERSION_POLICY_SCHEMA_VERSION = 2
-export const RELEASE_EVIDENCE_SCHEMA = "framework.release-evidence"
-export const RELEASE_EVIDENCE_SCHEMA_VERSION = 2
 
 export const FRAMEWORK_VERSION_POLICY = Object.freeze({
   schema: VERSION_POLICY_SCHEMA,

@@ -31,6 +31,15 @@ export class UnsupportedMediaTypeError extends Error {
   }
 }
 
+export class RequestBodyNotAcceptedError extends Error {
+  readonly code = "BODY_NOT_ACCEPTED"
+
+  constructor() {
+    super("This operation does not accept a request body")
+    this.name = "RequestBodyNotAcceptedError"
+  }
+}
+
 function assertJsonContentType(request: Request): void {
   const contentType = request.headers.get("content-type")
   if (!contentType) throw new UnsupportedMediaTypeError()
@@ -92,8 +101,8 @@ export async function parseJsonBodySafely<TSchema>(
   if (!text) {
     if (!schema) return undefined
   } else {
+    if (!schema) throw new RequestBodyNotAcceptedError()
     assertJsonContentType(request)
-    if (!schema) throw new UnsupportedMediaTypeError()
   }
 
   let raw: unknown

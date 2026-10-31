@@ -1,6 +1,7 @@
 import { eq, and, sql, type AnyColumn } from "drizzle-orm"
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core"
 import type { AtomicBatchIdempotencyPort, ClaimedPendingInvalidation, IdempotencyAcquireResult, IdempotencyCompletion, IdempotencyCommitItem, IdempotencyFinalizationPort, IdempotencyRequest } from "@xonava/core/events"
+import { ConflictError } from "@xonava/core/domain"
 import type { DrizzleSessionLike } from "./drizzleRepository"
 import { d1CurrentEpochMilliseconds, d1EpochMillisecondsAfter, getAffectedRows } from "./d1Utils"
 import { parseInvalidations, resolveExistingIdempotency } from "../drizzle-shared/idempotency"
@@ -101,7 +102,7 @@ export class DrizzleD1IdempotencyStore<TResult>
       eq(columns.scope, lease.scope), eq(columns.key, lease.key),
       eq(columns.fingerprint, lease.fingerprint), eq(columns.token, lease.token), eq(columns.status, "in-progress"),
     ))
-    if (getAffectedRows(updated) !== 1) throw new Error("Idempotency lease renewal lost ownership")
+    if (getAffectedRows(updated) !== 1) throw new ConflictError("Idempotency lease renewal lost ownership")
   }
 
   /** Releases an uncommitted reservation this caller still owns; committed receipts are never touched. */
@@ -220,7 +221,7 @@ export class DrizzleD1IdempotencyStore<TResult>
       eq(columns.status, "business-committed"),
       sql`${columns.finalizerClaimExpiresAt} > ${d1CurrentEpochMilliseconds()}`,
     ))
-    if (getAffectedRows(updated) !== 1) throw new Error("Idempotency ack claimed invalidations lost ownership or lease expired")
+    if (getAffectedRows(updated) !== 1) throw new ConflictError("Idempotency ack claimed invalidations lost ownership or lease expired")
   }
 
   async completeClaimedInvalidation(completion: IdempotencyCompletion<TResult> & { claimToken: string }): Promise<void> {
@@ -242,7 +243,7 @@ export class DrizzleD1IdempotencyStore<TResult>
        sql`${columns.status} = 'business-committed'`,
       sql`${columns.finalizerClaimExpiresAt} > ${d1CurrentEpochMilliseconds()}`,
     ))
-    if (getAffectedRows(updated) !== 1) throw new Error("Idempotency complete claimed invalidations lost ownership or lease expired")
+    if (getAffectedRows(updated) !== 1) throw new ConflictError("Idempotency complete claimed invalidations lost ownership or lease expired")
   }
 
   async complete(completion: IdempotencyCompletion<TResult>): Promise<void> {
@@ -262,7 +263,7 @@ export class DrizzleD1IdempotencyStore<TResult>
       eq(columns.token, completion.token),
       sql`${columns.status} = 'business-committed'`,
     ))
-    if (getAffectedRows(updated) !== 1) throw new Error("Idempotency completion lost ownership of the reservation")
+    if (getAffectedRows(updated) !== 1) throw new ConflictError("Idempotency completion lost ownership of the reservation")
   }
 }
 

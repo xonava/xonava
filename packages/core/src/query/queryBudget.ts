@@ -274,12 +274,13 @@ export function validateQueryPlan(plan: QueryPlan, budget: QueryBudget = DEFAULT
       }
     }
     if (own(root, "pagination")) {
-      const pagination = dataRecord(root.pagination, "query pagination", ["kind", "page", "pageSize", "after", "before", "limit"])
+      const pagination = dataRecord(root.pagination, "query pagination", ["kind", "page", "pageSize", "includeTotal", "after", "before", "limit"])
       const kind = required(pagination, "kind", "query pagination")
       if (kind === "offset") {
-        const offset = dataRecord(root.pagination, "offset pagination", ["kind", "page", "pageSize"])
+        const offset = dataRecord(root.pagination, "offset pagination", ["kind", "page", "pageSize", "includeTotal"])
         positiveInteger(required(offset, "page", "offset pagination"), "offset pagination.page")
         positiveInteger(required(offset, "pageSize", "offset pagination"), "offset pagination.pageSize")
+        if (own(offset, "includeTotal") && typeof offset.includeTotal !== "boolean") fail("offset pagination.includeTotal must be a boolean")
       } else if (kind === "cursor") {
         const cursor = dataRecord(root.pagination, "cursor pagination", ["kind", "after", "before", "limit"])
         positiveInteger(required(cursor, "limit", "cursor pagination"), "cursor pagination.limit")

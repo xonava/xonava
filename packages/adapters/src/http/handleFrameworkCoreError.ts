@@ -1,6 +1,6 @@
 import { ZodError } from "zod"
-import { FrameworkCoreError, type FrameworkCoreErrorCode } from "@xonava/core/domain"
-import { InvalidJsonError, RequestBodyTooLargeError, UnsupportedMediaTypeError } from "./requestBody"
+import { FrameworkCoreError, PublicBusinessError, type FrameworkCoreErrorCode } from "@xonava/core/domain"
+import { InvalidJsonError, RequestBodyNotAcceptedError, RequestBodyTooLargeError, UnsupportedMediaTypeError } from "./requestBody"
 
 export function frameworkJson<T>(data: T, init: ResponseInit = {}) {
   const headers = new Headers(init.headers)
@@ -23,6 +23,33 @@ function formatIssuePath(path: readonly (string | number | symbol)[]): string {
   return joined.length > MAX_ISSUE_PATH_LENGTH ? joined.slice(0, MAX_ISSUE_PATH_LENGTH) : joined
 }
 
+type ZodLikeError = { issues: readonly unknown[] }
+
+/**
+ * Schemas built with another zod installation (or zod 3) throw errors that fail `instanceof ZodError`.
+ * Recognize them by name and by an issues array of objects instead.
+ */
+function isZodLikeError(error: unknown): error is ZodLikeError {
+  if (error instanceof ZodError) return true
+  if (!(error instanceof Error) || error.name !== "ZodError") return false
+  const issues: unknown = (error as { issues?: unknown }).issues
+  return Array.isArray(issues) && issues.every((issue) => typeof issue === "object" && issue !== null)
+}
+
+function sanitizeIssue(issue: unknown) {
+  const record = issue as { code?: unknown; path?: unknown; message?: unknown }
+  const code = typeof record.code === "string" ? record.code : "invalid"
+  const rawPath: unknown[] = Array.isArray(record.path) ? record.path : []
+  const segments = rawPath.filter((segment): segment is string | number | symbol =>
+    typeof segment === "string" || typeof segment === "number" || typeof segment === "symbol")
+  const message = typeof record.message === "string" ? record.message : "Invalid value"
+  return {
+    code,
+    path: formatIssuePath(segments),
+    message: message.slice(0, MAX_ISSUE_MESSAGE_LENGTH),
+  }
+}
+
 function defaultReportError(_error: unknown) {}
 
 const HTTP_STATUS_BY_FRAMEWORK_CODE: Readonly<Record<FrameworkCoreErrorCode, number>> = Object.freeze({
@@ -35,6 +62,7 @@ const HTTP_STATUS_BY_FRAMEWORK_CODE: Readonly<Record<FrameworkCoreErrorCode, num
   OUTBOX_SINK_MISSING: 500, OPERATION_CONTEXT_INACTIVE: 500, EFFECT_REGISTRATION_CLOSED: 500,
   EFFECT_COLLECTOR_DISPOSED: 500, EFFECTS_ALREADY_DRAINED: 500,
   TIMEOUT: 504, UNAVAILABLE: 503, CANCELLED: 503,
+  REQUIRED_HEADER_MISSING: 400, PRECONDITION_REQUIRED: 428,
 })
 
 export function frameworkErrorHttpStatus(code: FrameworkCoreErrorCode): number {
@@ -78,22 +106,27 @@ export function createFrameworkErrorHandler(options: FrameworkErrorHandlerOption
       return json({ error: "Unsupported media type", code: error.code }, { status: 415 })
     }
 
+    if (error instanceof RequestBodyNotAcceptedError) {
+      return json({ error: "This operation does not accept a request body", code: error.code }, { status: 415 })
+    }
+
     if (error instanceof FrameworkCoreError) {
       const status = frameworkErrorHttpStatus(error.code)
       if (status >= 500 || status === 401 || status === 403) reportError(error)
       const headers = status === 429 || status === 503 ? retryAfterHeader(error, status) : undefined
-      return json({ error:error.safeMessage,code:error.publicCode }, { status,...(headers?{headers}:{}) })
+      const details = error instanceof PublicBusinessError
+        ? { fields: [...error.fields] }
+        : (error.code === "REQUIRED_HEADER_MISSING" || error.code === "PRECONDITION_REQUIRED") && typeof error.safeMetadata.header === "string"
+          ? { header: error.safeMetadata.header }
+          : undefined
+      return json({ error:error.safeMessage,code:error.publicCode,...(details?{details}:{}) }, { status,...(headers?{headers}:{}) })
     }
 
-    if (error instanceof ZodError) {
+    if (isZodLikeError(error)) {
       return json({
         error: "Validation failed",
         code: "VALIDATION_ERROR",
-        details: error.issues.map((issue) => ({
-          code: issue.code,
-          path: formatIssuePath(issue.path),
-          message: issue.message.slice(0, MAX_ISSUE_MESSAGE_LENGTH),
-        })),
+        details: error.issues.map(sanitizeIssue),
       }, { status: 400 })
     }
 
@@ -102,4 +135,4 @@ export function createFrameworkErrorHandler(options: FrameworkErrorHandlerOption
   }
 }
 
-export { InvalidJsonError, RequestBodyTooLargeError, UnsupportedMediaTypeError, parseJsonBodySafely } from "./requestBody"
+export { InvalidJsonError, RequestBodyNotAcceptedError, RequestBodyTooLargeError, UnsupportedMediaTypeError, parseJsonBodySafely } from "./requestBody"

@@ -5,7 +5,7 @@ import { enforceRateLimit, type RateLimitConfig, type RateLimitStore } from "@xo
 import { isAtomicBatchIdempotencyPort, isDurableIdempotencyPort, isTransactionalIdempotencyPort, type IdempotencyCommitItem, type IdempotencyResourceIdentity } from "@xonava/core/events"
 import type { AbacWriteEnforcer } from "@xonava/core/security"
 import { emitTelemetry, explicitlySafeTelemetryAttributes } from "@xonava/core/telemetry"
-import { ConfigurationError, ConflictError, ForbiddenError, UnauthorizedError, ValidationError, assertVerifiedAbacBundle, createAbacAuthorizer, type RequestContext } from "@xonava/core/domain"
+import { ConfigurationError, ConflictError, ForbiddenError, RequiredHeaderMissingError, UnauthorizedError, ValidationError, assertVerifiedAbacBundle, createAbacAuthorizer, type RequestContext } from "@xonava/core/domain"
 import { redactPhiDeep } from "./redact"
 import type { FrameworkAdapterDeps, FrameworkRequestNormalization } from "../server"
 import { assertFrameworkAdapterDeps } from "../server"
@@ -21,7 +21,7 @@ import { createFrameworkErrorHandler, frameworkJson } from "./handleFrameworkCor
 import { parseJsonBodySafely, parseUniqueQueryParameters, resolveRequestMetadata } from "./requestBody"
 import type { CacheAdapter } from "@xonava/core/cache"
 import type { AuditSink, OutboxSink } from "@xonava/core/events"
-import { boundRateLimitKeyMaterial, buildIdempotencyScopeIdentity, buildIdempotencySecurityContext, deserializeResponse, fingerprintJson, legacyFingerprintJson, MAX_IDEMPOTENCY_KEY_LENGTH, serializeResponse, type SerializedResponse, type SerializedResponseIdempotencyPort } from "./idempotency"
+import { IdempotencyPayloadTooLargeError, boundRateLimitKeyMaterial, buildIdempotencyScopeIdentity, buildIdempotencySecurityContext, deserializeResponse, fingerprintJson, MAX_IDEMPOTENCY_KEY_LENGTH, serializeResponse, type SerializedResponse, type SerializedResponseIdempotencyPort } from "./idempotency"
 import { authorizeFrameworkModule, normalizeCrudRequest, tenantIdFromContext } from "./crudHandlers/shared"
 
 const frameworkErrorHandler = createFrameworkErrorHandler()
@@ -45,22 +45,38 @@ export type ScopedFrameworkValidatedContext = {
   validatedBody?: unknown
 }
 
+/** Actions a business action may not reuse: they keep their CRUD or wildcard meaning. */
+const RESERVED_ACTION_NAMES: ReadonlySet<string> = new Set(["read", "manage", "create", "update", "delete"])
+const BUSINESS_ACTION_NAME = /^[a-z][a-zA-Z0-9_-]{0,63}$/
+
+/**
+ * A business action is a domain verb such as `approve`, granted on its own in
+ * the module catalog and ABAC policies. It never implies, and is never implied
+ * by, `update`.
+ */
+export type BusinessActionName = string & { readonly __businessAction?: never }
+
+export type WriteHandlerAction = "create" | "update" | "delete" | BusinessActionName
+
+function assertWriteAction(moduleKey: string, action: string): void {
+  if (action === "create" || action === "update" || action === "delete") return
+  if (typeof action === "string" && RESERVED_ACTION_NAMES.has(action)) {
+    throw new ConfigurationError(
+      `Write handler for "${moduleKey}" cannot use "${action}" as a business action; it is reserved`,
+    )
+  }
+  if (typeof action !== "string" || !BUSINESS_ACTION_NAME.test(action)) {
+    throw new ConfigurationError(
+      `Write handler for "${moduleKey}" has an invalid business action name; use ${String(BUSINESS_ACTION_NAME)}`,
+    )
+  }
+}
+
 export type CrudScopeConfig = {
   scope: "application" | "tenant" | "platform" | "system" | "public"
   sessionRequired?: boolean
   csrfRequired?: boolean
   idempotency?: { required?: boolean }
-}
-
-function getCookieValue(name: string, request: Request): string | null {
-  const header = request.headers.get("cookie")
-  if (!header) return null
-  for (const part of header.split("; ")) {
-    const eqIdx = part.indexOf("=")
-    if (eqIdx === -1) continue
-    if (part.slice(0, eqIdx).trim() === name) return part.slice(eqIdx + 1)
-  }
-  return null
 }
 
 /**
@@ -105,19 +121,15 @@ async function enrichValidatedContext(args: {
   return { validated: { validatedParams, validatedQuery, validatedBody }, raw }
 }
 
-async function fingerprintClientMutation(value: unknown, fingerprint: (value: unknown) => Promise<string> = fingerprintJson): Promise<string> {
+async function fingerprintClientMutation(value: unknown): Promise<string> {
   try {
-    return await fingerprint(value)
+    return await fingerprintJson(value)
   } catch (error) {
     // The client controls this material; anything without a canonical JSON
     // form (e.g. a "__proto__" member or an unsafe integer) is a bad request.
-    if (error instanceof CanonicalJsonError) throw new ValidationError("Request cannot be used with an Idempotency-Key")
+    if (error instanceof CanonicalJsonError || error instanceof IdempotencyPayloadTooLargeError) throw new ValidationError("Request cannot be used with an Idempotency-Key")
     throw error
   }
-}
-
-function resolveSessionRequired(scope: CrudScopeConfig): boolean {
-  return scope.sessionRequired ?? scope.scope !== "public"
 }
 
 function resolveCsrfRequired(scope: CrudScopeConfig): boolean {
@@ -133,7 +145,9 @@ export function createFrameworkWriteHandler<
   requestNormalization: FrameworkRequestNormalization
   scope: CrudScopeConfig
   moduleKey: string
-  action: "create" | "update" | "delete"
+  action: WriteHandlerAction
+  /** Key of the route binding in `requestNormalization.routeBindings`; defaults to `action`. */
+  routeKey?: string
   validation?: ScopedFrameworkValidation
    rateLimit?: { config: RateLimitConfig; consistency?: "atomic" | "best-effort"; failureMode?: import("@xonava/core/rate-limit").RateLimitFailureMode; key?: (request: Request, context: RequestContext) => string }
    getRateLimitStore?: () => Promise<RateLimitStore>
@@ -173,6 +187,13 @@ export function createFrameworkWriteHandler<
   toResponse?: (result: TResult) => Response
 } & CapabilityCheckConfig) {
   assertFrameworkAdapterDeps(args.adapterDeps)
+  assertWriteAction(args.moduleKey, args.action)
+  const routeKey = args.routeKey ?? args.action
+  if (!Object.hasOwn(args.requestNormalization.routeBindings, routeKey)) {
+    throw new ConfigurationError(
+      `Write handler for "${args.moduleKey}" action "${args.action}" has no route binding "${routeKey}"`,
+    )
+  }
 
   // Correctness-critical cache invalidation requires a durable obligation, which
   // is only available when the mutation participates in idempotency.
@@ -228,7 +249,7 @@ export function createFrameworkWriteHandler<
         : undefined
       const requestContext = await normalizeCrudRequest({
         request,
-        routeKey: args.action,
+        routeKey,
         normalization: args.requestNormalization,
         requestId: requestMetadata.requestId,
         correlationId: requestMetadata.correlationId,
@@ -298,7 +319,7 @@ export function createFrameworkWriteHandler<
 
       const authorizer = abacBundle ? createAbacAuthorizer(abacBundle) : null
       const enforceAbac: AbacWriteEnforcer | undefined = authorizer
-         ? { enforce: (action: string, record: Record<string, unknown>, changedFields?: string[]) => authorizer.assertWrite({ action: action as "create" | "update" | "delete", record, ...(changedFields ? { changedFields } : {}) }) }
+         ? { enforce: (action: string, record: Record<string, unknown>, changedFields?: string[]) => authorizer.assertWrite({ action, record, ...(changedFields ? { changedFields } : {}) }) }
         : undefined
 
        const basePersistence = args.createPersistence(requestContext)
@@ -317,7 +338,7 @@ export function createFrameworkWriteHandler<
           throw new ValidationError("Idempotency-Key is too long")
         }
          if (args.scope.idempotency?.required && !idempotencyKey) {
-           throw new ValidationError("Idempotency-Key header is required")
+           throw new RequiredHeaderMissingError("Idempotency-Key")
          }
          if (idempotencyKey && (!args.resolveResourceIdentity || !args.recoverCommittedResponse)) {
            throw new ConfigurationError(
@@ -407,21 +428,7 @@ export function createFrameworkWriteHandler<
               `Idempotency for "${args.moduleKey}" requires a transaction- or atomic-batch-integrated idempotency port`,
             )
           }
-          let acquired = await port.acquire(idempotencyRequest)
-          if (acquired.outcome === "conflict") {
-            // A record written before the RFC 8785 key-order fix carries the v2
-            // fingerprint of the same request. Retry once with it so a retry
-            // across that deploy replays instead of conflicting; the lease then
-            // keeps the stored fingerprint for renew/complete.
-            const legacyFingerprint = await fingerprintClientMutation(fingerprintMaterial, legacyFingerprintJson)
-            if (legacyFingerprint !== idempotencyRequest.fingerprint) {
-              const legacy = await port.acquire({ ...idempotencyRequest, fingerprint: legacyFingerprint })
-              if (legacy.outcome !== "conflict") {
-                idempotencyRequest.fingerprint = legacyFingerprint
-                acquired = legacy
-              }
-            }
-          }
+          const acquired = await port.acquire(idempotencyRequest)
           if (acquired.outcome === "replay") {
             return responseWithMetadata(deserializeResponse(acquired.result), requestMetadata)
           }

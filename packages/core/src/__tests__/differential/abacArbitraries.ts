@@ -5,6 +5,7 @@ import type { AbacPolicyBundle, AbacScopeType, NormalizedAbacPolicy, VerifiedAba
 import type { FieldPolicyReadMode, ParsedPolicyPayload, PolicyConditions, PolicyFieldAccess } from "../../domain/abacPolicySchema"
 import { DIFFERENTIAL_FIELDS, differentialFieldCatalog, generatePredicate, generateRecord, shrinkPredicate, shrinkRecord, type DifferentialField } from "./arbitraries"
 import { scaledRuns, type Rng } from "./harness"
+import { TIMING_SCALE } from "../timing"
 
 /**
  * Generators for random ABAC policy lists and verified bundles.
@@ -21,7 +22,7 @@ import { scaledRuns, type Rng } from "./harness"
  * so the 5s vitest default is too tight under parallel load, and the budget
  * grows with DIFFERENTIAL_SCALE.
  */
-export const ABAC_PROPERTY_TIMEOUT_MS = 60_000 * Math.max(1, scaledRuns(100) / 100)
+export const ABAC_PROPERTY_TIMEOUT_MS = 60_000 * Math.max(1, scaledRuns(100) / 100) * TIMING_SCALE
 
 export const ABAC_MODULE = "diff.records"
 export const FOREIGN_MODULE = "diff.other"

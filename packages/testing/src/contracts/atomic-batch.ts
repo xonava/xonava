@@ -13,7 +13,7 @@ export function runAtomicBatchContractTests<TCommand>(
   label: string,
   options: AtomicBatchContractOptions<TCommand>,
 ): void {
-  describe.sequential(`Atomic batch contract: ${label}`, () => {
+  describe(`Atomic batch contract: ${label}`, { concurrent: false }, () => {
     let provider: PersistenceProvider
 
     beforeEach(() => {

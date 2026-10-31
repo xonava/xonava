@@ -10,6 +10,8 @@ Nested transaction behavior MUST be declared: true savepoint/nesting, join-exist
 
 A versioned mutation MUST condition on the expected version and advance the version only on success. A stale version MUST produce a conflict and MUST NOT partially apply effects. When authorization facts can change concurrently, authorization predicates and the mutation MUST be one conditional atomic decision.
 
+A delete that carries an expected version follows the same rule on every provider. When the delete matches no row, the repository MUST distinguish the cause: if a row with that identity (within scope and authorization predicates) still exists with a different version, the result is `OPTIMISTIC_CONCURRENCY_FAILED` and the row is untouched; if no such row exists, the result is `NOT_FOUND`. An idempotent delete forgives only the missing row, never a stale version. `deleteWhere` with an expected version applies the same distinction to its filter: rows match the filter but not the version is `OPTIMISTIC_CONCURRENCY_FAILED`, no row matches the filter is `NOT_FOUND`. Over HTTP the first case answers 409 and the second 404.
+
 Exactly one concurrent mutation for a shared expected version may succeed. A retry MUST reread/re-authorize and use the new version; blind automatic replay is forbidden.
 
 ## Atomic effects and crash behavior
@@ -20,7 +22,7 @@ Idempotency receipt, audit, outbox, and cache-generation effects declared atomic
 
 Stale versions are conflict, invalid versions validation, unavailable transaction/isolation capability configuration/capability failure, and transient provider faults retryable only when normalized safely. Conformance covers rollback, commit visibility, independent verifier connections, concurrent winners, TOCTOU authorization, every atomic side effect, termination at named failpoints, fresh-process replay, and repetition thresholds.
 
-Traceability: provider transaction/OCC/race/crash suites; V1 and MYSQL1 evidence.
+Traceability: provider transaction/OCC/race/crash suites.
 
 ## Commit outcome classification
 
@@ -29,3 +31,14 @@ Providers MUST distinguish a transaction that definitely did not commit from one
 ## Transaction deadline
 
 `TransactionOptions.timeoutMs` bounds a whole transaction. Providers that declare `capabilities.transactionTimeouts` MUST enforce it inside the database (for example `SET LOCAL statement_timeout` or a transaction timeout) and roll back when it elapses. When the provider declares the capability, the operation pipeline sets `timeoutMs` to the operation's remaining execution deadline (or the operation's own smaller value), so a hung statement cannot outlive its request.
+
+## Not provided
+
+These are decided out of scope; adapters fail closed rather than emulate them.
+
+- **Interactive transactions on D1.** D1 offers no interactive transactions, only an atomic batch of statements. The D1
+  adapters declare `interactiveTransactions: false`; an operation that requires an interactive transaction fails with a
+  `ConfigurationError` when it runs, and a mutation that defines an atomic-batch form runs as one atomic batch instead.
+- **A bounded `COMMIT` on MySQL.** MySQL has no server-side limit on the duration of `COMMIT`, and cancelling a `COMMIT`
+  from the client leaves its outcome unknown. When the MySQL adapter declares `transactionTimeouts` (it is given a kill pool), the
+  timeout bounds the statements of a transaction, not its `COMMIT`; a `COMMIT` that does not return is classified as an unknown outcome, never as a rollback.

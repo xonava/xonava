@@ -26,17 +26,22 @@ export interface ScopeAdmissionEvidence {
   readonly delegationChain?: readonly DelegationHop[]
 }
 
+/**
+ * The built-in CRUD route keys. Each is required only by the CRUD handler that
+ * uses it; a module without CRUD handlers declares none of them.
+ */
 export type CrudRouteBindings = Readonly<{
-  list: CompiledRouteBinding
-  detail: CompiledRouteBinding
-  create: CompiledRouteBinding
-  update: CompiledRouteBinding
-  delete: CompiledRouteBinding
+  list?: CompiledRouteBinding
+  detail?: CompiledRouteBinding
+  create?: CompiledRouteBinding
+  update?: CompiledRouteBinding
+  delete?: CompiledRouteBinding
 }>
 
 /** Bootstrap-owned bindings used at the common HTTP normalization boundary. */
 export interface FrameworkRequestNormalization {
-  readonly routeBindings: CrudRouteBindings
+  /** Optional CRUD bindings plus one binding per business action, looked up by the handler's `routeKey`. */
+  readonly routeBindings: CrudRouteBindings & Readonly<Record<string, CompiledRouteBinding>>
   readonly resolverBindings: ReadonlyMap<string, CompiledScopeResolverBinding>
   readonly trustedHeaders?: readonly string[]
   resolveTrustedSession(args: { readonly request: Request; readonly route: CompiledRouteBinding }): Promise<TrustedFrameworkSession | undefined>

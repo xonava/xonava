@@ -9,7 +9,7 @@
 
 Xonava gives backend services the parts that are tedious to get right: entities with tenant scoping and optimistic concurrency, authorization enforced inside queries, transactions, transactional outbox and inbox events, durable jobs, schedules and workflows, caching, rate limiting and resilience. Each capability is a separate subpath of `@xonava/core`, which has no runtime dependencies, so you import only what you use and add the rest later. Reference adapters connect the contracts to PostgreSQL, MySQL, Cloudflare D1, Express, Fastify and Hono. The packages are native ES modules and require Node.js 22 or later.
 
-> **Experimental.** Xonava is in its `0.x` series. APIs, persistence schemas and wire formats may change in any minor release before `1.0.0`, and the repository ships no production DDL. Read [Known limitations](docs/KNOWN-LIMITATIONS.md) before adopting it.
+> **Experimental.** Xonava is in its `0.x` series. APIs, persistence schemas and wire formats may change in any minor release before `1.0.0`, and the reference migrations are fixture-derived DDL, not a managed migration tool. Read [Known limitations](docs/KNOWN-LIMITATIONS.md) before adopting it.
 
 ## Why Xonava
 
@@ -50,7 +50,7 @@ npm install -D @xonava/testing vitest
 
 ## Quick start
 
-This defines a tenant-scoped entity, backs it with PostgreSQL, and serves list, detail, create, update and delete routes with Hono. It uses the PostgreSQL install above plus `npm install hono zod`; entity schemas are written with [Zod](https://zod.dev). The table must exist; the repository ships no production DDL, and the reference schema is in the fixture migrations under `packages/testing/fixtures/`.
+This defines a tenant-scoped entity, backs it with PostgreSQL, and serves list, detail, create, update and delete routes with Hono. It uses the PostgreSQL install above plus `npm install hono zod`; entity schemas are written with [Zod](https://zod.dev). The table must exist; the reference DDL ships in `@xonava/adapters` under `migrations/<postgres|mysql|d1>/` (see its README for the apply order and which files are safe to re-run).
 
 **1. Define the entity.** Routes that update or delete require a version field, which provides optimistic concurrency.
 
@@ -149,6 +149,41 @@ const decision = await checkRateLimit({ store, key: "tenant:t1:user:u1", limit: 
 
 For custom business logic, declare an operation with `createOperation` and run it with `runOperation`; see [create an operation](docs/guides/create-an-operation.md).
 
+## Standalone application
+
+An application with one deployment and no tenants uses the platform scope. The entity has no tenant column, and the route's fixed scope plan, an optional `scopeFilter` and ABAC isolate it; see the [standalone application guide](docs/guides/standalone-application.md) for the routes, policy, jobs and workflows. This block is compiled and run by the documentation-example test; `MODULE_KEY` and the `Announcement` row type are defined in the guide.
+
+```ts
+const body = z.object({ title: z.string().min(1).max(200), region: z.string().min(1), priority: z.number().int() }).strict()
+const patch = body.partial()
+
+export const announcements = defineEntity<Announcement, z.infer<typeof body>, z.infer<typeof patch>, Announcement, Announcement>({
+  moduleKey: MODULE_KEY,
+  entity: {
+    name: "announcement",
+    primaryKey: "id",
+    versionField: "version",
+    fields: {
+      id: { type: "uuid" },
+      title: { type: "string" },
+      region: { type: "string" },
+      priority: { type: "number" },
+      version: { type: "number" },
+    },
+  },
+  // One deployment, no tenants: the row has no tenant or application column.
+  entityScope: { kind: "platform", acknowledged: true },
+  policy: { customCapabilityKey: "announcements" },
+  cache: false,
+  audit: false,
+  validation: {
+    idParams: z.object({ id: z.string().uuid() }).strict(),
+    createBody: body,
+    updateBody: patch,
+  },
+})
+```
+
 ## Packages
 
 | Package | Contents |
@@ -159,7 +194,7 @@ For custom business logic, declare an operation with `createOperation` and run i
 
 ## Capabilities
 
-Every row is an import path of `@xonava/core`. The [export reference](docs/reference/package-exports.md) lists the full surface, and the [capability catalog](docs/reference/capabilities.md) maps each one to its specification and certification suite.
+Every row is an import path of `@xonava/core`. The [export reference](docs/reference/package-exports.md) lists the full surface, and the [capability catalog](docs/reference/capabilities.md) maps each one to its specification and conformance suite.
 
 | Area | Subpaths |
 | --- | --- |
@@ -191,15 +226,15 @@ Typechecking an adapter does not show that it meets the contract. Behavior is ch
 - [Getting started](docs/guides/getting-started.md) and [using capabilities independently](docs/guides/independent-capabilities.md)
 - [Architecture overview](docs/architecture.md) and [principles](docs/architecture.md#principles)
 - [Specification](docs/spec/README.md) and [TypeScript profile](docs/typescript/README.md)
-- Guides: [persistence setup](docs/guides/persistence-setup.md), [events, jobs and workflows](docs/guides/events-and-workflows.md), [create an operation](docs/guides/create-an-operation.md), [transactions and OCC](docs/guides/transactions-and-occ.md), [understanding errors](docs/guides/understanding-errors.md)
-- Reference: [public exports](docs/reference/package-exports.md), [capability catalog](docs/reference/capabilities.md), [certification matrix](docs/reference/certification-matrix.md)
+- Guides: [persistence setup](docs/guides/persistence-setup.md), [events, jobs and workflows](docs/guides/events-and-workflows.md), [create an operation](docs/guides/create-an-operation.md), [transactions and OCC](docs/guides/transactions-and-occ.md), [understanding errors](docs/guides/understanding-errors.md), [ownership for non-staff users](docs/guides/ownership.md), [standalone applications](docs/guides/standalone-application.md), [durable uploads](docs/guides/durable-uploads.md), [supporting reads](docs/guides/supporting-reads.md)
+- Reference: [public exports](docs/reference/package-exports.md), [capability catalog](docs/reference/capabilities.md), [how releases are checked](docs/guides/release-checks.md)
 - [Compatibility and versioning policy](docs/governance.md#compatibility-and-versioning)
 
 ## Project status
 
-Xonava is experimental. The current release has passed its core, API and architecture gates and the PostgreSQL, MySQL and D1 integration, conformance, race and crash/replay suites. That evidence comes from local multi-backend runs and does not cover your production topology, custom adapters or your own policies; see the [certification matrix](docs/reference/certification-matrix.md).
+Xonava is experimental. The current release has passed its core, API and architecture gates and the PostgreSQL, MySQL and D1 integration, conformance, race and crash/replay suites. That evidence comes from local multi-backend runs and does not cover your production topology, custom adapters or your own policies; see [how releases are checked](docs/guides/release-checks.md).
 
-Before deploying, read [Known limitations](docs/KNOWN-LIMITATIONS.md). It lists required database migrations, the MySQL UTC session requirement, and accepted differences between databases. Notable changes are in the [changelog](CHANGELOG.md), and all remaining work is tracked in one place, the [plan](TODO.md). Until `1.0.0`, pin exact versions: a `0.x` minor release may contain breaking changes.
+Before deploying, read [Known limitations](docs/KNOWN-LIMITATIONS.md). It lists required database migrations, the MySQL UTC session requirement, and accepted differences between databases. Notable changes are in the [changelog](CHANGELOG.md). Until `1.0.0`, pin exact versions: a `0.x` minor release may contain breaking changes.
 
 ## Contributing
 

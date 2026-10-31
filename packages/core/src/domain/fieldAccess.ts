@@ -334,14 +334,18 @@ function collectDeniedQueryFields(
 }
 
 /**
- * Only allow-effect policies grant query access, and a grant can only re-open
- * a field an allow policy masks/omits: a deny's omission is never subtracted.
+ * Only unconditional allow-effect policies grant query access: a query is not
+ * evaluated per row, so a grant from a policy whose condition may fail for
+ * some row would expose values the record decision hides (the same rule as the
+ * record-less capability decision). A grant can only re-open a field an allow
+ * policy masks/omits: a deny's omission is never subtracted.
  */
 function collectQueryGrants(policies: NormalizedAbacPolicy[], moduleKey: string, knownFields: readonly string[]): FieldQueryAccess {
   const grants = emptyFieldQueryAccess()
   const hardDenied = collectDeniedQueryFields(policies, moduleKey, true, knownFields)
   for (const policy of policies) {
     if (policy.moduleKey !== moduleKey || policy.effect !== "allow") continue
+    if (!isAlwaysTruePredicate(policy.compiledConditions)) continue
     const query = policy.payload.fieldAccess?.query
     if (!query) continue
     for (const mode of FIELD_QUERY_MODES) {

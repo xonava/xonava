@@ -3,7 +3,7 @@ import {dirname,join} from "node:path"
 import {fileURLToPath} from "node:url"
 import type {Pool} from "mysql2/promise"
 
-export const MYSQL_FIXTURE_MIGRATIONS=["0001_framework.sql","0002_workflow_signal_buffering.sql","0003_schedule_next_run_nullable.sql","0004_job_partition_head_index.sql"] as const
+export const MYSQL_FIXTURE_MIGRATIONS=["0001_framework.sql","0002_workflow_signal_buffering.sql","0003_schedule_next_run_nullable.sql","0004_job_partition_head_index.sql","0005_job_scope_key.sql","0006_byte_exact_identifiers.sql"] as const
 
 /** The statements of one fixture migration (`;`-separated, comment lines dropped). */
 export async function readMySqlMigrationStatements(name:(typeof MYSQL_FIXTURE_MIGRATIONS)[number]):Promise<string[]>{
@@ -11,7 +11,7 @@ export async function readMySqlMigrationStatements(name:(typeof MYSQL_FIXTURE_MI
   return source.split("\n").filter(line=>!line.trim().startsWith("--")).join("\n").split(";").map(value=>value.trim()).filter(Boolean)
 }
 
-export async function bootstrapMySqlFixture(pool:Pool):Promise<void>{for(const statement of await readMySqlMigrationStatements("0001_framework.sql"))await pool.query(statement);const [columns]=await pool.query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='temporal_heads'");const names=new Set((columns as {COLUMN_NAME:string}[]).map(row=>row.COLUMN_NAME));if(!names.has("occurred_at"))await pool.query("ALTER TABLE temporal_heads ADD occurred_at DATETIME(3) NOT NULL DEFAULT '1970-01-01 00:00:00.000'");if(!names.has("kind"))await pool.query("ALTER TABLE temporal_heads ADD kind VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'created'");const [workflowColumns]=await pool.query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='workflows' AND COLUMN_NAME='failure'");if((workflowColumns as unknown[]).length===0)await pool.query("ALTER TABLE workflows ADD failure JSON NULL");await applyMySqlSignalBufferingMigration(pool);await applyMySqlScheduleNextRunNullableMigration(pool);await applyMySqlJobPartitionHeadIndexMigration(pool)}
+export async function bootstrapMySqlFixture(pool:Pool):Promise<void>{for(const statement of await readMySqlMigrationStatements("0001_framework.sql"))await pool.query(statement);const [columns]=await pool.query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='temporal_heads'");const names=new Set((columns as {COLUMN_NAME:string}[]).map(row=>row.COLUMN_NAME));if(!names.has("occurred_at"))await pool.query("ALTER TABLE temporal_heads ADD occurred_at DATETIME(3) NOT NULL DEFAULT '1970-01-01 00:00:00.000'");if(!names.has("kind"))await pool.query("ALTER TABLE temporal_heads ADD kind VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'created'");const [workflowColumns]=await pool.query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='workflows' AND COLUMN_NAME='failure'");if((workflowColumns as unknown[]).length===0)await pool.query("ALTER TABLE workflows ADD failure JSON NULL");await applyMySqlSignalBufferingMigration(pool);await applyMySqlScheduleNextRunNullableMigration(pool);await applyMySqlJobPartitionHeadIndexMigration(pool);await applyMySqlJobScopeKeyMigration(pool);await applyMySqlByteExactIdentifiersMigration(pool)}
 
 /** Applies 0002 once: MySQL cannot guard ADD COLUMN, so the migration runs only while `workflow_signals.seq` is missing. */
 export async function applyMySqlSignalBufferingMigration(pool:Pool):Promise<boolean>{
@@ -32,4 +32,35 @@ export async function applyMySqlJobPartitionHeadIndexMigration(pool:Pool):Promis
   if((existing as unknown[]).length>0)return false
   for(const statement of await readMySqlMigrationStatements("0004_job_partition_head_index.sql"))await pool.query(statement)
   return true
+}
+
+/**
+ * Applies 0005 once: MySQL cannot guard ADD COLUMN, so the migration runs only while `jobs.scope_key` is missing.
+ * A statement whose table does not exist in this database is skipped (isolated test databases create only some tables).
+ */
+export async function applyMySqlJobScopeKeyMigration(pool:Pool):Promise<boolean>{
+  const [existing]=await pool.query("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='jobs' AND COLUMN_NAME='scope_key'")
+  if((existing as unknown[]).length>0)return false
+  for(const statement of await readMySqlMigrationStatements("0005_job_scope_key.sql")){
+    const table=/^ALTER TABLE (\w+)/.exec(statement)?.[1]
+    if(table){const [found]=await pool.query("SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?",[table]);if((found as unknown[]).length===0)continue}
+    await pool.query(statement)
+  }
+  return true
+}
+
+/**
+ * Applies 0006 (byte-exact identifier columns). `tables` limits it to the tables an isolated database holds. The sequence/temporal
+ * statements add `scope_hash` (not re-runnable), so a table that already has it is skipped; the MODIFY statements are re-applicable.
+ */
+export async function applyMySqlByteExactIdentifiersMigration(pool:Pool,tables?:readonly string[]):Promise<void>{
+  for(const statement of await readMySqlMigrationStatements("0006_byte_exact_identifiers.sql")){
+    const table=/^ALTER TABLE ([a-z_]+)/.exec(statement)?.[1]
+    if(table===undefined||(tables&&!tables.includes(table)))continue
+    if(statement.includes("ADD COLUMN scope_hash")){
+      const [existing]=await pool.query("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME='scope_hash'",[table])
+      if((existing as unknown[]).length>0)continue
+    }
+    await pool.query(statement)
+  }
 }

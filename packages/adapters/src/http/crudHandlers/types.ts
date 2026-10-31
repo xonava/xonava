@@ -11,6 +11,7 @@ import type {
   EntityScopeDefinition,
 } from "@xonava/core/entity"
 import type { EntityDescriptor } from "@xonava/core/persistence"
+import type { LoadedCommittedRecord } from "../committedRecord"
 import type { RequestContext } from "@xonava/core/domain"
 import type { FrameworkAdapterDeps, FrameworkRequestNormalization } from "../../server"
 import type {
@@ -40,7 +41,27 @@ export type MutationOutsideReadScope = {
   success: true
   reason: "CREATED_OUTSIDE_READ_SCOPE" | "UPDATED_OUTSIDE_READ_SCOPE"
 }
-export type MutationResult<TRow> = { record: TRow } | MutationOutsideReadScope
+export type MutationResult<TRow> =
+  | {
+      record: TRow
+      /**
+       * The committed row as read inside the writing transaction (the only
+       * connection that can see the uncommitted write), under the caller's read
+       * scope and projection. The `after` hook builds the response from it. Absent
+       * on the atomic-batch path, where the write has already been applied when
+       * `after` runs and a fresh read sees it.
+       */
+      committedRead?: LoadedCommittedRecord<TRow & Record<string, unknown>>
+      /**
+       * The writing transaction's persistence, handed to the
+       * `projectCommittedResult` hook (read-only and scoped by `toCrudContext`)
+       * so it sees the row just written. Absent on the atomic-batch path, where
+       * the hook receives a fresh persistence. Internal: `after` builds a new
+       * result, so this never reaches the response, audit payload or afterCommit.
+       */
+      hookPersistence?: PersistenceProvider
+    }
+  | MutationOutsideReadScope
 
 export type RateLimitConfigs = {
   list?: import("@xonava/core/entity").EntityRateLimitSetting
@@ -69,7 +90,7 @@ export interface AuditConfig {
 export type ListDefaults = { sortColumn?: string; sortDesc?: boolean }
 export type ListPaginationConfig =
   | { strategy: "offset" }
-  | { strategy: "cursor"; integrity: CursorIntegrityPort; uniqueFields: readonly string[]; nullableFields?: readonly string[]; maxCursorBytes?: number }
+  | { strategy: "cursor"; integrity: CursorIntegrityPort; uniqueFields: readonly string[]; nullableFields?: readonly string[]; maxCursorBytes?: number; /** Opt-in cursor lifetime in milliseconds; issued cursors then carry an integrity-protected expiry. */ cursorTtlMs?: number }
 export type OptimisticConcurrencyConfig<TRow extends SelectableRow> = {
   versionField?: keyof TRow & string
 }
@@ -122,6 +143,12 @@ export interface CrudOptions<
   listDefaults?: ListDefaults
   pagination?: ListPaginationConfig
   optimisticConcurrency?: OptimisticConcurrencyConfig<TRow>
+  /**
+   * Generic-update settings. `protectedFields` reserves entity fields for
+   * business actions: a generic update whose patch contains one is refused
+   * with ForbiddenError.
+   */
+  update?: { protectedFields?: readonly string[] }
 }
 
 /** Upper bound on the offset page number accepted from callers. */

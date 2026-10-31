@@ -7,20 +7,20 @@ import {
   hasRecordDependentFieldWrite,
   markAbacPreImage,
   NotFoundError,
+  PreconditionRequiredError,
   Predicate,
   projectResponseRecord,
-  resolveFieldReadOverrides,
   type PredicateNode,
 } from "@xonava/core/domain"
 import { createFrameworkWriteHandler } from "../createFrameworkWriteHandler"
 import { frameworkJson } from "../handleFrameworkCoreError"
+import { loadCommittedRecord, readCommittedRecord } from "../committedRecord"
 import type { CrudShared, MutationResult, SelectableRow, UpdateOperationInput } from "./types"
 import { assertEntityVersion, type EntityVersion } from "@xonava/core/serialization"
 import type { AbacWriteEnforcer } from "@xonava/core/security"
 import { internalRepositoryForDescriptor } from "../../repository/dynamicRepository"
 import {
   auditEmit,
-  buildCommittedReadResponse,
   buildStructuralScope,
   loadExistingRecord,
   resolveOperationRequestContext,
@@ -28,7 +28,6 @@ import {
   toCrudContext,
   toCrudPostCommitContext,
   assertProtectedUpdateFields,
-  loadReadableMutationRecord,
   resolveActionScopeForContext,
   canUseOwnerBypass,
   enforceFinalWrite,
@@ -104,13 +103,13 @@ export function createUpdateHandler<
       ? {
           before: async ({ operation, input }: { operation: PreparationOperationContext; input: UpdateOperationInput<TRow, B> }) => {
             const session = resolveOperationRequestContext(operation)
-            assertProtectedUpdateFields(entity, input.patch as object)
+            assertProtectedUpdateFields(entity, input.patch as object, options.update?.protectedFields)
               const patch = await options.crud!.update!.transformInput!({
               existing: input.existing,
               patch: input.patch,
               context: toCrudContext(session, operation),
             })
-            assertProtectedUpdateFields(entity, (patch ?? input.patch) as object)
+            assertProtectedUpdateFields(entity, (patch ?? input.patch) as object, options.update?.protectedFields)
             return patch
               ? { ...input, patch, originalPatch: input.originalPatch }
               : input
@@ -150,7 +149,7 @@ export function createUpdateHandler<
             `Optimistic concurrency for "${entity.name}" requires numeric version field "${config.versionField}"`
           )
         if (typeof incoming !== "number")
-          throw new ConflictError("Version is required for this update")
+          throw new PreconditionRequiredError("If-Match")
         if (incoming !== existingVersion)
           throw new ConflictError(
             "This record was modified by another user. Please reload and try again."
@@ -174,7 +173,21 @@ export function createUpdateHandler<
             )
           throw new NotFoundError(`${entity.name} not found`)
         }
-         return { record: updated }
+        // Read the row back through the transaction that wrote it: any other
+        // connection cannot see the uncommitted update (PostgreSQL, MySQL).
+        const committedVersion = entity.versionField ? updated[entity.versionField] : undefined
+        if (committedVersion !== undefined) assertEntityVersion(committedVersion)
+        const committedRead = await loadCommittedRecord({
+          entity,
+          moduleKey: options.moduleKey,
+          context: session,
+          persistence: operation.persistence,
+          adapterDeps: options.adapterDeps,
+          ...(options.entityScope !== undefined ? { entityScope: options.entityScope } : {}),
+          id: input.id,
+          ...(committedVersion !== undefined ? { committedVersion: committedVersion as EntityVersion } : {}),
+        })
+        return { record: updated, committedRead, hookPersistence: operation.persistence }
       }
       throw new ConfigurationError(
         `Secure update for ${entity.name} requires updateOneWhereReturning support`
@@ -186,7 +199,7 @@ export function createUpdateHandler<
         // transformInput runs after the authorization stage; the FINAL patch
         // must pass the same protected-field and ABAC update checks that the
         // interactive execute path applies before the batch is prepared.
-        assertProtectedUpdateFields(entity, input.patch as object)
+        assertProtectedUpdateFields(entity, input.patch as object, options.update?.protectedFields)
         // Pre-image and post-image must both permit the patch (see
         // enforceUpdateImages).
         for (const record of [
@@ -217,7 +230,7 @@ export function createUpdateHandler<
               `Optimistic concurrency for "${entity.name}" requires numeric version field "${config.versionField}"`,
             )
           }
-          if (typeof incoming !== "number") throw new ConflictError("Version is required for this update")
+          if (typeof incoming !== "number") throw new PreconditionRequiredError("If-Match")
           if (incoming !== existingVersion) {
             throw new ConflictError("This record was modified by another user. Please reload and try again.")
           }
@@ -254,30 +267,29 @@ export function createUpdateHandler<
       const session = resolveOperationRequestContext(operation)
       if (!("record" in result)) throw new ConfigurationError("Mutation result record is unavailable")
        const readablePersistence = withScopedPersistence(session, options.createPersistence(session))
-         const committedVersion = entity.versionField ? result.record[entity.versionField] : undefined
-         if (committedVersion !== undefined) assertEntityVersion(committedVersion)
-       const readable = await loadReadableMutationRecord(
-        options,
-        entity,
-        session,
-         input.id,
-         readablePersistence,
-           committedVersion as EntityVersion | undefined,
-       )
-      if (!readable)
+         // Initial response: the row read inside the writing transaction. The
+         // atomic-batch path has no such read; its batch is already applied when
+         // `after` runs, so a fresh read sees it.
+         const loaded = result.committedRead ?? await (async () => {
+           const committedVersion = entity.versionField ? result.record[entity.versionField] : undefined
+           if (committedVersion !== undefined) assertEntityVersion(committedVersion)
+           return loadCommittedRecord({
+             entity,
+             moduleKey: options.moduleKey,
+             context: session,
+             persistence: options.createPersistence(session),
+             adapterDeps: options.adapterDeps,
+             ...(options.entityScope !== undefined ? { entityScope: options.entityScope } : {}),
+             id: input.id,
+             ...(committedVersion !== undefined ? { committedVersion: committedVersion as EntityVersion } : {}),
+           })
+         })()
+      if (loaded.kind !== "record")
         return {
           success: true,
           reason: "UPDATED_OUTSIDE_READ_SCOPE",
          }
-
-         const bundle = session.identity.actor.kind !== "anonymous" && !canUseOwnerBypass(options.adapterDeps, options.scope.scope, session)
-         ? await options.adapterDeps.resolveAbacBundle({ moduleKey: options.moduleKey, context: session })
-         : undefined
-         if (bundle) await assertAbacSecurityDigest(bundle)
-         const overrides = bundle
-           ? resolveFieldReadOverrides({ policies: bundle.policies, moduleKey: options.moduleKey, record: readable })
-           : undefined
-          const projectedReadable = projectResponseRecord({ entity, record: readable, ...(overrides ? { overrides } : {}) })
+         const { overrides, record: projectedReadable } = loaded
          const projectedExisting = projectResponseRecord({ entity, record: input.existing, ...(overrides ? { overrides } : {}) })
            const hookResult = options.crud?.update?.projectCommittedResult
            ? await options.crud.update.projectCommittedResult({
@@ -285,7 +297,7 @@ export function createUpdateHandler<
           patch: input.patch,
           originalPatch: input.originalPatch,
             result: projectedReadable,
-             context: toCrudContext(session, operation, readablePersistence),
+             context: toCrudContext(session, operation, result.hookPersistence ?? readablePersistence),
         })
         : undefined
 
@@ -293,11 +305,7 @@ export function createUpdateHandler<
          return { record: projectResponseRecord({
         entity,
           record: candidate,
-        ...(bundle
-          ? {
-               overrides: overrides!,
-            }
-          : {}),
+        ...(overrides ? { overrides } : {}),
        }) }
     },
     ...(options.crud?.update?.afterCommit
@@ -387,8 +395,19 @@ export function createUpdateHandler<
        const committedVersion = typeof previousVersion === "number" ? previousVersion + 1 : undefined
        return { entity: options.moduleKey, id: input.id, ...(committedVersion !== undefined ? { version: committedVersion } : {}) }
     },
-    recoverCommittedResponse: async ({ resource, context }) =>
-      buildCommittedReadResponse({ options, entity, context, id: resource.id, ...(resource.version !== undefined ? { resourceVersion: resource.version } : {}) }),
+    recoverCommittedResponse: async ({ resource, context }) => {
+      const committed = await readCommittedRecord({
+        entity,
+        moduleKey: options.moduleKey,
+        context,
+        persistence: options.createPersistence(context),
+        adapterDeps: options.adapterDeps,
+        ...(options.entityScope !== undefined ? { entityScope: options.entityScope } : {}),
+        id: resource.id,
+        ...(resource.version !== undefined ? { committedVersion: resource.version } : {}),
+      })
+      return committed.kind === "record" ? { record: committed.record } : null
+    },
     validation: options.validation?.updateBody
       ? { params: shared.idParamsSchema, body: options.validation.updateBody }
       : { params: shared.idParamsSchema },
@@ -424,9 +443,9 @@ export function createUpdateHandler<
        const headerValue = config ? request.headers.get("if-match") : null
        const expectedVersion = config ? parseIfMatchVersion(headerValue) : undefined
        if (config && (expectedVersion === undefined || !Number.isSafeInteger(expectedVersion) || expectedVersion < 0))
-         throw new ConflictError("Version is required for this update")
+         throw headerValue === null || headerValue.trim() === "" ? new PreconditionRequiredError("If-Match") : new ConflictError("Version is required for this update")
        const patch = rawPatch as B
-       assertProtectedUpdateFields(entity, patch as object)
+       assertProtectedUpdateFields(entity, patch as object, options.update?.protectedFields)
        return {
         id: (validated.validatedParams as { id: string }).id,
         patch,

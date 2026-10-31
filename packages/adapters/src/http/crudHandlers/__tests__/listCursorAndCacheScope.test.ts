@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import type { EntityDescriptor, PersistenceProvider } from "@xonava/core/persistence"
+import { ConfigurationError } from "@xonava/core/domain"
 import { hmacSha256 } from "@xonava/core/serialization"
 import type { CursorIntegrityPort } from "@xonava/core/query"
 import { createListHandler, listCacheScope } from "../list"
-import type { CrudShared } from "../types"
+import type { CrudShared, ListPaginationConfig } from "../types"
 import { canonicalRequestNormalization, trustedSession } from "../../__tests__/canonicalRequest"
 
 type Row = { id: string; name: string; title: string }
@@ -129,6 +130,81 @@ describe("list cursor bindings", () => {
     expect(first.status, await first.clone().text()).toBe(200)
     const cursor = findEndCursor(await first.json())
     expect((await list(entity("orders"), `?filters=${search("b")}&cursor=${cursor}`)).status).toBe(400)
+  })
+})
+
+describe("list cursor expiry (opt-in cursorTtlMs)", () => {
+  // Must not precede the fixture's admission evidence (issuedAt 2026-09-10).
+  const start = new Date("2026-10-20T00:00:00Z")
+  const cursorPagination = (cursorTtlMs?: number): ListPaginationConfig => ({
+    strategy: "cursor",
+    integrity,
+    uniqueFields: ["id"],
+    ...(cursorTtlMs === undefined ? {} : { cursorTtlMs }),
+  })
+  const withPagination = (descriptor: EntityDescriptor<Row>, pagination: ListPaginationConfig): Shared => {
+    const base = shared(descriptor)
+    return { ...base, options: { ...base.options, pagination } }
+  }
+  const listWith = (pagination: ListPaginationConfig, query = "") =>
+    createListHandler(withPagination(entity("orders"), pagination))(new Request(`https://example.test/items${query}`))
+  const cursorWith = async (pagination: ListPaginationConfig): Promise<string> => {
+    const response = await listWith(pagination)
+    const body = await response.text()
+    expect(response.status, body).toBe(200)
+    const cursor = findEndCursor(JSON.parse(body))
+    if (!cursor) throw new Error(`no cursor in ${body}`)
+    return cursor
+  }
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it("accepts a next-page cursor before its expiry", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(start)
+    const pagination = cursorPagination(60_000)
+    const cursor = await cursorWith(pagination)
+    vi.setSystemTime(start.getTime() + 59_999)
+    const response = await listWith(pagination, `?cursor=${encodeURIComponent(cursor)}`)
+    expect(response.status, await response.clone().text()).toBe(200)
+  })
+
+  it("refuses the same cursor once it has expired, with the stale-cursor 400", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(start)
+    const pagination = cursorPagination(60_000)
+    const cursor = await cursorWith(pagination)
+    vi.setSystemTime(start.getTime() + 60_000)
+    const response = await listWith(pagination, `?cursor=${encodeURIComponent(cursor)}`)
+    expect(response.status).toBe(400)
+    expect(await response.text()).toMatch(/restart from the first page/)
+  })
+
+  it("issues cursors without expiry when cursorTtlMs is not set", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(start)
+    const pagination = cursorPagination()
+    const cursor = await cursorWith(pagination)
+    vi.setSystemTime(start.getTime() + 10 * 365 * 24 * 60 * 60 * 1000)
+    const response = await listWith(pagination, `?cursor=${encodeURIComponent(cursor)}`)
+    expect(response.status, await response.clone().text()).toBe(200)
+  })
+
+  it("refuses a cursor without expiry once cursorTtlMs is enabled", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(start)
+    const cursor = await cursorWith(cursorPagination())
+    const response = await listWith(cursorPagination(60_000), `?cursor=${encodeURIComponent(cursor)}`)
+    expect(response.status).toBe(400)
+    expect(await response.text()).toMatch(/restart from the first page/)
+  })
+
+  it("rejects a cursorTtlMs that is not a positive safe integer at construction", () => {
+    for (const cursorTtlMs of [0, -1, 1.5]) {
+      expect(() => createListHandler(withPagination(entity("orders"), cursorPagination(cursorTtlMs)))).toThrow(ConfigurationError)
+    }
   })
 })
 

@@ -16,4 +16,4 @@ No obsolete pre-canonical reader is part of the current contract. Format version
 
 Unsupported values, malformed bytes/envelopes, unknown versions, limit excess, and failed validation MUST be explicit format/validation errors; partial decoding MUST NOT be returned as valid. Conformance uses exact cross-language vectors for bytes, digests, envelopes, versions, rejection cases, resource limits, upcasting, and fingerprints.
 
-Traceability: `packages/core/src/serialization`, `packages/core/src/spec`; exact vectors and codec tests; F1 certification.
+Traceability: `packages/core/src/serialization`, `packages/core/src/spec`; exact vectors and codec tests.

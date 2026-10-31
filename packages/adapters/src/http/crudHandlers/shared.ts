@@ -15,7 +15,6 @@ import {
   type PredicateNode,
   type RequestContext,
 } from "@xonava/core/domain"
-import type { CrudRouteKey } from "@xonava/core/entity"
 import { createReadOnlyPersistenceProvider, createTenantScopedPersistenceProvider, encodeTenantCacheTag, type PersistenceProvider } from "@xonava/core/persistence"
 import { CacheBackedRateLimitStore } from "../../cache"
 import type {
@@ -47,16 +46,29 @@ export function tenantIdFromContext(context: RequestContext): string | undefined
   return context.scope.kind === "tenant" ? context.scope.tenantId : undefined
 }
 
+/** Fails at handler construction when an enabled CRUD handler has no route binding. */
+export function assertCrudRouteBinding(
+  normalization: FrameworkRequestNormalization,
+  routeKey: "list" | "detail",
+  moduleKey: string,
+): void {
+  if (!Object.hasOwn(normalization.routeBindings, routeKey))
+    throw new ConfigurationError(`CRUD handler for "${moduleKey}" has no route binding "${routeKey}"`)
+}
+
 export async function normalizeCrudRequest(args: {
   request: Request
-  routeKey: CrudRouteKey
+  routeKey: string
   normalization: FrameworkRequestNormalization
   requestId: string
   correlationId: string
   pathParameters?: Readonly<Record<string, string>>
   metadata?: Readonly<Record<string, unknown>>
 }): Promise<RequestContext> {
-  const route = args.normalization.routeBindings[args.routeKey]
+  const route = Object.hasOwn(args.normalization.routeBindings, args.routeKey)
+    ? args.normalization.routeBindings[args.routeKey]
+    : undefined
+  if (route === undefined) throw new ConfigurationError(`No route binding is configured for "${args.routeKey}"`)
   const session = await args.normalization.resolveTrustedSession({ request: args.request, route })
   const trustedHeaders = Object.fromEntries((args.normalization.trustedHeaders ?? []).flatMap((name) => {
     const value = args.request.headers.get(name)
@@ -140,7 +152,7 @@ export function canUseOwnerBypass(
 export function authorizeFrameworkModule(args: {
   deps: CrudOptions<SelectableRow>["adapterDeps"]
   moduleKey: string
-  action: "read" | "create" | "update" | "delete"
+  action: string
   capabilityKey?: string
   context: RequestContext
   bundle?: import("../../server").AbacBundle | null
@@ -230,9 +242,10 @@ export function getProtectedMutationFields<TRow extends SelectableRow>(
 
 export function assertProtectedUpdateFields<TRow extends SelectableRow>(
   entity: CrudOptions<TRow>["entity"],
-  patch: object
+  patch: object,
+  reservedFields: readonly string[] = [],
 ): void {
-  const protectedFields = getProtectedMutationFields(entity)
+  const protectedFields = [...new Set([...getProtectedMutationFields(entity), ...reservedFields])]
   const provided = protectedFields.filter((field) => Object.hasOwn(patch, field))
   if (provided.length > 0)
     throw new ForbiddenError(
@@ -312,146 +325,11 @@ export async function enforceFinalWrite<
   createAbacAuthorizer(bundle).assertWrite({ action: args.action, record: args.record, changedFields: args.changedFields })
 }
 
-export async function readMutationResult<
-  TRow extends SelectableRow,
-  A = TRow,
-  B = Partial<TRow>,
-  L extends SelectableRow = TRow,
-  D extends SelectableRow = TRow,
->(
-  options: CrudOptions<TRow, A, B, L, D>,
-  entity: CrudOptions<TRow>["entity"],
-  context: RequestContext,
-  id: string,
-  persistence?: PersistenceProvider,
-): Promise<TRow | null> {
-  const result = await loadReadableMutationRecord(
-    options,
-    entity,
-    context,
-    id,
-    persistence,
-  )
-  if (!result) return null
-  const requiresAbac = context.identity.actor.kind !== "anonymous" && !canUseOwnerBypass(options.adapterDeps, options.scope.scope, context)
-  const bundle = requiresAbac
-    ? await options.adapterDeps.resolveAbacBundle({ moduleKey: options.moduleKey, context })
-    : undefined
-  if (requiresAbac && !bundle)
-    throw new ForbiddenError("ABAC authorization bundle unavailable")
-  if (bundle) assertVerifiedAbacBundle(bundle)
-  return projectResponseRecord({
-    entity,
-    record: result,
-    ...(bundle ? { overrides: resolveFieldReadOverrides({ policies: bundle.policies, moduleKey: options.moduleKey, record: result }) } : {}),
-  })
-}
-
 /** Internal versions are already validated numbers; do not coerce persisted strings. */
 export function sameMutationVersion(a: unknown, b: unknown): boolean {
   return a === b
 }
 
-/**
- * Rebuilds a safe committed mutation response by rereading the resource under
- * the current verified security context. Used to recover an idempotent request
- * whose committed response was never finalized (crash between commit and
- * complete). Returns null when the row is not readable, in which case the
- * caller must not invent a response.
- */
-export async function buildCommittedReadResponse<
-  TRow extends SelectableRow,
-  A,
-  B,
-  L extends SelectableRow,
-  D extends SelectableRow,
->(args: {
-  options: CrudOptions<TRow, A, B, L, D>
-  entity: CrudOptions<TRow>["entity"]
-  context: RequestContext
-  id: string
-  resourceVersion?: EntityVersion
-}): Promise<MutationResult<TRow> | null> {
-  const readable = await loadReadableMutationRecord(
-    args.options,
-    args.entity,
-    args.context,
-    args.id,
-    undefined,
-    args.resourceVersion,
-  )
-  if (!readable) return null
-  const bundle = args.context.identity.actor.kind !== "anonymous" && !canUseOwnerBypass(args.options.adapterDeps, args.options.scope.scope, args.context)
-    ? await args.options.adapterDeps.resolveAbacBundle({ moduleKey: args.options.moduleKey, context: args.context })
-    : undefined
-  if (bundle) assertVerifiedAbacBundle(bundle)
-  return {
-    record: projectResponseRecord({
-      entity: args.entity,
-      record: readable,
-      ...(bundle
-        ? {
-            overrides: resolveFieldReadOverrides({
-              policies: bundle.policies,
-              moduleKey: args.options.moduleKey,
-              record: readable,
-            }),
-          }
-        : {}),
-    }),
-  }
-}
-
-export async function loadReadableMutationRecord<
-  TRow extends SelectableRow,
-  A = TRow,
-  B = Partial<TRow>,
-  L extends SelectableRow = TRow,
-  D extends SelectableRow = TRow,
->(
-  options: CrudOptions<TRow, A, B, L, D>,
-  entity: CrudOptions<TRow>["entity"],
-  context: RequestContext,
-  id: string,
-  persistence?: PersistenceProvider,
-  resourceVersion?: EntityVersion,
-): Promise<TRow | null> {
-  const structural = buildStructuralScope(entity, context, options.entityScope)
-  const readBundle = context.identity.actor.kind === "anonymous" || canUseOwnerBypass(options.adapterDeps, options.scope.scope, context)
-    ? undefined
-    : await options.adapterDeps.resolveAbacBundle({
-        moduleKey: options.moduleKey,
-        context,
-      })
-  if (context.identity.actor.kind !== "anonymous" && !canUseOwnerBypass(options.adapterDeps, options.scope.scope, context) && !readBundle)
-    throw new ForbiddenError("ABAC authorization bundle unavailable")
-  if (readBundle) assertVerifiedAbacBundle(readBundle)
-  const resolvedReadScope = readBundle
-    ? createAbacAuthorizer(readBundle).authorizeCollection("read").scope
-    : undefined
-  const scope = structural && resolvedReadScope
-    ? Predicate.and(structural, resolvedReadScope)
-    : structural ?? resolvedReadScope
-  const filter = scope
-    ? Predicate.and(Predicate.eq(entity.primaryKey ?? "id", id), scope)
-    : Predicate.eq(entity.primaryKey ?? "id", id)
-  const versionField = entity.versionField
-  const versionFilter = resourceVersion !== undefined && versionField
-    ? Predicate.eq(versionField, resourceVersion)
-    : undefined
-  const mutationFilter = versionFilter ? Predicate.and(filter, versionFilter) : filter
-  const basePersistence = persistence ?? options.createPersistence(context)
-  const readPersistence = entity.tenantField
-    ? withScopedPersistence(context, basePersistence)
-    : basePersistence
-  const row = await internalRepositoryForDescriptor(readPersistence, entity).findMany({
-    filter: mutationFilter,
-    pagination: { kind: "offset", page: 1, pageSize: 1 },
-  })
-  const result = row.rows[0] ?? null
-  if (result && resourceVersion !== undefined && (!versionField || !sameMutationVersion(result[versionField], resourceVersion))) return null
-  return result
-}
 export function withScopedPersistence(
   context: RequestContext,
   persistence: PersistenceProvider

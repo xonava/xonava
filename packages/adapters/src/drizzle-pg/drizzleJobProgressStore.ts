@@ -35,7 +35,7 @@ export class DrizzlePgJobProgressStore implements JobProgressPort {
    * @param options.jobColumns the DrizzleJobStore's `columnMap.jobs`; the fence then uses the job
    *   store's own `id`, `leaseOwner`, `claimToken`, `attempts` and `leaseExpiresAt` columns.
    * @param options.fenceColumns explicit physical fence column names (overrides `jobColumns`).
-   * Without either, the legacy `worker_id`/`attempt` names are used.
+   * Without either, the default `worker_id`/`attempt` column names are used.
    */
   constructor(private readonly pool: Pick<Pool, "query">, options: { schema?: string; jobsTable?: string; jobColumns?: DrizzleColumnMap; fenceColumns?: Partial<JobProgressFenceColumns> } = {}) {
     this.schema = pgSchemaName(options.schema ?? "public")
@@ -60,7 +60,7 @@ export class DrizzlePgJobProgressStore implements JobProgressPort {
   }
   async write(fence: JobProgressFence, expectedSequence: number, progress: { percent?: number; checkpoint?: Record<string, unknown> }): Promise<JobProgress> {
     validateJobProgress(progress)
-    const result = await this.pool.query(`INSERT INTO ${this.schema}.job_progress(job_id,attempt,sequence,percent,checkpoint,updated_at) SELECT ${this.fence.id},${this.fence.attempt},$5,$6,$7::jsonb,clock_timestamp() FROM ${this.schema}.${this.jobsTable} WHERE ${this.fenceWhere()} ON CONFLICT(job_id) DO UPDATE SET attempt=EXCLUDED.attempt,sequence=EXCLUDED.sequence,percent=EXCLUDED.percent,checkpoint=EXCLUDED.checkpoint,updated_at=EXCLUDED.updated_at WHERE ${this.schema}.job_progress.sequence=$8 RETURNING job_id,attempt,sequence,percent,checkpoint,updated_at`, [fence.jobId, fence.workerId, fence.claimToken, fence.attempt, expectedSequence + 1, progress.percent ?? null, progress.checkpoint === undefined ? null : JSON.stringify(progress.checkpoint), expectedSequence])
+    const result = await this.pool.query(`INSERT INTO ${this.schema}.job_progress(job_id,attempt,sequence,percent,checkpoint,updated_at) SELECT ${this.fence.id},${this.fence.attempt},$5,$6,$7::jsonb,clock_timestamp() FROM ${this.schema}.${this.jobsTable} WHERE ${this.fenceWhere()} AND ($8::bigint=0 OR EXISTS(SELECT 1 FROM ${this.schema}.job_progress WHERE job_id=$1)) ON CONFLICT(job_id) DO UPDATE SET attempt=EXCLUDED.attempt,sequence=EXCLUDED.sequence,percent=EXCLUDED.percent,checkpoint=EXCLUDED.checkpoint,updated_at=EXCLUDED.updated_at WHERE ${this.schema}.job_progress.sequence=$8 RETURNING job_id,attempt,sequence,percent,checkpoint,updated_at`, [fence.jobId, fence.workerId, fence.claimToken, fence.attempt, expectedSequence + 1, progress.percent ?? null, progress.checkpoint === undefined ? null : JSON.stringify(progress.checkpoint), expectedSequence])
     const row = result.rows[0]
     if (!row) {
       const owner = (await this.pool.query(`SELECT 1 FROM ${this.schema}.${this.jobsTable} WHERE ${this.fenceWhere()}`, [fence.jobId, fence.workerId, fence.claimToken, fence.attempt])).rowCount

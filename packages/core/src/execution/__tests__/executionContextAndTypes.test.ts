@@ -71,6 +71,31 @@ describe("execution context and scope helpers", () => {
     expect(() => assertJobScopeMatches({ kind: "system", systemKey: "framework" }, "platform")).toThrow("scope mismatch")
   })
 
+  it("enforces the full requester-to-target enqueue matrix", () => {
+    const requesters: Record<string, JobRequester> = {
+      system: { scope: "system" },
+      platform: { scope: "platform", actorId: "p" },
+      platformCap: { scope: "platform", actorId: "p", capabilities: ["enqueue:system"] },
+      tenant: { scope: "tenant", tenantId: "t1", actorId: "a" },
+    }
+    const targets = ["tenant", "platform", "system"] as const
+    const allowed: Record<string, readonly string[]> = {
+      system: ["tenant", "platform", "system"],
+      platform: ["platform"],
+      platformCap: ["tenant", "platform", "system"],
+      tenant: ["tenant"],
+    }
+    for (const [name, requester] of Object.entries(requesters)) {
+      for (const target of targets) {
+        const jobTenant = target === "tenant" ? "t1" : null
+        const call = () => assertRequesterCanEnqueueScope(requester, target, jobTenant)
+        if (allowed[name]!.includes(target)) expect(call, `${name} -> ${target}`).not.toThrow()
+        else expect(call, `${name} -> ${target}`).toThrow(expect.objectContaining({ name: "TenantScopeViolationError" }))
+      }
+    }
+    expect(() => assertRequesterCanEnqueueScope(requesters.tenant!, "tenant", "t2")).toThrow(expect.objectContaining({ name: "TenantScopeViolationError" }))
+  })
+
   it("exposes the job error types with their stable kinds and defaults", () => {
     expect(new RetryableJobError("retry")).toMatchObject({ name: "RetryableJobError", kind: "retryable" })
     expect(new PermanentJobError("permanent")).toMatchObject({ name: "PermanentJobError", kind: "permanent" })

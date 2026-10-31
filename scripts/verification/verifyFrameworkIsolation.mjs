@@ -12,12 +12,12 @@ if (existsSync(hidden)) throw new Error(`isolation staging path already exists: 
 if (existsSync(apps)) renameSync(apps, hidden)
 try {
   const commands = [
-    ["run", "verify:framework:fixtures"],
+    ["run", "verify:fixtures"],
     ["run", "typecheck"],
-    ["run", "test:framework:integration:d1"],
-    ["run", "test:framework:conformance:d1"],
-    ["run", "test:framework:race:d1"],
-    ["run", "test:framework:crash:d1"],
+    ["run", "test:integration:d1"],
+    ["run", "test:conformance:d1"],
+    ["run", "test:race:d1"],
+    ["run", "test:crash:d1"],
   ]
   for (const args of commands) execFileSync(process.execPath, [npmCli, ...args], { cwd: root, stdio: "inherit", env: process.env })
 } finally {

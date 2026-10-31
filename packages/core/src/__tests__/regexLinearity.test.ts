@@ -4,10 +4,11 @@ import { parseTimeWindowMs } from "../rate-limit/rateLimit"
 import { parseCronExpression } from "../execution/scheduleCalculator"
 import { compileScheduleLifecycle } from "../execution/scheduleLifecycle"
 import { canonicalJsonString } from "../serialization/canonicalJson"
+import { expectNearLinear } from "./timing"
 
 /**
- * Guards for untrusted, unbounded text reaching the regular expressions in core. Every shape is 200 kB; the bound is generous
- * (a linear scan takes a few ms) but a backtracking blow-up takes seconds to minutes.
+ * Guards for untrusted, unbounded text reaching the regular expressions in core. Every shape is 200 kB; the cost on it is compared with the
+ * cost on a quarter of it, so the result does not depend on machine speed or load (a backtracking blow-up grows sixteen-fold).
  */
 const SIZE = 200_000
 const shapes: Array<[string, string]> = [
@@ -21,16 +22,14 @@ const shapes: Array<[string, string]> = [
   ["colon groups", `a${":v1".repeat(SIZE / 3)}`],
 ]
 
-function elapsed(fn: () => unknown): number {
-  const started = performance.now()
-  try { fn() } catch { /* rejection is the expected outcome */ }
-  return performance.now() - started
-}
+/** The cost on the whole shape must stay within a small multiple of the cost on a quarter of it (see expectNearLinear). */
+const nearLinear = (text: string, run: (text: string) => unknown) =>
+  expectNearLinear((size) => { const part = text.slice(0, size); return () => { try { run(part) } catch { /* rejection is the expected outcome */ } } }, { size: text.length })
 
 describe.each(shapes)("adversarial input: %s", (_name, text) => {
-  it("parseRfc3339Timestamp", () => { expect(elapsed(() => parseRfc3339Timestamp(text))).toBeLessThan(500) })
-  it("parseTimeWindowMs", () => { expect(elapsed(() => parseTimeWindowMs(text))).toBeLessThan(500) })
-  it("parseCronExpression", () => { expect(elapsed(() => parseCronExpression(text))).toBeLessThan(500) })
-  it("compileScheduleLifecycle", () => { expect(elapsed(() => compileScheduleLifecycle({ effectiveFrom: text, effectiveUntil: text }))).toBeLessThan(500) })
-  it("canonicalJsonString", () => { expect(elapsed(() => canonicalJsonString({ [text.slice(0, 1000)]: text }))).toBeLessThan(500) })
+  it("parseRfc3339Timestamp", async () => { await nearLinear(text, parseRfc3339Timestamp) })
+  it("parseTimeWindowMs", async () => { await nearLinear(text, parseTimeWindowMs) })
+  it("parseCronExpression", async () => { await nearLinear(text, parseCronExpression) })
+  it("compileScheduleLifecycle", async () => { await nearLinear(text, (part) => compileScheduleLifecycle({ effectiveFrom: part, effectiveUntil: part })) })
+  it("canonicalJsonString", async () => { await nearLinear(text, (part) => canonicalJsonString({ [part.slice(0, 1000)]: part })) })
 })

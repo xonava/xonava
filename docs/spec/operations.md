@@ -18,6 +18,8 @@ Nested operations MUST consume from the enclosing budget/deadline and MUST NOT a
 
 An operation's `execute` context exposes `invoke(definition, input)`. The child inherits identity, scope, correlation, signal, and deadline, runs its own authorization against the unconstrained persistence of the parent's run, and counts against `maxNestingDepth`. When the parent runs in a transaction the child joins it: the child's writes and durable effects commit or roll back with the parent, and the child's post-commit work (its `afterCommit` hooks and best-effort effects) runs only after the parent commits, reporting failures on the parent's outcome. A child that manages its own transaction retries or uses an atomic batch cannot join a transaction. A parent whose child failed, or is still running when `execute` returns, MUST NOT commit. When the parent's `execute` fails, its running children are cancelled through their signal and awaited (bounded by the parent's deadline) before the transaction ends. Once the parent's `execute` has ended, a joined child's persistence fails closed with `OperationContextInactiveError` and new `invoke` calls are refused. A child's `afterCommit` runs after the parent commits under the same rules as a top-level `afterCommit`; re-queuing a child's post-commit work never throws after commit. Read operations may invoke only read operations. `createOperationInvoker(environment)` composes top-level operations that each own their transaction.
 
+Savepoints are not provided: a joined child cannot roll back its own writes while the parent continues. A child that must be able to fail without failing the parent runs as a separate top-level operation through `createOperationInvoker`. Adding opt-in savepoints on PostgreSQL and MySQL later would not change this contract, because D1 cannot offer them.
+
 The request's `signal` and `deadline` bound the operation together with the environment's: the run aborts when either signal aborts and expires at the earlier deadline.
 
 ## Errors and conformance
@@ -35,3 +37,27 @@ When an atomic-batch `after` (representation) hook fails after the batch committ
 ## Transaction retry (normative)
 
 `execution: { kind: "retryable-transaction" }` re-runs the whole transaction callback, with a fresh effect scope, only when the failed attempt is known not to have committed: the callback threw a `RetryablePersistenceError` (the provider rolls the transaction back, including every outbox record, audit row, and commit marker it wrote), or the provider reports `TransactionRolledBackError` at commit. Any other failure after the callback returned has an unknown commit outcome and is never retried. Retries use jittered exponential backoff (`delay`, `backoff`, `maxDelay`), stop immediately when the operation signal aborts, and give up with the last error rather than wait past the execution deadline.
+
+## Business actions (normative)
+
+A business action is a domain verb on a module, such as `approve`, `reject` or `ship`, that is authorized by its own grant and is not an `update` of the row. `createFrameworkWriteHandler` accepts `action: "create" | "update" | "delete" | <business action name>`.
+
+**Name.** A business action name matches `/^[a-z][a-zA-Z0-9_-]{0,63}$/` and MUST NOT be `read`, `manage`, `create`, `update` or `delete`. The handler checks this at construction and throws `ConfigurationError` otherwise.
+
+**Route binding.** The handler normalizes its request against `requestNormalization.routeBindings[routeKey]`. The optional `routeKey` argument defaults to `action`. The binding map is the five CRUD bindings plus any number of additional bindings keyed by string. A `routeKey` with no binding is a `ConfigurationError` at handler construction, never at request time. The binding's `operationKey` MUST equal the handler definition's `key`, as for CRUD.
+
+**Authorization.** The action string is the only thing that grants a business action:
+
+- The ABAC catalog (`defineAbacModule`) lists the action, and policies grant it by naming it in `payload.actions` (`validatePayloadAgainstCatalog` rejects unknown actions). A policy that lists `approve` and not `update` admits `approve` and refuses `update`; a policy that lists `update` and not `approve` does the reverse. There is no implicit `update`, in either direction.
+- Module admission (`authorizeFrameworkModule`, `assertFrameworkAuthorization`) passes the action string to `enabledModuleActions` and to the ABAC collection-action check. An `enabledModuleActions` list that contains `manage` allows every action, business actions included; this existing behaviour is unchanged. Module admission is applied in tenant scope only, as for CRUD.
+- A deny policy on the action wins by the usual tier rules, and field write restrictions (`fieldAccess.write`) are resolved for the business action's own policies.
+- The business operation enforces the write by calling `operation.enforceAbac.enforce(action, record, changedFields)`, which reaches `AbacAuthorizer.assertWrite` and `enforceAbacWrite` with the action as a plain string. `evaluateWriteConditionTruth` special-cases only `create`, so a business action is evaluated like `update`: an UNKNOWN condition fails closed (an allow grants nothing, a deny applies), and the field-write tier and the record decision are checked against both the pre-image (`existing`) and the post-image.
+- The bundle is resolved on every request and its `securityDigest` is part of the idempotency fingerprint. Revoking a grant by issuing a new bundle refuses the next call, and a receipt created under the old bundle is not replayed under the new one.
+
+**Idempotency and rate limits.** The idempotency scope (`<scope>:<moduleKey>:<action>:principal:<identity>`), the idempotency fingerprint and the rate-limit key (`<scopeId>:<moduleKey>:<action>:<principal and ip>`) all include the action. A key used for `approve` is therefore independent of the same key used for `update`: it cannot replay the other action's response. Reusing a key for a different `approve` request is a 409 conflict.
+
+**Atomicity.** A business action is an ordinary standard or atomic-batch mutation. Its audit record, outbox records and idempotency receipt commit with the business change and roll back with it.
+
+**Reserving fields (`protectedFields`).** `CRUD(definition, { update: { protectedFields } })` lists entity fields that only a business action may change. A generic update whose patch contains any of them, including a patch produced by `transformInput`, is refused with `ForbiddenError` (403). The names MUST be entity fields; `CRUD()` throws `ConfigurationError` otherwise. They are added to the always-protected set (primary key, tenant field, version field, `immutableFields`).
+
+Traceability: `packages/adapters/src/http/createFrameworkWriteHandler.ts`, `packages/adapters/src/http/crud.ts`, `packages/adapters/src/http/__tests__/businessActionWrites.test.ts`.

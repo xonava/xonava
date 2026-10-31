@@ -22,6 +22,7 @@
 import { expect } from "vitest"
 import { assertDurableIdentifier, scheduleOccurrencesConsumed, type FencedScheduleClaim, type ScheduleStore } from "@xonava/core/execution"
 import { forAllAsync, scaledRuns, type Rng } from "../../../core/src/__tests__/differential/harness.js"
+import { TIMING_SCALE } from "../../../core/src/__tests__/timing.js"
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Driver
@@ -57,6 +58,8 @@ export interface RefRow {
   id: string
   scope: Scope
   tenantId: string | null
+  /** The persisted platform/system key (scope_key): NULL for the framework defaults and for tenant rows. */
+  scopeKey: string | null
   jobType: string
   jobVersion: number
   payload: string
@@ -83,13 +86,13 @@ export interface RefRow {
 
 type Kind = "text" | "int" | "bool" | "time"
 const FIELD_KINDS: Record<keyof RefRow, Kind> = {
-  id: "text", scope: "text", tenantId: "text", jobType: "text", jobVersion: "int", payload: "text", cronExpression: "text", timezone: "text",
+  id: "text", scope: "text", tenantId: "text", scopeKey: "text", jobType: "text", jobVersion: "int", payload: "text", cronExpression: "text", timezone: "text",
   enabled: "bool", paused: "bool", overlapPolicy: "text", misfirePolicy: "text", nextRunAt: "time", lastRunAt: "time", lastStatus: "text",
   lastError: "text", leaseOwner: "text", claimToken: "text", leaseAt: "time", effectiveFrom: "time", effectiveUntil: "time", remaining: "int",
   calendarKey: "text", owner: "text", description: "text",
 }
 const FIELD_COLUMN: Record<keyof RefRow, string> = {
-  id: "id", scope: "scope", tenantId: "tenant_id", jobType: "job_type", jobVersion: "job_version", payload: "payload", cronExpression: "cron_expression",
+  id: "id", scope: "scope", tenantId: "tenant_id", scopeKey: "scope_key", jobType: "job_type", jobVersion: "job_version", payload: "payload", cronExpression: "cron_expression",
   timezone: "timezone", enabled: "enabled", paused: "paused", overlapPolicy: "overlap_policy", misfirePolicy: "misfire_policy", nextRunAt: "next_run_at",
   lastRunAt: "last_run_at", lastStatus: "last_status", lastError: "last_error", leaseOwner: "@lease_owner", claimToken: "claim_token",
   leaseAt: "lease_expires_at", effectiveFrom: "effective_from", effectiveUntil: "effective_until", remaining: "remaining_occurrences",
@@ -231,7 +234,7 @@ export class ReferenceScheduleStore {
   toClaim(row: RefRow, prior: string | null): Claim {
     return {
       scheduleId: row.id, scope: row.scope,
-      executionScope: row.scope === "tenant" ? { kind: "tenant", tenantId: row.tenantId } : row.scope === "platform" ? { kind: "platform", platformKey: "default" } : { kind: "system", systemKey: "framework" },
+      executionScope: row.scope === "tenant" ? { kind: "tenant", tenantId: row.tenantId } : row.scope === "platform" ? { kind: "platform", platformKey: row.scopeKey ?? "default" } : { kind: "system", systemKey: row.scopeKey ?? "framework" },
       jobType: row.jobType, jobVersion: row.jobVersion, tenantId: row.tenantId, payload: row.payload, cronExpression: row.cronExpression,
       timezone: row.timezone, overlapPolicy: { type: row.overlapPolicy }, misfirePolicy: { type: row.misfirePolicy }, nextRunAt: row.nextRunAt!,
       lastRunAt: row.lastRunAt, lastStatus: prior,
@@ -336,7 +339,7 @@ type PatchOp =
 interface AdvanceSpec { nextOff: number | null; lastRunOff: number; status: string; error: string | undefined; occurrences: number | undefined; retryOff: number | undefined }
 
 export type Op =
-  | { k: "insert"; id: string; scope: Scope; payload: string; cron: string; tz: string; overlap: RefRow["overlapPolicy"]; misfire: RefRow["misfirePolicy"]; enabled: boolean; paused: boolean; fromOff: number | null; untilOff: number | null; remaining: number | null; calendar: string | null; owner: string | null; description: string | null; nextOff: number; lastStatus: string | null; retryOff: number | null; lastRunOff: number | null; lastError: string | null }
+  | { k: "insert"; id: string; scope: Scope; keyed: boolean; payload: string; cron: string; tz: string; overlap: RefRow["overlapPolicy"]; misfire: RefRow["misfirePolicy"]; enabled: boolean; paused: boolean; fromOff: number | null; untilOff: number | null; remaining: number | null; calendar: string | null; owner: string | null; description: string | null; nextOff: number; lastStatus: string | null; retryOff: number | null; lastRunOff: number | null; lastError: string | null }
   | { k: "patch"; id: string; patch: PatchOp }
   | { k: "delete"; id: string }
   | { k: "time"; ms: number }
@@ -368,7 +371,7 @@ function genRef(rng: Rng): GrantRef {
 function genInsert(rng: Rng, id: string): Op {
   const lastStatus = rng.pick([null, "idle", "fired", "skipped", "failed", "failed", "running"] as const)
   return {
-    k: "insert", id, scope: rng.pick(["tenant", "platform", "system"] as const), payload: rng.pick(PAYLOADS),
+    k: "insert", id, scope: rng.pick(["tenant", "platform", "system"] as const), keyed: rng.bool(0.5), payload: rng.pick(PAYLOADS),
     cron: rng.pick(["*/5 * * * *", "0 * * * *", "0 0 1 1 *"]), tz: rng.pick(["UTC", "Europe/Berlin", "America/New_York"]),
     overlap: rng.pick(["allow", "skip", "queue"] as const), misfire: rng.pick(["skip", "fire_now", "queue_all"] as const),
     enabled: rng.bool(0.9), paused: rng.bool(0.12),
@@ -452,7 +455,9 @@ class Run {
   async insert(op: Extract<Op, { k: "insert" }>): Promise<void> {
     const running = op.lastStatus === "running"
     const row: RefRow = {
-      id: op.id, scope: op.scope, tenantId: op.scope === "tenant" ? `tenant-${op.id}` : null, jobType: `job.${op.id}`, jobVersion: 1,
+      id: op.id, scope: op.scope, tenantId: op.scope === "tenant" ? `tenant-${op.id}` : null,
+      // A keyed platform/system schedule carries a non-default key the claim must hand back exactly; a default one stores NULL.
+      scopeKey: op.keyed && op.scope !== "tenant" ? (op.scope === "platform" ? "tenantless-a" : "probe") : null, jobType: `job.${op.id}`, jobVersion: 1,
       payload: op.payload, cronExpression: op.cron, timezone: op.tz, enabled: op.enabled, paused: op.paused, overlapPolicy: op.overlap, misfirePolicy: op.misfire,
       nextRunAt: this.unique(this.cursor + op.nextOff * 1_000, op.id), lastRunAt: op.lastRunOff === null ? null : this.cursor + op.lastRunOff * 1_000,
       lastStatus: op.lastStatus, lastError: op.lastError,
@@ -758,9 +763,9 @@ function shrinkOps(ops: Op[]): Iterable<Op[]> {
   return out
 }
 
-/** A per-test time budget that grows with DIFFERENTIAL_SCALE like the property case counts do (1 at scale 1). */
+/** A per-test time budget that grows with DIFFERENTIAL_SCALE like the property case counts do, and with XONAVA_TIMING_SCALE (1 at scale 1). */
 export function scaledTimeoutMs(baseMs: number): number {
-  return Math.ceil(baseMs * Math.max(1, scaledRuns(100) / 100))
+  return Math.ceil(baseMs * Math.max(1, scaledRuns(100) / 100) * TIMING_SCALE)
 }
 
 /**
@@ -806,7 +811,7 @@ export async function assertConcurrentClaimInvariants(driver: ScheduleDriver, ba
       const buffered = bufferedDriver(driver)
       const run = new Run(buffered, buffered.store)
       for (let index = 0; index < c.schedules; index++) {
-        await run.insert({ k: "insert", id: `conc-${index}`, scope: "system", payload: "{}", cron: "*/5 * * * *", tz: "UTC", overlap: "allow", misfire: "fire_now", enabled: true, paused: false, fromOff: null, untilOff: null, remaining: c.remaining[index] ?? null, calendar: null, owner: null, description: null, nextOff: -1 - index, lastStatus: null, retryOff: null, lastRunOff: null, lastError: null })
+        await run.insert({ k: "insert", id: `conc-${index}`, scope: "system", keyed: index % 2 === 1, payload: "{}", cron: "*/5 * * * *", tz: "UTC", overlap: "allow", misfire: "fire_now", enabled: true, paused: false, fromOff: null, untilOff: null, remaining: c.remaining[index] ?? null, calendar: null, owner: null, description: null, nextOff: -1 - index, lastStatus: null, retryOff: null, lastRunOff: null, lastError: null })
       }
       let pick = 0
       for (let round = 0; round < c.rounds; round++) {

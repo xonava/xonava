@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { CanonicalJsonError, canonicalJsonString, canonicalSha256Hex, canonicalizeValue, decodeCanonicalJson, legacyJavaScriptOrderJsonString } from "../../serialization/canonicalJson"
+import { CanonicalJsonError, canonicalJsonString, canonicalSha256Hex, canonicalizeValue, decodeCanonicalJson } from "../../serialization/canonicalJson"
 import { sha256Hex } from "../../serialization/sha256"
 import { createEnvelope, parseEnvelope } from "../../serialization/formatEnvelope"
 import { createVersionedCodec, decodeFromString } from "../../serialization/versionedCodec"
@@ -61,43 +61,30 @@ describe("encoding regressions", () => {
   })
 })
 
-describe("fingerprint compatibility across the RFC 8785 key-order fix", () => {
+describe("job fingerprint version", () => {
   const numericKeyed = { "10": "ten", "9": "nine", a: { "2": 0, "11": 1 } }
-
-  it("keeps the pre-fix JavaScript-order serializer for compatibility checks only", () => {
-    expect(legacyJavaScriptOrderJsonString(numericKeyed)).toBe(JSON.stringify(canonicalizeValue(numericKeyed)))
-    expect(legacyJavaScriptOrderJsonString(numericKeyed)).not.toBe(canonicalJsonString(numericKeyed))
-    // Same validation as canonical JSON: it is not a general-purpose escape hatch.
-    expect(() => legacyJavaScriptOrderJsonString({ at: new Date(0) })).toThrow(CanonicalJsonError)
-  })
-
   const input: JobFingerprintInput = {
     executionScope: { kind: "tenant", tenantId: "t1" }, jobType: "billing.sync", jobVersion: 1, payload: numericKeyed,
     runAt: new Date("2026-01-01T00:00:00.000Z"), maxAttempts: 3, priority: 0, correlationId: null, partitionKey: null, metadata: null,
   }
+  const sha256Hex = async (text: string): Promise<string> =>
+    Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))), (byte) => byte.toString(16).padStart(2, "0")).join("")
   /** What version 3 persisted: sha256 of the JavaScript-order serialization of { version: 3, job }. */
-  const storedV3 = async (job: JobFingerprintInput): Promise<string> => {
-    const text = JSON.stringify(canonicalizeValue({ version: 3, job: { ...job, runAt: job.runAt.toISOString() } }))
-    return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))), (byte) => byte.toString(16).padStart(2, "0")).join("")
-  }
-
+  const storedV3 = (job: JobFingerprintInput) => sha256Hex(JSON.stringify(canonicalizeValue({ version: 3, job: { ...job, runAt: job.runAt.toISOString() } })))
   /** What version 4 persisted: sha256 of the canonical (RFC 8785) serialization of { version: 4, job }. */
-  const storedV4 = async (job: JobFingerprintInput): Promise<string> => {
-    const text = canonicalJsonString({ version: 4, job: { ...job, runAt: job.runAt.toISOString() } })
-    return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))), (byte) => byte.toString(16).padStart(2, "0")).join("")
-  }
+  const storedV4 = (job: JobFingerprintInput) => sha256Hex(canonicalJsonString({ version: 4, job: { ...job, runAt: job.runAt.toISOString() } }))
 
-  it("bumps the job fingerprint version and still matches version-4 and version-3 fingerprints of the same job", async () => {
+  it("hashes the canonical (RFC 8785) serialization of the version-5 material", async () => {
     expect(JOB_FINGERPRINT_VERSION).toBe(5)
-    const legacy = await storedV3(input)
-    expect(await fingerprintJob(input)).not.toBe(legacy)
-    expect(await fingerprintJob(input)).not.toBe(await storedV4(input))
-    await expect(jobFingerprintMatches(await storedV4(input), input)).resolves.toBe(true)
-    await expect(jobFingerprintMatches(await storedV4(input), { ...input, maxAttempts: null })).resolves.toBe(true)
-    await expect(jobFingerprintMatches(await storedV4({ ...input, jobType: "billing.other" }), input)).resolves.toBe(false)
+    expect(await fingerprintJob(input)).toBe(await sha256Hex(canonicalJsonString({ version: 5, job: { ...input, runAt: input.runAt.toISOString() } })))
+  })
+
+  it("matches only its own current-version digest; version-3 and version-4 digests are no longer recognised", async () => {
     await expect(jobFingerprintMatches(await fingerprintJob(input), input)).resolves.toBe(true)
-    await expect(jobFingerprintMatches(legacy, input)).resolves.toBe(true)
-    await expect(jobFingerprintMatches(await storedV3({ ...input, jobType: "billing.other" }), input)).resolves.toBe(false)
+    await expect(jobFingerprintMatches(await fingerprintJob({ ...input, jobType: "billing.other" }), input)).resolves.toBe(false)
+    await expect(jobFingerprintMatches(await storedV4(input), input)).resolves.toBe(false)
+    await expect(jobFingerprintMatches(await storedV4(input), { ...input, maxAttempts: null })).resolves.toBe(false)
+    await expect(jobFingerprintMatches(await storedV3(input), input)).resolves.toBe(false)
     await expect(jobFingerprintMatches("", input)).resolves.toBe(false)
   })
 })

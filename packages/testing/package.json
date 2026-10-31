@@ -1,6 +1,6 @@
 {
   "name": "@xonava/testing",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Conformance contracts and test kit for verifying server framework adapters against persistence, cache, concurrency, and access-policy guarantees.",
   "keywords": [
     "server",
@@ -64,6 +64,10 @@
       "types": "./dist/contracts/cache-adapter.d.ts",
       "default": "./dist/contracts/cache-adapter.js"
     },
+    "./contracts/object-store": {
+      "types": "./dist/contracts/object-store/index.d.ts",
+      "default": "./dist/contracts/object-store/index.js"
+    },
     "./contracts/shared-conformance": {
       "types": "./dist/contracts/shared-conformance.d.ts",
       "default": "./dist/contracts/shared-conformance.js"
@@ -72,9 +76,10 @@
   "scripts": {
     "build": "tsc -b tsconfig.build.json --force && node ../../scripts/verification/rewriteBuildExtensions.mjs ../core ../adapters .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint src tests fixtures integration crash conformance --max-warnings=0",
+    "lint": "eslint src tests fixtures integration crash conformance bench soak --max-warnings=0",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "bench": "vitest bench --run",
     "test:property": "vitest run tests/property.test.ts",
     "test:race": "vitest run tests/race.test.ts",
     "test:crash": "vitest run tests/crash-recovery.test.ts",
@@ -90,21 +95,23 @@
     "test:crash:pg": "vitest run --config vitest.integration.config.ts crash/pg.crash.test.ts",
     "test:crash:d1": "vitest run --config vitest.integration.config.ts crash/d1.crash.test.ts",
     "test:crash:mysql": "vitest run --config vitest.integration.config.ts crash/mysql.crash.test.ts",
+    "soak": "vitest run --config vitest.soak.config.ts",
     "prepack": "npm run build"
   },
   "peerDependencies": {
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.7 || ^5.0.0"
   },
   "devDependencies": {
     "@types/pg": "8.23.1",
-    "@xonava/adapters": "0.1.0",
-    "drizzle-orm": "0.45.2",
-    "miniflare": "3.20250718.3",
-    "mysql2": "^3.24.4",
-    "pg": "8.23.0",
-    "vitest": "^4.1.7"
+    "@vitest/coverage-v8": "^5.0.5",
+    "@xonava/adapters": "0.3.0",
+    "drizzle-orm": "0.45.4",
+    "miniflare": "4.20260730.0",
+    "mysql2": "^3.24.6",
+    "pg": "8.23.1",
+    "vitest": "^5.0.5"
   },
   "dependencies": {
-    "@xonava/core": "0.1.0"
+    "@xonava/core": "0.3.0"
   }
 }

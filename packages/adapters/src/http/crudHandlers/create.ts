@@ -5,25 +5,21 @@ import { assertEntityVersion, type EntityVersion } from "@xonava/core/serializat
 import { internalRepositoryForDescriptor } from "../../repository/dynamicRepository"
 import {
   ConfigurationError,
-  assertAbacSecurityDigest,
   projectResponseRecord,
-  resolveFieldReadOverrides,
   type RequestContext,
 } from "@xonava/core/domain"
 import { createFrameworkWriteHandler } from "../createFrameworkWriteHandler"
 import { frameworkJson } from "../handleFrameworkCoreError"
+import { loadCommittedRecord, readCommittedRecord } from "../committedRecord"
 import type { CrudShared, CreateOperationInput, MutationResult, SelectableRow } from "./types"
 import {
   auditEmit,
   assertProtectedCreateFields,
-  buildCommittedReadResponse,
   buildScopedCreateRecord,
-  loadReadableMutationRecord,
   resolveOperationRequestContext,
   toAuditObject,
   toCrudContext,
   toCrudPostCommitContext,
-  canUseOwnerBypass,
   enforceFinalWrite,
   withScopedPersistence,
 } from "./shared"
@@ -86,7 +82,21 @@ export function createCreateHandler<
             options.entityScope
            ),
          )
-       return { record }
+       // Read the row back through the transaction that wrote it: any other
+       // connection cannot see the uncommitted insert (PostgreSQL, MySQL).
+       const committedVersion = entity.versionField ? record[entity.versionField] : undefined
+       if (committedVersion !== undefined) assertEntityVersion(committedVersion)
+       const committedRead = await loadCommittedRecord({
+         entity,
+         moduleKey: options.moduleKey,
+         context: session,
+         persistence: operation.persistence,
+         adapterDeps: options.adapterDeps,
+         ...(options.entityScope !== undefined ? { entityScope: options.entityScope } : {}),
+         id: input.id,
+         ...(committedVersion !== undefined ? { committedVersion: committedVersion as EntityVersion } : {}),
+       })
+       return { record, committedRead, hookPersistence: operation.persistence }
      },
     atomicBatch: {
       prepare: async ({ operation, input }) => {
@@ -110,29 +120,36 @@ export function createCreateHandler<
       const session = resolveOperationRequestContext(operation)
       if (!("record" in result)) throw new ConfigurationError("Mutation result record is unavailable")
          const readablePersistence = withScopedPersistence(session, options.createPersistence(session))
-         const committedVersion = entity.versionField ? result.record[entity.versionField] : undefined
-         if (committedVersion !== undefined) assertEntityVersion(committedVersion)
-         const readable = await loadReadableMutationRecord(options, entity, session, input.id, readablePersistence, committedVersion as EntityVersion | undefined)
-      if (!readable)
+         // Initial response: the row read inside the writing transaction. The
+         // atomic-batch path has no such read; its batch is already applied when
+         // `after` runs, so a fresh read sees it.
+         const loaded = result.committedRead ?? await (async () => {
+           const committedVersion = entity.versionField ? result.record[entity.versionField] : undefined
+           if (committedVersion !== undefined) assertEntityVersion(committedVersion)
+           return loadCommittedRecord({
+             entity,
+             moduleKey: options.moduleKey,
+             context: session,
+             persistence: options.createPersistence(session),
+             adapterDeps: options.adapterDeps,
+             ...(options.entityScope !== undefined ? { entityScope: options.entityScope } : {}),
+             id: input.id,
+             ...(committedVersion !== undefined ? { committedVersion: committedVersion as EntityVersion } : {}),
+           })
+         })()
+      if (loaded.kind !== "record")
          return {
            success: true,
            reason: "CREATED_OUTSIDE_READ_SCOPE",
          }
+        const { overrides, record: projectedReadable } = loaded
 
-        const bundle = session.identity.actor.kind !== "anonymous" && !canUseOwnerBypass(options.adapterDeps, options.scope.scope, session)
-         ? await options.adapterDeps.resolveAbacBundle({ moduleKey: options.moduleKey, context: session })
-         : undefined
-        if (bundle) await assertAbacSecurityDigest(bundle)
-        const overrides = bundle
-          ? resolveFieldReadOverrides({ policies: bundle.policies, moduleKey: options.moduleKey, record: readable })
-          : undefined
-          const projectedReadable = projectResponseRecord({ entity, record: readable, ...(overrides ? { overrides } : {}) })
-         const hookResult = options.crud?.create?.projectCommittedResult
+        const hookResult = options.crud?.create?.projectCommittedResult
            ? await options.crud.create.projectCommittedResult({
           input: input.body,
           originalInput: input.originalBody,
            result: projectedReadable,
-             context: toCrudContext(session, operation, readablePersistence),
+             context: toCrudContext(session, operation, result.hookPersistence ?? readablePersistence),
         })
         : undefined
 
@@ -140,11 +157,7 @@ export function createCreateHandler<
        return { record: projectResponseRecord({
         entity,
          record: candidate,
-        ...(bundle
-          ? {
-               overrides: overrides!,
-            }
-          : {}),
+        ...(overrides ? { overrides } : {}),
       }) }
     },
     ...(options.crud?.create?.afterCommit
@@ -218,14 +231,19 @@ export function createCreateHandler<
       id: input.id,
       ...(entity.versionField ? { version: 1 } : {}),
     }),
-    recoverCommittedResponse: async ({ resource, context }) =>
-      buildCommittedReadResponse({
-        options,
+    recoverCommittedResponse: async ({ resource, context }) => {
+      const committed = await readCommittedRecord({
         entity,
+        moduleKey: options.moduleKey,
         context,
+        persistence: options.createPersistence(context),
+        adapterDeps: options.adapterDeps,
+        ...(options.entityScope !== undefined ? { entityScope: options.entityScope } : {}),
         id: resource.id,
-        ...(resource.version !== undefined ? { resourceVersion: resource.version } : {}),
-      }),
+        ...(resource.version !== undefined ? { committedVersion: resource.version } : {}),
+      })
+      return committed.kind === "record" ? { record: committed.record } : null
+    },
     ...(options.rateLimit?.create
        ? { rateLimit: { config: options.rateLimit.create, consistency: options.rateLimit.create.consistency, ...(options.rateLimit.create.failureMode !== undefined ? { failureMode: options.rateLimit.create.failureMode } : {}) } }
       : {}),

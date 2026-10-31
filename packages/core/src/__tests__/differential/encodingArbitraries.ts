@@ -259,7 +259,8 @@ export function mutateJson(rng: Rng, value: unknown): unknown {
     return { ...record, [key]: mutateJson(rng, record[key]) }
   }
   if (typeof value === "string") return rng.pick([`${value}x`, sliceCodePoints(value, 1), value.replace(E_ACUTE_NFC, E_ACUTE_NFD) === value ? `${value}:` : value.replace(E_ACUTE_NFC, E_ACUTE_NFD), value.toUpperCase() === value ? `${value}a` : value.toUpperCase()])
-  if (typeof value === "number") return rng.pick([value + 1, -value === value ? 1 : -value, String(value)])
+  // Stay inside the safe-integer range: canonical JSON refuses integers beyond it by design.
+  if (typeof value === "number") return rng.pick([Number.isSafeInteger(value) && !Number.isSafeInteger(value + 1) ? value - 1 : value + 1, -value === value ? 1 : -value, String(value)])
   if (typeof value === "boolean") return rng.pick([!value, String(value), null])
   return rng.pick([false, 0, "", "null"])
 }

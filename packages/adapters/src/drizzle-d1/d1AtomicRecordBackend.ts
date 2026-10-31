@@ -40,18 +40,33 @@ export class D1AtomicRecordBackend<TKey, TRecord> implements AtomicRecordBackend
     throw new Error("D1 atomic-record transition exceeded retry budget")
   }
 
-  /** Commits pre-fenced business statements and the record transition in one rollback-on-error batch. */
+  /**
+   * Commits pre-fenced business statements and the record transition in one rollback-on-error batch. The transition
+   * receives `null` for a missing row and must throw. When the batch fails because the record changed after it was read
+   * (a concurrent transition), the transition is evaluated again against the new record, so a lost race surfaces as the
+   * transition's own error (for example a stale claim) and a harmless concurrent change (a lease renewal) is retried.
+   */
   async transactBatch<TResult>(key: TKey, businessStatements: readonly D1Statement[], transition: (current: TRecord | null, backendNow: Date) => { readonly record: TRecord; readonly result: TResult }): Promise<TResult> {
     const recordKey = this.config.encodeKey(key)
-    const row = await this.config.database.prepare(`SELECT record, revision, CAST(unixepoch('subsec') * 1000 AS INTEGER) AS now_ms FROM ${this.table} WHERE record_key = ?`).bind(recordKey).first<{ record: string; revision: number; now_ms: number }>()
-    if (!row) throw new Error("Atomic-record row does not exist")
-    const outcome = transition(JSON.parse(row.record) as TRecord, new Date(row.now_ms))
-    const guard = this.config.database.prepare("SELECT CASE WHEN changes() = 1 THEN 1 ELSE json('framework_atomic_batch_guard_failure') END")
-    const update = this.config.database.prepare(`UPDATE ${this.table} SET record = ?, revision = revision + 1 WHERE record_key = ? AND revision = ?`).bind(JSON.stringify(outcome.record), recordKey, row.revision)
-    const statements: D1Statement[] = []
-    for (const statement of businessStatements) statements.push(statement, guard)
-    statements.push(update, guard)
-    await this.config.database.batch(statements)
-    return outcome.result
+    for (let attempt = 0; attempt < (this.config.maxRetries ?? 16); attempt += 1) {
+      const row = await this.config.database.prepare(`SELECT record, revision, CAST(unixepoch('subsec') * 1000 AS INTEGER) AS now_ms FROM ${this.table} WHERE record_key = ?`).bind(recordKey).first<{ record: string; revision: number; now_ms: number }>()
+      const nowMs = row?.now_ms ?? (await this.config.database.prepare("SELECT CAST(unixepoch('subsec') * 1000 AS INTEGER) AS now_ms").first<{ now_ms: number }>())!.now_ms
+      const outcome = transition(row ? JSON.parse(row.record) as TRecord : null, new Date(nowMs))
+      if (!row) throw new Error("Atomic-record row does not exist")
+      const guard = this.config.database.prepare("SELECT CASE WHEN changes() = 1 THEN 1 ELSE json('framework_atomic_batch_guard_failure') END")
+      const update = this.config.database.prepare(`UPDATE ${this.table} SET record = ?, revision = revision + 1 WHERE record_key = ? AND revision = ?`).bind(JSON.stringify(outcome.record), recordKey, row.revision)
+      const statements: D1Statement[] = []
+      for (const statement of businessStatements) statements.push(statement, guard)
+      statements.push(update, guard)
+      try {
+        await this.config.database.batch(statements)
+        return outcome.result
+      } catch (error) {
+        const current = await this.config.database.prepare(`SELECT revision FROM ${this.table} WHERE record_key = ?`).bind(recordKey).first<{ revision: number }>()
+        if (current?.revision !== row.revision) continue
+        throw error
+      }
+    }
+    throw new Error("D1 atomic-record batch exceeded retry budget")
   }
 }

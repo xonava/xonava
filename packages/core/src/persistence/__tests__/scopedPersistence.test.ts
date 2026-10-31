@@ -386,6 +386,30 @@ describe("tenant-scoped persistence protections", () => {
     expect(mocks.deleteWhere).toHaveBeenCalledWith(Predicate.and(Predicate.eq("name", "old"), Predicate.eq("tenantId", "tenant-a")), undefined)
   })
 
+  it("scopes the bounded count to the tenant, and exposes it only when the adapter has it", async () => {
+    const { repo } = repository()
+    const countUpTo = vi.fn(async () => 4)
+    ;(repo as unknown as { countUpTo: typeof countUpTo }).countUpTo = countUpTo
+    const scopedRepo = dynamicRepository(createTenantScopedPersistenceProvider(provider(repo), "tenant-a"), entity) as unknown as { countUpTo?: (filter: unknown, limit: number) => Promise<number> }
+    expect(await scopedRepo.countUpTo!(Predicate.eq("name", "row"), 3)).toBe(4)
+    expect(countUpTo).toHaveBeenCalledWith(Predicate.and(Predicate.eq("name", "row"), Predicate.eq("tenantId", "tenant-a")), 3)
+    await scopedRepo.countUpTo!(undefined, 2)
+    expect(countUpTo).toHaveBeenLastCalledWith(Predicate.eq("tenantId", "tenant-a"), 2)
+    const bare = repository().repo
+    const without = dynamicRepository(createTenantScopedPersistenceProvider(provider(bare), "tenant-a"), entity) as unknown as { countUpTo?: unknown }
+    expect(without.countUpTo).toBeUndefined()
+  })
+
+  it("passes an opt-in total request through tenant scoping and leaves an absent total absent", async () => {
+    const { repo } = repository()
+    const findMany = (repo as unknown as { findMany: ReturnType<typeof vi.fn> }).findMany
+    findMany.mockResolvedValueOnce({ rows: [], page: 1, pageSize: 10 })
+    const scopedRepo = dynamicRepository(createTenantScopedPersistenceProvider(provider(repo), "tenant-a"), entity)
+    const result = await scopedRepo.findMany({ pagination: { kind: "offset", page: 1, pageSize: 10, includeTotal: true } })
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ pagination: { kind: "offset", page: 1, pageSize: 10, includeTotal: true } }))
+    expect(result).not.toHaveProperty("rowCount")
+  })
+
   it.each([
     ["updateOneWhere", "updateOneWhere"],
     ["updateManyWhere", "updateManyWhere"],

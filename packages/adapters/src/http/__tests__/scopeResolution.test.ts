@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { createAnonymousPrincipal, ForbiddenError, type ExecutionScope, type ExecutionScopeId, type Principal } from "@xonava/core/domain"
+import { ConfigurationError, createAnonymousPrincipal, ForbiddenError, UnauthorizedError, type ExecutionScope, type ExecutionScopeId, type Principal } from "@xonava/core/domain"
 import { type CompiledRouteBinding, type CompiledScopeResolverBinding } from "@xonava/core/bootstrap"
 import { createVerifiedScopeResolution, type ScopeResolver } from "@xonava/core/security"
 import { normalizeFrameworkRequest, type ScopeAdmissionEvidence, type TrustedFrameworkSession } from "../scopeResolution"
@@ -28,7 +28,7 @@ function base(resolver: ScopeResolver) {
   return { requestId: "request-1", correlationId: "correlation-1", route: route(), resolverBindings: bindings(resolver), admit: async () => admission, signal, now: NOW }
 }
 
-describe("A2 trusted scope normalization", () => {
+describe("trusted scope normalization", () => {
   it("resolves an authoritative public tenant, preserves anonymity, and passes the route ref", async () => {
     const resolve = vi.fn(async (_input, routeRef) => {
       expect(routeRef).toEqual({ routeKey: "catalog.list", definitionVersion: 1, operationKey: "catalog.list" })
@@ -120,6 +120,37 @@ describe("A2 trusted scope normalization", () => {
     await expect(normalizeFrameworkRequest({ ...base(resolver), route: route({ exposure: "authenticated", anonymousPrincipal: { allowed: false }, scopeResolution: { kind: "fixed", scope: { kind: "tenant", tenantId: "expected" } } }), session })).rejects.toThrow(/scope mismatch/)
   })
 
+  it("refuses a tenant session on a route fixed to the platform scope before admission, for read and write routes", async () => {
+    // TM13a: tenant credentials never reach a platform-scope route. The fixed scope plan wins over the session.
+    const principal: Principal = { id: "u", kind: "human", authentication: { kind: "authenticated", method: "session", authenticatedAt: "2026-09-10T00:00:00.000Z" } }
+    const session: TrustedFrameworkSession = { identity: { actor: principal, subject: principal }, scope: { kind: "tenant", tenantId: "tenant-a" } }
+    const resolve = vi.fn(async () => createVerifiedScopeResolution("directory", { kind: "tenant", tenantId: "tenant-a" }))
+    const admit = vi.fn(async () => admission)
+    const platformRoute = (overrides: Partial<CompiledRouteBinding>) => route({
+      exposure: "authenticated", anonymousPrincipal: { allowed: false },
+      scopeResolution: { kind: "fixed", scope: { kind: "platform", platformKey: "ops" } }, ...overrides,
+    })
+    const routes = [
+      platformRoute({ routeKey: "admin.list", method: "GET", pathTemplate: "/admin/items" }),
+      platformRoute({ routeKey: "admin.create", method: "POST", pathTemplate: "/admin/items", mutation: { allowed: true, idempotencyRequirement: "optional" } }),
+      platformRoute({ routeKey: "admin.update", method: "PATCH", pathTemplate: "/admin/items/:id", mutation: { allowed: true, idempotencyRequirement: "optional" } }),
+      platformRoute({ routeKey: "admin.delete", method: "DELETE", pathTemplate: "/admin/items/:id", mutation: { allowed: true, idempotencyRequirement: "optional" } }),
+    ]
+    for (const r of routes) {
+      await expect(normalizeFrameworkRequest({ ...base({ key: "directory", resolve }), route: r, session, admit })).rejects.toThrow(expect.objectContaining({ name: "ForbiddenError", message: expect.stringMatching(/session and fixed route scope mismatch/) }))
+    }
+    expect(admit).not.toHaveBeenCalled()
+    expect(resolve).not.toHaveBeenCalled()
+    // A tenant session whose tenant differs, and a platform session with another key, are refused the same way.
+    const otherPlatform: TrustedFrameworkSession = { identity: session.identity, scope: { kind: "platform", platformKey: "other" } }
+    await expect(normalizeFrameworkRequest({ ...base({ key: "directory", resolve }), route: routes[0]!, session: otherPlatform, admit })).rejects.toThrow(/scope mismatch/)
+    expect(admit).not.toHaveBeenCalled()
+    // Control: the matching platform session is admitted on the same route.
+    const platformSession: TrustedFrameworkSession = { identity: session.identity, scope: { kind: "platform", platformKey: "ops" } }
+    await expect(normalizeFrameworkRequest({ ...base({ key: "directory", resolve }), route: routes[0]!, session: platformSession, admit })).resolves.toMatchObject({ scope: { kind: "platform", platformKey: "ops" } })
+    expect(admit).toHaveBeenCalledOnce()
+  })
+
   it("rejects an authenticated tenant resolver attempting to rebind to another tenant", async () => {
     const principal: Principal = { id: "u", kind: "human", authentication: { kind: "authenticated", method: "session", authenticatedAt: "2026-09-10T00:00:00.000Z" } }
     const session: TrustedFrameworkSession = { identity: { actor: principal, subject: principal }, scope: { kind: "tenant", tenantId: "tenant-a" } }
@@ -127,5 +158,29 @@ describe("A2 trusted scope normalization", () => {
     await expect(normalizeFrameworkRequest({
       ...base(resolver), route: route({ exposure: "authenticated", anonymousPrincipal: { allowed: false } }), session,
     })).rejects.toThrow(/cannot widen or rebind/)
+  })
+
+  it("answers 401 for an absent session on an authenticated route without an anonymous principal, before resolving or admitting", async () => {
+    const resolve = vi.fn(async () => createVerifiedScopeResolution("directory", { kind: "tenant", tenantId: "t" }))
+    const admit = vi.fn(async () => admission)
+    const authenticatedRoute = route({ exposure: "authenticated", anonymousPrincipal: { allowed: false } })
+    const fixedRoute = route({ exposure: "authenticated", anonymousPrincipal: { allowed: false }, scopeResolution: { kind: "fixed", scope: { kind: "tenant", tenantId: "t" } } })
+    for (const r of [authenticatedRoute, fixedRoute]) {
+      await expect(normalizeFrameworkRequest({ ...base({ key: "directory", resolve }), route: r, admit })).rejects.toBeInstanceOf(UnauthorizedError)
+    }
+    expect(resolve).not.toHaveBeenCalled()
+    expect(admit).not.toHaveBeenCalled()
+  })
+
+  it("keeps the configuration error when an authenticated route allows an anonymous principal, and for misconfigured public routes", async () => {
+    const resolver: ScopeResolver = { key: "directory", resolve: async () => createVerifiedScopeResolution("directory", { kind: "tenant", tenantId: "t" }) }
+    await expect(normalizeFrameworkRequest({ ...base(resolver), route: route({ exposure: "authenticated" }) })).rejects.toBeInstanceOf(ConfigurationError)
+    await expect(normalizeFrameworkRequest({ ...base(resolver), route: route({ anonymousPrincipal: { allowed: false } }) })).rejects.toThrow(/no compiled anonymous principal/)
+  })
+
+  it("a public route with an anonymous principal and no session is unchanged", async () => {
+    const resolver: ScopeResolver = { key: "directory", resolve: async () => createVerifiedScopeResolution("directory", { kind: "tenant", tenantId: "t" }) }
+    const context = await normalizeFrameworkRequest(base(resolver))
+    expect(context.identity.actor.kind).toBe("anonymous")
   })
 })

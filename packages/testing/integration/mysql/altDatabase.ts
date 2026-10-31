@@ -32,6 +32,13 @@ export async function openAltDatabase():Promise<{pool:Pool;database:string;drop:
   for(const statement of await readMySqlMigrationStatements("0002_workflow_signal_buffering.sql"))await pool.query(statement.replace(/\b(workflows|workflow_signals)\b/g,name=>`\`${database}\`.\`${altName(name as AltTable)}\``))
   for(const statement of await readMySqlMigrationStatements("0003_schedule_next_run_nullable.sql"))await pool.query(statement.replace(/\bschedules\b/g,`\`${database}\`.\`${altName("schedules")}\``))
   for(const statement of await readMySqlMigrationStatements("0004_job_partition_head_index.sql"))await pool.query(statement.replace(/\bjobs\b/g,`\`${database}\`.\`${altName("jobs")}\``))
+  for(const statement of await readMySqlMigrationStatements("0005_job_scope_key.sql"))await pool.query(statement.replace(/\b(jobs|schedules)\b/g,name=>`\`${database}\`.\`${altName(name as AltTable)}\``))
+  const alt=new Set<string>(ALT_TABLES)
+  for(const statement of await readMySqlMigrationStatements("0006_byte_exact_identifiers.sql")){
+    const table=/^ALTER TABLE ([a-z_]+)/.exec(statement)?.[1]
+    if(table===undefined||!alt.has(table))continue
+    await pool.query(statement.replace(`ALTER TABLE ${table}`,`ALTER TABLE \`${database}\`.\`${altName(table as AltTable)}\``))
+  }
   const [failure]=await pool.query("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME=? AND COLUMN_NAME='failure'",[database,altName("workflows")])
   if((failure as unknown[]).length===0)await pool.query(`ALTER TABLE \`${database}\`.\`${altName("workflows")}\` ADD failure JSON NULL`)
   return {pool,database,drop:async()=>{try{await pool.query(`DROP DATABASE IF EXISTS \`${database}\``)}finally{await pool.end()}}}

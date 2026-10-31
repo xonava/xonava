@@ -1,0 +1,136 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: "47 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:coverage --workspaces --if-present
+
+  # The whole-package runs outgrow GitHub's 6-hour job limit, so each package is mutated in slices (modules grouped in
+  # .github/mutation-slices.json) that run in parallel. The plan job fails if a module of either package is in no slice,
+  # or in two. Slices only measure (XONAVA_MUTATION_BREAK=0); the enforcing gate stays `npm run test:mutation -w <package>`.
+  mutation-plan:
+    name: mutation plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+      - id: plan
+        run: node scripts/ci/mutationSlices.mjs --github-output
+
+  mutation:
+    name: mutation (${{ matrix.name }})
+    needs: mutation-plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.mutation-plan.outputs.matrix) }}
+    env:
+      XONAVA_MUTATION_BREAK: "0"
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Mutate ${{ matrix.name }}
+        working-directory: packages/${{ matrix.package }}
+        env:
+          MUTATE: ${{ matrix.mutate }}
+        run: npx stryker run --mutate "$MUTATE"
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mutation-${{ matrix.name }}
+          path: packages/${{ matrix.package }}/.stryker-tmp/reports/mutation.json
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 30
+
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run bench
+
+  differentials:
+    name: Differential suites (release volume)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: framework
+          POSTGRES_PASSWORD: framework
+          POSTGRES_DB: framework_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U framework -d framework_test_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: framework
+          MYSQL_DATABASE: framework_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -pframework"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      FRAMEWORK_TEST_PG_URL: postgres://framework:framework@localhost:5432/framework_test_db
+      FRAMEWORK_TEST_MYSQL_URL: mysql://root:framework@127.0.0.1:3306/framework_test
+      FRAMEWORK_CONFORMANCE_PHASE: release
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run verify:differentials

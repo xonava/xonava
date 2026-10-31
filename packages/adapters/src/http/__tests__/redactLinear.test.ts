@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest"
+import { expectNearLinear } from "../../../../core/src/__tests__/timing"
 import { redactPhi, redactPhiDeep } from "../redact"
+
+// The cost on each input is compared with the cost on a quarter-size input of the same shape, so coverage
+// instrumentation or a loaded machine cannot fail these tests; only super-linear growth can. The small input is built
+// by the same builder, not sliced from the large one: slicing can drop a shape's trailing "@" and turn it into a
+// cheaper input, which made the ratio meaningless.
+const nearLinear = (build: (size: number) => string, size: number) => expectNearLinear((n) => { const input = build(n); return () => redactPhi(input) }, { size })
 
 /** Equivalence oracle: the original (quadratic) pattern set, kept only here. */
 const LEGACY_PATTERNS = [
@@ -53,33 +60,31 @@ describe("redactPhi linear-time email scanner", () => {
   })
 
   const SIZE = 200_000
-  const shapes: Record<string, string> = {
-    "dot-letter pairs": "a.".repeat(SIZE / 2),
-    "dash-letter pairs": "a-".repeat(SIZE / 2),
-    "digit-dot pairs": "1.".repeat(SIZE / 2),
-    "plus pairs": "+1".repeat(SIZE / 2),
-    "at then dot pairs": `a@${"a.".repeat(SIZE / 2)}`,
-    "at then dotted domain and digit": `a@${"b.".repeat(SIZE / 2)}1`,
-    "repeated local@domain.": "a@a.".repeat(SIZE / 4),
-    "many ats": "x@".repeat(SIZE / 2),
-    "local run with trailing at": `${"a.".repeat(SIZE / 2 - 1)}a@`,
-    "long domain without tld": `a@${"b".repeat(SIZE)}`,
-    "digit runs": "1".repeat(SIZE),
-    "spaced digits": "1 ".repeat(SIZE / 2),
+  const shapes: Record<string, (n: number) => string> = {
+    "dot-letter pairs": (n) => "a.".repeat(n / 2),
+    "dash-letter pairs": (n) => "a-".repeat(n / 2),
+    "digit-dot pairs": (n) => "1.".repeat(n / 2),
+    "plus pairs": (n) => "+1".repeat(n / 2),
+    "at then dot pairs": (n) => `a@${"a.".repeat(n / 2)}`,
+    "at then dotted domain and digit": (n) => `a@${"b.".repeat(n / 2)}1`,
+    "repeated local@domain.": (n) => "a@a.".repeat(n / 4),
+    "many ats": (n) => "x@".repeat(n / 2),
+    "local run with trailing at": (n) => `${"a.".repeat(n / 2 - 1)}a@`,
+    "long domain without tld": (n) => `a@${"b".repeat(n)}`,
+    "digit runs": (n) => "1".repeat(n),
+    "spaced digits": (n) => "1 ".repeat(n / 2),
   }
-  for (const [name, input] of Object.entries(shapes)) {
-    it(`redacts a ${SIZE / 1000} kB ${name} input in linear time`, () => {
-      const started = performance.now()
-      redactPhi(input)
-      expect(performance.now() - started).toBeLessThan(500)
+  for (const [name, build] of Object.entries(shapes)) {
+    it(`redacts a ${SIZE / 1000} kB ${name} input in linear time`, async () => {
+      await nearLinear(build, SIZE)
     })
   }
 
-  it("redacts every email in a large body in linear time", () => {
-    const body = "contact alice@example.com today. ".repeat(30_000)
-    const started = performance.now()
+  it("redacts every email in a large body in linear time", async () => {
+    const sentence = "contact alice@example.com today. "
+    const body = sentence.repeat(30_000)
+    await nearLinear((n) => sentence.repeat(Math.round(n / sentence.length)), body.length)
     const out = redactPhi(body)
-    expect(performance.now() - started).toBeLessThan(500)
     expect(out.startsWith("contact [email redacted] today. ")).toBe(true)
     expect(out).not.toContain("@")
   })

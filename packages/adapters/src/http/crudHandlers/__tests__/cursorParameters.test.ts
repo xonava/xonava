@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { assertHttpPaginationParameters } from "../list"
 
-describe("Q2 HTTP cursor parameter contract", () => {
+describe("HTTP cursor parameter contract", () => {
   it("rejects ambiguous cursor/offset and dual-direction parameters", () => {
     expect(() => assertHttpPaginationParameters({ cursor: "x", page: "2" }, "cursor")).toThrow(/cannot be combined/)
     expect(() => assertHttpPaginationParameters({ cursor: "x", before: "y" }, "cursor")).toThrow(/cannot be combined/)

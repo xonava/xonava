@@ -1,14 +1,9 @@
 import { assertOutboxScope, type OutboxRecord } from "@xonava/core/events"
-import { canonicalJsonString, legacyJavaScriptOrderJsonString } from "@xonava/core/serialization"
+import { canonicalJsonString } from "@xonava/core/serialization"
 import { ConfigurationError, ConflictError } from "@xonava/core/domain"
 
-/**
- * v3: canonical JSON in RFC 8785 key order. v2 serialized integer-like object
- * keys in JavaScript property order; stored v2 fingerprints are still accepted
- * by {@link assertOutboxFingerprintMatches} (never written).
- */
+/** v3: canonical JSON in RFC 8785 key order. */
 export const OUTBOX_FINGERPRINT_VERSION = "v3"
-const LEGACY_OUTBOX_FINGERPRINT_VERSION = "v2"
 export const OUTBOX_FINGERPRINT_MISSING_ERROR = "Stored outbox fingerprint is missing; migrate fingerprints before replaying events."
 
 export function assertOutboxProtectedFields(
@@ -46,16 +41,10 @@ export async function fingerprintOutboxRecord(record: FingerprintedOutboxFields)
   return `${OUTBOX_FINGERPRINT_VERSION}:${await sha256Hex(canonicalJsonString(outboxFingerprintMaterial(record)))}`
 }
 
-/**
- * Throws unless the stored fingerprint identifies `record`: the current
- * version, or a v2 fingerprint written before the RFC 8785 key-order fix (so
- * re-appending the same event across that deploy stays an idempotent no-op).
- */
+/** Throws unless the stored fingerprint is exactly the current-version fingerprint of `record`. */
 export async function assertOutboxFingerprintMatches(stored: unknown, expected: string, record: FingerprintedOutboxFields): Promise<void> {
   if (typeof stored !== "string" || stored.length === 0) throw new Error(OUTBOX_FINGERPRINT_MISSING_ERROR)
   if (stored === expected) return
-  if (stored.startsWith(`${LEGACY_OUTBOX_FINGERPRINT_VERSION}:`)
-    && stored === `${LEGACY_OUTBOX_FINGERPRINT_VERSION}:${await sha256Hex(legacyJavaScriptOrderJsonString(outboxFingerprintMaterial(record)))}`) return
   throw new ConflictError("Outbox idempotency key was reused for a different event")
 }
 

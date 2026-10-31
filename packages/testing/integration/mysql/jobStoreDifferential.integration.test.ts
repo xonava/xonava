@@ -6,6 +6,8 @@ import type { Pool, RowDataPacket } from "mysql2/promise"
 import { afterAll, beforeAll, describe } from "vitest"
 import { DrizzleMySqlJobStore } from "@xonava/adapters/drizzle-mysql"
 import { mysqlCertificationUrl } from "./database.js"
+import { applyMySqlByteExactIdentifiersMigration } from "../../fixtures/mysql/bootstrap.js"
+import { applyMySqlJobScopeKeyMigration } from "../../fixtures/mysql/bootstrap.js"
 import { defineConcurrentLinearizability, defineConcurrentStorm, defineDispatcherAgainstStore } from "../shared/jobStoreDifferentialConcurrency.js"
 import { defineLifecycleDifferential, defineLifecycleRegressions, printCoverage, type JobStoreDifferentialDriver, type RawJobRow } from "../shared/jobStoreDifferential.js"
 
@@ -30,12 +32,13 @@ describe("MySQL job store differential", () => {
     expiredFinalAttemptError: "LEASE_EXPIRED_ATTEMPTS_EXHAUSTED",
     reset: async () => { await pool.query("DELETE FROM job_executions"); await pool.query("DELETE FROM jobs") },
     expireLease: async (id) => { await pool.query("UPDATE jobs SET lease_expires_at = CURRENT_TIMESTAMP(3) - INTERVAL 1 HOUR WHERE id = ? AND status = 'running'", [id]) },
+    clearScopeKey: async (id) => { await pool.query("UPDATE jobs SET scope_key = NULL WHERE id = ?", [id]) },
     dump: async (): Promise<RawJobRow[]> => (await q("SELECT * FROM jobs")).map((r) => ({
       id: r.id as string, status: r.status as string, attempts: r.attempt as number, maxAttempts: r.max_attempts as number, priority: r.priority as number,
       runAt: ms(r.run_at)!, nextAttemptAt: ms(r.next_attempt_at), leaseOwner: r.worker_id as string | null, claimToken: r.claim_token as string | null,
       leaseExpiresAt: ms(r.lease_expires_at), lastError: r.last_error as string | null, resultPayload: r.result_payload, startedAt: ms(r.started_at),
       completedAt: ms(r.completed_at), partitionKey: r.partition_key as string | null, correlationId: r.correlation_id as string | null,
-      idempotencyKey: r.idempotency_key as string | null, tenantId: r.tenant_id as string | null, scope: r.scope as string, jobType: r.job_type as string,
+      idempotencyKey: r.idempotency_key as string | null, tenantId: r.tenant_id as string | null, scope: r.scope as string, scopeKey: (r.scope_key ?? null) as string | null, jobType: r.job_type as string,
       jobVersion: r.job_version as number, payload: r.payload, metadata: r.metadata,
     })),
     executionsFor: async (jobIds) => (await q("SELECT id, job_id, attempt, worker_id, status FROM job_executions WHERE job_id IN (?)", [jobIds])).map((r) => ({ id: r.id as string, jobId: r.job_id as string, attempt: r.attempt as number, workerId: r.worker_id as string, status: r.status as string })),
@@ -52,6 +55,8 @@ describe("MySQL job store differential", () => {
       const match = /^CREATE TABLE (?:IF NOT EXISTS )?(jobs|job_executions)\b/.exec(statement)
       if (match) await pool.query(statement)
     }
+    await applyMySqlJobScopeKeyMigration(pool)
+    await applyMySqlByteExactIdentifiersMigration(pool, ["jobs", "job_executions"])
   })
   afterAll(async () => {
     printCoverage("mysql")

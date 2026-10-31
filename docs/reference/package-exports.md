@@ -63,6 +63,7 @@ Only package export-map paths are supported APIs. Private source/dist paths are 
 | `@xonava/testing/contracts/persistence-provider` | Persistence provider contract suite |
 | `@xonava/testing/contracts/atomic-batch` | Atomic batch contract suite |
 | `@xonava/testing/contracts/cache-adapter` | Cache adapter contract suite |
+| `@xonava/testing/contracts/object-store` | Object store contract suite |
 | `@xonava/testing/contracts/shared-conformance` | Shared conformance suites |
 
 Stability follows the version policy; new/removal/semantic changes to public paths require an API/version decision.

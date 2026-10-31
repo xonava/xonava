@@ -4,6 +4,8 @@ import {
   ConfigurationError,
   ConflictError,
   NotFoundError,
+  OptimisticConcurrencyError,
+  PreconditionRequiredError,
   Predicate,
   projectResponseRecord,
 } from "@xonava/core/domain"
@@ -73,7 +75,7 @@ export function createDeleteHandler<
       if (operation.enforceAbac)
         operation.enforceAbac.enforce("delete", toAuditObject(current))
       if (versionField) {
-        if (input.expectedVersion === undefined) throw new ConflictError("Version is required for this delete")
+        if (input.expectedVersion === undefined) throw new PreconditionRequiredError("If-Match")
         assertEntityVersion(input.expectedVersion)
         deleteFilter = Predicate.and(deleteFilter, Predicate.eq(versionField, input.expectedVersion))
       }
@@ -85,7 +87,13 @@ export function createDeleteHandler<
           })()
         : await (async () => {
             if (!repo.deleteWhere) throw new ConfigurationError(`Secure delete for ${entity.name} requires deleteWhere support`)
-            return (await repo.deleteWhere(deleteFilter, mutationOptions)).deletedCount
+            try {
+              return (await repo.deleteWhere(deleteFilter, mutationOptions)).deletedCount
+            } catch (error) {
+              // The version is part of the filter, so a stale version matches no row; the record was read above, so report it as a version conflict.
+              if (versionField && error instanceof NotFoundError) throw new OptimisticConcurrencyError(`${entity.name} version mismatch`)
+              throw error
+            }
           })()
       if (affected === 0) {
         if (versionField && input.expectedVersion !== undefined) throw new ConflictError("This record was modified by another user. Please reload and try again.")
@@ -104,7 +112,7 @@ export function createDeleteHandler<
           : structural ? Predicate.and(base, structural) : actionScope ? Predicate.and(base, actionScope) : base
         const versionField = options.optimisticConcurrency?.versionField ?? entity.versionField
         if (versionField) {
-          if (input.expectedVersion === undefined) throw new ConflictError("Version is required for this delete")
+          if (input.expectedVersion === undefined) throw new PreconditionRequiredError("If-Match")
           assertEntityVersion(input.expectedVersion)
            filter = Predicate.and(filter, Predicate.eq(versionField, input.expectedVersion))
         }
@@ -209,7 +217,9 @@ export function createDeleteHandler<
        if (!versionField) return { id: (validated.validatedParams as { id: string }).id, existing: existing as TRow }
        // If-Match is the ONLY concurrency transport for delete; a body version
        // field is never treated as the expected version.
-       const expectedVersion = parseIfMatchVersion(request.headers.get("if-match"))
+       const ifMatch = request.headers.get("if-match")
+       const expectedVersion = parseIfMatchVersion(ifMatch)
+       if (expectedVersion === undefined && ifMatch !== null && ifMatch.trim() !== "") throw new ConflictError("Version is required for this delete")
        if (expectedVersion !== undefined && (!Number.isInteger(expectedVersion) || expectedVersion < 0)) throw new ConflictError("Version must be a non-negative integer")
        return { id: (validated.validatedParams as { id: string }).id, existing: existing as TRow, ...(expectedVersion !== undefined ? { expectedVersion } : {}) }
      },

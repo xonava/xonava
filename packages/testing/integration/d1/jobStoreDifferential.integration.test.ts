@@ -9,7 +9,7 @@ import { defineLifecycleDifferential, defineLifecycleRegressions, printCoverage,
 
 const ts = (name: string) => integer(name, { mode: "timestamp_ms" })
 const jobs = sqliteTable("df_jobs", {
-  id: text("id").primaryKey(), jobType: text("job_type"), jobVersion: integer("job_version"), tenantId: text("tenant_id"), scope: text("scope"), payload: text("payload"),
+  id: text("id").primaryKey(), jobType: text("job_type"), jobVersion: integer("job_version"), tenantId: text("tenant_id"), scope: text("scope"), scopeKey: text("scope_key"), payload: text("payload"),
   status: text("status"), priority: integer("priority"), attempts: integer("attempts"), maxAttempts: integer("max_attempts"), runAt: ts("run_at"), nextAttemptAt: ts("next_attempt_at"),
   leaseOwner: text("lease_owner"), leaseExpiresAt: integer("lease_expires_at"), claimToken: text("claim_token"), idempotencyKey: text("idempotency_key"),
   idempotencyScope: text("idempotency_scope"), fingerprint: text("fingerprint"), correlationId: text("correlation_id"), lastError: text("last_error"),
@@ -17,7 +17,7 @@ const jobs = sqliteTable("df_jobs", {
 })
 const execs = sqliteTable("df_execs", { id: text("id").primaryKey(), jobId: text("job_id"), attempt: integer("attempt"), workerId: text("worker_id"), status: text("status"), errorMessage: text("error_message"), startedAt: ts("started_at"), finishedAt: ts("finished_at") })
 const SCHEMA = [
-  "CREATE TABLE df_jobs (id TEXT PRIMARY KEY, job_type TEXT, job_version INTEGER, tenant_id TEXT, scope TEXT, payload TEXT, status TEXT, priority INTEGER, attempts INTEGER NOT NULL, max_attempts INTEGER NOT NULL, run_at INTEGER, next_attempt_at INTEGER, lease_owner TEXT, lease_expires_at INTEGER, claim_token TEXT, idempotency_key TEXT, idempotency_scope TEXT, fingerprint TEXT, correlation_id TEXT, last_error TEXT, result_payload TEXT, metadata TEXT, created_at INTEGER, started_at INTEGER, completed_at INTEGER, partition_key TEXT)",
+  "CREATE TABLE df_jobs (id TEXT PRIMARY KEY, job_type TEXT, job_version INTEGER, tenant_id TEXT, scope TEXT, scope_key TEXT, payload TEXT, status TEXT, priority INTEGER, attempts INTEGER NOT NULL, max_attempts INTEGER NOT NULL, run_at INTEGER, next_attempt_at INTEGER, lease_owner TEXT, lease_expires_at INTEGER, claim_token TEXT, idempotency_key TEXT, idempotency_scope TEXT, fingerprint TEXT, correlation_id TEXT, last_error TEXT, result_payload TEXT, metadata TEXT, created_at INTEGER, started_at INTEGER, completed_at INTEGER, partition_key TEXT)",
   "CREATE UNIQUE INDEX df_jobs_idem ON df_jobs (idempotency_scope, idempotency_key)",
   "CREATE TABLE df_execs (id TEXT PRIMARY KEY, job_id TEXT NOT NULL, attempt INTEGER, worker_id TEXT, status TEXT, error_message TEXT, started_at INTEGER, finished_at INTEGER)",
 ]
@@ -45,12 +45,13 @@ describe("D1 job store differential", () => {
     claimReadbackMayLoseToCancel: true,
     reset: async () => { await run("DELETE FROM df_execs"); await run("DELETE FROM df_jobs") },
     expireLease: async (id) => { await run("UPDATE df_jobs SET lease_expires_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) - 3600000 WHERE id = ? AND status = 'running'", id) },
+    clearScopeKey: async (id) => { await run("UPDATE df_jobs SET scope_key = NULL WHERE id = ?", id) },
     dump: async (): Promise<RawJobRow[]> => (await all("SELECT * FROM df_jobs")).map((r) => ({
       id: r.id as string, status: r.status as string, attempts: Number(r.attempts), maxAttempts: Number(r.max_attempts), priority: Number(r.priority),
       runAt: Number(r.run_at), nextAttemptAt: num(r.next_attempt_at), leaseOwner: r.lease_owner as string | null, claimToken: r.claim_token as string | null,
       leaseExpiresAt: num(r.lease_expires_at), lastError: r.last_error as string | null, resultPayload: r.result_payload, startedAt: num(r.started_at),
       completedAt: num(r.completed_at), partitionKey: r.partition_key as string | null, correlationId: r.correlation_id as string | null,
-      idempotencyKey: r.idempotency_key as string | null, tenantId: r.tenant_id as string | null, scope: r.scope as string, jobType: r.job_type as string,
+      idempotencyKey: r.idempotency_key as string | null, tenantId: r.tenant_id as string | null, scope: r.scope as string, scopeKey: (r.scope_key ?? null) as string | null, jobType: r.job_type as string,
       jobVersion: Number(r.job_version), payload: r.payload, metadata: r.metadata,
     })),
     executionsFor: async (jobIds) => (await all(`SELECT id, job_id, attempt, worker_id, status FROM df_execs WHERE job_id IN (${jobIds.map(() => "?").join(",")})`, ...jobIds)).map((r) => ({ id: r.id as string, jobId: r.job_id as string, attempt: Number(r.attempt), workerId: r.worker_id as string, status: r.status as string })),

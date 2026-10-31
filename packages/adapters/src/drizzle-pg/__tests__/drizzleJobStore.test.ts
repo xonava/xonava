@@ -123,9 +123,20 @@ describe("PostgreSQL job-store idempotency lookup", () => {
     })).rejects.toThrow("fingerprint is missing")
   })
 
-  describe("fingerprints persisted before the RFC 8785 key-order fix (job fingerprint version 3)", () => {
+  it("refuses a non-default platform key instead of dropping it when the column map has no scopeKey column", async () => {
+    const db = { insert: vi.fn(), select: vi.fn() } as unknown as DrizzleSessionLike
+    const store = createDrizzleJobStore(db, { jobsTable, executionsTable, columnMap })
+    await expect(store.enqueue({
+      requester: { scope: "platform", actorId: "worker-1" },
+      job: { executionScope: { kind: "platform", platformKey: "tenantless-a" }, jobType: "test.job", jobVersion: 1, payload: {} },
+    })).rejects.toThrow(/scopeKey/)
+    expect(db.insert).not.toHaveBeenCalled()
+  })
+
+  describe("idempotent re-enqueue by stored fingerprint", () => {
     const runAt = new Date("2026-01-01T00:00:00.000Z")
     const job = { executionScope: { kind: "platform" as const, platformKey: "default" }, jobType: "test.job", jobVersion: 1, payload: { "10": 1, "9": 2 }, idempotencyKey: "job-1", runAt }
+    /** What version 3 persisted; kept to assert that it is no longer accepted. */
     const storedV3 = async (payload: Record<string, unknown>): Promise<string> => {
       const text = JSON.stringify(canonicalizeValue({ version: 3, job: { ...buildJobFingerprintInput({ ...job, payload }, runAt), maxAttempts: 3, runAt: runAt.toISOString() } }))
       return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))), (byte) => byte.toString(16).padStart(2, "0")).join("")
@@ -139,14 +150,19 @@ describe("PostgreSQL job-store idempotency lookup", () => {
       }] })) })) })),
     } as unknown as DrizzleSessionLike, { jobsTable, executionsTable, columnMap })
 
-    it("replays an identical re-enqueue whose stored fingerprint is version 3", async () => {
-      expect(await storedV3(job.payload)).not.toBe(await fingerprintJob(buildJobFingerprintInput(job, runAt)))
-      const stored = await storeWithExisting(await storedV3(job.payload)).enqueue({ requester: { scope: "platform", actorId: "worker-1" }, job })
+    it("replays an identical re-enqueue whose stored fingerprint is the current version", async () => {
+      const current = await fingerprintJob(buildJobFingerprintInput(job, runAt))
+      const stored = await storeWithExisting(current).enqueue({ requester: { scope: "platform", actorId: "worker-1" }, job })
       expect(stored.id).toBe("job-1")
     })
 
-    it("still rejects a different job under a version-3 fingerprint", async () => {
-      await expect(storeWithExisting(await storedV3({ "10": 2 })).enqueue({ requester: { scope: "platform", actorId: "worker-1" }, job })).rejects.toThrow(JobIdempotencyConflictError)
+    it("rejects a different job under the current-version fingerprint", async () => {
+      const other = await fingerprintJob(buildJobFingerprintInput({ ...job, payload: { "10": 2 } }, runAt))
+      await expect(storeWithExisting(other).enqueue({ requester: { scope: "platform", actorId: "worker-1" }, job })).rejects.toThrow(JobIdempotencyConflictError)
+    })
+
+    it("no longer recognises a version-3 fingerprint of the same job", async () => {
+      await expect(storeWithExisting(await storedV3(job.payload)).enqueue({ requester: { scope: "platform", actorId: "worker-1" }, job })).rejects.toThrow(JobIdempotencyConflictError)
     })
   })
 

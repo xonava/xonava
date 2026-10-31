@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { expectNearLinear } from "../../__tests__/timing"
 import { createWorkflowFailure } from "../workflowStateMachine"
 
 const at = new Date("2026-01-01T00:00:00.000Z")
@@ -22,10 +23,7 @@ describe("createWorkflowFailure sanitization bounds", () => {
     expect(failure("").message).toBe("")
   })
 
-  it("sanitizes a 1 MB adversarial message quickly", () => {
-    const started = performance.now()
-    failure("a.".repeat(500_000))
-    failure("1 ".repeat(500_000))
-    expect(performance.now() - started).toBeLessThan(500)
+  it("sanitizes a 1 MB adversarial message in near-linear time", async () => {
+    await expectNearLinear((size) => { const dots = "a.".repeat(size / 2); const digits = "1 ".repeat(size / 2); return () => { failure(dots); failure(digits) } }, { size: 1_000_000 })
   })
 })

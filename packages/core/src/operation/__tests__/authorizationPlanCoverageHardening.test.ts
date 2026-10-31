@@ -79,7 +79,9 @@ describe("authorization enforcement defensive convergence", () => {
 
     await expect(repo.findById("2")).resolves.toBeNull()
     await expect(repo.findOneWhere!(Predicate.eq("id", "1"))).resolves.toMatchObject({ id: "1" })
-    await expect(repo.findMany()).resolves.toMatchObject({ rowCount: 1, rows: [{ id: "1", tenantId: "tenant-1" }] })
+    const listed = await repo.findMany()
+    expect(listed).toMatchObject({ rows: [{ id: "1", tenantId: "tenant-1" }] })
+    expect(listed).not.toHaveProperty("rowCount")
     await expect(repo.insert(null as never)).rejects.toThrow(ConfigurationError)
     await expect(repo.insert({ tenantId: "tenant-1", forbidden: true } as never)).rejects.toThrow(ForbiddenError)
     await expect(repo.insert({ status: "new" } as never)).rejects.toThrow(/resource predicate/)

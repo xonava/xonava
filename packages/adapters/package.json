@@ -1,6 +1,6 @@
 {
   "name": "@xonava/adapters",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Adapters for the server framework: PostgreSQL, MySQL, and Cloudflare D1 persistence via Drizzle, Express, Fastify, and Hono HTTP bindings, and cache and storage adapters.",
   "keywords": [
     "server",
@@ -30,6 +30,7 @@
   "type": "module",
   "files": [
     "dist",
+    "migrations",
     "README.md",
     "LICENSE"
   ],
@@ -45,6 +46,8 @@
     "lint": "eslint src --max-warnings=0",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "bench": "vitest bench --run",
+    "test:mutation": "stryker run",
     "prepack": "npm run build"
   },
   "exports": {
@@ -127,21 +130,22 @@
     }
   },
   "dependencies": {
-    "@xonava/core": "0.1.0",
+    "@xonava/core": "0.3.0",
     "uuidv7": "^1.2.1",
-    "zod": "^4.3.6"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/pg": "^8.15.5",
-    "@types/supertest": "^6.0.3",
-    "drizzle-orm": "^0.45.2",
-    "express": "^5.2.1",
-    "fastify": "^5.12.5",
-    "hono": "^4.13.8",
-    "mysql2": "^3.24.4",
-    "pg": "^8.16.3",
-    "supertest": "^7.2.2",
-    "vitest": "^4.0.0"
+    "@types/supertest": "^7.2.1",
+    "@vitest/coverage-v8": "^5.0.5",
+    "drizzle-orm": "^0.45.4",
+    "express": "^5.3.0",
+    "fastify": "^5.12.7",
+    "hono": "^4.13.14",
+    "mysql2": "^3.24.6",
+    "pg": "^8.23.1",
+    "supertest": "^7.3.1",
+    "vitest": "^5.0.5"
   }
 }

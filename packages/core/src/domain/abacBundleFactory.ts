@@ -1,4 +1,4 @@
-import type { NormalizedAbacPolicy, AbacPolicyBundle, AbacContext } from "./abacTypes"
+import type { NormalizedAbacPolicy, VerifiedAbacPolicyBundle, AbacPolicy, AbacContext } from "./abacTypes"
 import type { AbacPolicyProvider } from "../security/abacPolicyProvider"
 import type { AbacFieldDefinition, AbacModuleCatalog } from "./abacCatalog"
 import { normalizeAbacPolicy } from "./abacPolicyNormalizer"
@@ -43,7 +43,77 @@ function scopeMatchesContext(policy: NormalizedAbacPolicy | { source: { scopeTyp
   return scopeRefId == null ? expectedRef == null : scopeRefId === expectedRef
 }
 
-export async function createAbacBundle(input: CreateAbacBundleInput): Promise<AbacPolicyBundle> {
+type PolicyFailure = { policyId: string; errors: unknown[] }
+
+/** Unknown catalog names (actions, capabilities, fields) reported by catalog validation. */
+function missingCatalogFields(failures: PolicyFailure[]): string[] {
+  const names = new Set<string>()
+  for (const { errors } of failures) {
+    for (const error of errors) {
+      const { code, message, value } = error as { code?: unknown; message?: unknown; value?: unknown }
+      if (code === "CATALOG_VALIDATION_FAILED" && typeof message === "string" && message.startsWith("Unknown field") && typeof value === "string") names.add(value)
+    }
+  }
+  return [...names]
+}
+
+function throwOnPolicyFailures(moduleKey: string, failures: PolicyFailure[]): void {
+  const firstError = failures[0]
+  if (!firstError) return
+  const missingFields = missingCatalogFields(failures)
+  throw new InvalidPolicyConfigurationError(
+    missingFields.length > 0
+      ? `One or more policies failed normalization: catalog does not list field(s) ${missingFields.join(", ")}`
+      : "One or more policies failed normalization",
+    {
+      moduleKey,
+      policyId: firstError.policyId,
+      issues: failures.flatMap(e => e.errors),
+      ...(missingFields.length > 0 ? { missingFields } : {}),
+    },
+  )
+}
+
+export interface AssertAbacPoliciesMatchCatalogInput {
+  moduleKey: string
+  catalog: AbacModuleCatalog
+  policies: readonly AbacPolicy[]
+  /** Only used to resolve `userAttr` references; unresolved attributes never match. */
+  context?: AbacContext
+  at?: Date
+}
+
+/**
+ * Configuration pre-flight: throws `InvalidPolicyConfigurationError` (moduleKey,
+ * policyId, issues, `missingFields`) when any policy names an action,
+ * capability, condition field or fieldAccess read/write/query field that the
+ * module catalog does not list. It runs the same normalization as
+ * `createAbacBundle`, so apps can call it at startup or when policies are
+ * loaded instead of discovering the mismatch on the first request.
+ */
+export function assertAbacPoliciesMatchCatalog(input: AssertAbacPoliciesMatchCatalogInput): void {
+  if (input.catalog.moduleKey !== input.moduleKey) {
+    throw new InvalidPolicyConfigurationError("Catalog moduleKey does not match input moduleKey", {
+      moduleKey: input.moduleKey,
+      catalogModuleKey: input.catalog.moduleKey,
+      policyId: null,
+      issues: [],
+    })
+  }
+  const failures: PolicyFailure[] = []
+  for (const policy of input.policies) {
+    const result = normalizeAbacPolicy({ policy, catalog: input.catalog, context: input.context ?? {}, ...(input.at ? { at: input.at } : {}) })
+    if (!result.success) failures.push({ policyId: policy.source.policyId, errors: result.errors })
+  }
+  throwOnPolicyFailures(input.moduleKey, failures)
+}
+
+/**
+ * Resolves, validates and normalizes policies for one request context. Every
+ * returned bundle is bound and registered as verified, so the result is typed
+ * `VerifiedAbacPolicyBundle` and needs no `assertVerifiedAbacBundle`.
+ */
+export async function createAbacBundle(input: CreateAbacBundleInput): Promise<VerifiedAbacPolicyBundle> {
   const rawPolicies = await input.provider.resolve({
     mode: input.mode,
     moduleKey: input.moduleKey,
@@ -61,7 +131,7 @@ export async function createAbacBundle(input: CreateAbacBundleInput): Promise<Ab
   }
 
   const normalized: NormalizedAbacPolicy[] = []
-  const allErrors: Array<{ policyId: string; errors: unknown[] }> = []
+  const allErrors: PolicyFailure[] = []
   const inactivePolicyIds: string[] = []
 
   for (const policy of rawPolicies) {
@@ -89,19 +159,7 @@ export async function createAbacBundle(input: CreateAbacBundleInput): Promise<Ab
     }
   }
 
-  if (allErrors.length > 0) {
-    const firstError = allErrors[0]
-    if (!firstError) throw new InvalidPolicyConfigurationError("Policy normalization failed", {
-      moduleKey: input.moduleKey,
-      policyId: null,
-      issues: [],
-    })
-    throw new InvalidPolicyConfigurationError("One or more policies failed normalization", {
-      moduleKey: input.moduleKey,
-      policyId: firstError.policyId,
-      issues: allErrors.flatMap(e => e.errors),
-    })
-  }
+  throwOnPolicyFailures(input.moduleKey, allErrors)
 
   normalized.sort((a, b) => {
     if (b.priority !== a.priority) return b.priority - a.priority

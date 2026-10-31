@@ -9,7 +9,9 @@ import {
   type ExecutionIdentity,
   type ExecutionScope,
   type ExecutionScopeId,
+  ForbiddenError,
   type RequestContext,
+  UnauthorizedError,
 } from "@xonava/core/domain"
 import {
   compiledRouteBindingRef,
@@ -57,12 +59,23 @@ function resolverInput(input: NormalizeFrameworkRequestInput): UntrustedScopeRes
   })
 }
 
+/**
+ * An absent session on an authenticated route that cannot fall back to an
+ * anonymous principal is a failed login (401), not a configuration fault.
+ */
+function missingSessionError(route: CompiledRouteBinding): Error {
+  if (route.anonymousPrincipal.allowed) return new ConfigurationError("authenticated route requires a trusted session")
+  return new UnauthorizedError()
+}
+
 async function resolveScope(input: NormalizeFrameworkRequestInput): Promise<ExecutionScope> {
   const plan = input.route.scopeResolution
   if (plan.kind === "fixed") {
     if (input.route.exposure === "public") throw new ConfigurationError("public route cannot use a fixed execution scope")
-    if (!input.session) throw new ConfigurationError("authenticated route requires a trusted session")
-    if (!executionScopesEqual(input.session.scope, plan.scope)) throw new ConfigurationError("session and fixed route scope mismatch")
+    if (!input.session) throw missingSessionError(input.route)
+    // A valid session for another scope (for example a tenant user on a platform route) is a caller that may not use
+    // this route, not a misconfiguration: refuse it as forbidden instead of answering 500.
+    if (!executionScopesEqual(input.session.scope, plan.scope)) throw new ForbiddenError("session and fixed route scope mismatch")
     return plan.scope
   }
   const binding = input.resolverBindings.get(plan.resolverKey)
@@ -78,7 +91,7 @@ function resolveIdentity(input: NormalizeFrameworkRequestInput): ExecutionIdenti
     if (actor.kind !== "anonymous") throw new ConfigurationError("public route principal must be anonymous")
     return Object.freeze({ actor, subject: actor })
   }
-  if (!input.session) throw new ConfigurationError("authenticated route requires a trusted session")
+  if (!input.session) throw missingSessionError(input.route)
   return input.session.identity
 }
 

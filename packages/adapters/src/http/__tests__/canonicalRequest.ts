@@ -1,6 +1,6 @@
 import type { CompiledRouteBinding } from "@xonava/core/bootstrap"
 import { bindAbacSecurityDigest, type ExecutionScope, type Principal } from "@xonava/core/domain"
-import type { FrameworkAuthorizationEntitlements } from "../../server"
+import type { CrudRouteBindings, FrameworkAuthorizationEntitlements } from "../../server"
 import type {
   FrameworkRequestNormalization,
   ScopeAdmissionEvidence,
@@ -51,7 +51,7 @@ function route(action: "list" | "detail" | "create" | "update" | "delete", scope
 export function canonicalRequestNormalization(
   sessionOrResolver: TrustedFrameworkSession | (() => TrustedFrameworkSession) = trustedSession(),
   operationPrefix = "test",
-): FrameworkRequestNormalization {
+): FrameworkRequestNormalization & { readonly routeBindings: Required<CrudRouteBindings> } {
   const initial = typeof sessionOrResolver === "function" ? sessionOrResolver() : sessionOrResolver
   const evidence: ScopeAdmissionEvidence = Object.freeze({
     grantId: "test-grant",

@@ -8,7 +8,6 @@
     "sourceMap": false,
     "rootDir": "src",
     "outDir": "dist",
-    "baseUrl": ".",
     "paths": {
       "@xonava/core": ["../core/dist/index.d.ts"],
       "@xonava/core/*": ["../core/dist/*"],

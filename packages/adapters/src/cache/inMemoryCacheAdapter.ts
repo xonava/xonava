@@ -32,8 +32,6 @@ export class InMemoryCacheAdapter implements CacheAdapter {
   readonly capabilities = { tagGenerationConsistency: "linearizable" as const, coherenceScope: "process" as const }
   private readonly maxEntries: number
   private values = new Map<string, ValueRecord>()
-  /** Live revision per stored key; pruned together with the value. */
-  private revisions = new Map<string, number>()
   private nextRevision = 0
   private tags = new Map<string, Map<string, number>>()
   /** Reverse index: key -> tag keys it is a member of, so removals prune memberships. */
@@ -55,10 +53,9 @@ export class InMemoryCacheAdapter implements CacheAdapter {
     return record?.expiresAt !== undefined && record.expiresAt <= now
   }
 
-  /** Removes a key together with its revision and every tag membership. */
+  /** Removes a key together with every tag membership. */
   private removeKey(key: string): boolean {
     const existed = this.values.delete(key)
-    this.revisions.delete(key)
     const tagKeys = this.keyTags.get(key)
     if (tagKeys) {
       for (const tagKey of tagKeys) {
@@ -134,7 +131,6 @@ export class InMemoryCacheAdapter implements CacheAdapter {
     }
     this.values.delete(key)
     this.values.set(key, record)
-    this.revisions.set(key, revision)
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
@@ -155,7 +151,6 @@ export class InMemoryCacheAdapter implements CacheAdapter {
   // eslint-disable-next-line @typescript-eslint/require-await
   async clear(): Promise<void> {
     this.values.clear()
-    this.revisions.clear()
     this.tags.clear()
     this.keyTags.clear()
     this.sweepCursor = undefined

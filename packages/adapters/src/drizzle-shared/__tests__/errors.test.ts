@@ -1,4 +1,5 @@
 import { describe,expect,it } from "vitest"
+import { expectNearLinear } from "../../../../core/src/__tests__/timing"
 import { isUniqueViolation, normalizeDrizzleError } from "../errors"
 import { BusinessRuleError,ConflictError,FrameworkCoreError,PersistenceError,RetryablePersistenceError,TimeoutError,ValidationError } from "@xonava/core/domain"
 
@@ -21,11 +22,11 @@ describe("timeout and D1 message classification",()=>{
     for(const [message,type] of cases){const normalized=normalizeDrizzleError(wrapped(message),"d1");expect(normalized).toBeInstanceOf(type as never);expect(normalized.message).not.toMatch(/secret|constraint failed|D1_ERROR/);expect(JSON.stringify(normalized.details)).not.toMatch(/secret/)}
     expect(normalizeDrizzleError(new Error("D1_ERROR: no such table: secret"),"d1")).toBeInstanceOf(PersistenceError)
   })
-  it("classifies D1 reset errors in linear time on repeated D1_ERROR tokens",()=>{
-    for(const message of ["D1_ERROR ".repeat(22_000),"D1_ERROR ".repeat(22_000)+"reset"]){
-      const started=performance.now();const normalized=classify(message);const elapsed=performance.now()-started
-      expect(normalized).toBeInstanceOf(message.endsWith("reset")?RetryablePersistenceError:PersistenceError)
-      expect(elapsed).toBeLessThan(200)
+  it("classifies D1 reset errors in linear time on repeated D1_ERROR tokens",async()=>{
+    for(const suffix of ["","reset"]){
+      const message=(size:number)=>"D1_ERROR ".repeat(Math.floor(size/9))+suffix
+      expect(classify(message(198_000))).toBeInstanceOf(suffix==="reset"?RetryablePersistenceError:PersistenceError)
+      await expectNearLinear((size)=>{const text=message(size);return()=>classify(text)},{size:198_000})
     }
   })
   it("matches the original D1_ERROR...reset regex on fragment strings",()=>{

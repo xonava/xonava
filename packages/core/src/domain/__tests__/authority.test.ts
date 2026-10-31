@@ -31,7 +31,7 @@ function provenance(overrides: Partial<AuthorityGrant> = {}, actor = human("u1")
   }
 }
 
-describe("A1 canonical execution scope", () => {
+describe("canonical execution scope", () => {
   const vectors: readonly [ExecutionScope, string][] = [
     [{ kind: "application", applicationKey: "app-main" }, "fscope:v1:eyJhcHBsaWNhdGlvbktleSI6ImFwcC1tYWluIiwia2luZCI6ImFwcGxpY2F0aW9uIn0"],
     [{ kind: "tenant", tenantId: "tenant-42" }, "fscope:v1:eyJraW5kIjoidGVuYW50IiwidGVuYW50SWQiOiJ0ZW5hbnQtNDIifQ"],
@@ -39,7 +39,7 @@ describe("A1 canonical execution scope", () => {
     [{ kind: "system", systemKey: "scheduler" }, "fscope:v1:eyJraW5kIjoic3lzdGVtIiwic3lzdGVtS2V5Ijoic2NoZWR1bGVyIn0"],
   ]
 
-  it.each(vectors)("validates and round-trips $kind using a frozen F1 vector", (scope, encoded) => {
+  it.each(vectors)("validates and round-trips $kind using a frozen vector", (scope, encoded) => {
     expect(validateExecutionScope(scope)).toEqual(scope)
     expect(encodeExecutionScopeId(scope)).toBe(encoded)
     expect(decodeExecutionScopeId(encoded)).toEqual(scope)
@@ -61,7 +61,7 @@ describe("A1 canonical execution scope", () => {
   })
 })
 
-describe("A1 canonical principal and authority", () => {
+describe("canonical principal and authority", () => {
   it("uses an explicit anonymous principal and rejects inconsistent authentication", () => {
     expect(createAnonymousPrincipal()).toEqual({ id: "anonymous", kind: "anonymous", authentication: { kind: "anonymous" } })
     expect(() => assertPrincipal({ id: "x", kind: "human", authentication: { kind: "anonymous" } })).toThrow(/authenticated/)
@@ -170,7 +170,7 @@ describe("A1 canonical principal and authority", () => {
   })
 })
 
-describe("A1 canonical request context", () => {
+describe("canonical request context", () => {
   function context(): RequestContext {
     const authority = provenance()
     return { requestId: "request-1", correlationId: authority.correlationId, identity: authority.identity, scope: authority.grant.target.scope, scopeId: authority.grant.target.scopeId, authority, route: { routeKey: "orders.read", definitionVersion: 1, operationKey: "orders.read" }, signal: new AbortController().signal, deadline: "2026-09-11T00:00:00.000Z", metadata: { display: true } }

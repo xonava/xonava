@@ -9,6 +9,7 @@ import { MAX_TIMER_DELAY_MS } from "../../execution/types"
 import { WorkflowStateError } from "../../workflow/workflowErrors"
 import type { WorkflowClaim, WorkflowInstance } from "../../workflow/types"
 import type { WorkflowFence, WorkflowStore } from "../../workflow/store"
+import { TIMING_SCALE } from "../timing"
 
 /**
  * Orchestrated interleavings the sequential model cannot express on its own:
@@ -17,7 +18,7 @@ import type { WorkflowFence, WorkflowStore } from "../../workflow/store"
  */
 
 // Property runs scale with DIFFERENTIAL_SCALE; so does the time they may take.
-vi.setConfig({ testTimeout: 60_000 * Math.max(1, scaledRuns(100) / 100) })
+vi.setConfig({ testTimeout: 60_000 * Math.max(1, scaledRuns(100) / 100) * TIMING_SCALE })
 
 const SAMPLES = [0.5] as const
 const ID = "i0"

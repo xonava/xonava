@@ -1,12 +1,12 @@
 import { describe, expect, it, vi, type Mock } from "vitest"
 import { createFrameworkWriteHandler } from "../createFrameworkWriteHandler"
-import { IDEMPOTENCY_FINGERPRINT_VERSION, deserializeResponse, fingerprintJson, legacyFingerprintJson, serializeResponse, type SerializedResponse, type SerializedResponseIdempotencyPort } from "../idempotency"
+import { IDEMPOTENCY_FINGERPRINT_VERSION, deserializeResponse, fingerprintJson, serializeResponse, type SerializedResponse, type SerializedResponseIdempotencyPort } from "../idempotency"
 import type { FrameworkAdapterDeps } from "../../server"
 import type { IdempotencyPort } from "@xonava/core/events"
 import type { PersistenceProvider } from "@xonava/core/persistence"
 import { bindAbacSecurityDigest, encodeExecutionScopeId } from "@xonava/core/domain"
 import { encodeTenantIdempotencyScope } from "@xonava/core/persistence"
-import { canonicalizeValue } from "@xonava/core/serialization"
+import { canonicalJsonString } from "@xonava/core/serialization"
 import { allowAllAbacBundle, allowAllModuleFacts, canonicalRequestNormalization, trustedSession } from "./canonicalRequest"
 
 const persistence = {
@@ -54,42 +54,26 @@ function createHandler(deps: FrameworkAdapterDeps, execute: ReturnType<typeof vi
   })
 }
 
-describe("idempotency fingerprints persisted before the RFC 8785 key-order fix (v2)", () => {
+describe("idempotency fingerprint version", () => {
   const hex = async (text: string) => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))), (byte) => byte.toString(16).padStart(2, "0")).join("")
 
-  it("writes v3 and reproduces the v2 digest (JavaScript key order) for compatibility", async () => {
+  it("writes v3: the digest of the canonical (RFC 8785 key order) form", async () => {
     const value = { body: { "10": 1, "9": 2 } }
     expect(IDEMPOTENCY_FINGERPRINT_VERSION).toBe("v3")
-    expect(await legacyFingerprintJson(value)).toBe(await hex(`v2\0${JSON.stringify(canonicalizeValue(value))}`))
-    expect(await legacyFingerprintJson(value)).not.toBe(await fingerprintJson(value))
+    expect(await fingerprintJson(value)).toBe(await hex(`v3\0${canonicalJsonString(value)}`))
+    // v2 hashed JavaScript property order ("9" before "10"); it is no longer produced or recognised.
+    expect(await fingerprintJson(value)).not.toBe(await hex(`v2\0${JSON.stringify({ body: { "9": 2, "10": 1 } })}`))
   })
 
-  it("replays a retry whose stored record carries the v2 fingerprint instead of reporting a conflict", async () => {
-    const offered: string[] = []
-    const replay = await serializeResponse(new Response(JSON.stringify({ id: "original" }), { status: 201, headers: { "content-type": "application/json" } }))
-    const acquire = vi.fn<SerializedResponseIdempotencyPort["acquire"]>(async (request) => {
-      offered.push(request.fingerprint)
-      // The stored record predates the deploy: only the second (legacy) fingerprint matches.
-      return offered.length === 1 ? { outcome: "conflict" } : { outcome: "replay", result: replay }
-    })
+  it("reports a conflict after one acquire when the stored fingerprint differs", async () => {
+    const acquire = vi.fn<SerializedResponseIdempotencyPort["acquire"]>(async () => ({ outcome: "conflict" }))
     const execute = vi.fn(async () => ({ id: "created" }))
     const response = await createHandler(createDeps(createPort(acquire)), execute)(new Request("https://example.test", {
       method: "POST", body: JSON.stringify({ "10": "ten", "9": "nine" }), headers: { "content-type": "application/json", "Idempotency-Key": "key-1" },
     }))
-    expect(response.status).toBe(201)
-    expect(await response.json()).toEqual({ id: "original" })
-    expect(offered).toHaveLength(2)
-    expect(offered[1]).not.toBe(offered[0])
-    expect(execute).not.toHaveBeenCalled()
-  })
-
-  it("still reports a conflict when neither the current nor the v2 fingerprint matches", async () => {
-    const acquire = vi.fn<SerializedResponseIdempotencyPort["acquire"]>(async () => ({ outcome: "conflict" }))
-    const response = await createHandler(createDeps(createPort(acquire)), vi.fn(async () => ({ id: "created" })))(new Request("https://example.test", {
-      method: "POST", body: "{}", headers: { "content-type": "application/json", "Idempotency-Key": "key-1" },
-    }))
     expect(response.status).toBe(409)
-    expect(acquire).toHaveBeenCalledTimes(2)
+    expect(acquire).toHaveBeenCalledOnce()
+    expect(execute).not.toHaveBeenCalled()
   })
 })
 
@@ -123,6 +107,7 @@ describe("framework write handler idempotency", () => {
     const port = createPort(conflictAcquire)
      const required = await createHandler(createDeps(port), execute, { required: true })(new Request("https://example.test", { method: "POST", body: "{}", headers: { "content-type": "application/json" } }))
     expect(required.status).toBe(400)
+    expect(await required.json()).toEqual({ error: "A required request header is missing", code: "REQUIRED_HEADER_MISSING", details: { header: "Idempotency-Key" } })
 
      const conflict = await createHandler(createDeps(port), execute)(new Request("https://example.test", { method: "POST", body: "{}", headers: { "content-type": "application/json", "Idempotency-Key": "key-1" } }))
     expect(conflict.status).toBe(409)
