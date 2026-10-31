@@ -62,7 +62,7 @@ export async function assertPlatformEntityPersistence(provider: PersistenceProvi
   // Read.
   expect(await repository.findById(id(3))).toEqual(announcement(3))
   expect(await repository.findById(id(99))).toBeNull()
-  const all = await repository.findMany({ sort: [{ field: "priority", direction: "asc" }], pagination: { kind: "offset", page: 1, pageSize: 100 } })
+  const all = await repository.findMany({ sort: [{ field: "priority", direction: "asc" }], pagination: { kind: "offset", page: 1, pageSize: 100, includeTotal: true } })
   expect(all.rows.map((row) => row.priority)).toEqual([1, 2, 3, 4, 5])
   expect(all.rowCount).toBe(5)
 
@@ -99,7 +99,7 @@ export async function assertPlatformEntityPersistence(provider: PersistenceProvi
   await repository.delete(id(1), { optimisticConcurrency: { expectedVersion: 2 } })
   expect(await probe.exists(id(1))).toBe(false)
   expect(await repository.findById(id(1))).toBeNull()
-  expect((await repository.findMany({ pagination: { kind: "offset", page: 1, pageSize: 100 } })).rowCount).toBe(4)
+  expect((await repository.findMany({ pagination: { kind: "offset", page: 1, pageSize: 100, includeTotal: true } })).rowCount).toBe(4)
 }
 
 // ---------------------------------------------------------------------------

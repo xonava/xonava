@@ -141,7 +141,7 @@ describe("MySQL repository findMany", () => {
 
   it("counts with the filter and pages with the resolved limit and offset", async () => {
     const f = capture(rows, "12")
-    const result = await f.repo.findMany!({ filter: Predicate.eq("score", 1), pagination: { kind: "offset", page: 3, pageSize: 4 } }) as { rowCount: number; page: number; pageSize: number; rows: unknown[] }
+    const result = await f.repo.findMany!({ filter: Predicate.eq("score", 1), pagination: { kind: "offset", page: 3, pageSize: 4, includeTotal: true } }) as { rowCount: number; page: number; pageSize: number; rows: unknown[] }
     expect(result).toMatchObject({ rowCount: 12, page: 3, pageSize: 4 })
     expect(result.rows).toHaveLength(4)
     expect(f.selects.map((select) => select.count)).toEqual([true, false])
@@ -154,7 +154,30 @@ describe("MySQL repository findMany", () => {
     expect(defaults.selects[0]!.where).toBeUndefined()
     expect(defaults.page().where).toBeUndefined()
     const none = capture([], undefined)
-    expect(await none.repo.findMany!()).toMatchObject({ rowCount: 0 })
+    expect(await none.repo.findMany!({ pagination: { kind: "offset", page: 1, pageSize: 20, includeTotal: true } })).toMatchObject({ rowCount: 0 })
+  })
+
+  it("runs no COUNT and omits rowCount unless an offset request asks for the total", async () => {
+    const plain = capture(rows, 99)
+    const result = await plain.repo.findMany!({ pagination: { kind: "offset", page: 1, pageSize: 5 } })
+    expect(result).not.toHaveProperty("rowCount")
+    expect(plain.selects.map((select) => select.count)).toEqual([false])
+    const off = capture(rows, 99)
+    expect(await off.repo.findMany!({ pagination: { kind: "offset", page: 1, pageSize: 5, includeTotal: false } })).not.toHaveProperty("rowCount")
+    expect(off.selects.map((select) => select.count)).toEqual([false])
+    const asked = capture(rows, 99)
+    expect(await asked.repo.findMany!({ pagination: { kind: "offset", page: 1, pageSize: 5, includeTotal: true } })).toMatchObject({ rowCount: 99 })
+    expect(asked.selects.map((select) => select.count)).toEqual([true, false])
+  })
+
+  it("countUpTo issues a bounded SELECT 1 under the given filter", async () => {
+    const f = build(() => [{ one: 1 }, { one: 1 }])
+    expect(await f.repo.countUpTo!(Predicate.eq("score", 1), 5)).toBe(2)
+    expect(f.ops).toHaveLength(1)
+    expect(f.ops[0]).toMatchObject({ limit: 5 })
+    expect(f.ops[0]!.offset).toBeUndefined()
+    expect(f.ops[0]!.where).toEqual({ sql: "(`widgets`.`score` = ?)", params: [1] })
+    await expect(f.repo.countUpTo!(undefined, 0)).rejects.toThrow(new ValidationError("countUpTo limit must be a positive integer"))
   })
 
   it("applies the configured maximum page size", async () => {
@@ -169,12 +192,15 @@ describe("MySQL repository findMany", () => {
     expect(f.page()).toMatchObject({ limit: 4, offset: 0 })
     expect(f.orderSql()).toEqual(["(CONVERT(`widgets`.`name` USING utf8mb4) COLLATE utf8mb4_0900_bin) asc", "(CONVERT(`widgets`.`id` USING utf8mb4) COLLATE utf8mb4_0900_bin) asc"])
     expect(result.rows).toHaveLength(3)
-    expect(result).toMatchObject({ rowCount: 9, page: 1, pageSize: 3, pageInfo: { kind: "cursor", hasNextPage: true, hasPreviousPage: false } })
+    expect(result).toMatchObject({ page: 1, pageSize: 3, pageInfo: { kind: "cursor", hasNextPage: true, hasPreviousPage: false } })
+    // Cursor pages never carry a total and never run a COUNT.
+    expect(result).not.toHaveProperty("rowCount")
+    expect(f.selects.map((select) => select.count)).toEqual([false])
     const after = capture(rows.slice(0, 2), 2)
     const next = await after.repo.findMany!({ sort, pagination: { kind: "cursor", direction: "after", limit: 3, values: ["alpha"] } }) as { pageInfo: unknown }
     expect(next.pageInfo).toEqual({ kind: "cursor", hasNextPage: false, hasPreviousPage: true })
     expect(renderSql("mysql", after.page().where)).toEqual({ sql: "((((CONVERT(`widgets`.`name` USING utf8mb4) COLLATE utf8mb4_0900_bin) > ?)))", params: ["alpha"] })
-    expect(renderSql("mysql", after.selects[0]!.where)).toEqual(renderSql("mysql", after.page().where))
+    expect(after.selects.map((select) => select.count)).toEqual([false])
     const filtered = capture(rows.slice(0, 1), 1)
     await filtered.repo.findMany!({ filter: Predicate.eq("score", 1), sort, pagination: { kind: "cursor", direction: "before", limit: 2, values: ["alpha"] } })
     expect(renderSql("mysql", filtered.page().where)).toEqual({ sql: "((`widgets`.`score` = ? and (((CONVERT(`widgets`.`name` USING utf8mb4) COLLATE utf8mb4_0900_bin) < ?))))", params: [1, "alpha"] })
@@ -209,7 +235,7 @@ describe("MySQL repository findMany", () => {
     await expect(f.repo.findMany!({ consistency: "eventual" })).rejects.toThrow("read consistency eventual is not proven for the selected datasource topology")
     expect(f.selects).toEqual([])
     const strong = capture(rows, 4)
-    expect(await strong.repo.findMany!({ consistency: "strong" })).toMatchObject({ rowCount: 4 })
+    expect(await strong.repo.findMany!({ consistency: "strong", pagination: { kind: "offset", page: 1, pageSize: 20, includeTotal: true } })).toMatchObject({ rowCount: 4 })
   })
 
   it("ignores an unknown pagination kind", async () => {

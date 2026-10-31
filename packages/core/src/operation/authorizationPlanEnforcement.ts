@@ -288,14 +288,17 @@ function constrainRepository<T, TId>(repository: ReturnType<PersistenceProvider[
       return permittedRecord(row, required) ? row : null
     },
     ...(typeof (repository as { findOneWhere?: unknown }).findOneWhere === "function" ? { findOneWhere } : {}),
+    ...(typeof (repository as { countUpTo?: unknown }).countUpTo === "function"
+      ? { countUpTo: (filter: PredicateNode | undefined, limit: number) => (repository as { countUpTo(filter: PredicateNode | undefined, limit: number): Promise<number> }).countUpTo(addRequiredPredicate(filter, required), limit) }
+      : {}),
     findMany: async (options?: QueryOptions) => {
       const filter = addRequiredPredicate(options?.filter, required)
       const constrainedOptions: QueryOptions | undefined = filter === undefined
         ? options
         : { ...(options ?? {}), filter }
-      const result = await (repository as { findMany(options?: QueryOptions): Promise<{ rows: T[]; rowCount: number; page: number; pageSize: number; pageInfo?: unknown }> }).findMany(constrainedOptions)
+      const result = await (repository as { findMany(options?: QueryOptions): Promise<{ rows: T[]; rowCount?: number; page: number; pageSize: number; pageInfo?: unknown }> }).findMany(constrainedOptions)
       const rows = result.rows.filter((row) => permittedQueriedRecord(row, required, requiredFields))
-      return Object.freeze({ ...result, rows: Object.freeze(rows), rowCount: rows.length })
+      return Object.freeze({ ...result, rows: Object.freeze(rows), ...(result.rowCount === undefined ? {} : { rowCount: rows.length }) })
     },
   }
   if (plan.operationKind === "read") return Object.freeze(read)
@@ -426,7 +429,7 @@ export function applyAuthorizationPlanToResult<TResult>(plan: AuthorizedExecutio
     const value = result as unknown as Record<string, unknown> & { rows: unknown[] }
     const envelope: Record<string, unknown> = {}
     for (const key of PAGED_ENVELOPE_KEYS) if (Object.prototype.hasOwnProperty.call(value, key)) envelope[key] = value[key]
-    return Object.freeze({ ...envelope, rows: projectRecord(value.rows), rowCount: value.rows.length }) as TResult
+    return Object.freeze({ ...envelope, rows: projectRecord(value.rows), ...(Object.prototype.hasOwnProperty.call(value, "rowCount") && value.rowCount !== undefined ? { rowCount: value.rows.length } : {}) }) as TResult
   }
   return projectRecord(result) as TResult
 }

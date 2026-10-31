@@ -40,7 +40,8 @@ const frameworkErrorHandler = createFrameworkErrorHandler()
 
 type ListReadResult<TRow> = {
   rows: TRow[]
-  rowCount: number
+  /** Offset pages only; cursor pages report `pageInfo.hasNextPage`/`hasPreviousPage` and never a total. */
+  rowCount?: number
   page: number
   pageSize: number
   pageInfo?: CursorPageInfo
@@ -264,18 +265,28 @@ export function createListHandler<
           const repositoryProjection = requestedProjection && !abacBundle && typeof options.crud?.list?.projectResult !== "function"
             ? { fields: [...new Set([...requestedProjection.fields, ...(cursorConfig ? (sort ?? []).map(item => item.field) : [])])] }
             : undefined
-          const raw = await internalRepositoryForDescriptor(operation.persistence, entity).findMany({
+          const listRepository = internalRepositoryForDescriptor(operation.persistence, entity)
+          const maxCount = options.queryLimits?.maxCount
+          if (maxCount !== undefined) {
+            // Bounded probe BEFORE the page query: at most maxCount + 1 rows are read, so an oversized result is
+            // rejected without running the page query or an unbounded COUNT. It counts the caller's filter only
+            // (never a cursor position), so the limit means the same on every page.
+            const matching = listRepository.countUpTo
+              ? await listRepository.countUpTo(filter, maxCount + 1)
+              : (await listRepository.findMany({ ...(filter ? { filter } : {}), pagination: { kind: "offset", page: 1, pageSize: 1, includeTotal: true } })).rowCount ?? 0
+            if (matching > maxCount) {
+              throw new ValidationError(`query result count exceeds the configured maximum of ${maxCount}`)
+            }
+          }
+          const raw = await listRepository.findMany({
             ...(filter ? { filter } : {}),
             ...(sort ? { sort } : {}),
             ...(repositoryProjection ? { projection: repositoryProjection } : {}),
             ...(input.query.consistency ? { consistency: input.query.consistency } : {}),
             pagination: cursorConfig
               ? { kind: "cursor", direction: cursorPayload?.direction ?? "after", ...(cursorPayload ? { values: cursorPayload.values } : {}), limit: input.query.limit ?? input.query.pageSize }
-              : { kind: "offset", page: input.query.page, pageSize: input.query.pageSize },
+              : { kind: "offset", page: input.query.page, pageSize: input.query.pageSize, includeTotal: true },
           })
-          if (options.queryLimits?.maxCount !== undefined && raw.rowCount > options.queryLimits.maxCount) {
-            throw new ValidationError(`query result count exceeds the configured maximum of ${options.queryLimits.maxCount}`)
-          }
           let pageInfo = raw.pageInfo?.kind === "cursor" ? raw.pageInfo : undefined
           if (cursorConfig && cursorBindings && raw.rows.length > 0 && sort) {
             const valuesFor = (row: Record<string, unknown>) => sort.map(item => {
@@ -296,7 +307,7 @@ export function createListHandler<
           }
           return {
             rows: raw.rows as unknown as SelectableRow[],
-            rowCount: raw.rowCount,
+            ...(raw.rowCount === undefined || cursorConfig ? {} : { rowCount: raw.rowCount }),
             page: raw.page,
             pageSize: raw.pageSize,
             ...(pageInfo ? { pageInfo } : {}),
@@ -483,7 +494,7 @@ export function createListHandler<
                 scopeId: requestContext.scopeId,
                 page: result.page,
                 pageSize: result.pageSize,
-                resultCount: result.rowCount,
+                resultCount: result.rowCount ?? result.rows.length,
                 // Bounded query fingerprint so audit records stay small and
                 // never dump the caller's filter values or record set.
                  queryFingerprint: await fingerprintJson(validatedTransformedQuery),

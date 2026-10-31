@@ -223,6 +223,15 @@ export function createDrizzleRepository<T extends SelectableRow, TId = string>(a
         whereClause: compileWhereClause(predicateCompiler, filter),
       })
     },
+    async countUpTo(filter: PredicateNode | undefined, limit: number): Promise<number> {
+      if (!Number.isSafeInteger(limit) || limit <= 0) throw new ValidationError("countUpTo limit must be a positive integer")
+      const probe = await args.db
+        .select({ one: sql`1` })
+        .from(args.table)
+        .where(filter ? compileWhereClause(predicateCompiler, filter) : undefined)
+        .limit(limit)
+      return probe.length
+    },
     async findMany(options?: QueryOptions): Promise<ListResult<T>> {
       validateQueryPlan({ ...(options?.filter ? { filter: options.filter } : {}), ...(options?.sort ? { sort: options.sort } : {}), ...(options?.projection ? { projection: options.projection } : {}), ...(options?.consistency ? { consistency: options.consistency } : {}) })
       if (options?.consistency) assertReadConsistencySupported(options.consistency, ["strong"])
@@ -236,13 +245,17 @@ export function createDrizzleRepository<T extends SelectableRow, TId = string>(a
         ? (cursor.values ? (options?.filter ? Predicate.and(options.filter, compileCursorPredicate(sort!, { ...cursor, values: cursor.values })) : compileCursorPredicate(sort!, { ...cursor, values: cursor.values })) : options?.filter)
         : options?.filter
       const whereClause = filter ? compileWhereClause(predicateCompiler, filter) : undefined
-      const [countResult] = await args.db
-        .select({ count: count() })
-        .from(args.table)
-        .where(whereClause)
-        .limit(1)
-
-      const rowCount = Number((countResult as { count?: number } | undefined)?.count ?? 0)
+      // The total is opt-in and offset-only. It counts the caller's filter (tenant/ABAC scope included), never the cursor predicate.
+      let rowCount: number | undefined
+      if (!cursor && offsetPagination?.includeTotal === true) {
+        const totalWhere = options?.filter ? compileWhereClause(predicateCompiler, options.filter) : undefined
+        const [countResult] = await args.db
+          .select({ count: count() })
+          .from(args.table)
+          .where(totalWhere)
+          .limit(1)
+        rowCount = Number((countResult as { count?: number } | undefined)?.count ?? 0)
+      }
        const effectiveSort = cursor ? executionSort(sort!, cursor.direction) : sort
        const orderBy = compileOrderBy(effectiveSort, args.columnMap, fallbackSortColumn, primaryKey, primaryKeyColumn, cursor !== undefined)
       const selection = options?.projection
@@ -264,7 +277,7 @@ export function createDrizzleRepository<T extends SelectableRow, TId = string>(a
 
       return {
         rows: (window?.rows ?? fetched) as T[],
-        rowCount,
+        ...(rowCount === undefined ? {} : { rowCount }),
         page: pagination.page,
         pageSize: pagination.pageSize,
         ...(window ? { pageInfo: { kind: "cursor" as const, hasNextPage: window.hasNextPage, hasPreviousPage: window.hasPreviousPage } } : {}),

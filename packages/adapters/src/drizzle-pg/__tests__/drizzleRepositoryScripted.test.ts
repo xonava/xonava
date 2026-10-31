@@ -51,7 +51,7 @@ describe("PostgreSQL repository reads", () => {
   it("lists with count and page rows, projection, explicit sort and defaults", async () => {
     const handler: ScriptedHandler = (op) => (op.fields && "count" in (op.fields as object) ? [{ count: 7 }] : [row(), row({ id: "w2" })])
     const { repo, ops } = build(handler)
-    const result = await repo.findMany!({ filter: Predicate.eq("name", "alpha"), sort: [{ field: "score", direction: "desc" }], projection: { fields: ["id", "score"] }, pagination: { kind: "offset", page: 2, pageSize: 5 } })
+    const result = await repo.findMany!({ filter: Predicate.eq("name", "alpha"), sort: [{ field: "score", direction: "desc" }], projection: { fields: ["id", "score"] }, pagination: { kind: "offset", page: 2, pageSize: 5, includeTotal: true } })
     expect(result).toMatchObject({ rowCount: 7, page: 2, pageSize: 5 })
     expect(result.rows).toHaveLength(2)
     const page = ops.find((op) => op.offset !== undefined)!

@@ -102,6 +102,16 @@ describe("strict query plan runtime validation", () => {
     expect(() => validateQueryPlan({ pagination: { kind: "cursor", after: "token", limit: 10 } })).not.toThrow()
   })
 
+  it("accepts the opt-in total on offset pagination only, as a boolean", () => {
+    expect(() => validateQueryPlan({ pagination: { kind: "offset", page: 1, pageSize: 10, includeTotal: true } })).not.toThrow()
+    expect(() => validateQueryPlan({ pagination: { kind: "offset", page: 1, pageSize: 10, includeTotal: false } })).not.toThrow()
+    for (const includeTotal of ["yes", 1, null]) {
+      expect(() => validateQueryPlan(malformed({ pagination: { kind: "offset", page: 1, pageSize: 10, includeTotal } }))).toThrow(/includeTotal must be a boolean/)
+    }
+    // A cursor page never carries a total, so the option is not part of cursor pagination.
+    expect(() => validateQueryPlan(malformed({ pagination: { kind: "cursor", after: "token", limit: 10, includeTotal: true } }))).toThrow(/unknown field/i)
+  })
+
   it("rejects duplicate and malformed sort and projection fields", () => {
     const rejected: unknown[] = [
       { sort: [{ field: "id", direction: "asc" }, { field: "id", direction: "desc" }] },

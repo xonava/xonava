@@ -60,6 +60,11 @@ export interface DeleteOptions {
 export interface ReadRepository<T, TId = string> {
   findById(id: TId): Promise<T | null>
   findOneWhere?(filter: PredicateNode): Promise<T | null>
+  /**
+   * Bounded count: `min(matching rows, limit)`, run as `SELECT 1 ... LIMIT limit` so it never scans more than
+   * `limit` rows. Callers check "more than N rows?" by passing `N + 1`. Optional; tenant scope is applied as for `findMany`.
+   */
+  countUpTo?(filter: PredicateNode | undefined, limit: number): Promise<number>
   findMany(options?: QueryOptions): Promise<ListResult<T>>
 }
 
@@ -159,6 +164,7 @@ export function assertMatchingPersistenceScope(
 export interface ReadOnlyRepository<T, TId = string> {
   findById(id: TId): Promise<T | null>
   findOneWhere?(filter: PredicateNode): Promise<T | null>
+  countUpTo?(filter: PredicateNode | undefined, limit: number): Promise<number>
   findMany(options?: QueryOptions): Promise<ListResult<T>>
 }
 
@@ -191,6 +197,7 @@ export function createReadOnlyPersistenceProvider(provider: PersistenceProvider)
     return Object.freeze({
       findById: (id: TId) => repository.findById(id),
       ...(repository.findOneWhere ? { findOneWhere: (filter: PredicateNode) => repository.findOneWhere!(filter) } : {}),
+      ...(repository.countUpTo ? { countUpTo: (filter: PredicateNode | undefined, limit: number) => repository.countUpTo!(filter, limit) } : {}),
       findMany: (options?: QueryOptions) => repository.findMany(options),
     })
   }

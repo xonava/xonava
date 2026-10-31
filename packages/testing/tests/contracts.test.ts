@@ -1,5 +1,6 @@
 import { OptimisticConcurrencyError } from "@xonava/core/domain"
 import type { AtomicBatchPlan, EntityDescriptor, PersistenceProvider, UnversionedRepository } from "@xonava/core/persistence"
+import { pageInMemoryRows } from "./inMemoryPaging"
 import {
   runAtomicBatchContractTests,
   runJobStoreConcurrencyContractTests,
@@ -76,11 +77,7 @@ function createMemoryProvider(): PersistenceProvider {
         findOneWhere: async (filter) => Array.from(rows.values()).find((row) => matches(row as T, filter)) as T | undefined ?? null,
         findMany: async (options) => {
           const filtered = Array.from(rows.values()).filter((row) => matches(row as T, options?.filter))
-          const offset = options?.pagination?.kind === "offset" ? options.pagination : undefined
-          const page = offset?.page ?? 1
-          const pageSize = offset?.pageSize ?? filtered.length
-          const start = (page - 1) * pageSize
-          return { rows: filtered.slice(start, start + pageSize) as T[], rowCount: filtered.length, page, pageSize }
+          return pageInMemoryRows(filtered as T[], options, filtered.length)
         },
         insert: async (data) => {
           const id = String(data[primaryKey] ?? `row-${++nextId}`)

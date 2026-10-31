@@ -3,6 +3,7 @@ import { createTenantScopedPersistenceProvider } from "@xonava/core/persistence"
 import type { PersistenceProvider, EntityDescriptor, UnversionedRepository, DeleteOptions, UpdateWhereOptions } from "@xonava/core/persistence"
 import type { QueryOptions, ListResult } from "@xonava/core/query"
 import { runRepositoryContractTests } from "../src/repository-contracts"
+import { pageInMemoryRows } from "./inMemoryPaging"
 import { runTenantAbacConformanceTests } from "../src/tenant-abac-contracts"
 
 function createInMemoryPersistenceProvider(): PersistenceProvider {
@@ -47,12 +48,7 @@ function createInMemoryPersistenceProvider(): PersistenceProvider {
           if (options?.filter) {
             all = all.filter(r => evaluatePredicate(r as Record<string, unknown>, options.filter!))
           }
-          const total = all.length
-          const offset = options?.pagination?.kind === "offset" ? options.pagination : undefined
-          const page = offset?.page ?? 1
-          const pageSize = offset?.pageSize ?? 100
-          const paged = all.slice((page - 1) * pageSize, page * pageSize)
-          return { rows: paged, rowCount: total, page, pageSize }
+          return pageInMemoryRows(all, options, 100)
         },
 
         async insert(data: Partial<T>): Promise<T> {

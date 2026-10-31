@@ -353,6 +353,9 @@ export function createTenantScopedPersistenceProvider<TTenantId extends string>(
           const result = await repo.findMany({ filter: scopedFilter, pagination: { kind: "offset", page: 1, pageSize: 1 } })
           return assertReturnedTenantRecord(result.rows[0] ?? null, tenantField, tenantId, entity.name)
         },
+        ...(repo.countUpTo
+          ? { async countUpTo(filter: PredicateNode | undefined, limit: number): Promise<number> { return repo.countUpTo!(withTenantScope(filter, tenantField, tenantId), limit) } }
+          : {}),
         async findMany(options?: QueryOptions): Promise<ListResult<T>> {
           const projected = withTenantProjection(options, tenantField)
           const result = await repo.findMany({
