@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Check the npm token and package contents without publishing"
+        description: "Build and check the package contents without publishing"
         type: boolean
         default: true
 
@@ -31,10 +31,10 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: npm
       - run: npm ci
-      - name: Check that the npm token authenticates
-        run: npm whoami
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # npm trusted publishing (OIDC, configured per package on npmjs.com) needs npm 11.5.1 or newer; Node 22 bundles
+      # npm 10. With it, no npm token or secret is used, and provenance is attached automatically.
+      - name: Use an npm that supports trusted publishing
+        run: npm install --global npm@11.21.1 && npm --version
       - name: Dry run (no publish)
         if: inputs.dry_run
         run: |
@@ -43,11 +43,6 @@ jobs:
           for workspace in @xonava/core @xonava/adapters @xonava/testing; do
             npm publish --dry-run --workspace "$workspace"
           done
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Publish
         if: ${{ !inputs.dry_run }}
         run: npm run release:publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: "true"

@@ -56,4 +56,12 @@ Differential testing is randomized: a pass shows that the explored cases agree, 
 
 ## Publishing
 
-The manual `Release` workflow (`.github/workflows/release.yml`) runs only on `main` and has a `dry_run` input, on by default. Every run first checks that the `NPM_TOKEN` secret authenticates (`npm whoami`). With `dry_run` it then builds and runs `npm publish --dry-run` for each package, publishing nothing; with `dry_run` off it runs `npm run release:publish` with npm provenance.
+Packages are published with npm trusted publishing: npm verifies the GitHub Actions run itself (OIDC), so no npm
+token or repository secret exists, and every published version carries provenance. Each package (`@xonava/core`,
+`@xonava/adapters`, `@xonava/testing`) has a trusted publisher on npmjs.com for repository `xonava/xonava` and
+workflow `release.yml`.
+
+To release, run the manual `Release` workflow (`.github/workflows/release.yml`) on `main`. It has a `dry_run` input,
+on by default: a dry run builds and runs `npm publish --dry-run` for each package and publishes nothing. With
+`dry_run` off it runs `npm run release:publish`. The workflow installs npm 11.5.1 or newer first, which trusted
+publishing requires.
