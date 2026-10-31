@@ -1,6 +1,6 @@
 {
   "name": "@xonava/adapters",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Adapters for the server framework: PostgreSQL, MySQL, and Cloudflare D1 persistence via Drizzle, Express, Fastify, and Hono HTTP bindings, and cache and storage adapters.",
   "keywords": [
     "server",
@@ -130,7 +130,7 @@
     }
   },
   "dependencies": {
-    "@xonava/core": "0.2.1",
+    "@xonava/core": "0.3.0",
     "uuidv7": "^1.2.1",
     "zod": "^4.6.7"
   },

@@ -102,7 +102,7 @@ export interface DeliveryClaimArgs { readonly owner: string; readonly token: str
  * Whether a claimable record has used up its attempt budget. When it has, the
  * claim dead-letters it: LEASE_EXPIRED when the last attempt's claim lapsed
  * (crashed or hung worker), ATTEMPTS_EXHAUSTED otherwise. Without
- * `maxAttempts` (legacy callers) the budget is not enforced at claim time.
+ * `maxAttempts` (callers that omit it) the budget is not enforced at claim time.
  */
 function exhaustedClaimCode(record: Claimable & { readonly attempt: number }, maxAttempts: number | undefined): string | null {
   if (maxAttempts === undefined || record.attempt < attemptLimit(maxAttempts)) return null

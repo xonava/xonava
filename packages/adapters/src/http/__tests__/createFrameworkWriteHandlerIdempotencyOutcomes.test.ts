@@ -212,40 +212,15 @@ describe("idempotency outcomes", () => {
     expect(inFlight.execute).not.toHaveBeenCalled()
   })
 
-  it("retries once with the legacy fingerprint after a conflict and adopts it when that replays or acquires", async () => {
-    const port = scriptedPort("transactional", (call) => call === 0 ? { outcome: "conflict" } : { outcome: "acquired", token: "legacy-token" })
-    const h = makeWrite(idempotentConfig(), { port })
-    expect((await h.send({})).status).toBe(200)
-    expect(port.acquire).toHaveBeenCalledTimes(2)
-    const first = acquireRequest(h, 0)
-    const second = acquireRequest(h, 1)
-    expect(first.fingerprint).toMatch(/^[0-9a-f]{64}$/)
-    expect(second.fingerprint).toMatch(/^[0-9a-f]{64}$/)
-    expect(second.fingerprint).not.toBe(first.fingerprint)
-    expect({ ...second, fingerprint: first.fingerprint }).toEqual(first)
-    expect(completion(h).fingerprint).toBe(second.fingerprint)
-    expect(completion(h).token).toBe("legacy-token")
-    expect(h.execute).toHaveBeenCalledOnce()
-  })
-
-  it("keeps the conflict when the legacy fingerprint conflicts too", async () => {
+  it("answers a conflict from a single acquire, without retrying under another fingerprint", async () => {
     const port = scriptedPort("transactional", () => ({ outcome: "conflict" }))
     const h = makeWrite(idempotentConfig(), { port })
     expect((await h.send({})).status).toBe(409)
-    expect(port.acquire).toHaveBeenCalledTimes(2)
+    expect(port.acquire).toHaveBeenCalledOnce()
     expect(h.execute).not.toHaveBeenCalled()
   })
 
-  it("replays through the legacy fingerprint", async () => {
-    const stored = { version: "v1", body: '{"id":"legacy"}', status: 200, headers: [] }
-    const port = scriptedPort("transactional", (call) => call === 0 ? { outcome: "conflict" } : { outcome: "replay", result: stored as never })
-    const h = makeWrite(idempotentConfig(), { port })
-    const response = await h.send({})
-    expect(await bodyOf(response)).toEqual({ id: "legacy" })
-    expect(h.execute).not.toHaveBeenCalled()
-  })
-
-  it("does not consult the legacy fingerprint when the first acquire succeeds", async () => {
+  it("acquires once when the first acquire succeeds", async () => {
     const h = makeWrite(idempotentConfig())
     await h.send({})
     expect(h.port.acquire).toHaveBeenCalledOnce()

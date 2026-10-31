@@ -53,7 +53,7 @@ describe("MySQL repository reads", () => {
 
   it("lists with a count, native order for offset pages and primary-key tie-breaking", async () => {
     const { repo, ops } = build((op) => (isCount(op) ? [{ value: "9" }] : [row(), row({ id: "w2" })]))
-    const result = await repo.findMany!({ filter: Predicate.eq("name", "alpha"), sort: [{ field: "score", direction: "desc" }], pagination: { kind: "offset", page: 3, pageSize: 4 } })
+    const result = await repo.findMany!({ filter: Predicate.eq("name", "alpha"), sort: [{ field: "score", direction: "desc" }], pagination: { kind: "offset", page: 3, pageSize: 4, includeTotal: true } })
     expect(result).toMatchObject({ rowCount: 9, page: 3, pageSize: 4 })
     expect(result.rows).toHaveLength(2)
     expect(result).not.toHaveProperty("pageInfo")
@@ -65,7 +65,7 @@ describe("MySQL repository reads", () => {
   it("sorts by primary key by default and does not duplicate it when sorted explicitly", async () => {
     const handler: ScriptedHandler = (op) => (isCount(op) ? [] : [])
     const byDefault = build(handler)
-    const empty = await byDefault.repo.findMany!()
+    const empty = await byDefault.repo.findMany!({ pagination: { kind: "offset", page: 1, pageSize: 20, includeTotal: true } })
     expect(empty).toMatchObject({ rowCount: 0, rows: [] })
     expect(byDefault.ops.find((op) => op.offset !== undefined)!.orderBy!.sql).toContain("`id`")
     const byId = build(handler)

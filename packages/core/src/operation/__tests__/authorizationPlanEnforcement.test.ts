@@ -194,6 +194,36 @@ describe("authorization decision and plan enforcement", () => {
     expect(result).toBeNull()
   })
 
+  it("keeps an absent total absent, and applies the mandatory predicate to the bounded count", async () => {
+    const countUpTo = vi.fn(async () => 2)
+    const repository = {
+      findById: vi.fn(),
+      findMany: vi.fn(async () => ({ rows: [{ id: "a", tenantId: "tenant-1", secret: "s" }], page: 1, pageSize: 10 })),
+      countUpTo,
+      insert: vi.fn(), update: vi.fn(), delete: vi.fn(),
+    } as unknown as UnversionedRepository<{ id: string; tenantId: string; secret: string }>
+    let listed: unknown
+    let counted: unknown
+    await runOperation({
+      operation: createOperationContext({ persistence: provider(() => repository), runtimeCapabilities, request: request("total-read") }),
+      definition: {
+        key: "total-read",
+        kind: "read",
+        authorization: { authorize: async () => ({ allowed: true, plan: plan({ mandatoryResourcePredicate: Predicate.eq("tenantId", "tenant-1") }) }) },
+        execute: async ({ operation }) => {
+          const repo = operation.persistence.repository(entity) as unknown as { findMany(options?: unknown): Promise<unknown>; countUpTo(filter: unknown, limit: number): Promise<number> }
+          listed = await repo.findMany({ pagination: { kind: "offset", page: 1, pageSize: 10 } })
+          counted = await repo.countUpTo(undefined, 3)
+          return null
+        },
+      },
+      input: {},
+    })
+    expect(listed).not.toHaveProperty("rowCount")
+    expect(counted).toBe(2)
+    expect(countUpTo).toHaveBeenCalledWith(Predicate.eq("tenantId", "tenant-1"), 3)
+  })
+
   it("binds mandatory and mutable-fact predicates to conditional mutations", async () => {
     let received: unknown
     const repository: UnversionedRepository<{ id: string; tenantId: string; membershipVersion: number; status: string }> = {

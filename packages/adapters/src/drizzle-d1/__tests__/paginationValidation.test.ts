@@ -12,14 +12,12 @@ const invalidPaginationValues = [Number.NaN, Number.POSITIVE_INFINITY, Number.NE
 const invalidRequestValues = [...invalidPaginationValues, Number.MAX_SAFE_INTEGER + 1]
 
 function session(): DrizzleSessionLike {
-  let selectCount = 0
   return {
     select: vi.fn(() => ({
       from: vi.fn(() => ({
         where: vi.fn(() => {
-          selectCount += 1
-          if (selectCount === 1) return { limit: vi.fn(async () => [{ count: 5 }]) }
-          return { orderBy: vi.fn(() => ({ limit: vi.fn(() => ({ offset: vi.fn(async () => []) })) })) }
+          // A COUNT (only when a total is requested) ends in limit(); the page query goes through orderBy().
+          return { limit: vi.fn(async () => [{ count: 5 }]), orderBy: vi.fn(() => ({ limit: vi.fn(() => ({ offset: vi.fn(async () => []) })) })) }
         }),
       })),
     })),

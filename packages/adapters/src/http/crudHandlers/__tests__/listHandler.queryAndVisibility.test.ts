@@ -86,10 +86,12 @@ type Stubs = {
   cacheScopeKey?: string | undefined
   defaultSort?: Array<{ field: string; direction: "asc" | "desc" }> | undefined
   rateLimit?: ReturnType<typeof vi.fn>
+  /** Bounded-count capability of the fake repository; `undefined` leaves the repository without `countUpTo`. */
+  countUpTo?: ReturnType<typeof vi.fn>
 }
 
 function setup(stubs: Stubs = {}) {
-  const repo = fakeRepo({ findMany: vi.fn(async () => stubs.result ?? page()) })
+  const repo = fakeRepo({ findMany: vi.fn(async () => stubs.result ?? page()), ...(stubs.countUpTo ? { countUpTo: stubs.countUpTo } : {}) })
   const persistence = persistenceOf(repo)
   const options = baseOptions({
     entity: unscopedEntity(),
@@ -178,17 +180,17 @@ describe("list query parameters", () => {
   it("defaults to the first page of ten", async () => {
     const { handler, find } = setup()
     expect((await get(handler)).status).toBe(200)
-    expect(find()[0]).toEqual({ pagination: { kind: "offset", page: 1, pageSize: 10 } })
+    expect(find()[0]).toEqual({ pagination: { kind: "offset", page: 1, pageSize: 10, includeTotal: true } })
   })
 
   it("passes page, page size and consistency to the repository", async () => {
     const { handler, find } = setup()
     await get(handler, q({ page: "3", pageSize: "7", consistency: "strong" }))
-    expect(find()[0]).toEqual({ consistency: "strong", pagination: { kind: "offset", page: 3, pageSize: 7 } })
+    expect(find()[0]).toEqual({ consistency: "strong", pagination: { kind: "offset", page: 3, pageSize: 7, includeTotal: true } })
     await get(handler, q({ pageSize: "2" }))
-    expect(find()[1]).toEqual({ pagination: { kind: "offset", page: 1, pageSize: 2 } })
+    expect(find()[1]).toEqual({ pagination: { kind: "offset", page: 1, pageSize: 2, includeTotal: true } })
     await get(handler, q({ page: "2" }))
-    expect(find()[2]).toEqual({ pagination: { kind: "offset", page: 2, pageSize: 10 } })
+    expect(find()[2]).toEqual({ pagination: { kind: "offset", page: 2, pageSize: 10, includeTotal: true } })
   })
 
   it("returns the page the repository produced", async () => {
@@ -236,12 +238,66 @@ describe("offset limits", () => {
     expect((await get(ok.handler)).status).toBe(200)
   })
 
-  it("rejects a result count above the maximum, accepting the boundary", async () => {
+  it("rejects a result count above the maximum with a bounded probe, before the page query", async () => {
+    const order: string[] = []
+    const countUpTo = vi.fn(async () => { order.push("probe"); return 3 })
+    const over = setup({ options: { queryLimits: { maxCount: 2 } }, countUpTo })
+    over.repo.findMany.mockImplementation(async () => { order.push("page"); return page() })
+    expect((await get(over.handler)).status).toBe(400)
+    expect(lastError()).toEqual(new ValidationError("query result count exceeds the configured maximum of 2"))
+    // maxCount + 1 rows is the most the probe may read, and the page query never ran.
+    expect(countUpTo).toHaveBeenCalledWith(undefined, 3)
+    expect(order).toEqual(["probe"])
+    expect(over.repo.findMany).not.toHaveBeenCalled()
+  })
+
+  it("accepts a result count at the boundary, probing first and then reading the page with a total", async () => {
+    const order: string[] = []
+    const countUpTo = vi.fn(async () => { order.push("probe"); return 2 })
+    const exact = setup({ options: { queryLimits: { maxCount: 2 } }, countUpTo })
+    exact.repo.findMany.mockImplementation(async () => { order.push("page"); return page(rowsFixture(), { rowCount: 2 }) })
+    const response = await get(exact.handler)
+    expect(response.status).toBe(200)
+    expect(order).toEqual(["probe", "page"])
+    expect((await json(response)).rowCount).toBe(2)
+  })
+
+  it("applies the probe to the caller's filter and read scope, not to a page position", async () => {
+    const R = Predicate.eq("name", "readable")
+    const countUpTo = vi.fn(async () => 1)
+    const scoped = setup({ options: { queryLimits: { maxCount: 5 } }, readFilter: R, countUpTo })
+    await get(scoped.handler, q({ page: "4" }))
+    expect(countUpTo).toHaveBeenCalledWith(R, 6)
+    expect(scoped.find()[0]?.filter).toEqual(R)
+  })
+
+  it("falls back to a one-row page with a total when the repository has no bounded probe", async () => {
     const over = setup({ options: { queryLimits: { maxCount: 2 } }, result: page(rowsFixture(), { rowCount: 3 }) })
     expect((await get(over.handler)).status).toBe(400)
     expect(lastError()).toEqual(new ValidationError("query result count exceeds the configured maximum of 2"))
+    expect(over.find()).toEqual([{ pagination: { kind: "offset", page: 1, pageSize: 1, includeTotal: true } }])
     const exact = setup({ options: { queryLimits: { maxCount: 2 } }, result: page(rowsFixture(), { rowCount: 2 }) })
     expect((await get(exact.handler)).status).toBe(200)
+  })
+
+  it("probes cursor pages too, and cursor pages answer without a total", async () => {
+    const countUpTo = vi.fn(async () => 9)
+    const over = setup({ defaultSort: SORT_ID, options: { ...cursorOptions(), queryLimits: { maxCount: 2 } }, countUpTo })
+    expect((await get(over.handler)).status).toBe(400)
+    expect(over.repo.findMany).not.toHaveBeenCalled()
+    const ok = setup({ defaultSort: SORT_ID, options: cursorOptions(), result: { rows: rowsFixture(), page: 1, pageSize: 10, pageInfo: { kind: "cursor", hasNextPage: false, hasPreviousPage: false } } })
+    const body = await json(await get(ok.handler))
+    expect(body).not.toHaveProperty("rowCount")
+    expect((ok.find()[0]?.pagination as Record<string, unknown>)).not.toHaveProperty("includeTotal")
+    const stray = setup({ defaultSort: SORT_ID, options: cursorOptions(), result: page(rowsFixture(), { rowCount: 7 }) })
+    expect(await json(await get(stray.handler))).not.toHaveProperty("rowCount")
+  })
+
+  it("omits the probe when no maxCount is configured", async () => {
+    const countUpTo = vi.fn(async () => 99)
+    const free = setup({ countUpTo })
+    expect((await get(free.handler)).status).toBe(200)
+    expect(countUpTo).not.toHaveBeenCalled()
   })
 })
 
@@ -681,11 +737,11 @@ describe("list hooks", () => {
   it("lets transformQuery merge into the query, or leave it untouched", async () => {
     const merged = setup({ options: { crud: { list: { transformQuery: async () => ({ query: { pageSize: 3 } }) } } } })
     await get(merged.handler, q({ page: "2" }))
-    expect(merged.find()[0]?.pagination).toEqual({ kind: "offset", page: 2, pageSize: 3 })
+    expect(merged.find()[0]?.pagination).toEqual({ kind: "offset", page: 2, pageSize: 3, includeTotal: true })
     for (const result of [undefined, {}, { query: undefined }]) {
       const untouched = setup({ options: { crud: { list: { transformQuery: async () => result } } } })
       expect((await get(untouched.handler, q({ page: "2" }))).status).toBe(200)
-      expect(untouched.find()[0]?.pagination).toEqual({ kind: "offset", page: 2, pageSize: 10 })
+      expect(untouched.find()[0]?.pagination).toEqual({ kind: "offset", page: 2, pageSize: 10, includeTotal: true })
     }
   })
 

@@ -4,4 +4,4 @@ Canonicalization identifier: `jcs-rfc8785-v1`. Digest identifier: `sha256-v1`. V
 
 Resource ceilings for bytes, depth, nodes, object members, array items and strings are part of the format contract. Typed codecs encode timestamps as RFC 3339 UTC milliseconds and binary as canonical unpadded base64url.
 
-Only the registered JCS-based durable formats are accepted. Records written by the internal builds that preceded the first public release must be migrated before adopting this core; no legacy reader is shipped in the runtime package.
+Only the registered JCS-based durable formats are accepted. Records written by the internal builds that preceded the first public release must be migrated before adopting this core; no reader for older formats is shipped in the runtime package.

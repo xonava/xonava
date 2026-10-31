@@ -14,4 +14,9 @@ export interface QueryPlan {
   readonly search?: SearchPlan
 }
 export interface QueryOptions { readonly filter?: PredicateNode; readonly sort?: readonly SortSpec[]; readonly pagination?: OffsetPaginationPlan | ResolvedCursorPaginationPlan; readonly projection?: ProjectionSpec; readonly consistency?: ReadConsistency }
-export interface ListResult<T> { readonly rows: T[]; readonly rowCount: number; readonly page: number; readonly pageSize: number; readonly pageInfo?: OffsetPageInfo | CursorPageInfo }
+/**
+ * One page of rows. `rowCount` (the total number of rows matching the filter and scope) is present only when an
+ * offset request set `includeTotal: true`. Cursor pages never carry a total; they report `pageInfo.hasNextPage` and
+ * `pageInfo.hasPreviousPage` instead.
+ */
+export interface ListResult<T> { readonly rows: T[]; readonly rowCount?: number; readonly page: number; readonly pageSize: number; readonly pageInfo?: OffsetPageInfo | CursorPageInfo }

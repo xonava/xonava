@@ -38,7 +38,7 @@ export interface WorkflowStore {
   deliverSignal(signal: Omit<WorkflowSignal, "deliveredAt">, now?: Date): Promise<{ delivered: boolean; duplicate: boolean }>
   cancel(instanceId: string, now?: Date): Promise<boolean>
   /**
-   * Optional, legacy: the most recently delivered receipt with this name, whether pending or consumed. It is NOT
+   * Optional: the most recently delivered receipt with this name, whether pending or consumed. It is NOT
    * necessarily the receipt that resumed the step (a later signal of the same name may already be buffered), so the
    * dispatcher uses it only when the instance has no `resumeSignalId` or the store lacks `getSignalById`.
    */

@@ -114,7 +114,7 @@ describe("d1 repository reads", () => {
 
   it("accepts strong consistency and rejects weaker levels", async () => {
     const strong = build(countThen([row()], 1))
-    expect(((await strong.repo.findMany!({ consistency: "strong" })) as { rowCount: number }).rowCount).toBe(1)
+    expect(((await strong.repo.findMany!({ consistency: "strong", pagination: { kind: "offset", page: 1, pageSize: 20, includeTotal: true } })) as { rowCount: number }).rowCount).toBe(1)
     await expect(build(countThen([])).repo.findMany!({ consistency: "eventual" })).rejects.toThrow()
   })
 
@@ -125,18 +125,63 @@ describe("d1 repository reads", () => {
     await expect(f.repo.findMany!({ sort: [], pagination: cursor })).rejects.toThrow("cursor pagination requires an explicit stable sort")
     expect(f.ops).toEqual([])
     const ok = build(countThen([row(), row({ id: "w2" }), row({ id: "w3" }), row({ id: "w4" })], 9))
-    const result = (await ok.repo.findMany!({ sort: [{ field: "name", direction: "asc" }], pagination: cursor })) as { rows: unknown[]; rowCount: number; page: number; pageSize: number; pageInfo: unknown }
+    const result = (await ok.repo.findMany!({ sort: [{ field: "name", direction: "asc" }], pagination: cursor })) as { rows: unknown[]; rowCount?: number; page: number; pageSize: number; pageInfo: unknown }
     expect(pageOp(ok.ops)).toMatchObject({ limit: 4, offset: 0 })
     expect(result.rows).toHaveLength(3)
-    expect(result).toMatchObject({ rowCount: 9, page: 1, pageSize: 3, pageInfo: { kind: "cursor", hasNextPage: true, hasPreviousPage: false } })
+    expect(result).toMatchObject({ page: 1, pageSize: 3, pageInfo: { kind: "cursor", hasNextPage: true, hasPreviousPage: false } })
+    // Cursor pages never carry a total and never run a COUNT.
+    expect(result).not.toHaveProperty("rowCount")
+    expect(ok.ops.some((op) => op.fields && "count" in (op.fields as object))).toBe(false)
+  })
+
+  it("runs no COUNT and omits rowCount unless an offset request asks for the total", async () => {
+    const none = build(countThen([row()], 99))
+    const plain = await none.repo.findMany!({ pagination: { kind: "offset", page: 1, pageSize: 5 } })
+    expect(plain).not.toHaveProperty("rowCount")
+    expect(none.ops.some((op) => op.fields && "count" in (op.fields as object))).toBe(false)
+    expect(none.ops).toHaveLength(1)
+    const explicitOff = build(countThen([row()], 99))
+    expect(await explicitOff.repo.findMany!({ pagination: { kind: "offset", page: 1, pageSize: 5, includeTotal: false } })).not.toHaveProperty("rowCount")
+    expect(explicitOff.ops).toHaveLength(1)
+    const asked = build(countThen([row()], 99))
+    expect(await asked.repo.findMany!({ pagination: { kind: "offset", page: 1, pageSize: 5, includeTotal: true } })).toMatchObject({ rowCount: 99 })
+    expect(asked.ops.filter((op) => op.fields && "count" in (op.fields as object))).toHaveLength(1)
+  })
+
+  it("counts the caller's filter only: the count carries the same WHERE as an offset page and a cursor page has no count", async () => {
+    const filter = Predicate.eq("name", "alpha")
+    const counted = build(countThen([row()], 4))
+    await counted.repo.findMany!({ filter, pagination: { kind: "offset", page: 2, pageSize: 1, includeTotal: true } })
+    const countOp = counted.ops.find((op) => op.fields && "count" in (op.fields as object))!
+    expect(whereOf(countOp)).toEqual(whereOf(pageOp(counted.ops)))
+    expect(countOp.offset).toBeUndefined()
+    const cursored = build(countThen([row(), row({ id: "w2" })], 4))
+    const sort = [{ field: "name", direction: "asc" }, { field: "id", direction: "asc" }]
+    const page = (await cursored.repo.findMany!({ filter, sort, pagination: { kind: "cursor", direction: "after", values: ["alpha", "w1"], limit: 1 } })) as { rows: unknown[] }
+    expect(page.rows).toHaveLength(1)
+    expect(cursored.ops.some((op) => op.fields && "count" in (op.fields as object))).toBe(false)
+    expect(norm(pageOp(cursored.ops).where?.sql)).not.toEqual(whereOf(countOp).sql)
+  })
+
+  it("countUpTo issues a bounded SELECT 1 under the given filter and returns the row count", async () => {
+    const f = build((op) => (op.limit === 3 ? [{ one: 1 }, { one: 1 }, { one: 1 }] : []))
+    const filter = Predicate.eq("name", "alpha")
+    expect(await f.repo.countUpTo!(filter, 3)).toBe(3)
+    expect(f.ops).toHaveLength(1)
+    expect(f.ops[0]).toMatchObject({ limit: 3 })
+    expect(f.ops[0]!.offset).toBeUndefined()
+    expect(whereOf(f.ops[0]).sql).toContain("name")
+    await expect(f.repo.countUpTo!(filter, 0)).rejects.toThrow("countUpTo limit must be a positive integer")
+    await expect(f.repo.countUpTo!(undefined, 1.5)).rejects.toThrow(ValidationError)
   })
 
   it("reports zero when the count query returns nothing and numbers text counts", async () => {
+    const total = { pagination: { kind: "offset", page: 1, pageSize: 20, includeTotal: true } }
     const none = build((op) => (op.fields && "count" in (op.fields as object) ? [] : [row()]))
-    expect(((await none.repo.findMany!()) as { rowCount: number }).rowCount).toBe(0)
-    expect(((await build(countThen([row()], "12")).repo.findMany!()) as { rowCount: number }).rowCount).toBe(12)
+    expect(((await none.repo.findMany!(total)) as { rowCount: number }).rowCount).toBe(0)
+    expect(((await build(countThen([row()], "12")).repo.findMany!(total)) as { rowCount: number }).rowCount).toBe(12)
     const missing = build((op) => (op.fields && "count" in (op.fields as object) ? [{}] : []))
-    expect(((await missing.repo.findMany!()) as { rowCount: number }).rowCount).toBe(0)
+    expect(((await missing.repo.findMany!(total)) as { rowCount: number }).rowCount).toBe(0)
   })
 })
 

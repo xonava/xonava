@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto"
 import type { Rng } from "../../../core/src/__tests__/differential/harness.js"
 
 /**
@@ -7,9 +6,8 @@ import type { Rng } from "../../../core/src/__tests__/differential/harness.js"
  * - `RefGenerations`: the shared generation store contract (DbTagGenerationStore, MySqlTagGenerationStore). A tag's
  *   generation is a counter that reads "0" before the first advance, and every advance returns exactly the previous
  *   value plus one. Tags are compared byte-for-byte.
- * - `RefKvGenerations`: the KV adapter's two counter layouts. The observed generation is the single counter when
- *   both agree, "0" when neither exists, and otherwise `h:` + the base64url SHA-256 of the JSON pair. A counter that
- *   only the previous release wrote is adopted into the current layout by a read.
+ * - `RefKvGenerations`: the KV adapter's single counter per tag. The observed generation is the counter, or "0"
+ *   before the first advance.
  */
 
 /** Tags up to MAX_CACHE_TAG_BYTES (256) UTF-8 bytes are legal; the rest are the shapes that stress byte-exact keys. */
@@ -101,59 +99,33 @@ export function describeStoreOps(ops: StoreOp[]): string {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// KV adapter, two counter layouts
+// KV adapter, one counter per tag
 
 export type KvOp =
-  /** The current release advances: legacy counter first, then the current one. */
   | { k: "advance"; tag: string }
-  /** An instance still on the previous release advances only the legacy counter. */
-  | { k: "oldAdvance"; tag: string; id: string }
   | { k: "get"; tag: string }
-  /** The previous release reads only the legacy counter. */
-  | { k: "oldGet"; tag: string }
-  /** A read while every KV write fails: adoption of a legacy counter is best effort and must not fail the read. */
+  /** A read while every KV write fails: reads never write, so this must not fail. */
   | { k: "getWritesFail"; tag: string }
   /** Stores a tagged value (CacheService's storage key shape) and clears the cache: counters survive, values do not. */
   | { k: "clear"; tag: string }
 
-export interface KvCounters { current?: string; legacy?: string }
-
-/** base64url SHA-256 of the JSON pair, written out from the spec. */
-export function digestOf(counters: KvCounters): string {
-  return `h:${createHash("sha256").update(JSON.stringify([counters.current ?? null, counters.legacy ?? null])).digest("base64url")}`
-}
-
 export class RefKvGenerations {
-  private readonly counters = new Map<string, KvCounters>()
-  private of(tag: string): KvCounters { return this.counters.get(tag) ?? this.counters.set(tag, {}).get(tag)! }
-
-  /** The observed generation, adopting a legacy-only counter into the current layout when `adopt` (a read that can write). */
-  get(tag: string, adopt: boolean): string {
-    const state = this.of(tag)
-    if (state.current === undefined && state.legacy !== undefined && adopt) state.current = state.legacy
-    if (state.current === undefined && state.legacy === undefined) return "0"
-    if (state.current !== undefined && state.current === state.legacy) return state.current
-    return digestOf(state)
-  }
-  advance(tag: string, id: string): void { const state = this.of(tag); state.legacy = id; state.current = id }
-  oldAdvance(tag: string, id: string): void { this.of(tag).legacy = id }
-  oldGet(tag: string): string { return this.of(tag).legacy ?? "0" }
-  state(tag: string): KvCounters { return { ...this.of(tag) } }
+  private readonly counters = new Map<string, string>()
+  get(tag: string): string { return this.counters.get(tag) ?? "0" }
+  advance(tag: string, id: string): void { this.counters.set(tag, id) }
+  counter(tag: string): string | undefined { return this.counters.get(tag) }
 }
 
 export function generateKvOps(rng: Rng): KvOp[] {
   const pool: readonly string[] = [...TAGS.slice(0, 2), ...EXOTIC_TAGS.kvLookalikes, "café"]
   const target = 4 + rng.int(20)
   const ops: KvOp[] = []
-  let counter = 0
   while (ops.length < target) {
     const tag = rng.bool(0.7) ? rng.pick(pool.slice(0, 2)) : rng.pick(pool)
-    const roll = rng.int(12)
-    if (roll < 3) ops.push({ k: "advance", tag })
-    else if (roll < 5) ops.push({ k: "oldAdvance", tag, id: `${1_700_000_000_000 + counter++}:00000000-0000-4000-8000-${String(rng.int(1e6)).padStart(12, "0")}` })
-    else if (roll < 8) ops.push({ k: "get", tag })
-    else if (roll < 9) ops.push({ k: "oldGet", tag })
-    else if (roll < 11) ops.push({ k: "getWritesFail", tag })
+    const roll = rng.int(10)
+    if (roll < 4) ops.push({ k: "advance", tag })
+    else if (roll < 7) ops.push({ k: "get", tag })
+    else if (roll < 9) ops.push({ k: "getWritesFail", tag })
     else ops.push({ k: "clear", tag })
   }
   return ops
@@ -164,5 +136,5 @@ export function* shrinkKvOps(ops: KvOp[]): Iterable<KvOp[]> {
 }
 
 export function describeKvOps(ops: KvOp[]): string {
-  return ops.map((op, index) => `${index}: ${op.k} ${describeTag(op.tag)}${op.k === "oldAdvance" ? ` id=${op.id}` : ""}`).join("\n")
+  return ops.map((op, index) => `${index}: ${op.k} ${describeTag(op.tag)}`).join("\n")
 }

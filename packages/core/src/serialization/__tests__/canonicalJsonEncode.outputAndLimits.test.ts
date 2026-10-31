@@ -12,7 +12,6 @@ import {
   decodeBase64UrlUnpadded,
   encodeBase64UrlUnpadded,
   isValidRfc3339Millis,
-  legacyJavaScriptOrderJsonString,
 } from "../canonicalJson"
 
 function caught(fn: () => unknown): unknown {
@@ -474,13 +473,11 @@ describe("canonical output and digests", () => {
     expect(canonicalSha256Hex("1")).not.toBe(canonicalSha256Hex(1))
   })
 
-  it("legacyJavaScriptOrderJsonString keeps JavaScript property order for integer-like keys", () => {
+  it("orders integer-like keys as strings (RFC 8785), not in JavaScript property order", () => {
     const value = { "10": 1, "9": 2, b: 3, a: 4 }
     expect(canonicalJsonString(value)).toBe('{"10":1,"9":2,"a":4,"b":3}')
-    expect(legacyJavaScriptOrderJsonString(value)).toBe('{"9":2,"10":1,"a":4,"b":3}')
-    expect(legacyJavaScriptOrderJsonString({ n: [-0, 1.5], s: "\u0000" })).toBe('{"n":[0,1.5],"s":"\\u0000"}')
-    expectCanonicalError(() => legacyJavaScriptOrderJsonString(undefined), "Canonical JSON does not accept undefined")
-    expectCanonicalError(() => legacyJavaScriptOrderJsonString({ a: Number.NaN }), "Canonical JSON does not accept NaN or Infinity")
+    expectCanonicalError(() => canonicalJsonString(undefined), "Canonical JSON does not accept undefined")
+    expectCanonicalError(() => canonicalJsonString({ a: Number.NaN }), "Canonical JSON does not accept NaN or Infinity")
   })
 })
 
@@ -543,11 +540,9 @@ describe("resource limits", () => {
     const text = canonicalJsonString(atLimit)
     expect(text.length).toBe(max)
     expect(canonicalJsonBytes(atLimit).byteLength).toBe(max)
-    expect(legacyJavaScriptOrderJsonString(atLimit).length).toBe(max)
     const over = ["a".repeat(half), "a".repeat(max - 7 - half + 1)]
     expectCanonicalError(() => canonicalJsonString(over), `canonical JSON bytes ${max + 1} exceeds maxUtf8Bytes ${max}`, LIMIT)
     expectCanonicalError(() => canonicalJsonBytes(over), `canonical JSON bytes ${max + 1} exceeds maxUtf8Bytes ${max}`, LIMIT)
     expectCanonicalError(() => canonicalSha256Hex(over), `canonical JSON bytes ${max + 1} exceeds maxUtf8Bytes ${max}`, LIMIT)
-    expectCanonicalError(() => legacyJavaScriptOrderJsonString(over), `canonical JSON bytes exceeds maxUtf8Bytes ${max}`, LIMIT)
   })
 })

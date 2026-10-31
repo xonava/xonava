@@ -7,6 +7,41 @@ All notable changes to this project are documented in this file. The format foll
 The project is experimental. See [docs/KNOWN-LIMITATIONS.md](docs/KNOWN-LIMITATIONS.md) for known
 limitations and deployment requirements.
 
+## [0.3.0] — 2026-10-31
+
+### Upgrading from 0.1.0
+
+0.2.0 and 0.2.1 were never published, so this is the first upgrade from 0.1.0. Read the 0.3.0, 0.2.1 and 0.2.0
+entries below; in short:
+
+1. **Database migrations** (in `migrations/<database>/` of `@xonava/adapters`): apply `0005_job_scope_key.sql` on
+   every database, `0006_byte_exact_identifiers.sql` on MySQL, and `0004_lease_records.sql` if you use the new
+   fenced-lease backends. Widen the MySQL `cache_generations.scope` column to `VARCHAR(256)` if you use the
+   reference table.
+2. **Breaking API and behaviour changes:** list totals are opt-in (0.3.0); older-format compatibility paths are removed
+   (0.3.0; a system that only ran 0.1.0 has nothing to migrate); and from 0.2.0: `fieldAccess.query` grants count only
+   from unconditional allow policies; job checkpoints containing U+0000 are refused; the unimplemented
+   `Root`/`Application`/`Platform`/`SystemPersistenceProvider` types are removed; a missing `If-Match` answers 428 and
+   a missing `Idempotency-Key` answers `REQUIRED_HEADER_MISSING`; PostgreSQL and D1 idempotency stores throw
+   `ConflictError` on lost ownership, and versioned deletes report `OPTIMISTIC_CONCURRENCY_FAILED` or `NOT_FOUND`
+   consistently on all databases.
+3. **Security fixes you get by upgrading:** MySQL repositories refuse every all-rows predicate in bulk writes (0.2.0),
+   and MySQL in `mysqlBinaryCollation` mode no longer returns rows an ABAC scope excludes (0.2.1).
+
+### Minor changes
+
+- List totals are now opt-in, and cursor pages no longer count. Upgrading from 0.1.0: `ListResult.rowCount` and `OffsetPageInfo.rowCount` are now optional (`number | undefined`), and `findMany` returns no `rowCount` unless you pass `pagination: { kind: "offset", page, pageSize, includeTotal: true }`; add `includeTotal: true` wherever you read `rowCount` and handle `undefined` in your types (the PostgreSQL, MySQL and D1 repositories run no `COUNT(*)` otherwise, so plain `findMany()` calls get cheaper). Cursor pages never carry a total (use `pageInfo.hasNextPage` and `pageInfo.hasPreviousPage`); before, `rowCount` on a cursor page was the number of rows past the cursor and shrank while paging. A requested total counts only the caller's filter plus tenant/authorization scope, never the cursor predicate. Custom repositories must follow the same rule (no `rowCount` unless `includeTotal` is true); `validateQueryPlan` accepts a boolean `includeTotal` on offset pagination. New optional `ReadRepository.countUpTo(filter, limit)` is a bounded `SELECT 1 ... LIMIT limit` count, implemented by the three Drizzle repositories and passed through tenant scope and authorization plans. The HTTP list handler now enforces `queryLimits.maxCount` with that bounded probe before the page query (repositories without `countUpTo` fall back to a one-row page with a total), counts only the caller's filter and read scope (a cursor position no longer changes it), still returns `rowCount` for offset pages and omits it for cursor pages, and audit `resultCount` falls back to the page row count when there is no total. `@xonava/testing`'s repository contract now asserts an absent total, `includeTotal` totals, cursor pages without a total and, when offered, `countUpTo`; custom repositories run through `runRepositoryContractTests` must meet them.
+  
+  Repositories wrapped by an authorization plan pass the underlying total through unchanged when the plan's re-check keeps every row on the page, and omit it (instead of reporting the page's row count) when the re-check drops a row.
+- **Breaking:** the code that read or accepted data in older formats is removed. Upgrading from 0.1.0 (0.2.x was never published): 0.1.0 itself already writes every current format, so a system that only ever ran 0.1.0 has nothing to migrate. The paths below only matter for records, keys or cache counters written before 0.1.0 (earlier internal builds) that are still alive. Before upgrading, check each one that applies and let it expire or finish; after upgrading, such a record is treated as unknown rather than recognised.
+  
+  - HTTP idempotency (`createFrameworkWriteHandler`; the compatibility-only export `legacyFingerprintJson` is removed from `@xonava/adapters/http`, delete any import of it): an `Idempotency-Key` record stored with a version-2 fingerprint (JavaScript key order for integer-like object keys) is no longer matched. 0.1.0 writes version-3 fingerprints. A retry of such a key now answers 409 "Idempotency-Key was reused for a different mutation" instead of replaying (or resuming) the original request, and the handler no longer calls `acquire` a second time after a conflict. Before upgrading, let in-flight and recently completed keys from builds older than 0.1.0 finish or pass their retention window; clients should not retry them after the upgrade.
+  - Outbox (`drizzle-shared/outbox`, used by the PostgreSQL, MySQL and D1 outbox sinks and persistence provider): an outbox row whose `event_fingerprint` starts with `v2:` is no longer accepted as the same event. Appending the same event again (same idempotency key) now throws `ConflictError` ("Outbox idempotency key was reused for a different event") instead of being a no-op. 0.1.0 writes `v3:`. Before upgrading, drain the outbox (publish and delete or archive the rows) until `SELECT count(*) FROM <outbox table> WHERE event_fingerprint LIKE 'v2:%'` returns 0, or make sure nothing re-appends those events.
+  - Jobs (`jobFingerprintMatches`, `@xonava/core/execution`): only the current fingerprint (version 5) matches a stored job fingerprint; the version-3 and version-4 digests are no longer recognised. Enqueueing a job with an `idempotencyKey` that already exists with an older digest now throws `JobIdempotencyConflictError` instead of returning the existing job. This also drops the rule that treated an omitted `maxAttempts` and an explicit 3 as the same job for version-3/4 rows. 0.1.0 writes version 5. Before upgrading, let jobs from builds older than 0.1.0 that still carry an idempotency key finish or be deleted, and drain schedules that re-enqueue them.
+  - KV cache tag generations (`KvCacheAdapter`): the adapter no longer reads, writes or adopts the previous counter location `__cache__:__generation__:<tag>`; the only counter is `__cachegen__:<tag>`, which 0.1.0 also writes, and `getTagGeneration` returns it (or "0" before the first invalidation) instead of a pair digest such as `h:...`. During a rolling deploy 0.1.0 instances still observe 0.3.0 invalidations, because they read both counters. A tag whose counter exists only at the old location reads as "0" again, which is safe only if no stale entry exists for it: if any instance older than 0.1.0 may have invalidated a tag, flush the KV cache (`CacheService.clear()`) or let those entries expire before upgrading. Old `__cache__:__generation__:<tag>` keys are left behind; `clear()` now removes them like any other cache key, and you may delete them. Raw cache keys that start with `__generation__:` (other than the quoted form `CacheService` builds) were rejected as reserved and are now accepted; `__tag__:` and `__revision__:` stay reserved.
+  - `legacyJavaScriptOrderJsonString` (`@xonava/core/serialization`, marked `@internal`) is removed. Nothing in the framework uses it. If you imported it to recompute older fingerprints, use `JSON.stringify(canonicalizeValue(value))`, which is what it returned.
+  - Tests and tooling: `@xonava/testing` no longer ships the N-1 upgrade suite (`integration/upgrade/`, the `test:upgrade:pg|mysql|d1` scripts) or the `xonava-core-prev` / `xonava-adapters-prev` dev dependencies, because there is no published 0.2.x to compare with. Remove any CI step that runs `test:upgrade:*`. The KV tag generation differential tests in `@xonava/testing` now model a single counter.
+
 ## [0.2.1] — 2026-10-30
 
 ### Patch changes

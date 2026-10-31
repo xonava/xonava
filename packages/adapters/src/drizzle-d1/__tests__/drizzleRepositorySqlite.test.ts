@@ -67,20 +67,22 @@ describe("D1 repository against a real SQLite engine: reads", () => {
       filter: Predicate.eq("status", "open"),
       sort: [{ field: "score", direction: "desc" }],
       projection: { fields: ["id", "score"] },
-      pagination: { kind: "offset", page: 1, pageSize: 1 },
+      pagination: { kind: "offset", page: 1, pageSize: 1, includeTotal: true },
     })
     expect(result.rowCount).toBe(2)
     expect(result.rows).toEqual([{ id: "w2", score: 20 }])
     expect(result.pageSize).toBe(1)
     const second = await repo.findMany!({ filter: Predicate.eq("status", "open"), sort: [{ field: "score", direction: "desc" }], pagination: { kind: "offset", page: 2, pageSize: 1 } })
     expect(second.rows.map((row: { id: string }) => row.id)).toEqual(["w1"])
+    expect(second).not.toHaveProperty("rowCount")
   })
 
   it("defaults the order to created_at then primary key when no sort is given", async () => {
     const repo = await seed()
-    const result = await repo.findMany!()
+    const result = await repo.findMany!({ pagination: { kind: "offset", page: 1, pageSize: 20, includeTotal: true } })
     expect(result.rows.map((row: { id: string }) => row.id)).toEqual(["w1", "w2", "w3"])
     expect(result.rowCount).toBe(3)
+    expect(await repo.findMany!()).not.toHaveProperty("rowCount")
   })
 
   it("honours explicit NULLS ordering", async () => {

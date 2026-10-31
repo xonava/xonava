@@ -150,7 +150,7 @@ export function enforceAbacWrite(args: {
   assertVerifiedAbacBundle(args.bundle)
   // Only written values are format-checked: a stored pre-image (passed as
   // `existing`, or as a `record` branded with markAbacPreImage) is not, so a
-  // row stored with a legacy date spelling can still be repaired.
+  // row stored with a non-canonical date spelling can still be repaired.
   if (args.action !== "delete" && !preImages.has(args.record)) {
     assertCanonicalDateValues(args.bundle, args.record, args.changedFields ?? Object.keys(args.record))
   }

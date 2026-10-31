@@ -1,6 +1,6 @@
 {
   "name": "@xonava/testing",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Conformance contracts and test kit for verifying server framework adapters against persistence, cache, concurrency, and access-policy guarantees.",
   "keywords": [
     "server",
@@ -92,9 +92,6 @@
     "test:race:pg": "vitest run --config vitest.integration.config.ts integration/pg/race.integration.test.ts integration/pg/temporal.integration.test.ts integration/pg/sequence.integration.test.ts",
     "test:race:d1": "vitest run --config vitest.integration.config.ts integration/d1/race.integration.test.ts integration/d1/new-capabilities-race.integration.test.ts",
     "test:race:mysql": "vitest run --config vitest.integration.config.ts integration/mysql/race.integration.test.ts integration/mysql/job.integration.test.ts integration/mysql/schedule.integration.test.ts integration/mysql/temporal.integration.test.ts integration/mysql/sequence.integration.test.ts",
-    "test:upgrade:d1": "vitest run --config vitest.integration.config.ts integration/upgrade/d1 integration/upgrade/portable",
-    "test:upgrade:pg": "vitest run --config vitest.integration.config.ts integration/upgrade/pg",
-    "test:upgrade:mysql": "vitest run --config vitest.integration.config.ts integration/upgrade/mysql",
     "test:crash:pg": "vitest run --config vitest.integration.config.ts crash/pg.crash.test.ts",
     "test:crash:d1": "vitest run --config vitest.integration.config.ts crash/d1.crash.test.ts",
     "test:crash:mysql": "vitest run --config vitest.integration.config.ts crash/mysql.crash.test.ts",
@@ -107,16 +104,14 @@
   "devDependencies": {
     "@types/pg": "8.23.1",
     "@vitest/coverage-v8": "^5.0.5",
-    "@xonava/adapters": "0.2.1",
+    "@xonava/adapters": "0.3.0",
     "drizzle-orm": "0.45.4",
     "miniflare": "4.20260730.0",
     "mysql2": "^3.24.6",
     "pg": "8.23.1",
-    "vitest": "^5.0.5",
-    "xonava-adapters-prev": "npm:@xonava/adapters@0.1.0",
-    "xonava-core-prev": "npm:@xonava/core@0.1.0"
+    "vitest": "^5.0.5"
   },
   "dependencies": {
-    "@xonava/core": "0.2.1"
+    "@xonava/core": "0.3.0"
   }
 }

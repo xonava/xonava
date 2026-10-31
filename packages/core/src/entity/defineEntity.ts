@@ -95,7 +95,8 @@ export interface EntityRouteConfig {
 
 export interface CrudListResult<T = Record<string, unknown>> {
   rows: T[]
-  rowCount: number
+  /** Total matching rows; present only for offset pages that requested a total. */
+  rowCount?: number
   page: number
   pageSize: number
 }

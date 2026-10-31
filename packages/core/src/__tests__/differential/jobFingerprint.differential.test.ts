@@ -95,8 +95,7 @@ function mutate(rng: Rng, input: JobFingerprintInput): JobFingerprintInput {
     case 2: return { ...input, jobVersion: input.jobVersion + 1 }
     case 3: return { ...input, payload: { ...input.payload, "added": rng.pick(STRINGS) } }
     case 4: return { ...input, runAt: new Date(input.runAt.getTime() + 1) }
-    // never 3 from an omitted budget: the legacy digests deliberately cannot tell those two apart
-    case 5: return { ...input, maxAttempts: input.maxAttempts === null ? 1 : input.maxAttempts + 1 }
+        case 5: return { ...input, maxAttempts: input.maxAttempts === null ? 1 : input.maxAttempts + 1 }
     case 6: return { ...input, priority: input.priority + 1 }
     case 7: return { ...input, correlationId: input.correlationId === null ? "" : null }
     case 8: return { ...input, partitionKey: input.partitionKey === null ? "" : null }
@@ -141,26 +140,22 @@ describe("job fingerprint properties", () => {
     }, { runs: 150 })
   })
 
-  it("accepts its own digest and stored version-4 and version-3 digests of the same job, and nothing else", async () => {
-    await forAllAsync("job fingerprint: current and legacy version-4 and version-3 digests match only the same job", (rng) => {
+  it("accepts its own digest for the same job and nothing else, including version-4 and version-3 digests", async () => {
+    await forAllAsync("job fingerprint: only the current digest of the same job matches", (rng) => {
       const input = generateInput(rng)
       return { input, other: mutate(rng, input), twin: permute(rng, input) as JobFingerprintInput }
     }, async ({ input, other, twin }) => {
       const current = await fingerprintJob(input)
-      const legacy = referenceV3(input)
-      const legacy4 = referenceV4(input)
-      expect(legacy4).not.toBe(legacy)
-      expect(legacy4).not.toBe(current)
+      const v3 = referenceV3(input)
+      const v4 = referenceV4(input)
+      expect(v4).not.toBe(v3)
+      expect(v4).not.toBe(current)
       await expect(jobFingerprintMatches(current, input)).resolves.toBe(true)
-      await expect(jobFingerprintMatches(legacy, input)).resolves.toBe(true)
-      await expect(jobFingerprintMatches(legacy4, input)).resolves.toBe(true)
-      await expect(jobFingerprintMatches(legacy, twin)).resolves.toBe(true)
-      await expect(jobFingerprintMatches(legacy4, twin)).resolves.toBe(true)
-      await expect(jobFingerprintMatches(legacy4, other)).resolves.toBe(false)
-      await expect(jobFingerprintMatches(referenceV4(other), input)).resolves.toBe(false)
+      await expect(jobFingerprintMatches(current, twin)).resolves.toBe(true)
       await expect(jobFingerprintMatches(current, other)).resolves.toBe(false)
-      await expect(jobFingerprintMatches(legacy, other)).resolves.toBe(false)
-      await expect(jobFingerprintMatches(referenceV3(other), input)).resolves.toBe(false)
+      await expect(jobFingerprintMatches(v3, input)).resolves.toBe(false)
+      await expect(jobFingerprintMatches(v4, input)).resolves.toBe(false)
+      await expect(jobFingerprintMatches(v4, twin)).resolves.toBe(false)
       await expect(jobFingerprintMatches("", input)).resolves.toBe(false)
       await expect(jobFingerprintMatches(current.toUpperCase(), input)).resolves.toBe(false)
       await expect(jobFingerprintMatches(current.slice(1), input)).resolves.toBe(false)
@@ -169,16 +164,15 @@ describe("job fingerprint properties", () => {
 })
 
 describe("job fingerprint: omitted attempt budget", () => {
-  it("never confuses an omitted maxAttempts with an explicit number, while legacy digests accept both", async () => {
+  it("never confuses an omitted maxAttempts with an explicit number, and no version-4 digest matches it", async () => {
     await forAllAsync("job fingerprint: omitted maxAttempts is distinct from every explicit number", (rng) => ({ input: { ...generateInput(rng), maxAttempts: null }, explicit: rng.pick([1, 2, 3, 5, 2_147_483_647]) }), async ({ input, explicit }) => {
       const omitted = await fingerprintJob(input)
       const withNumber = { ...input, maxAttempts: explicit }
       expect(await fingerprintJob(withNumber)).not.toBe(omitted)
       await expect(jobFingerprintMatches(omitted, withNumber)).resolves.toBe(false)
       await expect(jobFingerprintMatches(await fingerprintJob(withNumber), input)).resolves.toBe(false)
-      // A stored version-4 digest carries no such distinction for the budget 3 it wrote for an omitted value.
-      await expect(jobFingerprintMatches(referenceV4(input), { ...input, maxAttempts: 3 })).resolves.toBe(true)
-      await expect(jobFingerprintMatches(referenceV4(input), withNumber)).resolves.toBe(explicit === 3)
+      await expect(jobFingerprintMatches(referenceV4(input), { ...input, maxAttempts: 3 })).resolves.toBe(false)
+      await expect(jobFingerprintMatches(referenceV4(input), withNumber)).resolves.toBe(false)
     }, { runs: 100 })
   })
 })
