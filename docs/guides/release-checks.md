@@ -53,3 +53,7 @@ The differential suites compare the predicate, authorization and encoding code, 
 - **Output.** A release run writes its reports under `.release-check/<run id>/differentials/`. A standalone run writes to `<os tmpdir>/framework-differential-<run id>`, or to `FRAMEWORK_DIFFERENTIAL_OUTPUT_DIR`, and never into the repository.
 
 Differential testing is randomized: a pass shows that the explored cases agree, not that all inputs do. A later failure with a new seed is a defect to fix and replay, not a reason to doubt earlier runs.
+
+## Publishing
+
+The manual `Release` workflow (`.github/workflows/release.yml`) runs only on `main` and has a `dry_run` input, on by default. Every run first checks that the `NPM_TOKEN` secret authenticates (`npm whoami`). With `dry_run` it then builds and runs `npm publish --dry-run` for each package, publishing nothing; with `dry_run` off it runs `npm run release:publish` with npm provenance.

@@ -2,6 +2,11 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Check the npm token and package contents without publishing"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -26,7 +31,23 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: npm
       - run: npm ci
-      - run: npm run release:publish
+      - name: Check that the npm token authenticates
+        run: npm whoami
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Dry run (no publish)
+        if: inputs.dry_run
+        run: |
+          npm run verify:version
+          npm run build
+          for workspace in @xonava/core @xonava/adapters @xonava/testing; do
+            npm publish --dry-run --workspace "$workspace"
+          done
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish
+        if: ${{ !inputs.dry_run }}
+        run: npm run release:publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
