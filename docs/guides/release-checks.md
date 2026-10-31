@@ -35,6 +35,10 @@ It fails closed: it refuses to start without both database URLs, and after the s
 
 The run ID is `FRAMEWORK_CONFORMANCE_RUN_ID`, or `release-<timestamp>`. The check prints a summary and writes it to `.release-check/<run id>/summary.json`; the suites write their raw records to `artifacts/framework-conformance/<run id>/`. Both directories are git-ignored. Keep them with the release, as a CI artifact or a release attachment.
 
+### Running the release check in parallel
+
+The `Release check` workflow (`.github/workflows/release-check.yml`, started by hand, with a `soak` input) runs the same check as one job per database instead of one long sequence. The `d1`, `pg` and `mysql` jobs each run `node scripts/verification/runReleaseCheck.mjs` with `RELEASE_CHECK_DATABASE` set: that database's integration, conformance, race and crash (20 repetitions) suites, its differential suites at release volume (the `d1` job also runs lint, build, `verify`, the unit tests, core coverage and the database-free core and HTTP differentials) and, with `soak`, the 30-minute soak. All jobs share one run ID (`release-<run id>-<attempt>`), so the differential seed is the same everywhere, and each uploads its evidence as `release-evidence-<database>`. The final `summary` job downloads the three artifacts and runs the script with `RELEASE_CHECK_SUMMARIZE_ONLY` set: it merges the differential shares and applies the same validation as the local check (guarantee, crash and differential evidence present and valid for all three databases, lockstep versions) and also requires its own checkout's source digest to equal the one every job recorded. It uploads the result as `release-check-summary`. Neither option changes plain `npm run verify:release`.
+
 The check shows that the tested cases agree on the tested databases. It does not cover your production topology, custom adapters, untested remote D1 behaviour, application policy, or advisories for dependencies (it runs offline).
 
 ## Differential suites

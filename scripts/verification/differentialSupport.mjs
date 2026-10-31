@@ -19,6 +19,8 @@ import ts from "typescript"
 export const DIFFERENTIAL_PHASE = "differentials"
 export const DIFFERENTIAL_ARTIFACT = "differential-conformance.json"
 export const DIFFERENTIAL_SCHEMA_VERSION = 1
+/** File-name prefix of the artifact one share of a parallel release check writes (DIFFERENTIAL_SUITES). */
+export const DIFFERENTIAL_PARTIAL_PREFIX = "differential-conformance.partial-"
 
 /** Default (and release-minimum) case-count multipliers. */
 export const DIFFERENTIAL_DEFAULT_SCALES = Object.freeze({ core: 5, database: 2 })
@@ -594,6 +596,46 @@ export function composeDifferentialArtifact({ runId, seed, seedSource, scales, s
     replay: replayInstructions(seed, scales),
     sourceManifest,
   }
+}
+
+/**
+ * Merges the artifacts of the shares of a parallel release check into the one complete artifact. The shares must agree
+ * on run, seed, scales and source manifest, and no suite may appear twice; completeness is then checked by
+ * validateDifferentialArtifact, exactly as for a single run.
+ */
+export function mergeDifferentialArtifacts(partials, baseline) {
+  if (partials.length === 0) refuse("no differential shares to merge")
+  const [first] = partials
+  const suites = []
+  const properties = []
+  for (const partial of partials) {
+    for (const key of ["schemaVersion", "phase", "status", "runId", "seed", "seedSource"]) {
+      if (partial?.[key] !== first[key]) refuse(`differential shares disagree on ${key}`)
+    }
+    if (JSON.stringify(partial.scales) !== JSON.stringify(first.scales)) refuse("differential shares disagree on scales")
+    if (JSON.stringify(partial.sourceManifest) !== JSON.stringify(first.sourceManifest)) refuse("differential shares were taken over different sources")
+    if (!Array.isArray(partial.suites) || !Array.isArray(partial.properties)) refuse("a differential share lists no suites or properties")
+    for (const suite of partial.suites) {
+      if (suites.some(known => known.id === suite.id)) refuse(`differential suite ${suite.id} appears in more than one share`)
+      suites.push(suite)
+    }
+    properties.push(...partial.properties)
+  }
+  const times = partials.map(partial => Date.parse(partial.recordedAt))
+  const starts = partials.map(partial => Date.parse(partial.gateStartedAt))
+  if ([...times, ...starts].some(time => !Number.isFinite(time))) refuse("a differential share has no valid timestamp")
+  return composeDifferentialArtifact({
+    runId: first.runId,
+    seed: first.seed,
+    seedSource: first.seedSource,
+    scales: first.scales,
+    suites,
+    properties,
+    sourceManifest: first.sourceManifest,
+    gateStartedAt: Math.min(...starts),
+    baseline,
+    recordedAt: new Date(Math.max(...times)),
+  })
 }
 
 /** Validates a differential artifact against the current tree (used by the release check). */
