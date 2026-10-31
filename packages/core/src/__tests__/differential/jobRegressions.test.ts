@@ -193,7 +193,7 @@ describe("job fingerprint and the attempt budget", () => {
   // buildJobFingerprintInput used to map an omitted maxAttempts to 3, but the stores persist it as
   // JOB_MAX_ATTEMPTS_FROM_DEFINITION ("use the definition's budget"), so an idempotent re-enqueue that explicitly
   // asked for 3 attempts replayed a job whose real budget was the definition's, and the reverse. Fingerprint
-  // version 5 encodes an omitted budget as null; stored version-4 digests are still recognised.
+  // version 5 encodes an omitted budget as null; version-4 digests are no longer recognised.
   it("distinguishes an omitted maxAttempts (definition budget) from an explicit maxAttempts of 3", async () => {
     const omitted = await fingerprintJob(buildJobFingerprintInput(job, NOW))
     const explicit = await fingerprintJob(buildJobFingerprintInput({ ...job, maxAttempts: 3 }, NOW))
@@ -203,17 +203,15 @@ describe("job fingerprint and the attempt budget", () => {
     await expect(jobFingerprintMatches(explicit, buildJobFingerprintInput(job, NOW))).resolves.toBe(false)
   })
 
-  it("still replays against a stored version-4 digest (which wrote 3 for an omitted budget)", async () => {
+  it("no longer recognises a stored version-4 digest (which wrote 3 for an omitted budget)", async () => {
     const v4 = async (maxAttempts: number): Promise<string> => {
       const { runAt, ...rest } = buildJobFingerprintInput(job, NOW)
       const text = canonicalJsonString({ version: 4, job: { ...rest, maxAttempts, runAt: runAt.toISOString() } })
       return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))), (byte) => byte.toString(16).padStart(2, "0")).join("")
     }
-    const stored = await v4(3)
-    await expect(jobFingerprintMatches(stored, buildJobFingerprintInput(job, NOW))).resolves.toBe(true)
-    await expect(jobFingerprintMatches(stored, buildJobFingerprintInput({ ...job, maxAttempts: 3 }, NOW))).resolves.toBe(true)
-    await expect(jobFingerprintMatches(stored, buildJobFingerprintInput({ ...job, maxAttempts: 4 }, NOW))).resolves.toBe(false)
-    await expect(jobFingerprintMatches(await v4(4), buildJobFingerprintInput({ ...job, maxAttempts: 4 }, NOW))).resolves.toBe(true)
+    await expect(jobFingerprintMatches(await v4(3), buildJobFingerprintInput(job, NOW))).resolves.toBe(false)
+    await expect(jobFingerprintMatches(await v4(3), buildJobFingerprintInput({ ...job, maxAttempts: 3 }, NOW))).resolves.toBe(false)
+    await expect(jobFingerprintMatches(await v4(4), buildJobFingerprintInput({ ...job, maxAttempts: 4 }, NOW))).resolves.toBe(false)
   })
 })
 

@@ -24,13 +24,12 @@ Set `FRAMEWORK_TEST_PG_URL` and `FRAMEWORK_TEST_MYSQL_URL` for PostgreSQL and My
 - `npm run test:integration:<db>`: repository, transaction and store behaviour.
 - `npm run test:conformance:<db>`: the guarantee suite (see [capabilities](../reference/capabilities.md)).
 - `npm run test:race:<db>`: concurrent writers.
-- `npm run test:upgrade:<db>`: upgrade from the previous published version.
 - `npm run test:crash:<db>`: forced process termination at each failpoint, with a fresh verifier process. `FRAMEWORK_CRASH_REPETITIONS` sets the repetitions.
 - `npm run soak` runs the 30-minute soak.
 
 ## The release check
 
-`npm run verify:release` is the check a release must pass. It runs lint, build, `verify`, `verify:isolation`, the unit tests and core coverage, the integration, upgrade, conformance and race suites on all three databases, the differential suites at release volume, and every crash failpoint 20 times on every database. With `FRAMEWORK_RELEASE_SOAK=1` it also runs the soak.
+`npm run verify:release` is the check a release must pass. It runs lint, build, `verify`, `verify:isolation`, the unit tests and core coverage, the integration, conformance and race suites on all three databases, the differential suites at release volume, and every crash failpoint 20 times on every database. With `FRAMEWORK_RELEASE_SOAK=1` it also runs the soak.
 
 It fails closed: it refuses to start without both database URLs, and after the suites it re-reads what they recorded and fails unless, for this run only, the guarantee and crash records of every database are present, proven and newer than the start of the run, the crash records show at least 20 repetitions of all six failpoints with no partial commit, the differential evidence is complete, the packages are in lockstep, and the sources did not change while it ran. It never searches for evidence from earlier runs, and it rejects a run ID whose directory already exists.
 

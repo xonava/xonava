@@ -35,7 +35,7 @@ export class DrizzlePgJobProgressStore implements JobProgressPort {
    * @param options.jobColumns the DrizzleJobStore's `columnMap.jobs`; the fence then uses the job
    *   store's own `id`, `leaseOwner`, `claimToken`, `attempts` and `leaseExpiresAt` columns.
    * @param options.fenceColumns explicit physical fence column names (overrides `jobColumns`).
-   * Without either, the legacy `worker_id`/`attempt` names are used.
+   * Without either, the default `worker_id`/`attempt` column names are used.
    */
   constructor(private readonly pool: Pick<Pool, "query">, options: { schema?: string; jobsTable?: string; jobColumns?: DrizzleColumnMap; fenceColumns?: Partial<JobProgressFenceColumns> } = {}) {
     this.schema = pgSchemaName(options.schema ?? "public")

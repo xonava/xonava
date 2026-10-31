@@ -180,10 +180,9 @@ export function defineTagGenerationRegressions(driver: TagGenerationStoreDiffere
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// KV adapter, dual counter layouts
+// KV adapter, one counter per tag
 
 const CURRENT_PREFIX = "__cachegen__:"
-const LEGACY_PREFIX = "__cache__:__generation__:"
 const GENERATION_PATTERN = /^\d+:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const PROBE_KEY = "__generation__:\"1:probe\":value"
 
@@ -220,27 +219,21 @@ function newKv(): { kv: FakeKv; adapter: KvCacheAdapter } {
   return { kv, adapter: new KvCacheAdapter(kv as never) }
 }
 
-function expectCounters(kv: FakeKv, model: RefKvGenerations, tag: string, what: string): void {
-  const state = model.state(tag)
-  expect({ current: kv.raw(`${CURRENT_PREFIX}${tag}`), legacy: kv.raw(`${LEGACY_PREFIX}${tag}`) }, what).toEqual({ current: state.current, legacy: state.legacy })
+function expectCounter(kv: FakeKv, model: RefKvGenerations, tag: string, what: string): void {
+  expect(kv.raw(`${CURRENT_PREFIX}${tag}`), what).toBe(model.counter(tag))
 }
 
-/** Registers the KV adapter's dual-layout generation differential against its reference model. */
+/** Registers the KV adapter's generation differential against its reference model. */
 export function defineKvGenerationDifferential(label: string): void {
-  it(`KV tag generations read and advance both counter layouts like the reference model (${label})`, async () => {
-    await forAllAsync(`kv tag generation dual layout differential (${label})`, generateKvOps, async (ops: KvOp[]) => {
+  it(`KV tag generations read and advance the counter like the reference model (${label})`, async () => {
+    await forAllAsync(`kv tag generation differential (${label})`, generateKvOps, async (ops: KvOp[]) => {
       const { kv, adapter } = newKv()
       const model = new RefKvGenerations()
-      const seenObservations = new Map<string, Set<string>>()
-      const observe = (tag: string, value: string, what: string, mustBeNew: boolean): void => {
-        const seen = seenObservations.get(tag) ?? seenObservations.set(tag, new Set()).get(tag)!
-        if (mustBeNew) expect(seen.has(value), `${what}: observed generation ${value} was already observed before the advance`).toBe(false)
-        seen.add(value)
-      }
       const advanced = new Set<string>()
       for (const [index, op] of ops.entries()) {
         const what = `step ${index} ${op.k} ${describeTag(op.tag)}`
         if (op.k === "advance") {
+          const before = await adapter.getTagGeneration(op.tag)
           const id = await adapter.advanceTagGeneration(op.tag)
           expect(id, `${what} id`).toMatch(GENERATION_PATTERN)
           expect(advanced.has(id), `${what} id repeated`).toBe(false)
@@ -248,51 +241,36 @@ export function defineKvGenerationDifferential(label: string): void {
           model.advance(op.tag, id)
           const value = await adapter.getTagGeneration(op.tag)
           expect(value, `${what} read back`).toBe(id)
-          observe(op.tag, value, what, true)
-        } else if (op.k === "oldAdvance") {
-          await kv.put(`${LEGACY_PREFIX}${op.tag}`, JSON.stringify(op.id))
-          model.oldAdvance(op.tag, op.id)
-          const value = await adapter.getTagGeneration(op.tag)
-          expect(value, `${what} observed`).toBe(model.get(op.tag, true))
-          // A change to either counter must change what the current release observes.
-          observe(op.tag, value, what, true)
+          expect(value, `${what} changed by the advance`).not.toBe(before)
         } else if (op.k === "get") {
-          const value = await adapter.getTagGeneration(op.tag)
-          expect(value, what).toBe(model.get(op.tag, true))
-          observe(op.tag, value, what, false)
-        } else if (op.k === "oldGet") {
-          const expected = model.oldGet(op.tag)
-          const raw = kv.raw(`${LEGACY_PREFIX}${op.tag}`)
-          expect(raw ?? "0", what).toBe(expected)
+          expect(await adapter.getTagGeneration(op.tag), what).toBe(model.get(op.tag))
         } else if (op.k === "getWritesFail") {
           kv.failWrites = true
           try {
-            const value = await adapter.getTagGeneration(op.tag)
-            expect(value, what).toBe(model.get(op.tag, false))
+            expect(await adapter.getTagGeneration(op.tag), what).toBe(model.get(op.tag))
           } finally { kv.failWrites = false }
         } else {
           await adapter.set(PROBE_KEY, "tagged value")
           await adapter.clear()
           expect(await adapter.has(PROBE_KEY), `${what}: tagged value survived clear`).toBe(false)
-          expect(await adapter.getTagGeneration(op.tag), `${what}: counters changed by clear`).toBe(model.get(op.tag, true))
+          expect(await adapter.getTagGeneration(op.tag), `${what}: counters changed by clear`).toBe(model.get(op.tag))
         }
-        expectCounters(kv, model, op.tag, `${what} raw counters`)
+        expectCounter(kv, model, op.tag, `${what} raw counter`)
       }
     }, { runs: 60, shrink: shrinkKvOps, describe: describeKvOps, maxShrinkSteps: 100 })
   }, PROPERTY_TIMEOUT_MS)
 }
 
-interface KvConcurrentCase { workers: number; legacyWriters: number; yields: number[]; preAdvance: boolean }
+interface KvConcurrentCase { workers: number; yields: number[]; preAdvance: boolean }
 
 /**
- * Several instances advance one tag at once on interleaved KV operations (some are still on the previous release and
- * write only the legacy counter). Each instance that reads, advances and reads again must observe a different
- * generation afterwards (a fence), and afterwards one more advance must converge both counters to a single token.
+ * Several instances advance one tag at once on interleaved KV operations. Each instance that reads, advances and
+ * reads again must observe a different generation afterwards (a fence), and every advance returns a distinct one.
  */
 export function defineKvConcurrentInvalidation(label: string): void {
-  it(`KV concurrent invalidation fences every reader and converges on the next advance (${label})`, async () => {
+  it(`KV concurrent invalidation fences every reader (${label})`, async () => {
     await forAllAsync(`kv tag generation concurrent invalidation (${label})`, (rng): KvConcurrentCase => ({
-      workers: 2 + rng.int(6), legacyWriters: rng.int(3), preAdvance: rng.bool(0.5), yields: Array.from({ length: 64 }, () => rng.int(4)),
+      workers: 2 + rng.int(6), preAdvance: rng.bool(0.5), yields: Array.from({ length: 64 }, () => rng.int(4)),
     }), async (c) => {
       const { kv, adapter } = newKv()
       const tag = "contended"
@@ -300,25 +278,17 @@ export function defineKvConcurrentInvalidation(label: string): void {
       let cursor = 0
       kv.yields = () => c.yields[cursor++ % c.yields.length]!
       const ids: string[] = []
-      await Promise.all([
-        ...Array.from({ length: c.workers }, async () => {
-          const before = await adapter.getTagGeneration(tag)
-          ids.push(await adapter.advanceTagGeneration(tag))
-          const after = await adapter.getTagGeneration(tag)
-          expect(after, "generation observed after an own advance equals the one observed before it").not.toBe(before)
-        }),
-        ...Array.from({ length: c.legacyWriters }, async (_, i) => {
-          const before = await adapter.getTagGeneration(tag)
-          const id = `${1_800_000_000_000 + i}:00000000-0000-4000-8000-${String(i).padStart(12, "0")}`
-          await kv.put(`${LEGACY_PREFIX}${tag}`, JSON.stringify(id))
-          expect(await adapter.getTagGeneration(tag), "generation observed after a previous-release advance").not.toBe(before)
-        }),
-      ])
+      await Promise.all(Array.from({ length: c.workers }, async () => {
+        const before = await adapter.getTagGeneration(tag)
+        ids.push(await adapter.advanceTagGeneration(tag))
+        const after = await adapter.getTagGeneration(tag)
+        expect(after, "generation observed after an own advance differs from the one observed before it").not.toBe(before)
+      }))
       kv.yields = () => 0
       expect(new Set(ids).size, "advances returned distinct generations").toBe(ids.length)
       const settled = await adapter.advanceTagGeneration(tag)
-      expect(await adapter.getTagGeneration(tag), "next advance converges both counters").toBe(settled)
-      expect({ current: kv.raw(`${CURRENT_PREFIX}${tag}`), legacy: kv.raw(`${LEGACY_PREFIX}${tag}`) }).toEqual({ current: settled, legacy: settled })
+      expect(await adapter.getTagGeneration(tag), "the next advance is observed").toBe(settled)
+      expect(kv.raw(`${CURRENT_PREFIX}${tag}`)).toBe(settled)
     }, { runs: 50, describe: (c) => JSON.stringify({ ...c, yields: c.yields.join("") }) })
   }, PROPERTY_TIMEOUT_MS)
 }

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto"
 import { describe, expect, it } from "vitest"
 import type { RequestContext } from "@xonava/core/domain"
-import { canonicalJsonString, legacyJavaScriptOrderJsonString } from "@xonava/core/serialization"
+import { canonicalJsonString } from "@xonava/core/serialization"
 import {
   IdempotencyPayloadTooLargeError,
   MAX_IDEMPOTENCY_CANONICAL_BYTES,
@@ -11,7 +11,6 @@ import {
   buildIdempotencySecurityContext,
   deserializeResponse,
   fingerprintJson,
-  legacyFingerprintJson,
   serializeResponse,
   type SerializedResponse,
 } from "../idempotency"
@@ -66,8 +65,6 @@ describe("fingerprints", () => {
   it("hashes the versioned canonical form", async () => {
     const value = { b: 2, a: [1, { z: true }] }
     expect(await fingerprintJson(value)).toBe(sha256(`v3\0${canonicalJsonString(value)}`))
-    expect(await legacyFingerprintJson(value)).toBe(sha256(`v2\0${legacyJavaScriptOrderJsonString(value)}`))
-    expect(await fingerprintJson(value)).not.toBe(await legacyFingerprintJson(value))
   })
 
   it("accepts a payload of exactly the canonical size limit and refuses one byte more", async () => {
@@ -75,8 +72,6 @@ describe("fingerprints", () => {
     const atLimit = "a".repeat(MAX_IDEMPOTENCY_CANONICAL_BYTES - prefixAndQuotes)
     await expect(fingerprintJson(atLimit)).resolves.toMatch(/^[0-9a-f]{64}$/)
     await expect(fingerprintJson(`${atLimit}a`)).rejects.toBeInstanceOf(IdempotencyPayloadTooLargeError)
-    await expect(legacyFingerprintJson(atLimit)).resolves.toMatch(/^[0-9a-f]{64}$/)
-    await expect(legacyFingerprintJson(`${atLimit}a`)).rejects.toBeInstanceOf(IdempotencyPayloadTooLargeError)
   })
 
   it("describes the oversize failure", () => {

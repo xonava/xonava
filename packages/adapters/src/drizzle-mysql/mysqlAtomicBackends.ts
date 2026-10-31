@@ -26,10 +26,10 @@ export type MySqlAtomicRecordStoreOptions=MySqlTableOptions<keyof typeof MYSQL_A
 export type MySqlLeaseStoreOptions=MySqlTableOptions<keyof typeof MYSQL_LEASE_TABLES>
 const recordTable=(tableOrOptions:string|MySqlAtomicRecordStoreOptions)=>{const {database,tables}=resolveMySqlTableNames(MYSQL_ATOMIC_RECORD_TABLES,typeof tableOrOptions==="string"?{tables:{atomicRecords:tableOrOptions}}:tableOrOptions);return {table:tables.atomicRecords,options:database===undefined?{}:{database}}}
 const leaseTable=(tableOrOptions:string|MySqlLeaseStoreOptions)=>{const {database,tables}=resolveMySqlTableNames(MYSQL_LEASE_TABLES,typeof tableOrOptions==="string"?{tables:{leases:tableOrOptions}}:tableOrOptions);return {table:tables.leases,options:database===undefined?{}:{database}}}
-/** @param tableOrOptions a table name (legacy) or `{database?, tables?: {atomicRecords?}}`. */
+/** @param tableOrOptions a table name or `{database?, tables?: {atomicRecords?}}`. */
 export const createMySqlInboxStore=(pool:Pool,tableOrOptions:string|MySqlAtomicRecordStoreOptions="atomic_records")=>{const {table,options}=recordTable(tableOrOptions);return new FencedInboxStore(new MySqlAtomicRecordBackend<InboxKey,InboxRecord>(pool,table,inboxKey,options))}
-/** @param tableOrOptions a table name (legacy) or `{database?, tables?: {atomicRecords?}}`. */
+/** @param tableOrOptions a table name or `{database?, tables?: {atomicRecords?}}`. */
 export const createMySqlOutboxStore=(pool:Pool,tableOrOptions:string|MySqlAtomicRecordStoreOptions="atomic_records")=>{const {table,options}=recordTable(tableOrOptions);return new FencedOutboxStore(new MySqlAtomicRecordBackend<OutboxDeliveryKey,OutboxDeliveryRecord>(pool,table,outboxKey,options))}
-/** @param tableOrOptions a table name (legacy) or `{database?, tables?: {leases?}}`. */
+/** @param tableOrOptions a table name or `{database?, tables?: {leases?}}`. */
 export const createMySqlLeaseStore=(pool:Pool,tableOrOptions:string|MySqlLeaseStoreOptions="leases")=>{const {table,options}=leaseTable(tableOrOptions);return new FencedLeaseStore(new MySqlAtomicLeaseBackend(pool,table,options))}
 export type MySqlTransaction=PoolConnection

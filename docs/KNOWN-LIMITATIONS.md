@@ -110,8 +110,6 @@ During a rolling deploy, expect these transitional effects:
 - **Rate-limit windows** restart once after the deploy.
 - **List cursors** issued before the deploy are refused once, with HTTP 400 ("restart from the first
   page").
-- **KV cache counters.** Tag generations are read from and written to both the old and new counter
-  layouts during the upgrade. Drop the old layout one release after every instance is upgraded.
 
 ### MySQL session time zone
 
@@ -194,9 +192,6 @@ These differences are intentional. The differential suites accept exactly these 
 - **Custom fields with durable codecs** are rejected. Persistence does not apply the codecs on write or read.
 - **List cursors** do not expire unless the list handler sets the opt-in `cursorTtlMs`.
 - **Tenant idempotency scopes** have two encodings, `fscope:v1:` and `tenant:N:`. Both are recognised.
-- **Legacy fingerprints.** Stored job fingerprints of versions 4 and 3 are still recognised through
-  compatibility-only constructions. Version 3 and 4 digests cannot tell an omitted `maxAttempts` from an
-  explicit 3.
 
 ## Jobs and schedules
 

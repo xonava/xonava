@@ -2,12 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { ValidationError } from "@xonava/core/domain"
 import { CanonicalJsonError } from "@xonava/core/serialization"
 import { IdempotencyPayloadTooLargeError } from "../idempotency"
-import { idempotentConfig, makeWrite, scriptedPort } from "./writeHandlerHarness"
+import { idempotentConfig, makeWrite } from "./writeHandlerHarness"
 
 const spy = vi.hoisted(() => ({
   errors: [] as unknown[],
   fingerprintFailure: undefined as unknown,
-  legacyEqualsCurrent: false,
 }))
 
 vi.mock("../handleFrameworkCoreError", async (importOriginal) => {
@@ -32,14 +31,12 @@ vi.mock("../idempotency", async (importOriginal) => {
       if (spy.fingerprintFailure !== undefined) throw spy.fingerprintFailure
       return actual.fingerprintJson(value)
     },
-    legacyFingerprintJson: async (value: unknown) => spy.legacyEqualsCurrent ? actual.fingerprintJson(value) : actual.legacyFingerprintJson(value),
   }
 })
 
 beforeEach(() => {
   spy.errors.length = 0
   spy.fingerprintFailure = undefined
-  spy.legacyEqualsCurrent = false
 })
 
 describe("client material that cannot be fingerprinted", () => {
@@ -63,15 +60,5 @@ describe("client material that cannot be fingerprinted", () => {
     const response = await h.send({})
     expect(response.status).toBe(500)
     expect(spy.errors.at(-1)).toBe(failure)
-  })
-})
-
-describe("legacy fingerprint retry", () => {
-  it("does not retry when the legacy fingerprint equals the current one", async () => {
-    spy.legacyEqualsCurrent = true
-    const port = scriptedPort("transactional", () => ({ outcome: "conflict" }))
-    const h = makeWrite(idempotentConfig(), { port })
-    expect((await h.send({})).status).toBe(409)
-    expect(port.acquire).toHaveBeenCalledTimes(1)
   })
 })

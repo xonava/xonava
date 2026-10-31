@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { CacheAdapterError } from "@xonava/core/cache"
 import { ValidationError } from "@xonava/core/domain"
@@ -97,7 +96,7 @@ afterEach(() => {
 })
 
 describe("KvCacheAdapter reads", () => {
-  it("returns plain legacy JSON entries untouched", async () => {
+  it("returns plain JSON entries (not written by this adapter) untouched", async () => {
     const { kv, cache } = setup()
     kv.seed("__cache__:a", "text")
     kv.seed("__cache__:b", 42)
@@ -166,7 +165,7 @@ describe("KvCacheAdapter reads", () => {
 })
 
 describe("KvCacheAdapter reserved keys", () => {
-  it.each(["__tag__:x", "__revision__:x", "__generation__:x", "__generation__:"])("rejects %s everywhere a caller key is accepted", async (key) => {
+  it.each(["__tag__:x", "__revision__:x"])("rejects %s everywhere a caller key is accepted", async (key) => {
     const { cache } = setup()
     for (const run of [() => cache.get(key), () => cache.set(key, 1), () => cache.delete(key), () => cache.has(key), () => cache.addToTag("t", key)]) {
       const failure = await run().catch((error: unknown) => error)
@@ -175,7 +174,7 @@ describe("KvCacheAdapter reserved keys", () => {
     }
   })
 
-  it.each(['__generation__:"1":k', "__tag__x", "__revisionx", "_generation__:x", "plain"])("accepts %s", async (key) => {
+  it.each(['__generation__:"1":k', "__generation__:x", "__generation__:", "__tag__x", "__revisionx", "_generation__:x", "plain"])("accepts %s", async (key) => {
     const { cache } = setup()
     await cache.set(key, "v")
     expect(await cache.get(key)).toBe("v")
@@ -253,19 +252,18 @@ describe("KvCacheAdapter writes", () => {
 })
 
 describe("KvCacheAdapter clear", () => {
-  it("deletes cache-namespace keys across pages, keeping generation counters and legacy counters", async () => {
+  it("deletes cache-namespace keys across pages, keeping generation counters", async () => {
     const { kv, cache } = setup()
     kv.pageSize = 2
     kv.seed("__cache__:a", { $cacheEnvelope: 1, v: 1 })
     kv.seed("__cache__:b", { $cacheEnvelope: 1, v: 2 })
     kv.seed("__cache__:__tag__:t", ["a"])
     kv.seed("__cache__:__revision__:a", "r")
-    kv.seed("__cache__:__generation__:legacyTag", "gen")
     kv.seed('__cache__:__generation__:"gen":x', { $cacheEnvelope: 1, v: 3 })
     kv.seed("__cachegen__:t", "current")
     kv.seed("other", "outside")
     await cache.clear()
-    expect([...kv.store.keys()].sort()).toEqual(["__cache__:__generation__:legacyTag", "__cachegen__:t", "other"])
+    expect([...kv.store.keys()].sort()).toEqual(["__cachegen__:t", "other"])
     expect(kv.lists).toHaveLength(3)
     expect(kv.lists[0]).toEqual({ prefix: "__cache__:" })
     expect(kv.lists[1]).toEqual({ cursor: expect.stringMatching(/^__cache__:/) as string, prefix: "__cache__:" })
@@ -313,7 +311,7 @@ describe("KvCacheAdapter tags", () => {
     expect((await cache.getTagKeys("t")).sort()).toEqual(["a", "b"])
   })
 
-  it("upgrades legacy string members and treats a missing revision as empty", async () => {
+  it("upgrades plain-string tag members and treats a missing revision as empty", async () => {
     const { kv, cache } = setup()
     kv.seed("__cache__:__tag__:t", ["old"])
     await cache.addToTag("t", "fresh")
@@ -321,7 +319,7 @@ describe("KvCacheAdapter tags", () => {
       { key: "__cache__:old", revision: "" },
       { key: "__cache__:fresh", revision: "" },
     ])
-    // The same key with the same (empty) revision is a no-op, a legacy member is matched by canonical key.
+    // The same key with the same (empty) revision is a no-op, a plain-string member is matched by canonical key.
     const before = kv.puts.length
     await cache.addToTag("t", "old")
     expect(kv.puts).toHaveLength(before)
@@ -353,18 +351,18 @@ describe("KvCacheAdapter tags", () => {
     await cache.addToTag("t", "moved")
     vi.setSystemTime(1_000_900)
     await cache.set("moved", 2)
-    kv.seed("__cache__:legacy", "x")
-    kv.seed("__cache__:__tag__:t", [...(kv.json("__cache__:__tag__:t") as unknown[]), "legacy"])
+    kv.seed("__cache__:plainmember", "x")
+    kv.seed("__cache__:__tag__:t", [...(kv.json("__cache__:__tag__:t") as unknown[]), "plainmember"])
     kv.deletes.length = 0
     await cache.deleteTag("t")
     expect(kv.store.has("__cache__:same")).toBe(false)
     expect(kv.store.has("__cache__:__revision__:same")).toBe(false)
     expect(kv.store.has("__cache__:moved")).toBe(true)
     expect(kv.store.has("__cache__:__revision__:moved")).toBe(true)
-    expect(kv.store.has("__cache__:legacy")).toBe(false)
+    expect(kv.store.has("__cache__:plainmember")).toBe(false)
     expect(kv.store.has("__cache__:__tag__:t")).toBe(false)
-    // A legacy member has no revision to remove.
-    expect(kv.deletes).not.toContain("__cache__:__revision__:legacy")
+    // A plain-string member has no revision to remove.
+    expect(kv.deletes).not.toContain("__cache__:__revision__:plainmember")
     expect(kv.deletes.at(-1)).toBe("__cache__:__tag__:t")
   })
 
@@ -386,70 +384,28 @@ describe("KvCacheAdapter tags", () => {
 })
 
 describe("KvCacheAdapter tag generations", () => {
-  function digest(pair: unknown[]): string {
-    return `h:${createHash("sha256").update(JSON.stringify(pair)).digest("base64url")}`
-  }
-
   it("reports 0 when neither counter exists", async () => {
     const { kv, cache } = setup()
     expect(await cache.getTagGeneration("t")).toBe("0")
     expect(kv.puts).toEqual([])
   })
 
-  it("advances both counters to one shared value that reads back unchanged", async () => {
+  it("advances a single counter that reads back unchanged", async () => {
     const { kv, cache } = setup()
     const generation = await cache.advanceTagGeneration("t")
     expect(generation).toMatch(/^1000000:[0-9a-f-]{36}$/)
-    expect(kv.puts.map((p) => p.key)).toEqual(["__cache__:__generation__:t", "__cachegen__:t"])
+    expect(kv.puts.map((p) => p.key)).toEqual(["__cachegen__:t"])
     expect(kv.json("__cachegen__:t")).toBe(generation)
-    expect(kv.json("__cache__:__generation__:t")).toBe(generation)
     expect(await cache.getTagGeneration("t")).toBe(generation)
     expect(await cache.advanceTagGeneration("t")).not.toBe(generation)
   })
 
-  it("reports a fixed-size digest of the pair when the counters differ", async () => {
+  it("ignores the `__generation__:` counters of earlier releases", async () => {
     const { kv, cache } = setup()
-    kv.seed("__cachegen__:t", "new")
-    kv.seed("__cache__:__generation__:t", "old")
-    const value = await cache.getTagGeneration("t")
-    expect(value).toBe(digest(["new", "old"]))
-    expect(value).toHaveLength(2 + 43)
-  })
-
-  it("adopts a legacy-only counter into the current key and then reports it unchanged", async () => {
-    const { kv, cache } = setup()
-    kv.seed("__cache__:__generation__:t", "legacy-gen")
-    expect(await cache.getTagGeneration("t")).toBe("legacy-gen")
-    expect(kv.json("__cachegen__:t")).toBe("legacy-gen")
-  })
-
-  it("does not overwrite a current counter that appeared during adoption", async () => {
-    const { kv, cache } = setup()
-    kv.seed("__cache__:__generation__:t", "legacy-gen")
-    const realGet = kv.get.bind(kv)
-    let currentReads = 0
-    vi.spyOn(kv, "get").mockImplementation(async (key: string, options?: { type: "json" }) => {
-      if (key === "__cachegen__:t") {
-        currentReads += 1
-        if (currentReads === 2) kv.seed("__cachegen__:t", "raced")
-      }
-      return realGet(key, options)
-    })
-    expect(await cache.getTagGeneration("t")).toBe(digest(["raced", "legacy-gen"]))
-    expect(kv.json("__cachegen__:t")).toBe("raced")
-  })
-
-  it("falls back to the pair token when adoption fails", async () => {
-    const { kv, cache } = setup()
-    kv.seed("__cache__:__generation__:t", "legacy-gen")
-    kv.failOn = "put"
-    expect(await cache.getTagGeneration("t")).toBe(digest([null, "legacy-gen"]))
-  })
-
-  it("reports the pair when only the current counter exists", async () => {
-    const { kv, cache } = setup()
+    kv.seed("__cache__:__generation__:t", "earlier-gen")
+    expect(await cache.getTagGeneration("t")).toBe("0")
     kv.seed("__cachegen__:t", "cur")
-    expect(await cache.getTagGeneration("t")).toBe(digest(["cur", null]))
+    expect(await cache.getTagGeneration("t")).toBe("cur")
   })
 
   it("ignores non-string counter values", async () => {

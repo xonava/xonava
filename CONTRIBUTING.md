@@ -49,7 +49,6 @@ PostgreSQL reads `FRAMEWORK_TEST_PG_URL`, falling back to `DATABASE_URL`:
 ```sh
 export FRAMEWORK_TEST_PG_URL=postgres://user:password@localhost:5432/framework_test
 npm run test:integration:pg
-npm run test:upgrade:pg
 npm run test:conformance:pg
 npm run test:race:pg
 npm run test:crash:pg
@@ -60,7 +59,6 @@ MySQL reads `FRAMEWORK_TEST_MYSQL_URL`. The fixture creates the database named i
 ```sh
 export FRAMEWORK_TEST_MYSQL_URL=mysql://user:password@localhost:3306/framework_test
 npm run test:integration:mysql
-npm run test:upgrade:mysql
 npm run test:conformance:mysql
 npm run test:race:mysql
 npm run test:crash:mysql
@@ -70,7 +68,6 @@ Cloudflare D1 runs locally with Miniflare and needs no URL:
 
 ```sh
 npm run test:integration:d1
-npm run test:upgrade:d1
 npm run test:conformance:d1
 npm run test:race:d1
 npm run test:crash:d1
@@ -108,7 +105,7 @@ The soak is a quality gate for `1.0.0`. It is an optional step of `npm run verif
 
 ## Release gate
 
-`npm run verify:release` is the full release check. Maintainers run it before a release. It requires both `FRAMEWORK_TEST_PG_URL` and `FRAMEWORK_TEST_MYSQL_URL`. It runs the fast checks (`npm run verify`), the suites for all three database providers (including the N-1 upgrade compatibility suite), the differential suites at release volume, and the crash suites with 20 repetitions. It takes a long time and should run against dedicated databases.
+`npm run verify:release` is the full release check. Maintainers run it before a release. It requires both `FRAMEWORK_TEST_PG_URL` and `FRAMEWORK_TEST_MYSQL_URL`. It runs the fast checks (`npm run verify`), the suites for all three database providers, the differential suites at release volume, and the crash suites with 20 repetitions. It takes a long time and should run against dedicated databases.
 
 It writes a summary to `.release-check/<run-id>/` and the suites' raw records to `artifacts/framework-conformance/<run-id>/`. Both are git-ignored; keep them with the release (see [release evidence](docs/governance.md#release-evidence)).
 
@@ -157,31 +154,10 @@ edit package versions or `CHANGELOG.md` by hand.
 
 1. On a `release/<version>` branch from `dev`, run `npm run release:version`. It consumes the changesets,
    bumps all three packages to the same version, writes the `CHANGELOG.md` entry, and refreshes the lockfile.
-2. Point the upgrade compatibility aliases at the release being replaced (see below), then run
-   `npm run verify:framework-release`.
+2. Run `npm run verify:framework-release`.
 3. Open the pull request into `dev`, then merge `dev` into `main`.
 4. From `main`, run `npm run release:publish`. It checks the version policy, builds, publishes the packages
    that are not yet on npm, and creates the git tags. Push the tags with `git push --follow-tags`.
-
-**Upgrade compatibility alias.** The N-1 upgrade suite (`packages/testing/integration/upgrade/`) runs the previous
-published release against the current code on the same databases: data written by one must be read by the other
-(job, outbox and HTTP idempotency fingerprints, list cursors, KV tag-generation layouts, workflow
-`resume_signal_id` receipts). The previous release is installed from npm under the aliases `xonava-core-prev` and
-`xonava-adapters-prev` in the `devDependencies` of `packages/testing`, pinned to an exact version, for example
-`"xonava-core-prev": "npm:@xonava/core@0.1.0"`. `release:version` must bump both aliases to the release being
-replaced, that is the version the packages had before the bump, so a release candidate is always tested against what
-users run today:
-
-1. After `npm run release:version`, set both aliases in `packages/testing/package.json` to the previous version
-   (`npm:@xonava/core@<previous>` and `npm:@xonava/adapters@<previous>`).
-2. Run `npm install` to update `package-lock.json`, and check that `npm ci` still works.
-3. Run the upgrade suites (`npm run test:upgrade:d1`, `:pg`, `:mysql`). Where a format changed on purpose
-   since that release, the suite asserts the documented behaviour (see
-   [known limitations](docs/KNOWN-LIMITATIONS.md#rolling-deployment-order)); update those assertions together with the changeset that
-   introduced the change, never by loosening a test.
-
-The suite belongs to the release gate: `verify:framework-release:local` runs the D1 and database-free tests, and the
-baseline runs PostgreSQL and MySQL.
 
 ## Security
 

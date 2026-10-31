@@ -1,14 +1,9 @@
 import type { IdempotencyCompletion, IdempotencyPort, IdempotencyRequest } from "@xonava/core/events"
-import { canonicalJsonString, legacyJavaScriptOrderJsonString } from "@xonava/core/serialization"
+import { canonicalJsonString } from "@xonava/core/serialization"
 import type { RequestContext } from "@xonava/core/domain"
 
-/**
- * v3: canonical JSON in RFC 8785 key order. v2 serialized integer-like object
- * keys in JavaScript property order; a retry whose stored record still carries
- * a v2 fingerprint is matched via {@link legacyFingerprintJson}.
- */
+/** v3: canonical JSON in RFC 8785 key order. */
 export const IDEMPOTENCY_FINGERPRINT_VERSION = "v3"
-const LEGACY_IDEMPOTENCY_FINGERPRINT_VERSION = "v2"
 export const SERIALIZED_RESPONSE_VERSION = "v1"
 export const MAX_IDEMPOTENCY_KEY_LENGTH = 255
 export const MAX_IDEMPOTENCY_CANONICAL_BYTES = 1024 * 1024
@@ -91,15 +86,6 @@ async function digestFingerprintInput(version: string, canonical: string): Promi
 
 export async function fingerprintJson(value: unknown): Promise<string> {
   return digestFingerprintInput(IDEMPOTENCY_FINGERPRINT_VERSION, canonicalJsonString(value))
-}
-
-/**
- * COMPATIBILITY ONLY: the v2 fingerprint of `value` (JavaScript key order), used
- * solely to recognise idempotency records written before the RFC 8785 fix.
- * Never use it for new records; remove it with v2.
- */
-export async function legacyFingerprintJson(value: unknown): Promise<string> {
-  return digestFingerprintInput(LEGACY_IDEMPOTENCY_FINGERPRINT_VERSION, legacyJavaScriptOrderJsonString(value))
 }
 
 export async function serializeResponse(response: Response): Promise<SerializedResponse> {

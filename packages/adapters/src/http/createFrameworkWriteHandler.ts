@@ -21,7 +21,7 @@ import { createFrameworkErrorHandler, frameworkJson } from "./handleFrameworkCor
 import { parseJsonBodySafely, parseUniqueQueryParameters, resolveRequestMetadata } from "./requestBody"
 import type { CacheAdapter } from "@xonava/core/cache"
 import type { AuditSink, OutboxSink } from "@xonava/core/events"
-import { IdempotencyPayloadTooLargeError, boundRateLimitKeyMaterial, buildIdempotencyScopeIdentity, buildIdempotencySecurityContext, deserializeResponse, fingerprintJson, legacyFingerprintJson, MAX_IDEMPOTENCY_KEY_LENGTH, serializeResponse, type SerializedResponse, type SerializedResponseIdempotencyPort } from "./idempotency"
+import { IdempotencyPayloadTooLargeError, boundRateLimitKeyMaterial, buildIdempotencyScopeIdentity, buildIdempotencySecurityContext, deserializeResponse, fingerprintJson, MAX_IDEMPOTENCY_KEY_LENGTH, serializeResponse, type SerializedResponse, type SerializedResponseIdempotencyPort } from "./idempotency"
 import { authorizeFrameworkModule, normalizeCrudRequest, tenantIdFromContext } from "./crudHandlers/shared"
 
 const frameworkErrorHandler = createFrameworkErrorHandler()
@@ -121,9 +121,9 @@ async function enrichValidatedContext(args: {
   return { validated: { validatedParams, validatedQuery, validatedBody }, raw }
 }
 
-async function fingerprintClientMutation(value: unknown, fingerprint: (value: unknown) => Promise<string> = fingerprintJson): Promise<string> {
+async function fingerprintClientMutation(value: unknown): Promise<string> {
   try {
-    return await fingerprint(value)
+    return await fingerprintJson(value)
   } catch (error) {
     // The client controls this material; anything without a canonical JSON
     // form (e.g. a "__proto__" member or an unsafe integer) is a bad request.
@@ -428,21 +428,7 @@ export function createFrameworkWriteHandler<
               `Idempotency for "${args.moduleKey}" requires a transaction- or atomic-batch-integrated idempotency port`,
             )
           }
-          let acquired = await port.acquire(idempotencyRequest)
-          if (acquired.outcome === "conflict") {
-            // A record written before the RFC 8785 key-order fix carries the v2
-            // fingerprint of the same request. Retry once with it so a retry
-            // across that deploy replays instead of conflicting; the lease then
-            // keeps the stored fingerprint for renew/complete.
-            const legacyFingerprint = await fingerprintClientMutation(fingerprintMaterial, legacyFingerprintJson)
-            if (legacyFingerprint !== idempotencyRequest.fingerprint) {
-              const legacy = await port.acquire({ ...idempotencyRequest, fingerprint: legacyFingerprint })
-              if (legacy.outcome !== "conflict") {
-                idempotencyRequest.fingerprint = legacyFingerprint
-                acquired = legacy
-              }
-            }
-          }
+          const acquired = await port.acquire(idempotencyRequest)
           if (acquired.outcome === "replay") {
             return responseWithMetadata(deserializeResponse(acquired.result), requestMetadata)
           }

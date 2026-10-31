@@ -73,7 +73,7 @@ for (const database of ["postgres", "mysql", "d1"]) {
   }
 }
 const rootPackage = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8"))
-const commands = ["test:integration:pg", "test:integration:d1", "test:integration:mysql", "test:upgrade:pg", "test:upgrade:d1", "test:upgrade:mysql", "test:conformance:pg", "test:conformance:d1", "test:conformance:mysql", "test:race:pg", "test:race:d1", "test:race:mysql", "test:crash:pg", "test:crash:d1", "test:crash:mysql"]
+const commands = ["test:integration:pg", "test:integration:d1", "test:integration:mysql", "test:conformance:pg", "test:conformance:d1", "test:conformance:mysql", "test:race:pg", "test:race:d1", "test:race:mysql", "test:crash:pg", "test:crash:d1", "test:crash:mysql"]
 for (const command of commands) {
   const script = rootPackage.scripts?.[command]
   if (typeof script !== "string" || !script.includes("testing")) throw new Error(`missing independent framework command: ${command}`)

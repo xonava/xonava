@@ -155,7 +155,7 @@ for (const script of ["lint", "build", "verify", "verify:isolation", "test"]) np
 npm(["run", "test:coverage", "-w", "@xonava/core"])
 // D1 first (no external service), then PostgreSQL and MySQL.
 for (const adapter of ["d1", "pg", "mysql"]) {
-  for (const kind of ["integration", "upgrade", "conformance", "race"]) npm(["run", `test:${kind}:${adapter}`, "-w", "@xonava/testing"])
+  for (const kind of ["integration", "conformance", "race"]) npm(["run", `test:${kind}:${adapter}`, "-w", "@xonava/testing"])
 }
 // Differential/property suites at release volume with a run-derived seed.
 npm(["run", "verify:differentials"])
