@@ -432,7 +432,9 @@ export function applyAuthorizationPlanToResult<TResult>(plan: AuthorizedExecutio
     const value = result as unknown as Record<string, unknown> & { rows: unknown[] }
     const envelope: Record<string, unknown> = {}
     for (const key of PAGED_ENVELOPE_KEYS) if (Object.prototype.hasOwnProperty.call(value, key)) envelope[key] = value[key]
-    return Object.freeze({ ...envelope, rows: projectRecord(value.rows), ...(Object.prototype.hasOwnProperty.call(value, "rowCount") && value.rowCount !== undefined ? { rowCount: value.rows.length } : {}) }) as TResult
+    // Projection masks or omits fields but never drops rows, so the total stays as the operation returned it
+    // (as pageInfo does); it was counted by the plan-constrained repository.
+    return Object.freeze({ ...envelope, rows: projectRecord(value.rows), ...(Object.prototype.hasOwnProperty.call(value, "rowCount") && value.rowCount !== undefined ? { rowCount: value.rowCount } : {}) }) as TResult
   }
   return projectRecord(result) as TResult
 }

@@ -122,7 +122,7 @@ describe("authorization enforcement defensive convergence", () => {
     expect(applyAuthorizationPlanToResult(partial, [{ id: "1", secret: "4111111111111111", hidden: true }])).toEqual([{ id: "1", secret: "****1111" }])
     // Short values reveal nothing: a partial mask must not disclose most of an identifier.
     expect(applyAuthorizationPlanToResult(partial, [{ id: "1", secret: "abcdef" }])).toEqual([{ id: "1", secret: "[REDACTED]" }])
-    expect(applyAuthorizationPlanToResult(partial, { rows: [{ id: "1", secret: "x" }], rowCount: 99 })).toEqual({ rows: [{ id: "1", secret: "[REDACTED]" }], rowCount: 1 })
+    expect(applyAuthorizationPlanToResult(partial, { rows: [{ id: "1", secret: "x" }], rowCount: 99 })).toEqual({ rows: [{ id: "1", secret: "[REDACTED]" }], rowCount: 99 })
     expect(applyAuthorizationPlanToResult(partial, null)).toBeNull()
     expect(applyAuthorizationPlanToResult(undefined, { untouched: true })).toEqual({ untouched: true })
   })

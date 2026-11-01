@@ -48,4 +48,4 @@ Core errors MUST NOT contain HTTP status, headers, GraphQL codes, CLI exit value
 
 Conformance MUST instantiate every identity, verify stable code/category/retryability/safe message/metadata freezing, prove unsafe details remain internal, and verify each transport mapping independently. Adding/removing/repurposing an identity requires a specification and compatibility decision.
 
-Traceability: `packages/core/src/domain/errors.ts`; error coverage tests; ER1 certification.
+Traceability: `packages/core/src/domain/errors.ts`; error coverage tests.
