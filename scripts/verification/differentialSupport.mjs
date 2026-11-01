@@ -343,8 +343,12 @@ async function filesUnder(repositoryRoot, directory) {
   return result
 }
 
-/** Required call sites per suite; refuses when a harness consumer lives outside every differential suite. */
-export async function requiredCallSites(repositoryRoot, suites) {
+/**
+ * Required call sites per suite; refuses when a harness consumer lives outside every differential suite.
+ * `suites` must be every differential suite, so the coverage check sees all of them; `selected` (suite IDs)
+ * limits the returned map to one share of a parallel release check.
+ */
+export async function requiredCallSites(repositoryRoot, suites, selected) {
   const bySuite = {}
   const covered = new Set([HARNESS, HARNESS_SELF_TEST])
   const scanned = new Set()
@@ -377,7 +381,7 @@ export async function requiredCallSites(repositoryRoot, suites) {
       if (scanPropertyCallSites(source, path).length > 0) refuse(`${path} declares differential properties but is not part of any differential suite`)
     }
   }
-  return bySuite
+  return selected ? Object.fromEntries(Object.entries(bySuite).filter(([id]) => selected.includes(id))) : bySuite
 }
 
 /** Whether a call site is required on a database: every site is, unless DATABASE_SPECIFIC_PROPERTIES limits it. */

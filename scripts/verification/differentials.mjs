@@ -131,7 +131,7 @@ async function main() {
     if (unknown.length > 0) refuse(`DIFFERENTIAL_SUITES names unknown suites ${unknown.join(", ")} (known: ${allSuites.map(suite => suite.id).join(", ")})`)
   }
   const suites = selected ? allSuites.filter(suite => selected.includes(suite.id)) : allSuites
-  const sites = await requiredCallSites(repositoryRoot, suites)
+  const sites = await requiredCallSites(repositoryRoot, allSuites, selected)
   const baseline = await readDifferentialBaseline(repositoryRoot)
   const sourceManifestBefore = await createDifferentialSourceManifest(repositoryRoot)
   const reportRoot = join(directory, "property-reports")

@@ -121,6 +121,18 @@ describe("differential real-database store differential suites", () => {
     }
   })
 
+  it("checks coverage against every suite when a release-check share selects only some of them", async () => {
+    const suites = await differentialSuites(repositoryRoot)
+    const all = await requiredCallSites(repositoryRoot, suites)
+    for (const suite of suites) {
+      // A share scans its own suites only if handed only those: the other suites look orphaned or unmatched.
+      await assert.rejects(requiredCallSites(repositoryRoot, [suite]), refused(/is not part of any differential suite|matches no differential call site/))
+      const share = await requiredCallSites(repositoryRoot, suites, [suite.id])
+      assert.deepEqual(Object.keys(share), [suite.id])
+      assert.deepEqual(share[suite.id], all[suite.id])
+    }
+  })
+
   it("runs every store area and the signal-buffering suite that exist on every database, and requires their properties", async () => {
     const suites = await differentialSuites(repositoryRoot)
     const sites = await requiredCallSites(repositoryRoot, suites)
