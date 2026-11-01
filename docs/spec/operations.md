@@ -4,7 +4,7 @@
 
 An operation definition declares identity, input/output validation, authorization requirements, budget, required services/capabilities, handler, hooks, and effects. Creation MUST reject invalid or contradictory definitions.
 
-Inputs are validated before handler behavior. Authorization plans are created from trusted context and attenuated for nested operations. Required services are capability-checked before use. Hooks receive only their declared context and MUST NOT gain mutable privileged persistence accidentally.
+Inputs are validated before handler behavior. Authorization plans are created from trusted context and attenuated for nested operations. A repository constrained by an authorization plan passes the underlying `rowCount` through unchanged when its re-check keeps every row of the page, and omits it when the re-check drops a row; applying a plan to a list result keeps `rowCount` as the result returned it. Required services are capability-checked before use. Hooks receive only their declared context and MUST NOT gain mutable privileged persistence accidentally.
 
 ## Execution and effects
 
