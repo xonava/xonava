@@ -43,9 +43,32 @@ jobs:
           for workspace in @xonava/core @xonava/adapters @xonava/testing; do
             npm publish --dry-run --workspace "$workspace"
           done
+      - name: Dry run tags (no push)
+        if: inputs.dry_run
+        run: |
+          for dir in packages/core packages/adapters packages/testing; do
+            echo "would tag $(node -p "const p = require('./$dir/package.json'); p.name + '@' + p.version")"
+          done
+      # changesets creates annotated tags, which need a git identity; without one `git tag` fails and changesets
+      # ignores the failure. The step below creates any missing tag itself and fails loudly, so it also repairs
+      # a release whose tags were not pushed: re-running with dry_run off publishes nothing new and adds the tags.
+      - name: Set the git identity for release tags
+        if: ${{ !inputs.dry_run }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
       - name: Publish
         if: ${{ !inputs.dry_run }}
         run: npm run release:publish
       - name: Push the release tags
         if: ${{ !inputs.dry_run }}
-        run: git push origin --tags
+        run: |
+          for dir in packages/core packages/adapters packages/testing; do
+            tag="$(node -p "const p = require('./$dir/package.json'); p.name + '@' + p.version")"
+            if git ls-remote --exit-code --tags origin "refs/tags/$tag" > /dev/null; then
+              echo "$tag is already on origin"
+              continue
+            fi
+            git rev-parse --quiet --verify "refs/tags/$tag" > /dev/null || git tag --annotate "$tag" --message "$tag"
+            git push origin "refs/tags/$tag"
+          done
