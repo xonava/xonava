@@ -26,7 +26,7 @@ The request's `signal` and `deadline` bound the operation together with the envi
 
 Invalid definitions/input are validation; denial authorization; missing service capability/configuration; deadline/cancellation execution failure; closed/disposed/drained effects stable lifecycle errors. Conformance covers ordering, hook trust boundaries, nested attenuation/budgets, cancellation/deadline, atomic and post-commit effects, committed-effect failure, and telemetry redaction.
 
-Traceability: `packages/core/src/operation`; operation and adversarial suites; OP1/S1/T1 certification.
+Traceability: `packages/core/src/operation`; operation and adversarial suites.
 
 ## Post-commit outcome contract (normative)
 

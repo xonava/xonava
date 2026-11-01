@@ -18,4 +18,4 @@ An already-cancelled request MUST fail before provider I/O. An absolute epoch-mi
 
 Invalid keys, lengths, checksums, expiry, timestamps, or metadata are validation failures. Missing object is absence, missing optional signing is capability failure, and provider faults are dependency failures with retryability explicitly normalized. Conformance covers every operation, absence, versioned references, metadata fidelity, streaming/early termination, cancellation/deadline, signed expiry/authority, hostile keys, checksum/length mismatch, and failure redaction.
 
-Traceability: `packages/core/src/object-store`; reference object-store tests; O1 certification. Attachment semantics are specified separately in [attachments](attachments.md).
+Traceability: `packages/core/src/object-store`; reference object-store tests. Attachment semantics are specified separately in [attachments](attachments.md).

@@ -10,7 +10,7 @@ Each event has stable name, severity, timestamp, and bounded scalar attributes. 
 
 Best-effort provider throws/rejections are contained. Validation failure for unsafe/oversized data occurs before emission when required. Conformance covers classification filtering, secret removal, scalar validation, size limits, immutable emission, absent/no-op provider, and synchronous/asynchronous provider failure.
 
-Provider APIs and logging libraries are not normative. Traceability: `packages/core/src/telemetry`; telemetry/redaction tests; T1 certification.
+Provider APIs and logging libraries are not normative. Traceability: `packages/core/src/telemetry`; telemetry/redaction tests.
 
 ## Core event catalogue
 

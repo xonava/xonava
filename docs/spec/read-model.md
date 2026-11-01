@@ -10,4 +10,4 @@ Definitions have stable identity and validated input/output. Execution authorize
 
 Invalid input/definition is validation; source denial authorization without existence leakage; unavailable required source dependency failure; explicitly optional source may produce declared partial result/warning. Conformance covers multi-source authorization, consistency selection, partial/required failure, timeout, deterministic composition, projection, and safe errors.
 
-Traceability: `packages/core/src/read-model`; read-model tests; R1 certification.
+Traceability: `packages/core/src/read-model`; read-model tests.
