@@ -162,10 +162,12 @@ edit package versions or `CHANGELOG.md` by hand.
 
 1. On a `release/<version>` branch from `dev`, run `npm run release:version`. It consumes the changesets,
    bumps all three packages to the same version, writes the `CHANGELOG.md` entry, and refreshes the lockfile.
-2. Run `npm run verify:framework-release`.
+2. Run `npm run verify:release` (or the manual `Release check` workflow).
 3. Open the pull request into `dev`, then merge `dev` into `main`.
-4. From `main`, run `npm run release:publish`. It checks the version policy, builds, publishes the packages
-   that are not yet on npm, and creates the git tags. Push the tags with `git push --follow-tags`.
+4. From `main`, run the manual `Release` workflow. Its `dry_run` input is on by default and builds and checks the
+   package contents without publishing; with `dry_run` off it runs `npm run release:publish` (version policy, build,
+   publish of the packages that are not yet on npm, git tags) and pushes the tags. Publishing uses npm trusted
+   publishing, so no npm token is needed; see [publishing](docs/guides/release-checks.md#publishing).
 
 ## Security
 
