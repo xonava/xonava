@@ -13,6 +13,10 @@ This repository is a TypeScript npm workspace with three packages: `packages/cor
 npm install
 ```
 
+Node 22 or newer is required. npm 12 runs dependency install scripts only when they are approved; the two this
+repository needs (`esbuild`, and `workerd` for the local D1 runtime) are approved in the `allowScripts` field of
+`package.json`. When either is updated, approve the new version with `npm install-scripts approve esbuild workerd`.
+
 ## Everyday checks
 
 | Command | What it does |
