@@ -192,6 +192,10 @@ function runShare(database) {
 const hashFile = async path => createHash("sha256").update(await readFile(path)).digest("hex")
 const posixRelative = (base, path) => relative(base, path).replaceAll("\\", "/")
 
+// The summary step runs after the shares: their evidence is fresh relative to each share's own start, not the summary's.
+const shareStartedAt = new Map()
+const evidenceSince = adapter => (summarizeOnly ? shareStartedAt.get(adapter) : startedAt)
+
 if (summarizeOnly) {
   // Merge the shards' differential shares into the one artifact the validation below reads.
   const differentialDirectory = join(outputDirectory, DIFFERENTIAL_PHASE)
@@ -204,6 +208,9 @@ if (summarizeOnly) {
     const shard = await readJson(join(outputDirectory, "shards", `${adapter}.json`))
     if (shard.runId !== runId || shard.database !== adapter || shard.status !== "passed") fail(`${adapter} share is missing, for another run, or not passed`)
     if (shard.source?.sha256 !== sourceBefore.sha256) fail(`${adapter} share was taken over different sources than this checkout`)
+    const shardStartedAt = Date.parse(shard.startedAt)
+    if (!Number.isFinite(shardStartedAt) || shardStartedAt > startedAt) fail(`${adapter} share has no valid start time before this summary`)
+    shareStartedAt.set(adapter, shardStartedAt)
   }
 } else if (shardDatabase) {
   runShare(shardDatabase)
@@ -230,10 +237,10 @@ if (shardDatabase) {
 for (const adapter of shardDatabase ? [shardDatabase] : adapters) {
   const guaranteePath = join(evidenceDirectory, `${adapter}-guarantees.json`)
   const crashPath = join(evidenceDirectory, `${adapter}-crash-replay.json`)
-  await validateFreshness(guaranteePath, startedAt)
-  await validateFreshness(crashPath, startedAt)
-  validateGuarantees(await readJson(guaranteePath), adapter, runId, startedAt)
-  validateCrash(await readJson(crashPath), adapter, runId, startedAt)
+  await validateFreshness(guaranteePath, evidenceSince(adapter))
+  await validateFreshness(crashPath, evidenceSince(adapter))
+  validateGuarantees(await readJson(guaranteePath), adapter, runId, evidenceSince(adapter))
+  validateCrash(await readJson(crashPath), adapter, runId, evidenceSince(adapter))
   for (const [kind, path] of [["guarantees", guaranteePath], ["crash-replay", crashPath]]) {
     evidence.push({ adapter, kind, path: posixRelative(dataRoot, path), sha256: await hashFile(path) })
   }
