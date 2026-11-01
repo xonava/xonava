@@ -9,4 +9,4 @@
 - Certification binds evidence and source to a named guarantee set.
 - Architecture tests prove dependency direction, exports, cycles, ownership, and tree shaking.
 
-Use the `@xonava/testing` workspace and provider-specific commands documented in the certification guide. A skipped mandatory provider suite is not certification.
+Use the `@xonava/testing` workspace and provider-specific commands documented in [how releases are checked](../guides/release-checks.md). A skipped mandatory provider suite is not certification.
