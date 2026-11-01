@@ -102,9 +102,6 @@ During a rolling deploy, expect these transitional effects:
   partition, which only serializes more than new workers do and never runs two jobs of one key at once.
   Drain old workers before enqueueing non-default keys.
 
-- **Job fingerprints.** Job fingerprint version 5 is not matched by workers on version 4. An older
-  worker that re-enqueues a job without an explicit `maxAttempts`, written by a newer worker, receives
-  `JobIdempotencyConflictError` until the deploy completes. Schedule occurrences back off and retry.
 - **Unknown job definitions.** Workers on older code read the "use the definition's `maxAttempts`"
   sentinel as a very large attempt budget for jobs enqueued without `maxAttempts`.
 - **Rate-limit windows** restart once after the deploy.
@@ -190,6 +187,11 @@ These differences are intentional. The differential suites accept exactly these 
 ## Entities, queries, and idempotency
 
 - **Custom fields with durable codecs** are rejected. Persistence does not apply the codecs on write or read.
+- **List totals are opt-in.** Offset pagination returns `rowCount` only when the plan sets `includeTotal: true`;
+  cursor pages never carry a total (use `pageInfo.hasNextPage` and `pageInfo.hasPreviousPage`). Repositories may
+  offer `countUpTo(filter, limit)`, and the HTTP list handler uses it to check `queryLimits.maxCount` with a
+  bounded probe before the page query. Offset responses keep `rowCount`; cursor responses omit it. A plan-constrained
+  repository passes the real total through and omits it when its re-check drops a row.
 - **List cursors** do not expire unless the list handler sets the opt-in `cursorTtlMs`.
 - **Tenant idempotency scopes** have two encodings, `fscope:v1:` and `tenant:N:`. Both are recognised.
 

@@ -620,7 +620,7 @@ describe("masking and projection", () => {
       rows: [{ id: "1", hidden: true }, { id: "2" }],
       rowCount: 99, page: 2, pageSize: 2, pageInfo: { next: null }, debug: { secret: "leak" },
     }) as Record<string, unknown>
-    expect(result).toEqual({ rows: [{ id: "1" }, { id: "2" }], rowCount: 2, page: 2, pageSize: 2, pageInfo: { next: null } })
+    expect(result).toEqual({ rows: [{ id: "1" }, { id: "2" }], rowCount: 99, page: 2, pageSize: 2, pageInfo: { next: null } })
     expect(Object.isFrozen(result)).toBe(true)
     const withoutEnvelope = applyAuthorizationPlanToResult(readPlan, { rows: [], rowCount: 0 })
     expect(withoutEnvelope).toEqual({ rows: [], rowCount: 0 })

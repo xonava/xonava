@@ -63,5 +63,5 @@ workflow `release.yml`.
 
 To release, run the manual `Release` workflow (`.github/workflows/release.yml`) on `main`. It has a `dry_run` input,
 on by default: a dry run builds and runs `npm publish --dry-run` for each package and publishes nothing. With
-`dry_run` off it runs `npm run release:publish`. The workflow installs npm 11.5.1 or newer first, which trusted
+`dry_run` off it runs `npm run release:publish` and pushes the release tags. The workflow installs npm 11.5.1 or newer first, which trusted
 publishing requires.

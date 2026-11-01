@@ -31,9 +31,9 @@ describe("authorization result projection", () => {
     expect(Object.isFrozen(result[0])).toBe(true)
   })
 
-  it("projects paged rows, removes hidden fields, and corrects rowCount", () => {
+  it("projects paged rows, removes hidden fields, and keeps the total", () => {
     const result = applyAuthorizationPlanToResult(plan(), { rows: [{ id: "1", hidden: true }, { id: "2", hidden: true }], rowCount: 99, page: 1 })
-    expect(result).toEqual({ rows: [{ id: "1" }, { id: "2" }], rowCount: 2, page: 1 })
+    expect(result).toEqual({ rows: [{ id: "1" }, { id: "2" }], rowCount: 99, page: 1 })
     expect(Object.isFrozen(result.rows)).toBe(true)
   })
 })

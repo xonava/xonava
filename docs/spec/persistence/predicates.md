@@ -37,7 +37,7 @@ Entities hydrate `date` fields as `YYYY-MM-DD` strings or as `Date` values at UT
 
 ### Text matching
 
-`contains`, `startsWith`, and `endsWith` are case-sensitive and match literally (no wildcard characters). They yield UNKNOWN for a NULL or non-string field. An empty needle matches every non-null string. SQL compilers MUST NOT rely on case-insensitive `LIKE` (SQLite, and MySQL under a `_ci` collation); they must use an exact construct such as `instr`/`substr` or a binary collation.
+`contains`, `startsWith`, and `endsWith` are case-sensitive and match literally (no wildcard characters). They yield UNKNOWN for a NULL or non-string field. An empty needle matches every non-null string. SQL compilers MUST NOT rely on case-insensitive `LIKE` (SQLite, and MySQL under a `_ci` collation); they must use an exact construct such as `instr`/`substr` or a binary collation. With `mysqlBinaryCollation: true` the MySQL compiler compares the bare column and gives text literals an explicit `utf8mb4_0900_bin` collation, so the comparison is binary and index-friendly; the column MUST itself use a NO PAD binary collation.
 
 ### Membership
 

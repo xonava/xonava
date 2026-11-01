@@ -16,7 +16,7 @@ Only package export-map paths are supported APIs. Private source/dist paths are 
 | `@xonava/core/telemetry` | Neutral telemetry port/events/safe attributes |
 | `@xonava/core/temporal` | Temporal revisions, snapshots, stores, and point-in-time reconstruction |
 | `@xonava/core/quota` | Quota contracts |
-| `@xonava/core/resilience` | Retry/circuit/resilience policy |
+| `@xonava/core/resilience` | Retry/circuit-breaker/bulkhead policy |
 | `@xonava/core/rules` | Deterministic, versioned and effective-dated business-rule evaluation |
 | `@xonava/core/sequence` | Transaction-bound scoped sequential-number allocation and formatting |
 | `@xonava/core/object-store` | Object-store contract |

@@ -16,7 +16,7 @@ Activities may be retried only under declared idempotency/retry semantics. A wor
 
 Invalid transition/input/signal is validation or conflict as defined; stale claim/revision conflict; unsupported version configuration; activity failure follows retry/compensation policy. Conformance covers transition tables, concurrent signals, duplicate signal receipts, timer recovery, stale fencing, activity retry, compensation ordering/failure, migration, and crash at every durable boundary.
 
-Traceability: `packages/core/src/workflow`; workflow unit and provider integration suites; W1 certification.
+Traceability: `packages/core/src/workflow`; workflow unit and provider integration suites.
 
 ## Attempts, retry, and failure (normative)
 
