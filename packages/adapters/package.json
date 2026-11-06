@@ -141,11 +141,11 @@
     "@vitest/coverage-v8": "^5.0.5",
     "drizzle-orm": "^0.45.4",
     "express": "^5.3.0",
-    "fastify": "^5.12.7",
-    "hono": "^4.13.14",
+    "fastify": "^5.12.8",
+    "hono": "^4.13.16",
     "mysql2": "^3.24.6",
     "pg": "^8.23.1",
     "supertest": "^7.3.1",
-    "vitest": "^5.0.5"
+    "vitest": "^5.1.0"
   }
 }
